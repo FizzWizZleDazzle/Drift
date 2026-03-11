@@ -1,0 +1,14 @@
+build/
+.cache/
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.spv
+compile_commands.json
+.vs/
+.vscode/
+*.user
+bin/
+obj/
