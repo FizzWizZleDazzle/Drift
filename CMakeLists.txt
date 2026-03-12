@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(drift VERSION 0.1.0 LANGUAGES C CXX)
+project(drift VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -51,14 +51,6 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 
-# pugixml (for Tiled .tmx)
-FetchContent_Declare(
-    pugixml
-    GIT_REPOSITORY https://github.com/zeux/pugixml.git
-    GIT_TAG        v1.14
-    GIT_SHALLOW    TRUE
-)
-
 # stb (stb_image, stb_truetype)
 FetchContent_Declare(
     stb
@@ -75,14 +67,6 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 
-# cr.h (hot reload)
-FetchContent_Declare(
-    cr
-    GIT_REPOSITORY https://github.com/fungos/cr.git
-    GIT_TAG        master
-    GIT_SHALLOW    TRUE
-)
-
 # nlohmann/json (for Tiled JSON)
 FetchContent_Declare(
     json
@@ -92,7 +76,7 @@ FetchContent_Declare(
 )
 set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(SDL3 flecs box2d pugixml json)
+FetchContent_MakeAvailable(SDL3 flecs box2d json)
 
 # stb - header-only, just need the path
 FetchContent_GetProperties(stb)
@@ -104,12 +88,6 @@ endif()
 FetchContent_GetProperties(cute_aseprite)
 if(NOT cute_aseprite_POPULATED)
     FetchContent_Populate(cute_aseprite)
-endif()
-
-# cr.h - header-only
-FetchContent_GetProperties(cr)
-if(NOT cr_POPULATED)
-    FetchContent_Populate(cr)
 endif()
 
 # imgui - build as a static library
@@ -136,21 +114,24 @@ target_link_libraries(imgui_lib PUBLIC SDL3::SDL3-static)
 
 # ---------- Drift Engine Library ----------
 set(DRIFT_SOURCES
-    src/core/drift.cpp
-    src/core/log.cpp
-    src/asset/asset.cpp
-    src/ecs/ecs.cpp
-    src/renderer/renderer.cpp
-    src/renderer/sprite_batch.cpp
-    src/sprite/sprite.cpp
-    src/physics/physics.cpp
-    src/input/input.cpp
-    src/audio/audio.cpp
-    src/font/font.cpp
-    src/ui/ui.cpp
-    src/tilemap/tilemap.cpp
-    src/particles/particles.cpp
-    src/hotreload/hotreload.cpp
+    # Core
+    src/core/App.cpp
+    src/core/Log.cpp
+
+    # ECS
+    src/ecs/World.cpp
+    src/ecs/ScriptSystem.cpp
+
+    # Subsystem resources
+    src/renderer/RendererResource.cpp
+    src/input/InputResource.cpp
+    src/audio/AudioResource.cpp
+    src/physics/PhysicsResource.cpp
+    src/sprite/SpriteResource.cpp
+    src/font/FontResource.cpp
+    src/particles/ParticleResource.cpp
+    src/tilemap/TilemapResource.cpp
+    src/ui/UIResource.cpp
 )
 
 add_library(drift STATIC ${DRIFT_SOURCES})
@@ -162,7 +143,6 @@ target_include_directories(drift PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${stb_SOURCE_DIR}
     ${cute_aseprite_SOURCE_DIR}
-    ${cr_SOURCE_DIR}
 )
 
 target_link_libraries(drift PUBLIC
@@ -170,7 +150,6 @@ target_link_libraries(drift PUBLIC
     flecs::flecs_static
     box2d
     imgui_lib
-    pugixml::pugixml
     nlohmann_json::nlohmann_json
 )
 
@@ -190,14 +169,12 @@ target_include_directories(drift_shared PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${stb_SOURCE_DIR}
     ${cute_aseprite_SOURCE_DIR}
-    ${cr_SOURCE_DIR}
 )
 target_link_libraries(drift_shared PUBLIC
     SDL3::SDL3-static
     flecs::flecs_static
     box2d
     imgui_lib
-    pugixml::pugixml
     nlohmann_json::nlohmann_json
 )
 if(DRIFT_DEV)
@@ -208,13 +185,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 set_target_properties(drift_shared PROPERTIES OUTPUT_NAME "drift")
 
+# ---------- SWIG C# Bindings (optional) ----------
+include(cmake/DriftSwig.cmake)
+
 # ---------- Examples ----------
 if(DRIFT_BUILD_EXAMPLES)
     add_executable(hello_sprites examples/hello_sprites/main.cpp)
     target_link_libraries(hello_sprites PRIVATE drift)
-
-    add_executable(platformer examples/platformer/main.cpp)
-    target_link_libraries(platformer PRIVATE drift)
 
     add_executable(flappy_bird examples/flappy_bird/main.cpp)
     target_link_libraries(flappy_bird PRIVATE drift)

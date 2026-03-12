@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SWIG-generated bindings -->
+    <Compile Include="../../bindings/csharp/Drift.Native/Generated/**/*.cs" />
+    <!-- Hand-written SDK layer -->
+    <Compile Include="../../bindings/csharp/Drift/Systems.cs" />
+    <Compile Include="../../bindings/csharp/Drift/AppExtensions.cs" />
+  </ItemGroup>
+
+  <!-- Copy native libraries next to output -->
+  <ItemGroup>
+    <None Include="../../build/lib/libdrift_csharp.so" CopyToOutputDirectory="PreserveNewest" Link="libdrift_csharp.so" Condition="Exists('../../build/lib/libdrift_csharp.so')" />
+    <None Include="../../build/libdrift.so" CopyToOutputDirectory="PreserveNewest" Link="libdrift.so" Condition="Exists('../../build/libdrift.so')" />
+  </ItemGroup>
+</Project>

@@ -1,417 +1,349 @@
 // =============================================================================
 // Flappy Bird — built with Drift 2D Engine
 // =============================================================================
-// Uses the flat C API directly. The C# high-level SDK version is in
-// bindings/csharp/FlappyBird/.
-// =============================================================================
 
-#include <drift/drift.h>
-#include <drift/renderer.h>
-#include <drift/input.h>
-#include <drift/audio.h>
-#include <drift/ui.h>
+#include <drift/App.h>
+#include <drift/plugins/DefaultPlugins.h>
+#include <drift/resources/RendererResource.h>
+#include <drift/resources/InputResource.h>
+#include <drift/resources/AudioResource.h>
 
-static constexpr int WINDOW_SCALE = 2;
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstdio>
+
+using namespace drift;
 
 // --- Constants ---
-static constexpr int   SCREEN_W       = 288;
-static constexpr int   SCREEN_H       = 512;
-static constexpr float GRAVITY        = 900.0f;
-static constexpr float FLAP_VELOCITY  = -280.0f;
-static constexpr float PIPE_SPEED     = 120.0f;
+static constexpr int   WINDOW_SCALE       = 2;
+static constexpr int   SCREEN_W           = 288;
+static constexpr int   SCREEN_H           = 512;
+static constexpr float GRAVITY            = 900.f;
+static constexpr float FLAP_VELOCITY      = -280.f;
+static constexpr float PIPE_SPEED         = 120.f;
 static constexpr float PIPE_SPAWN_INTERVAL = 1.8f;
-static constexpr float PIPE_GAP       = 100.0f;
-static constexpr float PIPE_WIDTH     = 52.0f;
-static constexpr float PIPE_HEIGHT    = 320.0f;
-static constexpr float BIRD_W         = 34.0f;
-static constexpr float BIRD_H         = 24.0f;
-static constexpr float BASE_H         = 112.0f;
-static constexpr float BASE_Y         = static_cast<float>(SCREEN_H) - BASE_H;
-static constexpr int   MAX_PIPES      = 8;
-static constexpr float BIRD_X         = 60.0f;
-static constexpr float BIRD_ANIM_SPEED = 0.12f;
+static constexpr float PIPE_GAP           = 100.f;
+static constexpr float PIPE_WIDTH         = 52.f;
+static constexpr float PIPE_HEIGHT        = 320.f;
+static constexpr float BIRD_W             = 34.f;
+static constexpr float BIRD_H             = 24.f;
+static constexpr float BASE_H             = 112.f;
+static constexpr float BASE_Y             = static_cast<float>(SCREEN_H) - BASE_H;
+static constexpr int   MAX_PIPES          = 8;
+static constexpr float BIRD_X             = 60.f;
+static constexpr float BIRD_ANIM_SPEED    = 0.12f;
 
-// --- Game state ---
+// --- Game state as a Resource ---
 enum GameState { STATE_MENU, STATE_PLAYING, STATE_DEAD };
 
 struct Pipe {
     float x;
-    float gap_y;   // center of the gap
+    float gapY;
     bool  scored;
     bool  active;
 };
 
-struct Game {
-    GameState state;
-    float     bird_y;
-    float     bird_vel;
-    float     bird_rot;
-    int       bird_frame;
-    float     bird_anim_timer;
-    float     base_scroll;
-    float     pipe_timer;
-    Pipe      pipes[MAX_PIPES];
-    int       score;
+struct FlappyState : public Resource {
+    const char* name() const override { return "FlappyState"; }
+
+    GameState state = STATE_MENU;
+    float     birdY = SCREEN_H * 0.4f;
+    float     birdVel = 0.f;
+    float     birdRot = 0.f;
+    int       birdFrame = 1;
+    float     birdAnimTimer = 0.f;
+    float     baseScroll = 0.f;
+    float     pipeTimer = 0.f;
+    Pipe      pipes[MAX_PIPES] = {};
+    int       score = 0;
+    bool      hitPlayed = false;
 
     // Textures
-    DriftTexture tex_bg;
-    DriftTexture tex_base;
-    DriftTexture tex_pipe;
-    DriftTexture tex_bird[3];  // down, mid, up
-    DriftTexture tex_gameover;
-    DriftTexture tex_message;
-    DriftTexture tex_num[10];
+    TextureHandle texBg;
+    TextureHandle texBase;
+    TextureHandle texPipe;
+    TextureHandle texBird[3];
+    TextureHandle texGameover;
+    TextureHandle texMessage;
+    TextureHandle texNum[10];
 
     // Sounds
-    DriftSound snd_wing;
-    DriftSound snd_hit;
-    DriftSound snd_point;
-    DriftSound snd_die;
-    DriftSound snd_swoosh;
-
-    bool hit_played;
+    SoundHandle sndWing;
+    SoundHandle sndHit;
+    SoundHandle sndPoint;
+    SoundHandle sndDie;
+    SoundHandle sndSwoosh;
 };
 
-static Game g;
-
 // --- Helpers ---
-static void reset_game() {
+static bool rectsOverlap(float ax, float ay, float aw, float ah,
+                          float bx, float by, float bw, float bh) {
+    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+static void resetGame(FlappyState& g) {
     g.state          = STATE_MENU;
-    g.bird_y         = SCREEN_H * 0.4f;
-    g.bird_vel       = 0.0f;
-    g.bird_rot       = 0.0f;
-    g.bird_frame     = 1;
-    g.bird_anim_timer = 0.0f;
-    g.base_scroll    = 0.0f;
-    g.pipe_timer     = 0.0f;
+    g.birdY          = SCREEN_H * 0.4f;
+    g.birdVel        = 0.f;
+    g.birdRot        = 0.f;
+    g.birdFrame      = 1;
+    g.birdAnimTimer  = 0.f;
+    g.baseScroll     = 0.f;
+    g.pipeTimer      = 0.f;
     g.score          = 0;
-    g.hit_played     = false;
+    g.hitPlayed      = false;
     for (int i = 0; i < MAX_PIPES; ++i) g.pipes[i].active = false;
 }
 
-static void spawn_pipe() {
+static void spawnPipe(FlappyState& g) {
     for (int i = 0; i < MAX_PIPES; ++i) {
         if (!g.pipes[i].active) {
             g.pipes[i].active = true;
-            g.pipes[i].x = static_cast<float>(SCREEN_W) + 20.0f;
-            // Random gap center between top margin and base
-            float min_y = PIPE_GAP * 0.5f + 50.0f;
-            float max_y = BASE_Y - PIPE_GAP * 0.5f - 20.0f;
-            g.pipes[i].gap_y = min_y + (static_cast<float>(rand()) / RAND_MAX) * (max_y - min_y);
+            g.pipes[i].x = static_cast<float>(SCREEN_W) + 20.f;
+            float minY = PIPE_GAP * 0.5f + 50.f;
+            float maxY = BASE_Y - PIPE_GAP * 0.5f - 20.f;
+            g.pipes[i].gapY = minY + (static_cast<float>(rand()) / RAND_MAX) * (maxY - minY);
             g.pipes[i].scored = false;
             return;
         }
     }
 }
 
-static bool rects_overlap(float ax, float ay, float aw, float ah,
-                           float bx, float by, float bw, float bh) {
-    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+static void flap(FlappyState& g, AudioResource* audio) {
+    g.birdVel = FLAP_VELOCITY;
+    if (g.sndWing.valid() && audio) audio->playSound(g.sndWing, 0.6f);
 }
 
-static void flap() {
-    g.bird_vel = FLAP_VELOCITY;
-    if (g.snd_wing.id) drift_sound_play(g.snd_wing, 0.6f, 0.0f);
-}
-
-// --- Draw score using number sprites ---
-static void draw_score(int score) {
+static void drawScore(RendererResource* renderer, FlappyState& g, int score) {
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", score);
-    int len = (int)strlen(buf);
+    int len = static_cast<int>(strlen(buf));
 
-    // Each digit sprite is ~24x36 px (variable width, but roughly)
-    float total_w = len * 26.0f;
-    float start_x = (SCREEN_W - total_w) * 0.5f;
-    float y = 40.0f;
+    float totalW = len * 26.f;
+    float startX = (SCREEN_W - totalW) * 0.5f;
+    float y = 40.f;
 
     for (int i = 0; i < len; ++i) {
         int digit = buf[i] - '0';
         if (digit < 0 || digit > 9) continue;
-        DriftTexture tex = g.tex_num[digit];
-        if (tex.id == 0) continue;
+        TextureHandle tex = g.texNum[digit];
+        if (!tex.valid()) continue;
 
         int32_t dw, dh;
-        drift_texture_get_size(tex, &dw, &dh);
+        renderer->getTextureSize(tex, &dw, &dh);
 
-        drift_sprite_draw(tex,
-                          DriftVec2{start_x + i * 26.0f, y},
-                          DriftRect{0, 0, (float)dw, (float)dh},
-                          DriftVec2{1.0f, 1.0f},
-                          0.0f,
-                          DriftVec2{0, 0},
-                          DRIFT_COLOR_WHITE,
-                          DRIFT_FLIP_NONE,
-                          50.0f);
+        renderer->drawSprite(tex,
+            {startX + i * 26.f, y},
+            {0, 0, static_cast<float>(dw), static_cast<float>(dh)},
+            50.f);
     }
 }
 
-// --- Main update ---
-static void update(float dt, void* /*user_data*/) {
-    if (drift_key_pressed(DRIFT_KEY_ESCAPE)) {
-        drift_request_quit();
-        return;
+// --- Startup system ---
+void flappyStartup(ResMut<FlappyState> game, ResMut<RendererResource> renderer,
+                    ResMut<AudioResource> audio, float) {
+    // Configure default camera for pixel-perfect scaling
+    auto cam = renderer->getDefaultCamera();
+    renderer->setCameraPosition(cam, {SCREEN_W * 0.5f, SCREEN_H * 0.5f});
+    renderer->setCameraZoom(cam, static_cast<float>(WINDOW_SCALE));
+
+    // Load textures
+    game->texBg       = renderer->loadTexture("assets/background.png");
+    game->texBase     = renderer->loadTexture("assets/base.png");
+    game->texPipe     = renderer->loadTexture("assets/pipe.png");
+    game->texBird[0]  = renderer->loadTexture("assets/bird-down.png");
+    game->texBird[1]  = renderer->loadTexture("assets/bird-mid.png");
+    game->texBird[2]  = renderer->loadTexture("assets/bird-up.png");
+    game->texGameover = renderer->loadTexture("assets/gameover.png");
+    game->texMessage  = renderer->loadTexture("assets/message.png");
+    for (int i = 0; i < 10; ++i) {
+        char path[64];
+        snprintf(path, sizeof(path), "assets/num%d.png", i);
+        game->texNum[i] = renderer->loadTexture(path);
     }
 
-    bool action = drift_key_pressed(DRIFT_KEY_SPACE) ||
-                  drift_mouse_button_pressed(DRIFT_MOUSE_LEFT);
+    // Load sounds
+    game->sndWing   = audio->loadSound("assets/wing.wav");
+    game->sndHit    = audio->loadSound("assets/hit.wav");
+    game->sndPoint  = audio->loadSound("assets/point.wav");
+    game->sndDie    = audio->loadSound("assets/die.wav");
+    game->sndSwoosh = audio->loadSound("assets/swoosh.wav");
 
-    // ---- State machine ----
-    switch (g.state) {
+    resetGame(*game);
+}
+
+// --- Update system ---
+void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
+                  ResMut<AudioResource> audio, float dt) {
+    if (input->keyPressed(Key::Escape)) return; // App handles quit
+
+    bool action = input->keyPressed(Key::Space) ||
+                  input->mouseButtonPressed(MouseButton::Left);
+
+    switch (game->state) {
     case STATE_MENU:
-        // Bobbing bird animation
-        g.bird_anim_timer += dt;
-        if (g.bird_anim_timer >= BIRD_ANIM_SPEED) {
-            g.bird_anim_timer = 0.0f;
-            g.bird_frame = (g.bird_frame + 1) % 3;
+        game->birdAnimTimer += dt;
+        if (game->birdAnimTimer >= BIRD_ANIM_SPEED) {
+            game->birdAnimTimer = 0.f;
+            game->birdFrame = (game->birdFrame + 1) % 3;
         }
-        g.bird_y = SCREEN_H * 0.4f + sinf(drift_get_time() * 3.0f) * 8.0f;
-        g.base_scroll += PIPE_SPEED * dt;
-
-        if (action) {
-            g.state = STATE_PLAYING;
-            flap();
-        }
+        game->birdY = SCREEN_H * 0.4f + sinf(static_cast<float>(game->birdAnimTimer * 20.f)) * 8.f;
+        game->baseScroll += PIPE_SPEED * dt;
+        if (action) { game->state = STATE_PLAYING; flap(*game, audio.ptr); }
         break;
 
     case STATE_PLAYING:
-        // Bird physics
-        g.bird_vel += GRAVITY * dt;
-        g.bird_y += g.bird_vel * dt;
-
-        // Rotation: tilt up on flap, tilt down when falling
-        if (g.bird_vel < 0) {
-            g.bird_rot = -25.0f * (3.14159f / 180.0f);
+        game->birdVel += GRAVITY * dt;
+        game->birdY += game->birdVel * dt;
+        if (game->birdVel < 0) {
+            game->birdRot = -25.f * (3.14159f / 180.f);
         } else {
-            g.bird_rot += 3.0f * dt;
-            if (g.bird_rot > 1.57f) g.bird_rot = 1.57f; // 90 degrees
+            game->birdRot += 3.f * dt;
+            if (game->birdRot > 1.57f) game->birdRot = 1.57f;
         }
 
-        // Bird animation
-        g.bird_anim_timer += dt;
-        if (g.bird_anim_timer >= BIRD_ANIM_SPEED) {
-            g.bird_anim_timer = 0.0f;
-            g.bird_frame = (g.bird_frame + 1) % 3;
+        game->birdAnimTimer += dt;
+        if (game->birdAnimTimer >= BIRD_ANIM_SPEED) {
+            game->birdAnimTimer = 0.f;
+            game->birdFrame = (game->birdFrame + 1) % 3;
+        }
+        if (action) flap(*game, audio.ptr);
+        game->baseScroll += PIPE_SPEED * dt;
+
+        game->pipeTimer += dt;
+        if (game->pipeTimer >= PIPE_SPAWN_INTERVAL) {
+            game->pipeTimer = 0.f;
+            spawnPipe(*game);
         }
 
-        // Flap
-        if (action) flap();
-
-        // Scroll base
-        g.base_scroll += PIPE_SPEED * dt;
-
-        // Spawn pipes
-        g.pipe_timer += dt;
-        if (g.pipe_timer >= PIPE_SPAWN_INTERVAL) {
-            g.pipe_timer = 0.0f;
-            spawn_pipe();
-        }
-
-        // Move & check pipes
         for (int i = 0; i < MAX_PIPES; ++i) {
-            Pipe& p = g.pipes[i];
+            Pipe& p = game->pipes[i];
             if (!p.active) continue;
-
             p.x -= PIPE_SPEED * dt;
+            if (p.x < -PIPE_WIDTH - 10.f) { p.active = false; continue; }
 
-            // Deactivate off-screen pipes
-            if (p.x < -PIPE_WIDTH - 10.0f) {
-                p.active = false;
-                continue;
-            }
-
-            // Score
             if (!p.scored && p.x + PIPE_WIDTH < BIRD_X) {
                 p.scored = true;
-                g.score++;
-                if (g.snd_point.id) drift_sound_play(g.snd_point, 0.7f, 0.0f);
+                game->score++;
+                if (game->sndPoint.valid()) audio->playSound(game->sndPoint, 0.7f);
             }
 
-            // Collision with top pipe
-            float top_pipe_bottom = p.gap_y - PIPE_GAP * 0.5f;
-            if (rects_overlap(BIRD_X - BIRD_W * 0.4f, g.bird_y - BIRD_H * 0.4f,
-                              BIRD_W * 0.8f, BIRD_H * 0.8f,
-                              p.x, top_pipe_bottom - PIPE_HEIGHT,
-                              PIPE_WIDTH, PIPE_HEIGHT)) {
-                g.state = STATE_DEAD;
-            }
+            float topBottom = p.gapY - PIPE_GAP * 0.5f;
+            float botTop    = p.gapY + PIPE_GAP * 0.5f;
 
-            // Collision with bottom pipe
-            float bot_pipe_top = p.gap_y + PIPE_GAP * 0.5f;
-            if (rects_overlap(BIRD_X - BIRD_W * 0.4f, g.bird_y - BIRD_H * 0.4f,
-                              BIRD_W * 0.8f, BIRD_H * 0.8f,
-                              p.x, bot_pipe_top,
-                              PIPE_WIDTH, PIPE_HEIGHT)) {
-                g.state = STATE_DEAD;
+            if (rectsOverlap(BIRD_X - BIRD_W * 0.4f, game->birdY - BIRD_H * 0.4f,
+                             BIRD_W * 0.8f, BIRD_H * 0.8f,
+                             p.x, topBottom - PIPE_HEIGHT, PIPE_WIDTH, PIPE_HEIGHT) ||
+                rectsOverlap(BIRD_X - BIRD_W * 0.4f, game->birdY - BIRD_H * 0.4f,
+                             BIRD_W * 0.8f, BIRD_H * 0.8f,
+                             p.x, botTop, PIPE_WIDTH, PIPE_HEIGHT)) {
+                game->state = STATE_DEAD;
             }
         }
 
-        // Hit ground or ceiling
-        if (g.bird_y + BIRD_H * 0.5f >= BASE_Y || g.bird_y < 0) {
-            g.state = STATE_DEAD;
-        }
+        if (game->birdY + BIRD_H * 0.5f >= BASE_Y || game->birdY < 0)
+            game->state = STATE_DEAD;
 
-        if (g.state == STATE_DEAD) {
-            if (g.snd_hit.id) drift_sound_play(g.snd_hit, 0.8f, 0.0f);
-            g.hit_played = true;
+        if (game->state == STATE_DEAD) {
+            if (game->sndHit.valid()) audio->playSound(game->sndHit, 0.8f);
+            game->hitPlayed = true;
         }
         break;
 
     case STATE_DEAD:
-        // Bird falls
-        g.bird_vel += GRAVITY * dt;
-        g.bird_y += g.bird_vel * dt;
-        g.bird_rot += 4.0f * dt;
-        if (g.bird_rot > 1.57f) g.bird_rot = 1.57f;
-
-        if (g.bird_y + BIRD_H * 0.5f > BASE_Y) {
-            g.bird_y = BASE_Y - BIRD_H * 0.5f;
-            g.bird_vel = 0.0f;
+        game->birdVel += GRAVITY * dt;
+        game->birdY += game->birdVel * dt;
+        game->birdRot += 4.f * dt;
+        if (game->birdRot > 1.57f) game->birdRot = 1.57f;
+        if (game->birdY + BIRD_H * 0.5f > BASE_Y) {
+            game->birdY = BASE_Y - BIRD_H * 0.5f;
+            game->birdVel = 0.f;
         }
-
         if (action) {
-            reset_game();
-            if (g.snd_swoosh.id) drift_sound_play(g.snd_swoosh, 0.5f, 0.0f);
+            resetGame(*game);
+            if (game->sndSwoosh.valid()) audio->playSound(game->sndSwoosh, 0.5f);
         }
         break;
     }
+}
 
-    // ---- Render ----
-    drift_renderer_begin_frame();
-
-    // Background (tiled to fill - bg is 288 wide, same as screen)
-    drift_sprite_draw(g.tex_bg,
-                      DriftVec2{0, 0},
-                      DriftRect{0, 0, (float)SCREEN_W, (float)SCREEN_H},
-                      DriftVec2{1, 1}, 0, DriftVec2{0, 0},
-                      DRIFT_COLOR_WHITE, DRIFT_FLIP_NONE, 0.0f);
+// --- Render system ---
+void flappyRender(Res<FlappyState> game, ResMut<RendererResource> renderer, float) {
+    // Background
+    renderer->drawSprite(game->texBg, {0, 0},
+        {0, 0, static_cast<float>(SCREEN_W), static_cast<float>(SCREEN_H)}, 0.f);
 
     // Pipes
     for (int i = 0; i < MAX_PIPES; ++i) {
-        const Pipe& p = g.pipes[i];
+        const Pipe& p = game->pipes[i];
         if (!p.active) continue;
 
-        // Bottom pipe (normal orientation)
-        float bot_top = p.gap_y + PIPE_GAP * 0.5f;
-        drift_sprite_draw(g.tex_pipe,
-                          DriftVec2{p.x, bot_top},
-                          DriftRect{0, 0, PIPE_WIDTH, PIPE_HEIGHT},
-                          DriftVec2{1, 1}, 0, DriftVec2{0, 0},
-                          DRIFT_COLOR_WHITE, DRIFT_FLIP_NONE, 5.0f);
+        float botTop = p.gapY + PIPE_GAP * 0.5f;
+        float topBottom = p.gapY - PIPE_GAP * 0.5f;
 
-        // Top pipe (flipped vertically)
-        float top_bottom = p.gap_y - PIPE_GAP * 0.5f;
-        drift_sprite_draw(g.tex_pipe,
-                          DriftVec2{p.x, top_bottom},
-                          DriftRect{0, 0, PIPE_WIDTH, PIPE_HEIGHT},
-                          DriftVec2{1, 1}, 0, DriftVec2{0, PIPE_HEIGHT},
-                          DRIFT_COLOR_WHITE, DRIFT_FLIP_V, 5.0f);
+        // Bottom pipe
+        renderer->drawSprite(game->texPipe, {p.x, botTop},
+            {0, 0, PIPE_WIDTH, PIPE_HEIGHT}, 5.f);
+
+        // Top pipe (flipped)
+        renderer->drawSprite(game->texPipe, {p.x, topBottom},
+            {0, 0, PIPE_WIDTH, PIPE_HEIGHT}, Vec2::one(), 0.f,
+            {0, PIPE_HEIGHT}, Color::white(), Flip::V, 5.f);
     }
 
     // Base (scrolling ground)
-    float base_x = -fmodf(g.base_scroll, 48.0f); // 48px repeat in the base texture
-    for (float bx = base_x; bx < SCREEN_W + 48.0f; bx += 336.0f) {
-        drift_sprite_draw(g.tex_base,
-                          DriftVec2{bx, BASE_Y},
-                          DriftRect{0, 0, 336, BASE_H},
-                          DriftVec2{1, 1}, 0, DriftVec2{0, 0},
-                          DRIFT_COLOR_WHITE, DRIFT_FLIP_NONE, 10.0f);
+    float baseX = -fmodf(game->baseScroll, 48.f);
+    for (float bx = baseX; bx < SCREEN_W + 48.f; bx += 336.f) {
+        renderer->drawSprite(game->texBase, {bx, BASE_Y},
+            {0, 0, 336, BASE_H}, 10.f);
     }
 
     // Bird
-    drift_sprite_draw(g.tex_bird[g.bird_frame],
-                      DriftVec2{BIRD_X, g.bird_y},
-                      DriftRect{0, 0, BIRD_W, BIRD_H},
-                      DriftVec2{1, 1},
-                      g.bird_rot,
-                      DriftVec2{BIRD_W * 0.5f, BIRD_H * 0.5f},
-                      DRIFT_COLOR_WHITE, DRIFT_FLIP_NONE, 20.0f);
+    renderer->drawSprite(game->texBird[game->birdFrame],
+        {BIRD_X, game->birdY},
+        {0, 0, BIRD_W, BIRD_H}, Vec2::one(), game->birdRot,
+        {BIRD_W * 0.5f, BIRD_H * 0.5f},
+        Color::white(), Flip::None, 20.f);
 
     // Score
-    if (g.state == STATE_PLAYING || g.state == STATE_DEAD) {
-        draw_score(g.score);
+    if (game->state == STATE_PLAYING || game->state == STATE_DEAD) {
+        drawScore(renderer.ptr, const_cast<FlappyState&>(*game), game->score);
     }
 
     // Menu overlay
-    if (g.state == STATE_MENU) {
+    if (game->state == STATE_MENU) {
         int32_t mw, mh;
-        drift_texture_get_size(g.tex_message, &mw, &mh);
-        drift_sprite_draw(g.tex_message,
-                          DriftVec2{(SCREEN_W - mw) * 0.5f, SCREEN_H * 0.2f},
-                          DriftRect{0, 0, (float)mw, (float)mh},
-                          DriftVec2{1, 1}, 0, DriftVec2{0, 0},
-                          DRIFT_COLOR_WHITE, DRIFT_FLIP_NONE, 60.0f);
+        renderer->getTextureSize(game->texMessage, &mw, &mh);
+        renderer->drawSprite(game->texMessage,
+            {(SCREEN_W - mw) * 0.5f, SCREEN_H * 0.2f},
+            {0, 0, static_cast<float>(mw), static_cast<float>(mh)}, 60.f);
     }
 
     // Game over overlay
-    if (g.state == STATE_DEAD) {
+    if (game->state == STATE_DEAD) {
         int32_t gow, goh;
-        drift_texture_get_size(g.tex_gameover, &gow, &goh);
-        drift_sprite_draw(g.tex_gameover,
-                          DriftVec2{(SCREEN_W - gow) * 0.5f, SCREEN_H * 0.3f},
-                          DriftRect{0, 0, (float)gow, (float)goh},
-                          DriftVec2{1, 1}, 0, DriftVec2{0, 0},
-                          DRIFT_COLOR_WHITE, DRIFT_FLIP_NONE, 60.0f);
+        renderer->getTextureSize(game->texGameover, &gow, &goh);
+        renderer->drawSprite(game->texGameover,
+            {(SCREEN_W - gow) * 0.5f, SCREEN_H * 0.3f},
+            {0, 0, static_cast<float>(gow), static_cast<float>(goh)}, 60.f);
     }
-
-    drift_renderer_end_frame();
-    drift_renderer_present();
 }
 
 int main(int /*argc*/, char* /*argv*/[]) {
     srand(42);
 
-    DriftConfig config = drift_config_default();
-    config.title = "Flappy Bird - Drift Engine";
-    config.width = SCREEN_W * WINDOW_SCALE;
-    config.height = SCREEN_H * WINDOW_SCALE;
-    config.resizable = false;
-
-    if (drift_init(&config) != DRIFT_OK) return 1;
-    drift_renderer_init();
-    drift_input_init();
-    drift_audio_init();
-
-    // Camera maps logical 288x512 coords to the larger window.
-    DriftCamera cam = drift_camera_create();
-    drift_camera_set_position(cam, DriftVec2{SCREEN_W * 0.5f, SCREEN_H * 0.5f});
-    drift_camera_set_zoom(cam, static_cast<float>(WINDOW_SCALE));
-    drift_camera_set_active(cam);
-
-    // Load textures
-    g.tex_bg       = drift_texture_load("assets/background.png");
-    g.tex_base     = drift_texture_load("assets/base.png");
-    g.tex_pipe     = drift_texture_load("assets/pipe.png");
-    g.tex_bird[0]  = drift_texture_load("assets/bird-down.png");
-    g.tex_bird[1]  = drift_texture_load("assets/bird-mid.png");
-    g.tex_bird[2]  = drift_texture_load("assets/bird-up.png");
-    g.tex_gameover = drift_texture_load("assets/gameover.png");
-    g.tex_message  = drift_texture_load("assets/message.png");
-    for (int i = 0; i < 10; ++i) {
-        char path[64];
-        snprintf(path, sizeof(path), "assets/num%d.png", i);
-        g.tex_num[i] = drift_texture_load(path);
-    }
-
-    // Load sounds
-    g.snd_wing  = drift_sound_load("assets/wing.wav");
-    g.snd_hit   = drift_sound_load("assets/hit.wav");
-    g.snd_point = drift_sound_load("assets/point.wav");
-    g.snd_die   = drift_sound_load("assets/die.wav");
-    g.snd_swoosh = drift_sound_load("assets/swoosh.wav");
-
-    reset_game();
-
-    DRIFT_LOG_INFO("Flappy Bird started! Space/Click to flap, ESC to quit.");
-
-    drift_run(update, nullptr);
-
-    drift_audio_shutdown();
-    drift_renderer_shutdown();
-    drift_shutdown();
-    return 0;
+    App app;
+    app.setConfig({
+        .title = "Flappy Bird - Drift Engine",
+        .width = SCREEN_W * WINDOW_SCALE,
+        .height = SCREEN_H * WINDOW_SCALE,
+        .resizable = false,
+    });
+    app.addPlugins<DefaultPlugins>();
+    app.addResource<FlappyState>();
+    app.startup<flappyStartup>("flappy_startup");
+    app.update<flappyUpdate>("flappy_update");
+    app.render<flappyRender>("flappy_render");
+    return app.run();
 }
