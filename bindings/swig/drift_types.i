@@ -7,10 +7,10 @@
 // =============================================================================
 
 %{
-#include <drift/Types.h>
-#include <drift/Handle.h>
-#include <drift/Math.h>
-#include <drift/Config.h>
+#include <drift/Types.hpp>
+#include <drift/Handle.hpp>
+#include <drift/Math.hpp>
+#include <drift/Config.hpp>
 %}
 
 // ---------------------------------------------------------------------------
@@ -130,10 +130,10 @@
 // ---------------------------------------------------------------------------
 // Parse the actual headers so SWIG sees the struct layouts
 // ---------------------------------------------------------------------------
-%include "drift/Types.h"
-%include "drift/Handle.h"
-%include "drift/Math.h"
-%include "drift/Config.h"
+%include "drift/Types.hpp"
+%include "drift/Handle.hpp"
+%include "drift/Math.hpp"
+%include "drift/Config.hpp"
 
 // ---------------------------------------------------------------------------
 // Instantiate Handle<T> for each concrete tag type

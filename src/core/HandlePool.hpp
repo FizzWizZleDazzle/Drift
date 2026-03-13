@@ -1,6 +1,6 @@
 #pragma once
 
-#include <drift/Handle.h>
+#include <drift/Handle.hpp>
 #include <vector>
 #include <cassert>
 

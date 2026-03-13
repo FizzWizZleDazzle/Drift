@@ -1,8 +1,8 @@
 #pragma once
 
-#include <drift/Plugin.h>
-#include <drift/App.h>
-#include <drift/resources/InputResource.h>
+#include <drift/Plugin.hpp>
+#include <drift/App.hpp>
+#include <drift/resources/InputResource.hpp>
 
 namespace drift {
 

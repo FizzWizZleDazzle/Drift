@@ -1,7 +1,7 @@
-#include <drift/resources/TilemapResource.h>
-#include <drift/resources/RendererResource.h>
-#include <drift/Log.h>
-#include "core/HandlePool.h"
+#include <drift/resources/TilemapResource.hpp>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/Log.hpp>
+#include "core/HandlePool.hpp"
 
 #include <nlohmann/json.hpp>
 

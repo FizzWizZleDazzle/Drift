@@ -1,7 +1,7 @@
 #pragma once
 
-#include <drift/Types.h>
-#include <drift/World.h>
+#include <drift/Types.hpp>
+#include <drift/World.hpp>
 
 namespace drift {
 

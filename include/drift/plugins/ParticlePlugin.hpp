@@ -1,9 +1,9 @@
 #pragma once
 
-#include <drift/Plugin.h>
-#include <drift/App.h>
-#include <drift/resources/ParticleResource.h>
-#include <drift/resources/RendererResource.h>
+#include <drift/Plugin.hpp>
+#include <drift/App.hpp>
+#include <drift/resources/ParticleResource.hpp>
+#include <drift/resources/RendererResource.hpp>
 
 namespace drift {
 

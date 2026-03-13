@@ -1,5 +1,5 @@
-#include <drift/World.h>
-#include <drift/Log.h>
+#include <drift/World.hpp>
+#include <drift/Log.hpp>
 
 #include "flecs.h"
 

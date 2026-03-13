@@ -1,5 +1,5 @@
-#include <drift/App.h>
-#include <drift/Log.h>
+#include <drift/App.hpp>
+#include <drift/Log.hpp>
 
 #include <SDL3/SDL.h>
 

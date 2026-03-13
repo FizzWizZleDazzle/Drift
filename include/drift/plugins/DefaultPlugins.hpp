@@ -1,15 +1,15 @@
 #pragma once
 
-#include <drift/Plugin.h>
-#include <drift/plugins/InputPlugin.h>
-#include <drift/plugins/RendererPlugin.h>
-#include <drift/plugins/AudioPlugin.h>
-#include <drift/plugins/PhysicsPlugin.h>
-#include <drift/plugins/SpritePlugin.h>
-#include <drift/plugins/FontPlugin.h>
-#include <drift/plugins/ParticlePlugin.h>
-#include <drift/plugins/TilemapPlugin.h>
-#include <drift/plugins/UIPlugin.h>
+#include <drift/Plugin.hpp>
+#include <drift/plugins/InputPlugin.hpp>
+#include <drift/plugins/RendererPlugin.hpp>
+#include <drift/plugins/AudioPlugin.hpp>
+#include <drift/plugins/PhysicsPlugin.hpp>
+#include <drift/plugins/SpritePlugin.hpp>
+#include <drift/plugins/FontPlugin.hpp>
+#include <drift/plugins/ParticlePlugin.hpp>
+#include <drift/plugins/TilemapPlugin.hpp>
+#include <drift/plugins/UIPlugin.hpp>
 
 namespace drift {
 

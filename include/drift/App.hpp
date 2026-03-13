@@ -1,11 +1,11 @@
 #pragma once
 
-#include <drift/Types.h>
-#include <drift/Config.h>
-#include <drift/Handle.h>
-#include <drift/Resource.h>
-#include <drift/Plugin.h>
-#include <drift/System.h>
+#include <drift/Types.hpp>
+#include <drift/Config.hpp>
+#include <drift/Handle.hpp>
+#include <drift/Resource.hpp>
+#include <drift/Plugin.hpp>
+#include <drift/System.hpp>
 
 #include <memory>
 #include <functional>

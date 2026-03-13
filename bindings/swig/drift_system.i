@@ -7,28 +7,28 @@
 // =============================================================================
 
 %{
-#include <drift/Resource.h>
-#include <drift/Plugin.h>
-#include <drift/System.h>
-#include <drift/App.h>
-#include <drift/World.h>
-#include <drift/Entity.h>
-#include <drift/Script.h>
-#include <drift/Log.h>
+#include <drift/Resource.hpp>
+#include <drift/Plugin.hpp>
+#include <drift/System.hpp>
+#include <drift/App.hpp>
+#include <drift/World.hpp>
+#include <drift/Entity.hpp>
+#include <drift/Script.hpp>
+#include <drift/Log.hpp>
 
 // Resource headers
-#include <drift/resources/RendererResource.h>
-#include <drift/resources/InputResource.h>
-#include <drift/resources/AudioResource.h>
-#include <drift/resources/PhysicsResource.h>
-#include <drift/resources/SpriteResource.h>
-#include <drift/resources/FontResource.h>
-#include <drift/resources/ParticleResource.h>
-#include <drift/resources/TilemapResource.h>
-#include <drift/resources/UIResource.h>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/resources/InputResource.hpp>
+#include <drift/resources/AudioResource.hpp>
+#include <drift/resources/PhysicsResource.hpp>
+#include <drift/resources/SpriteResource.hpp>
+#include <drift/resources/FontResource.hpp>
+#include <drift/resources/ParticleResource.hpp>
+#include <drift/resources/TilemapResource.hpp>
+#include <drift/resources/UIResource.hpp>
 
 // Plugin headers (for DefaultPlugins/MinimalPlugins)
-#include <drift/plugins/DefaultPlugins.h>
+#include <drift/plugins/DefaultPlugins.hpp>
 %}
 
 // ---------------------------------------------------------------------------
@@ -217,31 +217,31 @@
 // Parse the headers. SWIG respects #ifndef SWIG guards in the headers,
 // so template-only code is automatically excluded.
 // ---------------------------------------------------------------------------
-%include "drift/Resource.h"
-%include "drift/Plugin.h"
-%include "drift/System.h"
-%include "drift/Log.h"
-%include "drift/App.h"
-%include "drift/World.h"
-%include "drift/Entity.h"
-%include "drift/Script.h"
+%include "drift/Resource.hpp"
+%include "drift/Plugin.hpp"
+%include "drift/System.hpp"
+%include "drift/Log.hpp"
+%include "drift/App.hpp"
+%include "drift/World.hpp"
+%include "drift/Entity.hpp"
+%include "drift/Script.hpp"
 
 // ---------------------------------------------------------------------------
 // Resource classes
 // ---------------------------------------------------------------------------
-%include "drift/resources/RendererResource.h"
-%include "drift/resources/InputResource.h"
-%include "drift/resources/AudioResource.h"
-%include "drift/resources/PhysicsResource.h"
-%include "drift/resources/SpriteResource.h"
-%include "drift/resources/FontResource.h"
-%include "drift/resources/ParticleResource.h"
-%include "drift/resources/TilemapResource.h"
-%include "drift/resources/UIResource.h"
+%include "drift/resources/RendererResource.hpp"
+%include "drift/resources/InputResource.hpp"
+%include "drift/resources/AudioResource.hpp"
+%include "drift/resources/PhysicsResource.hpp"
+%include "drift/resources/SpriteResource.hpp"
+%include "drift/resources/FontResource.hpp"
+%include "drift/resources/ParticleResource.hpp"
+%include "drift/resources/TilemapResource.hpp"
+%include "drift/resources/UIResource.hpp"
 
 // ---------------------------------------------------------------------------
 // Built-in plugin classes (DefaultPlugins, MinimalPlugins)
 // These are concrete C++ classes, not director-enabled (no C# subclassing).
 // Users can instantiate them from C# and pass to App::addPlugins().
 // ---------------------------------------------------------------------------
-%include "drift/plugins/DefaultPlugins.h"
+%include "drift/plugins/DefaultPlugins.hpp"

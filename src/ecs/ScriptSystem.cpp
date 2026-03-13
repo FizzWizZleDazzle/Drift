@@ -1,7 +1,7 @@
-#include <drift/Script.h>
-#include <drift/App.h>
-#include <drift/World.h>
-#include <drift/Log.h>
+#include <drift/Script.hpp>
+#include <drift/App.hpp>
+#include <drift/World.hpp>
+#include <drift/Log.hpp>
 
 namespace drift {
 

@@ -5,8 +5,8 @@
 // physics.cpp with a proper Resource that owns all state through its Impl.
 // =============================================================================
 
-#include <drift/resources/PhysicsResource.h>
-#include <drift/Log.h>
+#include <drift/resources/PhysicsResource.hpp>
+#include <drift/Log.hpp>
 
 #include "box2d/box2d.h"
 

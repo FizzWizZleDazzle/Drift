@@ -1,6 +1,6 @@
 #pragma once
 
-#include <drift/Types.h>
+#include <drift/Types.hpp>
 
 namespace drift {
 

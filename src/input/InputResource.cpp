@@ -1,5 +1,5 @@
-#include "drift/resources/InputResource.h"
-#include "drift/Log.h"
+#include "drift/resources/InputResource.hpp"
+#include "drift/Log.hpp"
 
 #include <SDL3/SDL.h>
 

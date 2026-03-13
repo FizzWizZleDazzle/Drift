@@ -2,11 +2,11 @@
 // Flappy Bird — built with Drift 2D Engine
 // =============================================================================
 
-#include <drift/App.h>
-#include <drift/plugins/DefaultPlugins.h>
-#include <drift/resources/RendererResource.h>
-#include <drift/resources/InputResource.h>
-#include <drift/resources/AudioResource.h>
+#include <drift/App.hpp>
+#include <drift/plugins/DefaultPlugins.hpp>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/resources/InputResource.hpp>
+#include <drift/resources/AudioResource.hpp>
 
 #include <cmath>
 #include <cstdio>

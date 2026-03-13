@@ -1,5 +1,5 @@
-#include <drift/resources/AudioResource.h>
-#include <drift/Log.h>
+#include <drift/resources/AudioResource.hpp>
+#include <drift/Log.hpp>
 
 #include <SDL3/SDL.h>
 

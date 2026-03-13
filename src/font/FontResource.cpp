@@ -1,10 +1,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#include <drift/resources/FontResource.h>
-#include <drift/resources/RendererResource.h>
-#include <drift/Log.h>
-#include "core/HandlePool.h"
+#include <drift/resources/FontResource.hpp>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/Log.hpp>
+#include "core/HandlePool.hpp"
 
 #include <cstdio>
 #include <cstring>

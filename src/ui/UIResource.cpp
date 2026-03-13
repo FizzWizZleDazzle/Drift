@@ -1,7 +1,7 @@
-#include <drift/resources/UIResource.h>
-#include <drift/resources/RendererResource.h>
-#include <drift/App.h>
-#include <drift/Log.h>
+#include <drift/resources/UIResource.hpp>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/App.hpp>
+#include <drift/Log.hpp>
 
 #include <SDL3/SDL.h>
 

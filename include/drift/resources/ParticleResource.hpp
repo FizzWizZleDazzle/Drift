@@ -1,8 +1,8 @@
 #pragma once
 
-#include <drift/Resource.h>
-#include <drift/Handle.h>
-#include <drift/Types.h>
+#include <drift/Resource.hpp>
+#include <drift/Handle.hpp>
+#include <drift/Types.hpp>
 
 namespace drift {
 

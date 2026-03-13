@@ -8,13 +8,13 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include <drift/resources/RendererResource.h>
-#include <drift/App.h>
-#include <drift/Math.h>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/App.hpp>
+#include <drift/Math.hpp>
 
 #include <SDL3/SDL.h>
 
-#include "../../src/core/HandlePool.h"
+#include "core/HandlePool.hpp"
 
 #include <algorithm>
 #include <cmath>

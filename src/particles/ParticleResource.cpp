@@ -1,7 +1,7 @@
-#include <drift/resources/ParticleResource.h>
-#include <drift/resources/RendererResource.h>
-#include <drift/Log.h>
-#include "core/HandlePool.h"
+#include <drift/resources/ParticleResource.hpp>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/Log.hpp>
+#include "core/HandlePool.hpp"
 
 #include <cmath>
 #include <cstdint>

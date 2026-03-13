@@ -1,4 +1,4 @@
-#include <drift/Log.h>
+#include <drift/Log.hpp>
 #include <cstdarg>
 #include <cstdio>
 

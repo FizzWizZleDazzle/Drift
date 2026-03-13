@@ -1,9 +1,9 @@
 #pragma once
 
-#include <drift/Resource.h>
-#include <drift/App.h>
-#include <drift/Handle.h>
-#include <drift/Types.h>
+#include <drift/Resource.hpp>
+#include <drift/App.hpp>
+#include <drift/Handle.hpp>
+#include <drift/Types.hpp>
 
 union SDL_Event;
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <drift/Resource.h>
-#include <drift/Types.h>
+#include <drift/Resource.hpp>
+#include <drift/Types.hpp>
 
 #include <vector>
 
