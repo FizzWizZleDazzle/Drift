@@ -15,6 +15,12 @@
 #include <drift/Entity.hpp>
 #include <drift/Script.hpp>
 #include <drift/Log.hpp>
+#include <drift/Commands.h>
+#include <drift/RenderSnapshot.h>
+#include <drift/WorldResource.h>
+#include <drift/AssetServer.h>
+#include <drift/components/Sprite.h>
+#include <drift/components/Camera.h>
 
 // Resource headers
 #include <drift/resources/RendererResource.hpp>
@@ -88,6 +94,13 @@
 %ignore drift::World::getMut;
 %ignore drift::World::set;
 %ignore drift::World::registerComponent(const char*);
+
+// Commands: hide template insert
+%ignore drift::Commands::insert(Entity, ComponentId, const T&);
+
+// Script: hide template getComponent/getComponentMut
+%ignore drift::Script::getComponent;
+%ignore drift::Script::getComponentMut;
 
 // Ignore SDL_Event parameter - not usable from C#
 %ignore drift::EventHandler::processEvent;
@@ -211,6 +224,24 @@
         return static_cast<drift::UIResource*>(
             $self->getResourceByName("UIResource"));
     }
+    drift::World* getWorld() {
+        return &$self->world();
+    }
+    drift::Commands* getCommands() {
+        return &$self->commands();
+    }
+    drift::WorldResource* getWorldResource() {
+        return static_cast<drift::WorldResource*>(
+            $self->getResourceByName("WorldResource"));
+    }
+    drift::RenderSnapshot* getRenderSnapshot() {
+        return static_cast<drift::RenderSnapshot*>(
+            $self->getResourceByName("RenderSnapshot"));
+    }
+    drift::AssetServer* getAssetServer() {
+        return static_cast<drift::AssetServer*>(
+            $self->getResourceByName("AssetServer"));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +255,13 @@
 %include "drift/App.hpp"
 %include "drift/World.hpp"
 %include "drift/Entity.hpp"
+%include "drift/components/Sprite.h"
+%include "drift/components/Camera.h"
+%include "drift/Commands.h"
 %include "drift/Script.hpp"
+%include "drift/RenderSnapshot.h"
+%include "drift/WorldResource.h"
+%include "drift/AssetServer.h"
 
 // ---------------------------------------------------------------------------
 // Resource classes

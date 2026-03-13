@@ -1,5 +1,13 @@
 #include <drift/App.hpp>
 #include <drift/Log.hpp>
+#include <drift/World.hpp>
+#include <drift/Commands.h>
+#include <drift/WorldResource.h>
+#include <drift/RenderSnapshot.h>
+#include <drift/AssetServer.h>
+#include <drift/resources/RendererResource.hpp>
+#include <drift/resources/AudioResource.hpp>
+#include <drift/resources/FontResource.hpp>
 
 #include <SDL3/SDL.h>
 
@@ -32,6 +40,10 @@ struct App::Impl {
     bool running = false;
     bool initialised = false;
 
+    // ECS World + Commands (owned by App)
+    World world;
+    Commands commands{world};
+
     // Frame timing
     uint64_t lastCounter = 0;
     uint64_t perfFrequency = 0;
@@ -51,7 +63,9 @@ struct App::Impl {
     std::vector<SystemEntry> preUpdateSystems;
     std::vector<SystemEntry> updateSystems;
     std::vector<SystemEntry> postUpdateSystems;
+    std::vector<SystemEntry> extractSystems;
     std::vector<SystemEntry> renderSystems;
+    std::vector<SystemEntry> renderFlushSystems;
 
     // Event handlers
     std::vector<EventHandler*> eventHandlers;
@@ -62,11 +76,13 @@ struct App::Impl {
 
     std::vector<SystemEntry>& systemsForPhase(Phase phase) {
         switch (phase) {
-            case Phase::Startup:    return startupSystems;
-            case Phase::PreUpdate:  return preUpdateSystems;
-            case Phase::Update:     return updateSystems;
-            case Phase::PostUpdate: return postUpdateSystems;
-            case Phase::Render:     return renderSystems;
+            case Phase::Startup:     return startupSystems;
+            case Phase::PreUpdate:   return preUpdateSystems;
+            case Phase::Update:      return updateSystems;
+            case Phase::PostUpdate:  return postUpdateSystems;
+            case Phase::Extract:     return extractSystems;
+            case Phase::Render:      return renderSystems;
+            case Phase::RenderFlush: return renderFlushSystems;
         }
         return updateSystems;
     }
@@ -104,7 +120,9 @@ App::~App() {
     cleanSystems(impl_->preUpdateSystems);
     cleanSystems(impl_->updateSystems);
     cleanSystems(impl_->postUpdateSystems);
+    cleanSystems(impl_->extractSystems);
     cleanSystems(impl_->renderSystems);
+    cleanSystems(impl_->renderFlushSystems);
 
     // Shutdown SDL
     if (impl_->gpuDevice) {
@@ -197,6 +215,14 @@ void App::registerSystemFn(const char* name, Phase phase,
     impl_->systemsForPhase(phase).push_back(std::move(entry));
 }
 
+World& App::world() {
+    return impl_->world;
+}
+
+Commands& App::commands() {
+    return impl_->commands;
+}
+
 int App::run() {
     auto& s = *impl_;
 
@@ -244,6 +270,16 @@ int App::run() {
 
     DRIFT_LOG_INFO("Drift engine initialised (%dx%d)", w, h);
 
+    // ---- Register core resources (WorldResource + RenderSnapshot) ----
+    {
+        auto* worldRes = new WorldResource(s.world);
+        addResourceImpl(std::type_index(typeid(WorldResource)), worldRes);
+    }
+    {
+        auto* snapshot = new RenderSnapshot();
+        addResourceImpl(std::type_index(typeid(RenderSnapshot)), snapshot);
+    }
+
     // ---- Build plugins (deferred so window/GPU are available) ----
     for (auto* g : s.pluginGroups) {
         g->build(*this);
@@ -252,8 +288,17 @@ int App::run() {
         p->build(*this);
     }
 
+    // ---- Register AssetServer (after plugins so underlying resources exist) ----
+    {
+        auto* renderer = getResource<RendererResource>();
+        auto* audio = getResource<AudioResource>();
+        auto* font = getResource<FontResource>();
+        addResource<AssetServer>(renderer, audio, font);
+    }
+
     // ---- Run startup systems ----
     s.runSystems(s.startupSystems, *this, 0.f);
+    s.commands.flush();
 
     // ---- Main loop ----
     s.running = true;
@@ -276,6 +321,7 @@ int App::run() {
 
         // PreUpdate: beginFrame() snapshots previous state before new events
         s.runSystems(s.preUpdateSystems, *this, s.dt);
+        s.commands.flush();
 
         // Poll events (updates current state for this frame)
         SDL_Event event;
@@ -291,10 +337,22 @@ int App::run() {
 
         if (!s.running) break;
 
-        // Run remaining phase systems
+        // Update phase
         s.runSystems(s.updateSystems, *this, s.dt);
+        s.commands.flush();
+
+        // PostUpdate phase
         s.runSystems(s.postUpdateSystems, *this, s.dt);
+        s.commands.flush();
+
+        // Extract phase: fill render snapshot
+        s.runSystems(s.extractSystems, *this, s.dt);
+
+        // Render phase: auto-render from snapshot + user manual draws
         s.runSystems(s.renderSystems, *this, s.dt);
+
+        // RenderFlush phase: endFrame + present
+        s.runSystems(s.renderFlushSystems, *this, s.dt);
 
         s.frame++;
     }

@@ -57,6 +57,13 @@ public class Script : global::System.IDisposable {
     }
   }
 
+  public Transform2D TransformComponent {
+    get { return getTransformMut(); }
+  }
+  public Sprite SpriteComponent {
+    get { return getSpriteMut(); }
+  }
+
   public virtual void onCreate() {
     if (SwigDerivedClassHasMethod("onCreate", swigMethodTypes0)) driftPINVOKE.Script_onCreateSwigExplicitScript(swigCPtr); else driftPINVOKE.Script_onCreate(swigCPtr);
   }
@@ -92,6 +99,35 @@ public class Script : global::System.IDisposable {
   public void SetPosition(Vec2 pos) {
     driftPINVOKE.Script_SetPosition(swigCPtr, Vec2.getCPtr(pos));
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+  }
+
+  public Transform2D getTransform() {
+    global::System.IntPtr cPtr = driftPINVOKE.Script_getTransform(swigCPtr);
+    Transform2D ret = (cPtr == global::System.IntPtr.Zero) ? null : new Transform2D(cPtr, false);
+    return ret;
+  }
+
+  public Transform2D getTransformMut() {
+    global::System.IntPtr cPtr = driftPINVOKE.Script_getTransformMut(swigCPtr);
+    Transform2D ret = (cPtr == global::System.IntPtr.Zero) ? null : new Transform2D(cPtr, false);
+    return ret;
+  }
+
+  public Sprite getSprite() {
+    global::System.IntPtr cPtr = driftPINVOKE.Script_getSprite(swigCPtr);
+    Sprite ret = (cPtr == global::System.IntPtr.Zero) ? null : new Sprite(cPtr, false);
+    return ret;
+  }
+
+  public Sprite getSpriteMut() {
+    global::System.IntPtr cPtr = driftPINVOKE.Script_getSpriteMut(swigCPtr);
+    Sprite ret = (cPtr == global::System.IntPtr.Zero) ? null : new Sprite(cPtr, false);
+    return ret;
+  }
+
+  public Commands commands() {
+    Commands ret = new Commands(driftPINVOKE.Script_commands(swigCPtr), false);
+    return ret;
   }
 
   public Script() : this(driftPINVOKE.new_Script(), true) {

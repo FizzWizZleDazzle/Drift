@@ -12,109 +12,61 @@ using System;
 
 namespace Drift
 {
-    /// <summary>
-    /// Extension methods for <see cref="drift.App"/> that provide typed
-    /// resource accessors and system registration helpers.
-    /// </summary>
     public static class AppExtensions
     {
         // ====================================================================
         // Typed resource getters
         // ====================================================================
-        // Each method fetches the resource by its registered name (which
-        // matches the C++ class name returned by Resource::name()) and casts
-        // to the concrete SWIG proxy type.
 
-        /// <summary>
-        /// Returns the RendererResource, or null if not registered.
-        /// </summary>
         public static drift.RendererResource? GetRenderer(this drift.App app)
-        {
-            return app.getResourceByName("RendererResource") as drift.RendererResource;
-        }
+            => app.getRendererResource();
 
-        /// <summary>
-        /// Returns the InputResource, or null if not registered.
-        /// </summary>
         public static drift.InputResource? GetInput(this drift.App app)
-        {
-            return app.getResourceByName("InputResource") as drift.InputResource;
-        }
+            => app.getInputResource();
 
-        /// <summary>
-        /// Returns the AudioResource, or null if not registered.
-        /// </summary>
         public static drift.AudioResource? GetAudio(this drift.App app)
-        {
-            return app.getResourceByName("AudioResource") as drift.AudioResource;
-        }
+            => app.getAudioResource();
 
-        /// <summary>
-        /// Returns the PhysicsResource, or null if not registered.
-        /// </summary>
         public static drift.PhysicsResource? GetPhysics(this drift.App app)
-        {
-            return app.getResourceByName("PhysicsResource") as drift.PhysicsResource;
-        }
+            => app.getPhysicsResource();
 
-        /// <summary>
-        /// Returns the SpriteResource, or null if not registered.
-        /// </summary>
         public static drift.SpriteResource? GetSprites(this drift.App app)
-        {
-            return app.getResourceByName("SpriteResource") as drift.SpriteResource;
-        }
+            => app.getSpriteResource();
 
-        /// <summary>
-        /// Returns the FontResource, or null if not registered.
-        /// </summary>
         public static drift.FontResource? GetFonts(this drift.App app)
-        {
-            return app.getResourceByName("FontResource") as drift.FontResource;
-        }
+            => app.getFontResource();
 
-        /// <summary>
-        /// Returns the ParticleResource, or null if not registered.
-        /// </summary>
         public static drift.ParticleResource? GetParticles(this drift.App app)
-        {
-            return app.getResourceByName("ParticleResource") as drift.ParticleResource;
-        }
+            => app.getParticleResource();
 
-        /// <summary>
-        /// Returns the TilemapResource, or null if not registered.
-        /// </summary>
         public static drift.TilemapResource? GetTilemaps(this drift.App app)
-        {
-            return app.getResourceByName("TilemapResource") as drift.TilemapResource;
-        }
+            => app.getTilemapResource();
 
-        /// <summary>
-        /// Returns the UIResource, or null if not registered.
-        /// </summary>
         public static drift.UIResource? GetUI(this drift.App app)
-        {
-            return app.getResourceByName("UIResource") as drift.UIResource;
-        }
+            => app.getUIResource();
+
+        // ====================================================================
+        // World + Commands + AssetServer access
+        // ====================================================================
+
+        public static drift.World GetWorld(this drift.App app)
+            => app.getWorld();
+
+        public static drift.Commands GetCommands(this drift.App app)
+            => app.getCommands();
+
+        public static drift.AssetServer? GetAssets(this drift.App app)
+            => app.getAssetServer();
 
         // ====================================================================
         // Generic resource getter
         // ====================================================================
 
-        /// <summary>
-        /// Retrieves a resource by its C# type name.  The type name must
-        /// match the string returned by the C++ Resource::name() virtual.
-        /// Returns null if not found.
-        /// </summary>
         public static T? GetResource<T>(this drift.App app) where T : drift.Resource
         {
             return app.getResourceByName(typeof(T).Name) as T;
         }
 
-        /// <summary>
-        /// Retrieves a resource by its C# type name.  Throws
-        /// <see cref="InvalidOperationException"/> if not found.
-        /// </summary>
         public static T RequireResource<T>(this drift.App app) where T : drift.Resource
         {
             var res = app.getResourceByName(typeof(T).Name) as T;
@@ -132,18 +84,6 @@ namespace Drift
         // System registration
         // ====================================================================
 
-        /// <summary>
-        /// Creates a new instance of system type <typeparamref name="T"/>
-        /// and registers it with the App at the given phase.
-        ///
-        /// <typeparamref name="T"/> must be a concrete subclass of one of
-        /// the generic System or ReadSystem base classes from Drift.Systems.
-        ///
-        /// Example:
-        /// <code>
-        /// app.AddSystem&lt;MyMovementSystem&gt;(drift.Phase.Update);
-        /// </code>
-        /// </summary>
         public static drift.App AddSystem<T>(this drift.App app, drift.Phase phase)
             where T : Drift.SystemBase, new()
         {
@@ -153,16 +93,6 @@ namespace Drift
             return app;
         }
 
-        /// <summary>
-        /// Registers an existing system instance with the App.
-        /// Use this overload when you need to pass constructor arguments.
-        ///
-        /// Example:
-        /// <code>
-        /// var sys = new MySystem(someConfig);
-        /// app.AddSystem(sys, drift.Phase.Update);
-        /// </code>
-        /// </summary>
         public static drift.App AddSystem(this drift.App app, Drift.SystemBase system, drift.Phase phase)
         {
             if (system == null) throw new ArgumentNullException(nameof(system));
@@ -171,19 +101,6 @@ namespace Drift
             return app;
         }
 
-        /// <summary>
-        /// Registers a lambda / delegate as a system.  Convenient for quick
-        /// prototyping.
-        ///
-        /// Example:
-        /// <code>
-        /// app.AddSystem("DebugOverlay", drift.Phase.Render, (app, dt) =>
-        /// {
-        ///     var renderer = app.GetRenderer();
-        ///     // ... draw debug info ...
-        /// });
-        /// </code>
-        /// </summary>
         public static drift.App AddSystem(
             this drift.App app,
             string name,
@@ -227,32 +144,25 @@ namespace Drift
         public static drift.App PostUpdate<T>(this drift.App app) where T : Drift.SystemBase, new()
             => app.AddSystem<T>(drift.Phase.PostUpdate);
 
+        public static drift.App Extract<T>(this drift.App app) where T : Drift.SystemBase, new()
+            => app.AddSystem<T>(drift.Phase.Extract);
+
         // ====================================================================
         // Plugin-like builder helpers
         // ====================================================================
 
-        /// <summary>
-        /// Fluent configuration helper.  Sets the Config on the App and
-        /// returns it for chaining.
-        /// </summary>
         public static drift.App WithConfig(this drift.App app, drift.Config config)
         {
             app.setConfig(config);
             return app;
         }
 
-        /// <summary>
-        /// Adds a plugin and returns the App for chaining.
-        /// </summary>
         public static drift.App WithPlugin(this drift.App app, drift.Plugin plugin)
         {
             app.addPlugin(plugin);
             return app;
         }
 
-        /// <summary>
-        /// Adds a plugin group and returns the App for chaining.
-        /// </summary>
         public static drift.App WithPlugins(this drift.App app, drift.PluginGroup group)
         {
             app.addPlugins(group);

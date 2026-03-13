@@ -38,6 +38,9 @@
 %ignore drift::Color::green;
 %ignore drift::Color::blue;
 
+// Ignore std::vector returns from RenderSnapshot (complex C++ type)
+%ignore drift::RenderSnapshot::sprites;
+
 // ---------------------------------------------------------------------------
 // Vec2 - expose as a value type with public fields
 // ---------------------------------------------------------------------------

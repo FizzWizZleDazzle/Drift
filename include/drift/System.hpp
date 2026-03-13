@@ -10,6 +10,7 @@
 namespace drift {
 
 class App;
+class Commands;
 
 // Access mode for dependency tracking.
 enum class AccessMode { Read, Write };
@@ -59,6 +60,14 @@ struct DepsCollector<> {
 // Skip float (dt parameter)
 template<typename... Rest>
 struct DepsCollector<float, Rest...> {
+    static void collect(std::vector<AccessDescriptor>& deps) {
+        DepsCollector<Rest...>::collect(deps);
+    }
+};
+
+// Skip Commands& (injected from App, not a resource dependency)
+template<typename... Rest>
+struct DepsCollector<Commands&, Rest...> {
     static void collect(std::vector<AccessDescriptor>& deps) {
         DepsCollector<Rest...>::collect(deps);
     }

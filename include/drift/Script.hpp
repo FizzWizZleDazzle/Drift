@@ -2,10 +2,12 @@
 
 #include <drift/Types.hpp>
 #include <drift/World.hpp>
+#include <drift/components/Sprite.h>
 
 namespace drift {
 
 class App;
+class Commands;
 
 // Unity-style Script base class.
 // Attach to an entity as a component. ScriptSystem calls the virtuals.
@@ -26,6 +28,30 @@ public:
     // Convenience: read/write position via Transform2D
     Vec2 position() const;
     void setPosition(Vec2 pos);
+
+    // Built-in component accessors
+    const Transform2D* getTransform() const;
+    Transform2D* getTransformMut();
+    const Sprite* getSprite() const;
+    Sprite* getSpriteMut();
+
+    // Commands access (for spawn/despawn from scripts)
+    Commands& commands() const;
+
+#ifndef SWIG
+    // C++ template escape hatch (not SWIG-visible)
+    template<typename T>
+    const T* getComponent(ComponentId compId) const {
+        if (!world_ || entity_ == InvalidEntity) return nullptr;
+        return world_->get<T>(entity_, compId);
+    }
+
+    template<typename T>
+    T* getComponentMut(ComponentId compId) {
+        if (!world_ || entity_ == InvalidEntity) return nullptr;
+        return world_->getMut<T>(entity_, compId);
+    }
+#endif
 
     // Internal: set by ScriptSystem, not for user code
     void _bind(Entity e, World* w, App* a) {

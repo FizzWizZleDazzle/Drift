@@ -123,6 +123,16 @@ public class App : global::System.IDisposable {
     return ret;
   }
 
+  public World world() {
+    World ret = new World(driftPINVOKE.App_world(swigCPtr), false);
+    return ret;
+  }
+
+  public Commands commands() {
+    Commands ret = new Commands(driftPINVOKE.App_commands(swigCPtr), false);
+    return ret;
+  }
+
   public RendererResource getRendererResource() {
     global::System.IntPtr cPtr = driftPINVOKE.App_getRendererResource(swigCPtr);
     RendererResource ret = (cPtr == global::System.IntPtr.Zero) ? null : new RendererResource(cPtr, false);
@@ -174,6 +184,36 @@ public class App : global::System.IDisposable {
   public UIResource getUIResource() {
     global::System.IntPtr cPtr = driftPINVOKE.App_getUIResource(swigCPtr);
     UIResource ret = (cPtr == global::System.IntPtr.Zero) ? null : new UIResource(cPtr, false);
+    return ret;
+  }
+
+  public World getWorld() {
+    global::System.IntPtr cPtr = driftPINVOKE.App_getWorld(swigCPtr);
+    World ret = (cPtr == global::System.IntPtr.Zero) ? null : new World(cPtr, false);
+    return ret;
+  }
+
+  public Commands getCommands() {
+    global::System.IntPtr cPtr = driftPINVOKE.App_getCommands(swigCPtr);
+    Commands ret = (cPtr == global::System.IntPtr.Zero) ? null : new Commands(cPtr, false);
+    return ret;
+  }
+
+  public WorldResource getWorldResource() {
+    global::System.IntPtr cPtr = driftPINVOKE.App_getWorldResource(swigCPtr);
+    WorldResource ret = (cPtr == global::System.IntPtr.Zero) ? null : new WorldResource(cPtr, false);
+    return ret;
+  }
+
+  public RenderSnapshot getRenderSnapshot() {
+    global::System.IntPtr cPtr = driftPINVOKE.App_getRenderSnapshot(swigCPtr);
+    RenderSnapshot ret = (cPtr == global::System.IntPtr.Zero) ? null : new RenderSnapshot(cPtr, false);
+    return ret;
+  }
+
+  public AssetServer getAssetServer() {
+    global::System.IntPtr cPtr = driftPINVOKE.App_getAssetServer(swigCPtr);
+    AssetServer ret = (cPtr == global::System.IntPtr.Zero) ? null : new AssetServer(cPtr, false);
     return ret;
   }
 

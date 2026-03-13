@@ -9,9 +9,6 @@ namespace drift {
 
 class App;
 
-// Component ID = flecs entity_t
-using ComponentId = uint64_t;
-
 // Opaque query iterator
 struct QueryIter {
     void* _internal = nullptr;
@@ -78,8 +75,14 @@ public:
     Entity* queryEntities(QueryIter* iter);
     void queryFini(QueryIter* iter);
 
+    // Pre-allocate an Entity ID without creating it in flecs.
+    // Used by Commands to return valid IDs before flush.
+    Entity allocateEntity();
+
     // Built-in component IDs
     ComponentId transform2dId() const;
+    ComponentId spriteId() const;
+    ComponentId cameraId() const;
 
     // Internal access
     void* flecsWorld() const;

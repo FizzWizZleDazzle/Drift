@@ -15,7 +15,9 @@ public enum Phase {
   PreUpdate,
   Update,
   PostUpdate,
-  Render
+  Extract,
+  Render,
+  RenderFlush
 }
 
 }

@@ -101,7 +101,9 @@ enum class Phase {
     PreUpdate,
     Update,
     PostUpdate,
+    Extract,
     Render,
+    RenderFlush,
 };
 
 enum class BodyType {
@@ -249,6 +251,7 @@ inline bool operator&(PanelFlags a, PanelFlags b) { return (static_cast<int>(a) 
 // ---- ECS types ----
 using Entity = uint64_t;
 constexpr Entity InvalidEntity = 0;
+using ComponentId = uint64_t;
 
 // ---- Log levels ----
 enum class LogLevel {

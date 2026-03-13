@@ -121,6 +121,13 @@ set(DRIFT_SOURCES
     # ECS
     src/ecs/World.cpp
     src/ecs/ScriptSystem.cpp
+    src/ecs/Commands.cpp
+
+    # Render snapshot
+    src/renderer/RenderSnapshot.cpp
+
+    # Asset server
+    src/core/AssetServer.cpp
 
     # Subsystem resources
     src/renderer/RendererResource.cpp

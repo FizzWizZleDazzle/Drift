@@ -226,11 +226,41 @@ HANDLE_CSHARP_CODE(CameraTag)
 %}
 
 // ---------------------------------------------------------------------------
+// Sprite: ToString
+// ---------------------------------------------------------------------------
+%typemap(cscode) drift::Sprite %{
+  public override string ToString() {
+    return $"Sprite(zOrder={zOrder}, visible={visible})";
+  }
+%}
+
+// ---------------------------------------------------------------------------
+// SpriteEntry: ToString
+// ---------------------------------------------------------------------------
+%typemap(cscode) drift::SpriteEntry %{
+  public override string ToString() {
+    return $"SpriteEntry({transform}, {sprite})";
+  }
+%}
+
+// ---------------------------------------------------------------------------
 // EntityBuilder: return self for chaining in C#
 // ---------------------------------------------------------------------------
 %typemap(cscode) drift::EntityBuilder %{
   // C# property wrapper for the entity ID
   public ulong Id {
     get { return id(); }
+  }
+%}
+
+// ---------------------------------------------------------------------------
+// Script: C# property accessors for built-in components
+// ---------------------------------------------------------------------------
+%typemap(cscode) drift::Script %{
+  public Transform2D TransformComponent {
+    get { return getTransformMut(); }
+  }
+  public Sprite SpriteComponent {
+    get { return getSpriteMut(); }
   }
 %}

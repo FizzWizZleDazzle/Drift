@@ -17,6 +17,7 @@ union SDL_Event;
 namespace drift {
 
 class World;
+class Commands;
 
 // EventHandler: receives raw SDL events (for InputResource, UIResource, etc.)
 class EventHandler {
@@ -46,6 +47,10 @@ public:
     double time() const;
     uint64_t frameCount() const;
     const Config& config() const;
+
+    // World + Commands access
+    World& world();
+    Commands& commands();
 
     // Internal: get window/GPU device for subsystems
     void* sdlWindow() const;
@@ -135,6 +140,11 @@ private:
     auto buildParam(float) -> std::enable_if_t<IsResMut<T>::value, T> {
         using Inner = typename InnerType<T>::type;
         return T(getResource<Inner>());
+    }
+
+    template<typename T>
+    auto buildParam(float) -> std::enable_if_t<std::is_same_v<T, Commands&>, Commands&> {
+        return commands();
     }
 #endif
 

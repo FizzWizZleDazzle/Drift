@@ -17,7 +17,7 @@ public:
 #ifndef SWIG
         app.addResource<RendererResource>(app);
         app.addSystem<renderer_begin_frame>("renderer_begin", Phase::PreUpdate);
-        app.addSystem<renderer_end_frame>("renderer_end", Phase::Render);
+        app.addSystem<renderer_end_frame>("renderer_end", Phase::RenderFlush);
 #endif
     }
     DRIFT_PLUGIN(RendererPlugin)

@@ -1,5 +1,7 @@
 #include <drift/World.hpp>
 #include <drift/Log.hpp>
+#include <drift/components/Sprite.h>
+#include <drift/components/Camera.h>
 
 #include "flecs.h"
 
@@ -25,6 +27,8 @@ struct QueryIterInternal {
 struct World::Impl {
     ecs_world_t* ecs = nullptr;
     ComponentId transform2dId = 0;
+    ComponentId spriteId = 0;
+    ComponentId cameraId = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -40,8 +44,10 @@ World::World()
         return;
     }
 
-    // Register built-in Transform2D component
+    // Register built-in components
     impl_->transform2dId = registerComponent("Transform2D", sizeof(Transform2D), alignof(Transform2D));
+    impl_->spriteId = registerComponent("Sprite", sizeof(Sprite), alignof(Sprite));
+    impl_->cameraId = registerComponent("Camera", sizeof(Camera), alignof(Camera));
 
     DRIFT_LOG_INFO("ECS world created (flecs)");
 }
@@ -225,8 +231,22 @@ void World::queryFini(QueryIter* iter) {
 // Built-in IDs
 // ---------------------------------------------------------------------------
 
+Entity World::allocateEntity() {
+    if (!impl_->ecs) return InvalidEntity;
+    // ecs_new creates an empty entity in flecs (no components yet)
+    return static_cast<Entity>(ecs_new(impl_->ecs));
+}
+
 ComponentId World::transform2dId() const {
     return impl_->transform2dId;
+}
+
+ComponentId World::spriteId() const {
+    return impl_->spriteId;
+}
+
+ComponentId World::cameraId() const {
+    return impl_->cameraId;
 }
 
 void* World::flecsWorld() const {

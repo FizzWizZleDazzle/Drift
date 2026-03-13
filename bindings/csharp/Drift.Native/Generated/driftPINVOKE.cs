@@ -1404,6 +1404,12 @@ class driftPINVOKE {
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_config")]
   public static extern global::System.IntPtr App_config(global::System.Runtime.InteropServices.HandleRef jarg1);
 
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_world")]
+  public static extern global::System.IntPtr App_world(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_commands")]
+  public static extern global::System.IntPtr App_commands(global::System.Runtime.InteropServices.HandleRef jarg1);
+
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_getRendererResource")]
   public static extern global::System.IntPtr App_getRendererResource(global::System.Runtime.InteropServices.HandleRef jarg1);
 
@@ -1430,6 +1436,21 @@ class driftPINVOKE {
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_getUIResource")]
   public static extern global::System.IntPtr App_getUIResource(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_getWorld")]
+  public static extern global::System.IntPtr App_getWorld(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_getCommands")]
+  public static extern global::System.IntPtr App_getCommands(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_getWorldResource")]
+  public static extern global::System.IntPtr App_getWorldResource(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_getRenderSnapshot")]
+  public static extern global::System.IntPtr App_getRenderSnapshot(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_getAssetServer")]
+  public static extern global::System.IntPtr App_getAssetServer(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_QueryIter_count_set")]
   public static extern void QueryIter_count_set(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
@@ -1509,8 +1530,17 @@ class driftPINVOKE {
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_queryFini")]
   public static extern void World_queryFini(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
 
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_allocateEntity")]
+  public static extern ulong World_allocateEntity(global::System.Runtime.InteropServices.HandleRef jarg1);
+
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_transform2dId")]
   public static extern ulong World_transform2dId(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_spriteId")]
+  public static extern ulong World_spriteId(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_cameraId")]
+  public static extern ulong World_cameraId(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_EntityBuilder")]
   public static extern global::System.IntPtr new_EntityBuilder(global::System.Runtime.InteropServices.HandleRef jarg1);
@@ -1529,6 +1559,123 @@ class driftPINVOKE {
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_EntityBuilder")]
   public static extern void delete_EntityBuilder(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_texture_set")]
+  public static extern void Sprite_texture_set(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_texture_get")]
+  public static extern global::System.IntPtr Sprite_texture_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_srcRect_set")]
+  public static extern void Sprite_srcRect_set(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_srcRect_get")]
+  public static extern global::System.IntPtr Sprite_srcRect_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_origin_set")]
+  public static extern void Sprite_origin_set(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_origin_get")]
+  public static extern global::System.IntPtr Sprite_origin_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_tint_set")]
+  public static extern void Sprite_tint_set(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_tint_get")]
+  public static extern global::System.IntPtr Sprite_tint_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_flip_set")]
+  public static extern void Sprite_flip_set(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_flip_get")]
+  public static extern int Sprite_flip_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_zOrder_set")]
+  public static extern void Sprite_zOrder_set(global::System.Runtime.InteropServices.HandleRef jarg1, float jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_zOrder_get")]
+  public static extern float Sprite_zOrder_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_visible_set")]
+  public static extern void Sprite_visible_set(global::System.Runtime.InteropServices.HandleRef jarg1, bool jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Sprite_visible_get")]
+  public static extern bool Sprite_visible_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_Sprite")]
+  public static extern global::System.IntPtr new_Sprite();
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_Sprite")]
+  public static extern void delete_Sprite(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Camera_zoom_set")]
+  public static extern void Camera_zoom_set(global::System.Runtime.InteropServices.HandleRef jarg1, float jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Camera_zoom_get")]
+  public static extern float Camera_zoom_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Camera_rotation_set")]
+  public static extern void Camera_rotation_set(global::System.Runtime.InteropServices.HandleRef jarg1, float jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Camera_rotation_get")]
+  public static extern float Camera_rotation_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Camera_active_set")]
+  public static extern void Camera_active_set(global::System.Runtime.InteropServices.HandleRef jarg1, bool jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Camera_active_get")]
+  public static extern bool Camera_active_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_Camera")]
+  public static extern global::System.IntPtr new_Camera();
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_Camera")]
+  public static extern void delete_Camera(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_Commands")]
+  public static extern global::System.IntPtr new_Commands(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_spawn")]
+  public static extern ulong Commands_spawn(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_insert")]
+  public static extern void Commands_insert(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2, ulong jarg3, global::System.IntPtr jarg4, uint jarg5);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_despawn")]
+  public static extern void Commands_despawn(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_remove")]
+  public static extern void Commands_remove(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2, ulong jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_setTransform")]
+  public static extern void Commands_setTransform(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_setSprite")]
+  public static extern void Commands_setSprite(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_setCamera")]
+  public static extern void Commands_setCamera(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_spawnSprite__SWIG_0")]
+  public static extern ulong Commands_spawnSprite__SWIG_0(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, float jarg4);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_spawnSprite__SWIG_1")]
+  public static extern ulong Commands_spawnSprite__SWIG_1(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_spawnCamera__SWIG_0")]
+  public static extern ulong Commands_spawnCamera__SWIG_0(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, float jarg3, bool jarg4);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_spawnCamera__SWIG_1")]
+  public static extern ulong Commands_spawnCamera__SWIG_1(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, float jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_spawnCamera__SWIG_2")]
+  public static extern ulong Commands_spawnCamera__SWIG_2(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Commands_flush")]
+  public static extern void Commands_flush(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_Commands")]
+  public static extern void delete_Commands(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_Script")]
   public static extern void delete_Script(global::System.Runtime.InteropServices.HandleRef jarg1);
@@ -1566,6 +1713,21 @@ class driftPINVOKE {
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Script_SetPosition")]
   public static extern void Script_SetPosition(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
 
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Script_getTransform")]
+  public static extern global::System.IntPtr Script_getTransform(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Script_getTransformMut")]
+  public static extern global::System.IntPtr Script_getTransformMut(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Script_getSprite")]
+  public static extern global::System.IntPtr Script_getSprite(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Script_getSpriteMut")]
+  public static extern global::System.IntPtr Script_getSpriteMut(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Script_commands")]
+  public static extern global::System.IntPtr Script_commands(global::System.Runtime.InteropServices.HandleRef jarg1);
+
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_Script")]
   public static extern global::System.IntPtr new_Script();
 
@@ -1583,6 +1745,135 @@ class driftPINVOKE {
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_ScriptPtr")]
   public static extern void delete_ScriptPtr(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_SpriteEntry_transform_set")]
+  public static extern void SpriteEntry_transform_set(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_SpriteEntry_transform_get")]
+  public static extern global::System.IntPtr SpriteEntry_transform_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_SpriteEntry_sprite_set")]
+  public static extern void SpriteEntry_sprite_set(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_SpriteEntry_sprite_get")]
+  public static extern global::System.IntPtr SpriteEntry_sprite_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_SpriteEntry")]
+  public static extern global::System.IntPtr new_SpriteEntry();
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_SpriteEntry")]
+  public static extern void delete_SpriteEntry(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_position_set")]
+  public static extern void CameraSnapshot_position_set(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_position_get")]
+  public static extern global::System.IntPtr CameraSnapshot_position_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_zoom_set")]
+  public static extern void CameraSnapshot_zoom_set(global::System.Runtime.InteropServices.HandleRef jarg1, float jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_zoom_get")]
+  public static extern float CameraSnapshot_zoom_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_rotation_set")]
+  public static extern void CameraSnapshot_rotation_set(global::System.Runtime.InteropServices.HandleRef jarg1, float jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_rotation_get")]
+  public static extern float CameraSnapshot_rotation_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_found_set")]
+  public static extern void CameraSnapshot_found_set(global::System.Runtime.InteropServices.HandleRef jarg1, bool jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_CameraSnapshot_found_get")]
+  public static extern bool CameraSnapshot_found_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_CameraSnapshot")]
+  public static extern global::System.IntPtr new_CameraSnapshot();
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_CameraSnapshot")]
+  public static extern void delete_CameraSnapshot(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_name")]
+  public static extern string RenderSnapshot_name(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_nameSwigExplicitRenderSnapshot")]
+  public static extern string RenderSnapshot_nameSwigExplicitRenderSnapshot(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_extract")]
+  public static extern void RenderSnapshot_extract(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_camera")]
+  public static extern global::System.IntPtr RenderSnapshot_camera(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_swap")]
+  public static extern void RenderSnapshot_swap(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_RenderSnapshot")]
+  public static extern global::System.IntPtr new_RenderSnapshot();
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_RenderSnapshot")]
+  public static extern void delete_RenderSnapshot(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_director_connect")]
+  public static extern void RenderSnapshot_director_connect(global::System.Runtime.InteropServices.HandleRef jarg1, RenderSnapshot.SwigDelegateRenderSnapshot_0 delegate0);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_WorldResource")]
+  public static extern global::System.IntPtr new_WorldResource(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_WorldResource_name")]
+  public static extern string WorldResource_name(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_WorldResource_nameSwigExplicitWorldResource")]
+  public static extern string WorldResource_nameSwigExplicitWorldResource(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_WorldResource_world__SWIG_0")]
+  public static extern global::System.IntPtr WorldResource_world__SWIG_0(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_WorldResource")]
+  public static extern void delete_WorldResource(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_WorldResource_director_connect")]
+  public static extern void WorldResource_director_connect(global::System.Runtime.InteropServices.HandleRef jarg1, WorldResource.SwigDelegateWorldResource_0 delegate0);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_AssetServer")]
+  public static extern global::System.IntPtr new_AssetServer(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_delete_AssetServer")]
+  public static extern void delete_AssetServer(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_name")]
+  public static extern string AssetServer_name(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_nameSwigExplicitAssetServer")]
+  public static extern string AssetServer_nameSwigExplicitAssetServer(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_loadTexture")]
+  public static extern global::System.IntPtr AssetServer_loadTexture(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_destroyTexture")]
+  public static extern void AssetServer_destroyTexture(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_getTextureSize")]
+  public static extern void AssetServer_getTextureSize(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, global::System.Runtime.InteropServices.HandleRef jarg4);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_loadSound")]
+  public static extern global::System.IntPtr AssetServer_loadSound(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_playSound__SWIG_0")]
+  public static extern global::System.IntPtr AssetServer_playSound__SWIG_0(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, float jarg3, float jarg4);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_playSound__SWIG_1")]
+  public static extern global::System.IntPtr AssetServer_playSound__SWIG_1(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, float jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_playSound__SWIG_2")]
+  public static extern global::System.IntPtr AssetServer_playSound__SWIG_2(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_loadFont")]
+  public static extern global::System.IntPtr AssetServer_loadFont(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2, int jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_director_connect")]
+  public static extern void AssetServer_director_connect(global::System.Runtime.InteropServices.HandleRef jarg1, AssetServer.SwigDelegateAssetServer_0 delegate0);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_RendererResource")]
   public static extern global::System.IntPtr new_RendererResource(global::System.Runtime.InteropServices.HandleRef jarg1);
@@ -2300,6 +2591,15 @@ class driftPINVOKE {
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_MinimalPlugins_director_connect")]
   public static extern void MinimalPlugins_director_connect(global::System.Runtime.InteropServices.HandleRef jarg1, MinimalPlugins.SwigDelegateMinimalPlugins_0 delegate0);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_SWIGUpcast")]
+  public static extern global::System.IntPtr RenderSnapshot_SWIGUpcast(global::System.IntPtr jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_WorldResource_SWIGUpcast")]
+  public static extern global::System.IntPtr WorldResource_SWIGUpcast(global::System.IntPtr jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_AssetServer_SWIGUpcast")]
+  public static extern global::System.IntPtr AssetServer_SWIGUpcast(global::System.IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RendererResource_SWIGUpcast")]
   public static extern global::System.IntPtr RendererResource_SWIGUpcast(global::System.IntPtr jarg1);

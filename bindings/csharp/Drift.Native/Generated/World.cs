@@ -139,8 +139,23 @@ public class World : global::System.IDisposable {
     driftPINVOKE.World_queryFini(swigCPtr, QueryIter.getCPtr(iter));
   }
 
+  public ulong allocateEntity() {
+    ulong ret = driftPINVOKE.World_allocateEntity(swigCPtr);
+    return ret;
+  }
+
   public ulong transform2dId() {
     ulong ret = driftPINVOKE.World_transform2dId(swigCPtr);
+    return ret;
+  }
+
+  public ulong spriteId() {
+    ulong ret = driftPINVOKE.World_spriteId(swigCPtr);
+    return ret;
+  }
+
+  public ulong cameraId() {
+    ulong ret = driftPINVOKE.World_cameraId(swigCPtr);
     return ret;
   }
 
