@@ -62,6 +62,11 @@ public class Plugin : global::System.IDisposable {
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
+  public virtual void finish(App app) {
+    if (SwigDerivedClassHasMethod("finish", swigMethodTypes1)) driftPINVOKE.Plugin_finishSwigExplicitPlugin(swigCPtr, App.getCPtr(app)); else driftPINVOKE.Plugin_finish(swigCPtr, App.getCPtr(app));
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+  }
+
   public virtual string name() {
     string ret = driftPINVOKE.Plugin_name(swigCPtr);
     return ret;
@@ -74,9 +79,11 @@ public class Plugin : global::System.IDisposable {
   private void SwigDirectorConnect() {
     if (SwigDerivedClassHasMethod("build", swigMethodTypes0))
       swigDelegate0 = new SwigDelegatePlugin_0(SwigDirectorMethodbuild);
-    if (SwigDerivedClassHasMethod("name", swigMethodTypes1))
-      swigDelegate1 = new SwigDelegatePlugin_1(SwigDirectorMethodname);
-    driftPINVOKE.Plugin_director_connect(swigCPtr, swigDelegate0, swigDelegate1);
+    if (SwigDerivedClassHasMethod("finish", swigMethodTypes1))
+      swigDelegate1 = new SwigDelegatePlugin_1(SwigDirectorMethodfinish);
+    if (SwigDerivedClassHasMethod("name", swigMethodTypes2))
+      swigDelegate2 = new SwigDelegatePlugin_2(SwigDirectorMethodname);
+    driftPINVOKE.Plugin_director_connect(swigCPtr, swigDelegate0, swigDelegate1, swigDelegate2);
   }
 
   private bool SwigDerivedClassHasMethod(string methodName, global::System.Type[] methodTypes) {
@@ -117,18 +124,25 @@ public class Plugin : global::System.IDisposable {
     build(new App(app, false));
   }
 
+  private void SwigDirectorMethodfinish(global::System.IntPtr app) {
+    finish(new App(app, false));
+  }
+
   private string SwigDirectorMethodname() {
     return name();
   }
 
   public delegate void SwigDelegatePlugin_0(global::System.IntPtr app);
-  public delegate string SwigDelegatePlugin_1();
+  public delegate void SwigDelegatePlugin_1(global::System.IntPtr app);
+  public delegate string SwigDelegatePlugin_2();
 
   private SwigDelegatePlugin_0 swigDelegate0;
   private SwigDelegatePlugin_1 swigDelegate1;
+  private SwigDelegatePlugin_2 swigDelegate2;
 
   private static global::System.Type[] swigMethodTypes0 = new global::System.Type[] { typeof(App) };
-  private static global::System.Type[] swigMethodTypes1 = new global::System.Type[] {  };
+  private static global::System.Type[] swigMethodTypes1 = new global::System.Type[] { typeof(App) };
+  private static global::System.Type[] swigMethodTypes2 = new global::System.Type[] {  };
 }
 
 }

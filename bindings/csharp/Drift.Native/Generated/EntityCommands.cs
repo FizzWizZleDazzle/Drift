@@ -83,6 +83,12 @@ public class EntityCommands : global::System.IDisposable {
     return ret;
   }
 
+  public EntityCommands insert(Name n) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insert__SWIG_3(swigCPtr, Name.getCPtr(n)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
   public EntityCommands despawn() {
     EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_despawn(swigCPtr), false);
     return ret;
@@ -90,6 +96,78 @@ public class EntityCommands : global::System.IDisposable {
 
   public ulong id() {
     ulong ret = driftPINVOKE.EntityCommands_id(swigCPtr);
+    return ret;
+  }
+
+  public EntityCommands insertRigidBody(RigidBody2D v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertRigidBody(swigCPtr, RigidBody2D.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertBoxCollider(BoxCollider2D v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertBoxCollider(swigCPtr, BoxCollider2D.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertCircleCollider(CircleCollider2D v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertCircleCollider(swigCPtr, CircleCollider2D.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertVelocity(Velocity2D v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertVelocity(swigCPtr, Velocity2D.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertParent(Parent v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertParent(swigCPtr, Parent.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertChildren(Children v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertChildren(swigCPtr, Children.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertCameraFollow(CameraFollow v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertCameraFollow(swigCPtr, CameraFollow.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertCameraShake(CameraShake v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertCameraShake(swigCPtr, CameraShake.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertTrailRenderer(TrailRenderer v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertTrailRenderer(swigCPtr, TrailRenderer.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertParticleEmitter(ParticleEmitter v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertParticleEmitter(swigCPtr, ParticleEmitter.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertSpriteAnimator(SpriteAnimator v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertSpriteAnimator(swigCPtr, SpriteAnimator.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
+  }
+
+  public EntityCommands insertGlobalTransform(GlobalTransform2D v) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insertGlobalTransform(swigCPtr, GlobalTransform2D.getCPtr(v)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
     return ret;
   }
 

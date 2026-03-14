@@ -25,6 +25,13 @@ public class drift {
     driftPINVOKE.log((int)level, fmt);
   }
 
+  public static int MaxChildren {
+    get {
+      int ret = driftPINVOKE.MaxChildren_get();
+      return ret;
+    } 
+  }
+
 }
 
 }

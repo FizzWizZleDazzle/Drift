@@ -94,43 +94,58 @@ public class RendererResource : Resource {
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
+  public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, Vec2 scale, float rotation, Vec2 origin, Color tint, Flip flip, float zOrder, bool additive) {
+    driftPINVOKE.RendererResource_drawSprite__SWIG_2(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin), Color.getCPtr(tint), (int)flip, zOrder, additive);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+  }
+
   public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, Vec2 scale, float rotation, Vec2 origin, Color tint, Flip flip, float zOrder) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_2(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin), Color.getCPtr(tint), (int)flip, zOrder);
+    driftPINVOKE.RendererResource_drawSprite__SWIG_3(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin), Color.getCPtr(tint), (int)flip, zOrder);
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
   public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, Vec2 scale, float rotation, Vec2 origin, Color tint, Flip flip) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_3(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin), Color.getCPtr(tint), (int)flip);
+    driftPINVOKE.RendererResource_drawSprite__SWIG_4(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin), Color.getCPtr(tint), (int)flip);
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
   public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, Vec2 scale, float rotation, Vec2 origin, Color tint) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_4(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin), Color.getCPtr(tint));
+    driftPINVOKE.RendererResource_drawSprite__SWIG_5(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin), Color.getCPtr(tint));
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
   public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, Vec2 scale, float rotation, Vec2 origin) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_5(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin));
+    driftPINVOKE.RendererResource_drawSprite__SWIG_6(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation, Vec2.getCPtr(origin));
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
   public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, Vec2 scale, float rotation) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_6(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation);
+    driftPINVOKE.RendererResource_drawSprite__SWIG_7(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale), rotation);
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
   public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, Vec2 scale) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_7(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale));
+    driftPINVOKE.RendererResource_drawSprite__SWIG_8(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect), Vec2.getCPtr(scale));
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
   public void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_8(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect));
+    driftPINVOKE.RendererResource_drawSprite__SWIG_9(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position), Rect.getCPtr(srcRect));
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
   public void drawSprite(TextureHandle texture, Vec2 position) {
-    driftPINVOKE.RendererResource_drawSprite__SWIG_9(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position));
+    driftPINVOKE.RendererResource_drawSprite__SWIG_10(swigCPtr, TextureHandle.getCPtr(texture), Vec2.getCPtr(position));
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+  }
+
+  public void drawSpriteBatch(TextureHandle texture, Rect srcRect, Vec2 positions, SWIGTYPE_p_float sizes, SWIGTYPE_p_float rotations, Color tints, int count, float zOrder, bool additive) {
+    driftPINVOKE.RendererResource_drawSpriteBatch__SWIG_0(swigCPtr, TextureHandle.getCPtr(texture), Rect.getCPtr(srcRect), Vec2.getCPtr(positions), SWIGTYPE_p_float.getCPtr(sizes), SWIGTYPE_p_float.getCPtr(rotations), Color.getCPtr(tints), count, zOrder, additive);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+  }
+
+  public void drawSpriteBatch(TextureHandle texture, Rect srcRect, Vec2 positions, SWIGTYPE_p_float sizes, SWIGTYPE_p_float rotations, Color tints, int count, float zOrder) {
+    driftPINVOKE.RendererResource_drawSpriteBatch__SWIG_1(swigCPtr, TextureHandle.getCPtr(texture), Rect.getCPtr(srcRect), Vec2.getCPtr(positions), SWIGTYPE_p_float.getCPtr(sizes), SWIGTYPE_p_float.getCPtr(rotations), Color.getCPtr(tints), count, zOrder);
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 

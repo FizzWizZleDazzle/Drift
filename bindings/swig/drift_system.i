@@ -23,6 +23,16 @@
 #include <drift/EntityAllocator.hpp>
 #include <drift/components/Sprite.hpp>
 #include <drift/components/Camera.hpp>
+#include <drift/components/Physics.hpp>
+#include <drift/components/Name.hpp>
+#include <drift/components/Hierarchy.hpp>
+#include <drift/components/GlobalTransform.hpp>
+#include <drift/components/ParticleEmitter.hpp>
+#include <drift/components/SpriteAnimator.hpp>
+#include <drift/components/CameraController.hpp>
+#include <drift/components/TrailRenderer.hpp>
+#include <drift/particles/EmitterConfig.hpp>
+#include <drift/CollisionBridge.hpp>
 
 // Resource headers
 #include <drift/resources/RendererResource.hpp>
@@ -192,6 +202,61 @@
 %ignore drift::UIResource::devIsVisible;
 
 // ---------------------------------------------------------------------------
+// Component types: ignore std::vector fields, provide helpers
+// ---------------------------------------------------------------------------
+
+// SpriteAnimator: ignore vector<AnimationClip> clips
+%ignore drift::SpriteAnimator::clips;
+%ignore drift::AnimationClip;
+%extend drift::SpriteAnimator {
+    void addClip(const drift::Rect* frames, int frameCount, float frameDuration, bool loop) {
+        drift::AnimationClip clip;
+        clip.frameDuration = frameDuration;
+        clip.looping = loop;
+        for (int i = 0; i < frameCount; i++) {
+            clip.frames.push_back(frames[i]);
+        }
+        $self->clips.push_back(clip);
+    }
+    int clipCount() const { return static_cast<int>($self->clips.size()); }
+    void clearClips() { $self->clips.clear(); }
+}
+
+// EmitterConfig: ignore vector<BurstEntry> bursts
+%ignore drift::EmitterConfig::bursts;
+%extend drift::EmitterConfig {
+    void addBurst(float time, int count, int cycles, float interval) {
+        drift::BurstEntry burst;
+        burst.time = time;
+        burst.count = count;
+        burst.cycles = cycles;
+        burst.interval = interval;
+        $self->bursts.push_back(burst);
+    }
+    int burstCount() const { return static_cast<int>($self->bursts.size()); }
+    void clearBursts() { $self->bursts.clear(); }
+}
+
+// Children: ignore fixed-size array, provide indexed access
+%ignore drift::Children::ids;
+%extend drift::Children {
+    uint64_t getId(int i) const {
+        return (i >= 0 && i < $self->count) ? $self->ids[i] : 0;
+    }
+    void setId(int i, uint64_t id) {
+        if (i >= 0 && i < drift::MaxChildren) $self->ids[i] = id;
+    }
+}
+
+// CollisionBridge: hide internal Entry struct and mutator methods
+%ignore drift::CollisionBridge::Entry;
+%ignore drift::CollisionBridge::clear;
+%ignore drift::CollisionBridge::addCollisionStart;
+%ignore drift::CollisionBridge::addCollisionEnd;
+%ignore drift::CollisionBridge::addSensorStart;
+%ignore drift::CollisionBridge::addSensorEnd;
+
+// ---------------------------------------------------------------------------
 // Ownership transfers: App takes ownership of Plugin*, PluginGroup*,
 // SystemBase* passed via these methods. Tell SWIG so the C# GC does not
 // try to free the C++ object.
@@ -277,6 +342,82 @@
         return static_cast<drift::Time*>(
             $self->getResourceByName("Time"));
     }
+    drift::CollisionBridge* getCollisionBridge() {
+        return static_cast<drift::CollisionBridge*>(
+            $self->getResourceByName("CollisionBridge"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// EntityCommands: typed inserts for all component types
+// ---------------------------------------------------------------------------
+%extend drift::EntityCommands {
+    drift::EntityCommands& insertRigidBody(const drift::RigidBody2D& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertBoxCollider(const drift::BoxCollider2D& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertCircleCollider(const drift::CircleCollider2D& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertVelocity(const drift::Velocity2D& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertParent(const drift::Parent& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertChildren(const drift::Children& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertCameraFollow(const drift::CameraFollow& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertCameraShake(const drift::CameraShake& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertTrailRenderer(const drift::TrailRenderer& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertParticleEmitter(const drift::ParticleEmitter& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertSpriteAnimator(const drift::SpriteAnimator& v) {
+        $self->insert(v);
+        return *$self;
+    }
+    drift::EntityCommands& insertGlobalTransform(const drift::GlobalTransform2D& v) {
+        $self->insert(v);
+        return *$self;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// World: component ID lookups for C# direct component access
+// ---------------------------------------------------------------------------
+%extend drift::World {
+    uint64_t rigidBody2dId()     { return $self->lookupComponent("RigidBody2D"); }
+    uint64_t boxCollider2dId()   { return $self->lookupComponent("BoxCollider2D"); }
+    uint64_t circleCollider2dId(){ return $self->lookupComponent("CircleCollider2D"); }
+    uint64_t velocity2dId()      { return $self->lookupComponent("Velocity2D"); }
+    uint64_t parentComponentId() { return $self->lookupComponent("Parent"); }
+    uint64_t childrenId()        { return $self->lookupComponent("Children"); }
+    uint64_t cameraFollowId()    { return $self->lookupComponent("CameraFollow"); }
+    uint64_t cameraShakeId()     { return $self->lookupComponent("CameraShake"); }
+    uint64_t trailRendererId()   { return $self->lookupComponent("TrailRenderer"); }
+    uint64_t particleEmitterId() { return $self->lookupComponent("ParticleEmitter"); }
+    uint64_t spriteAnimatorId()  { return $self->lookupComponent("SpriteAnimator"); }
+    uint64_t globalTransform2dId() { return $self->lookupComponent("GlobalTransform2D"); }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,8 +433,21 @@
 %include "drift/ComponentRegistry.hpp"
 %include "drift/World.hpp"
 %include "drift/Entity.hpp"
+// Component types (must come BEFORE Commands.hpp so SWIG resolves
+// types used in EntityCommands::insert() overloads correctly)
 %include "drift/components/Sprite.hpp"
 %include "drift/components/Camera.hpp"
+%include "drift/components/Name.hpp"
+%include "drift/components/Hierarchy.hpp"
+%include "drift/components/GlobalTransform.hpp"
+%include "drift/components/Physics.hpp"
+%include "drift/particles/EmitterConfig.hpp"
+%include "drift/components/ParticleEmitter.hpp"
+%include "drift/components/SpriteAnimator.hpp"
+%include "drift/components/CameraController.hpp"
+%include "drift/components/TrailRenderer.hpp"
+%include "drift/CollisionBridge.hpp"
+
 %include "drift/Commands.hpp"
 %include "drift/Script.hpp"
 %include "drift/RenderSnapshot.hpp"

@@ -198,6 +198,12 @@ public class App : global::System.IDisposable {
     return ret;
   }
 
+  public CollisionBridge getCollisionBridge() {
+    global::System.IntPtr cPtr = driftPINVOKE.App_getCollisionBridge(swigCPtr);
+    CollisionBridge ret = (cPtr == global::System.IntPtr.Zero) ? null : new CollisionBridge(cPtr, false);
+    return ret;
+  }
+
 }
 
 }

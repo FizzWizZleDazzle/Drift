@@ -1,13 +1,3 @@
-// =============================================================================
-// Drift SDK - Typed App Extension Methods (Layer 2)
-// =============================================================================
-// Hand-written C# SDK extension methods for the SWIG-generated drift.App.
-// Provides strongly-typed resource accessors and system registration helpers.
-//
-// SWIG-generated code lives in namespace "drift" (the C++ namespace).
-// This hand-written SDK lives in namespace "Drift".
-// =============================================================================
-
 using System;
 
 namespace Drift
@@ -61,48 +51,12 @@ namespace Drift
         public static drift.AssetServer? GetAssets(this drift.App app)
             => app.getAssetServer();
 
-        // ====================================================================
-        // Generic resource getter
-        // ====================================================================
-
-        public static T? GetResource<T>(this drift.App app) where T : drift.Resource
-        {
-            return app.getResourceByName(typeof(T).Name) as T;
-        }
-
-        public static T RequireResource<T>(this drift.App app) where T : drift.Resource
-        {
-            var res = app.getResourceByName(typeof(T).Name) as T;
-            if (res == null)
-            {
-                throw new InvalidOperationException(
-                    $"Resource '{typeof(T).Name}' is required but was not " +
-                    $"registered. Ensure the corresponding plugin is added " +
-                    $"to the App before this system runs.");
-            }
-            return res;
-        }
+        public static drift.CollisionBridge? GetCollisionBridge(this drift.App app)
+            => app.getCollisionBridge();
 
         // ====================================================================
-        // System registration
+        // Lambda system registration
         // ====================================================================
-
-        public static drift.App AddSystem<T>(this drift.App app, drift.Phase phase)
-            where T : Drift.SystemBase, new()
-        {
-            var system = new T();
-            string name = typeof(T).Name;
-            app.addSystemRaw(name, phase, system);
-            return app;
-        }
-
-        public static drift.App AddSystem(this drift.App app, Drift.SystemBase system, drift.Phase phase)
-        {
-            if (system == null) throw new ArgumentNullException(nameof(system));
-            string name = system.GetType().Name;
-            app.addSystemRaw(name, phase, system);
-            return app;
-        }
 
         public static drift.App AddSystem(
             this drift.App app,
@@ -117,38 +71,15 @@ namespace Drift
         }
 
         // ====================================================================
-        // Single-call resource registration
+        // Resource registration
         // ====================================================================
 
-        public static drift.App AddResource<T>(this drift.App app, T resource) where T : drift.Resource
+        public static drift.App AddResource(this drift.App app, drift.Resource resource)
         {
             string name = resource.name();
             app.addResourceByName(name, resource);
-            ResourceResolver.Register(name, resource);
             return app;
         }
-
-        // ====================================================================
-        // Phase shortcuts
-        // ====================================================================
-
-        public static drift.App Startup<T>(this drift.App app) where T : Drift.SystemBase, new()
-            => app.AddSystem<T>(drift.Phase.Startup);
-
-        public static drift.App Update<T>(this drift.App app) where T : Drift.SystemBase, new()
-            => app.AddSystem<T>(drift.Phase.Update);
-
-        public static drift.App Render<T>(this drift.App app) where T : Drift.SystemBase, new()
-            => app.AddSystem<T>(drift.Phase.Render);
-
-        public static drift.App PreUpdate<T>(this drift.App app) where T : Drift.SystemBase, new()
-            => app.AddSystem<T>(drift.Phase.PreUpdate);
-
-        public static drift.App PostUpdate<T>(this drift.App app) where T : Drift.SystemBase, new()
-            => app.AddSystem<T>(drift.Phase.PostUpdate);
-
-        public static drift.App Extract<T>(this drift.App app) where T : Drift.SystemBase, new()
-            => app.AddSystem<T>(drift.Phase.Extract);
 
         // ====================================================================
         // Plugin-like builder helpers
@@ -170,6 +101,22 @@ namespace Drift
         {
             app.addPlugins(group);
             return app;
+        }
+    }
+
+    // Internal: LambdaSystem for inline Action registration
+    internal sealed class LambdaSystem : drift.SystemBase
+    {
+        private readonly Action<drift.App, float> _action;
+
+        public LambdaSystem(Action<drift.App, float> action)
+        {
+            _action = action ?? throw new ArgumentNullException(nameof(action));
+        }
+
+        public override void execute(drift.App app, float dt)
+        {
+            _action(app, dt);
         }
     }
 }

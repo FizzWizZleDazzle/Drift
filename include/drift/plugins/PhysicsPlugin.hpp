@@ -4,6 +4,7 @@
 #include <drift/App.hpp>
 #include <drift/Events.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
+#include <drift/CollisionBridge.hpp>
 #include <drift/resources/PhysicsResource.hpp>
 #include <drift/resources/Time.hpp>
 #include <drift/components/Physics.hpp>
@@ -64,6 +65,52 @@ public:
         // 5. Emit collision events
         app.addSystem("physics_emit_events", Phase::PostUpdate, [](App& a) {
             physics_emit_events(a);
+        });
+
+        // 6. Populate CollisionBridge directly from PhysicsResource contact events
+        //    (same-frame data, no double-buffer delay)
+        app.initResource<CollisionBridge>();
+        app.addSystem("collision_bridge_sync", Phase::PostUpdate, [](App& a) {
+            auto* cb = a.getResource<CollisionBridge>();
+            auto* physics = a.getResource<PhysicsResource>();
+            auto* bridge = a.getResource<PhysicsBridge>();
+            if (!cb || !physics || !bridge) return;
+            cb->clear();
+
+            auto lookupEntity = [&](uint64_t shapeU64) -> EntityId {
+                PhysicsShape shape = u64_to_shape(shapeU64);
+                void* userData = physics->getShapeUserData(shape);
+                if (userData) {
+                    return static_cast<EntityId>(reinterpret_cast<uintptr_t>(userData));
+                }
+                auto it = bridge->shapeToEntity.find(shapeU64);
+                return it != bridge->shapeToEntity.end() ? it->second : InvalidEntityId;
+            };
+
+            for (auto& ce : physics->contactBeginEvents()) {
+                EntityId ea = lookupEntity(ce.shapeA);
+                EntityId eb = lookupEntity(ce.shapeB);
+                if (ea != InvalidEntityId && eb != InvalidEntityId)
+                    cb->addCollisionStart(ea, eb);
+            }
+            for (auto& ce : physics->contactEndEvents()) {
+                EntityId ea = lookupEntity(ce.shapeA);
+                EntityId eb = lookupEntity(ce.shapeB);
+                if (ea != InvalidEntityId && eb != InvalidEntityId)
+                    cb->addCollisionEnd(ea, eb);
+            }
+            for (auto& ce : physics->sensorBeginEvents()) {
+                EntityId ea = lookupEntity(ce.shapeA);
+                EntityId eb = lookupEntity(ce.shapeB);
+                if (ea != InvalidEntityId && eb != InvalidEntityId)
+                    cb->addSensorStart(ea, eb);
+            }
+            for (auto& ce : physics->sensorEndEvents()) {
+                EntityId ea = lookupEntity(ce.shapeA);
+                EntityId eb = lookupEntity(ce.shapeB);
+                if (ea != InvalidEntityId && eb != InvalidEntityId)
+                    cb->addSensorEnd(ea, eb);
+            }
         });
 #endif
     }

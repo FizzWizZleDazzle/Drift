@@ -130,6 +130,8 @@ public class World : global::System.IDisposable {
 
   public System.IntPtr queryField(QueryIter iter, int index, uint size) { return driftPINVOKE.World_queryField(swigCPtr, QueryIter.getCPtr(iter), index, size); }
 
+  public System.IntPtr queryFieldOptional(QueryIter iter, int index, uint size) { return driftPINVOKE.World_queryFieldOptional(swigCPtr, QueryIter.getCPtr(iter), index, size); }
+
   public SWIGTYPE_p_unsigned_long_long queryEntities(QueryIter iter) {
     global::System.IntPtr cPtr = driftPINVOKE.World_queryEntities(swigCPtr, QueryIter.getCPtr(iter));
     SWIGTYPE_p_unsigned_long_long ret = (cPtr == global::System.IntPtr.Zero) ? null : new SWIGTYPE_p_unsigned_long_long(cPtr, false);
@@ -160,8 +162,92 @@ public class World : global::System.IDisposable {
     return ret;
   }
 
+  public ulong nameId() {
+    ulong ret = driftPINVOKE.World_nameId(swigCPtr);
+    return ret;
+  }
+
+  public void setCurrentTick(uint tick) {
+    driftPINVOKE.World_setCurrentTick(swigCPtr, tick);
+  }
+
+  public uint currentTick() {
+    uint ret = driftPINVOKE.World_currentTick(swigCPtr);
+    return ret;
+  }
+
+  public uint getComponentChangeTick(ulong entity, ulong component) {
+    uint ret = driftPINVOKE.World_getComponentChangeTick(swigCPtr, entity, component);
+    return ret;
+  }
+
+  public uint getComponentAddTick(ulong entity, ulong component) {
+    uint ret = driftPINVOKE.World_getComponentAddTick(swigCPtr, entity, component);
+    return ret;
+  }
+
   public SWIGTYPE_p_std__mutex queryMutex() {
     SWIGTYPE_p_std__mutex ret = new SWIGTYPE_p_std__mutex(driftPINVOKE.World_queryMutex(swigCPtr), false);
+    return ret;
+  }
+
+  public ulong rigidBody2dId() {
+    ulong ret = driftPINVOKE.World_rigidBody2dId(swigCPtr);
+    return ret;
+  }
+
+  public ulong boxCollider2dId() {
+    ulong ret = driftPINVOKE.World_boxCollider2dId(swigCPtr);
+    return ret;
+  }
+
+  public ulong circleCollider2dId() {
+    ulong ret = driftPINVOKE.World_circleCollider2dId(swigCPtr);
+    return ret;
+  }
+
+  public ulong velocity2dId() {
+    ulong ret = driftPINVOKE.World_velocity2dId(swigCPtr);
+    return ret;
+  }
+
+  public ulong parentComponentId() {
+    ulong ret = driftPINVOKE.World_parentComponentId(swigCPtr);
+    return ret;
+  }
+
+  public ulong childrenId() {
+    ulong ret = driftPINVOKE.World_childrenId(swigCPtr);
+    return ret;
+  }
+
+  public ulong cameraFollowId() {
+    ulong ret = driftPINVOKE.World_cameraFollowId(swigCPtr);
+    return ret;
+  }
+
+  public ulong cameraShakeId() {
+    ulong ret = driftPINVOKE.World_cameraShakeId(swigCPtr);
+    return ret;
+  }
+
+  public ulong trailRendererId() {
+    ulong ret = driftPINVOKE.World_trailRendererId(swigCPtr);
+    return ret;
+  }
+
+  public ulong particleEmitterId() {
+    ulong ret = driftPINVOKE.World_particleEmitterId(swigCPtr);
+    return ret;
+  }
+
+  public ulong spriteAnimatorId() {
+    ulong ret = driftPINVOKE.World_spriteAnimatorId(swigCPtr);
+    return ret;
+  }
+
+  public ulong globalTransform2dId() {
+    ulong ret = driftPINVOKE.World_globalTransform2dId(swigCPtr);
     return ret;
   }
 
