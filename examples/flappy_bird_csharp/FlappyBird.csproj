@@ -10,8 +10,17 @@
     <!-- SWIG-generated bindings -->
     <Compile Include="../../bindings/csharp/Drift.Native/Generated/**/*.cs" />
     <!-- Hand-written SDK layer -->
-    <Compile Include="../../bindings/csharp/Drift/Systems.cs" />
     <Compile Include="../../bindings/csharp/Drift/AppExtensions.cs" />
+    <Compile Include="../../bindings/csharp/Drift/Component.cs" />
+    <Compile Include="../../bindings/csharp/Drift/EcsComponent.cs" />
+    <Compile Include="../../bindings/csharp/Drift/Entity.cs" />
+    <Compile Include="../../bindings/csharp/Drift/EntityRegistry.cs" />
+    <Compile Include="../../bindings/csharp/Drift/EntityRef.cs" />
+    <Compile Include="../../bindings/csharp/Drift/DriftApp.cs" />
+    <Compile Include="../../bindings/csharp/Drift/Events.cs" />
+    <Compile Include="../../bindings/csharp/Drift/Prelude.cs" />
+    <Compile Include="../../bindings/csharp/Drift/StateMachine.cs" />
+    <Compile Include="../../bindings/csharp/Drift/components/**/*.cs" />
   </ItemGroup>
 
   <!-- Copy native libraries next to output -->
