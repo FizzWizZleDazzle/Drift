@@ -78,6 +78,8 @@ class CameraPlugin : public Plugin {
 public:
     void build(App& app) override {
 #ifndef SWIG
+        app.world().registerComponent<CameraFollow>("CameraFollow");
+        app.world().registerComponent<CameraShake>("CameraShake");
         app.addSystem<cameraFollowSystem>("camera_follow", Phase::PostUpdate);
         app.addSystem<cameraShakeSystem>("camera_shake", Phase::PostUpdate);
 #endif

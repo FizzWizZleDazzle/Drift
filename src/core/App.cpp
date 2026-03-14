@@ -57,6 +57,7 @@ public:
             std::lock_guard<std::mutex> lock(mutex_);
             batchTasks_ = &tasks;
             nextTask_.store(1, std::memory_order_relaxed);  // main takes index 0
+            batchGen_.fetch_add(1, std::memory_order_relaxed);
         }
         cv_.notify_all();
 
@@ -75,17 +76,25 @@ public:
 
 private:
     void workerLoop() {
+        uint64_t lastGen = 0;
         while (true) {
             std::function<void()> task;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
-                cv_.wait(lock, [this] { return stop_ || batchTasks_ != nullptr; });
+                cv_.wait(lock, [this, &lastGen] {
+                    return stop_ || (batchTasks_ != nullptr &&
+                                     batchGen_.load(std::memory_order_relaxed) != lastGen);
+                });
                 if (stop_ && !batchTasks_) return;
                 if (!batchTasks_) continue;
 
                 int idx = nextTask_.fetch_add(1, std::memory_order_relaxed);
-                if (idx >= static_cast<int>(batchTasks_->size())) continue;
+                if (idx >= static_cast<int>(batchTasks_->size())) {
+                    lastGen = batchGen_.load(std::memory_order_relaxed);
+                    continue;
+                }
                 task = (*batchTasks_)[idx];
+                lastGen = batchGen_.load(std::memory_order_relaxed);
             }
 
             if (task) {
@@ -106,6 +115,7 @@ private:
     std::vector<std::function<void()>>* batchTasks_ = nullptr;
     std::atomic<int> nextTask_{0};
     std::atomic<int> remaining_{0};
+    std::atomic<uint64_t> batchGen_{0};
 };
 
 // ---- Thread-safe entity allocator wrapping World's allocator ----

@@ -49,6 +49,7 @@ class SpriteAnimationPlugin : public Plugin {
 public:
     void build(App& app) override {
 #ifndef SWIG
+        app.world().registerComponent<SpriteAnimator>("SpriteAnimator");
         app.addSystem<spriteAnimationUpdate>("sprite_animation_update", Phase::PostUpdate);
 #endif
     }
