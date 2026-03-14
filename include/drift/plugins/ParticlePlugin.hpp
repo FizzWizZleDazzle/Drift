@@ -4,12 +4,13 @@
 #include <drift/App.hpp>
 #include <drift/resources/ParticleResource.hpp>
 #include <drift/resources/RendererResource.hpp>
+#include <drift/resources/Time.hpp>
 
 namespace drift {
 
 #ifndef SWIG
-inline void particles_update(ResMut<ParticleResource> particles, float dt) { particles->update(dt); }
-inline void particles_render(ResMut<ParticleResource> particles, float) { particles->render(); }
+inline void particles_update(ResMut<ParticleResource> particles, Res<Time> time) { particles->update(time->delta); }
+inline void particles_render(ResMut<ParticleResource> particles) { particles->render(); }
 #endif
 
 class ParticlePlugin : public Plugin {

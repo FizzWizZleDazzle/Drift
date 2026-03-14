@@ -1,26 +1,45 @@
 #include <drift/Commands.h>
+#include <drift/EntityAllocator.hpp>
 #include <drift/World.hpp>
 
 #include <cstring>
 
 namespace drift {
 
-Commands::Commands(World& world)
-    : world_(world)
+Commands::Commands(EntityAllocator& allocator, const ComponentRegistry& registry)
+    : allocator_(allocator), registry_(registry)
 {
 }
 
-Entity Commands::spawn() {
-    Entity e = world_.allocateEntity();
+// Typed inserts for SWIG-visible components
+EntityCommands& EntityCommands::insert(const Transform2D& t) {
+    cmd_.insert(entity_, cmd_.registry().getByName("Transform2D"), &t, sizeof(t));
+    return *this;
+}
+EntityCommands& EntityCommands::insert(const Sprite& s) {
+    cmd_.insert(entity_, cmd_.registry().getByName("Sprite"), &s, sizeof(s));
+    return *this;
+}
+EntityCommands& EntityCommands::insert(const Camera& c) {
+    cmd_.insert(entity_, cmd_.registry().getByName("Camera"), &c, sizeof(c));
+    return *this;
+}
+
+EntityCommands Commands::spawn() {
+    EntityId e = allocator_.allocate();
     CommandEntry entry;
     entry.type = CommandEntry::Spawn;
     entry.entity = e;
     entry.component = 0;
     queue_.push_back(std::move(entry));
-    return e;
+    return EntityCommands(*this, e);
 }
 
-void Commands::insert(Entity entity, ComponentId comp, const void* data, size_t size) {
+EntityCommands Commands::entity(EntityId e) {
+    return EntityCommands(*this, e);
+}
+
+void Commands::insert(EntityId entity, ComponentId comp, const void* data, size_t size) {
     CommandEntry entry;
     entry.type = CommandEntry::Insert;
     entry.entity = entity;
@@ -32,7 +51,7 @@ void Commands::insert(Entity entity, ComponentId comp, const void* data, size_t 
     queue_.push_back(std::move(entry));
 }
 
-void Commands::despawn(Entity entity) {
+void Commands::despawn(EntityId entity) {
     CommandEntry entry;
     entry.type = CommandEntry::Despawn;
     entry.entity = entity;
@@ -40,7 +59,7 @@ void Commands::despawn(Entity entity) {
     queue_.push_back(std::move(entry));
 }
 
-void Commands::remove(Entity entity, ComponentId comp) {
+void Commands::remove(EntityId entity, ComponentId comp) {
     CommandEntry entry;
     entry.type = CommandEntry::Remove;
     entry.entity = entity;
@@ -48,73 +67,31 @@ void Commands::remove(Entity entity, ComponentId comp) {
     queue_.push_back(std::move(entry));
 }
 
-void Commands::setTransform(Entity entity, const Transform2D& transform) {
-    insert(entity, world_.transform2dId(), &transform, sizeof(Transform2D));
-}
-
-void Commands::setSprite(Entity entity, const Sprite& sprite) {
-    insert(entity, world_.spriteId(), &sprite, sizeof(Sprite));
-}
-
-void Commands::setCamera(Entity entity, const Camera& camera) {
-    insert(entity, world_.cameraId(), &camera, sizeof(Camera));
-}
-
-Entity Commands::spawnCamera(Vec2 position, float zoom, bool active) {
-    Entity e = spawn();
-
-    Transform2D transform;
-    transform.position = position;
-    insert(e, world_.transform2dId(), &transform, sizeof(Transform2D));
-
-    Camera camera;
-    camera.zoom = zoom;
-    camera.active = active;
-    insert(e, world_.cameraId(), &camera, sizeof(Camera));
-
-    return e;
-}
-
-Entity Commands::spawnSprite(TextureHandle texture, Vec2 position, float zOrder) {
-    Entity e = spawn();
-
-    Transform2D transform;
-    transform.position = position;
-    insert(e, world_.transform2dId(), &transform, sizeof(Transform2D));
-
-    Sprite sprite;
-    sprite.texture = texture;
-    sprite.zOrder = zOrder;
-    insert(e, world_.spriteId(), &sprite, sizeof(Sprite));
-
-    return e;
-}
-
-void Commands::flush() {
+void Commands::flush(World& world) {
     if (queue_.empty()) return;
 
     for (auto& cmd : queue_) {
         switch (cmd.type) {
             case CommandEntry::Spawn:
-                // Entity already allocated via allocateEntity()
+                // Entity already allocated via allocator_.allocate()
                 break;
 
             case CommandEntry::Despawn:
-                if (world_.isAlive(cmd.entity)) {
-                    world_.destroyEntity(cmd.entity);
+                if (world.isAlive(cmd.entity)) {
+                    world.destroyEntity(cmd.entity);
                 }
                 break;
 
             case CommandEntry::Insert:
-                if (world_.isAlive(cmd.entity) && cmd.component != 0) {
-                    world_.setComponent(cmd.entity, cmd.component,
+                if (world.isAlive(cmd.entity) && cmd.component != 0) {
+                    world.setComponent(cmd.entity, cmd.component,
                                         cmd.data.data(), cmd.data.size());
                 }
                 break;
 
             case CommandEntry::Remove:
-                if (world_.isAlive(cmd.entity) && cmd.component != 0) {
-                    world_.removeComponent(cmd.entity, cmd.component);
+                if (world.isAlive(cmd.entity) && cmd.component != 0) {
+                    world.removeComponent(cmd.entity, cmd.component);
                 }
                 break;
         }

@@ -15,14 +15,14 @@ public:
         app.addResource<SpriteResource>(*app.getResource<RendererResource>());
 
         // Extract system: query Sprite+Transform2D+Camera entities into snapshot
-        app.addSystem("sprite_extract", Phase::Extract, [](App& a, float) {
+        app.addSystem("sprite_extract", Phase::Extract, [](App& a) {
             auto* snapshot = a.getResource<RenderSnapshot>();
             snapshot->extract(a.world());
             snapshot->swap();
         });
 
         // Auto-render system: apply camera, then draw sprites from snapshot
-        app.addSystem("sprite_render", Phase::Render, [](App& a, float) {
+        app.addSystem("sprite_render", Phase::Render, [](App& a) {
             auto* snapshot = a.getResource<RenderSnapshot>();
             auto* renderer = a.getResource<RendererResource>();
 

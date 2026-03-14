@@ -11,7 +11,7 @@ public:
     explicit EntityBuilder(World& world)
         : world_(world), entity_(world.createEntity()) {}
 
-    Entity id() const { return entity_; }
+    EntityId id() const { return entity_; }
 
 #ifndef SWIG
     template<typename T>
@@ -31,11 +31,11 @@ public:
         return *this;
     }
 
-    Entity build() { return entity_; }
+    EntityId build() { return entity_; }
 
 private:
     World& world_;
-    Entity entity_;
+    EntityId entity_;
 };
 
 } // namespace drift

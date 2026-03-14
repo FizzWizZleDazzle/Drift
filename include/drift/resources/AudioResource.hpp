@@ -11,7 +11,7 @@ public:
     AudioResource();
     ~AudioResource() override;
 
-    const char* name() const override { return "AudioResource"; }
+    DRIFT_RESOURCE(AudioResource)
 
     void update();
 

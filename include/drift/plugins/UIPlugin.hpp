@@ -7,8 +7,8 @@
 namespace drift {
 
 #ifndef SWIG
-inline void ui_begin_frame(ResMut<UIResource> ui, float) { ui->beginFrame(); }
-inline void ui_end_frame(ResMut<UIResource> ui, float) { ui->endFrame(); ui->render(); }
+inline void ui_begin_frame(ResMut<UIResource> ui) { ui->beginFrame(); }
+inline void ui_end_frame(ResMut<UIResource> ui) { ui->endFrame(); ui->render(); }
 #endif
 
 class UIPlugin : public Plugin {

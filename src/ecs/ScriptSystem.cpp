@@ -21,22 +21,22 @@ void Script::setPosition(Vec2 pos) {
 }
 
 const Transform2D* Script::getTransform() const {
-    if (!world_ || entity_ == InvalidEntity) return nullptr;
+    if (!world_ || entity_ == InvalidEntityId) return nullptr;
     return world_->get<Transform2D>(entity_, world_->transform2dId());
 }
 
 Transform2D* Script::getTransformMut() {
-    if (!world_ || entity_ == InvalidEntity) return nullptr;
+    if (!world_ || entity_ == InvalidEntityId) return nullptr;
     return world_->getMut<Transform2D>(entity_, world_->transform2dId());
 }
 
 const Sprite* Script::getSprite() const {
-    if (!world_ || entity_ == InvalidEntity) return nullptr;
+    if (!world_ || entity_ == InvalidEntityId) return nullptr;
     return world_->get<Sprite>(entity_, world_->spriteId());
 }
 
 Sprite* Script::getSpriteMut() {
-    if (!world_ || entity_ == InvalidEntity) return nullptr;
+    if (!world_ || entity_ == InvalidEntityId) return nullptr;
     return world_->getMut<Sprite>(entity_, world_->spriteId());
 }
 

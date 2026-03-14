@@ -8,8 +8,11 @@ class App;
 class Resource {
 public:
     virtual ~Resource() = default;
-    virtual const char* name() const = 0;
+    virtual const char* name() const { return ""; }
 };
+
+// Macro for engine resources that need SWIG-visible names.
+#define DRIFT_RESOURCE(Name) const char* name() const override { return #Name; }
 
 #ifndef SWIG
 // Res<T> = read-only resource access. Used as system parameter.

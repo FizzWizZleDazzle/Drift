@@ -16,7 +16,7 @@ public:
     explicit PhysicsResource(Vec2 gravity = {0.f, 9.8f});
     ~PhysicsResource() override;
 
-    const char* name() const override { return "PhysicsResource"; }
+    DRIFT_RESOURCE(PhysicsResource)
 
     void step(float dt);
 

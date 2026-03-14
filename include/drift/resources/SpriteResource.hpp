@@ -20,7 +20,7 @@ public:
     explicit SpriteResource(RendererResource& renderer);
     ~SpriteResource() override;
 
-    const char* name() const override { return "SpriteResource"; }
+    DRIFT_RESOURCE(SpriteResource)
 
     // Spritesheets
     SpritesheetHandle createSpritesheet(TextureHandle texture, int32_t frameW, int32_t frameH);

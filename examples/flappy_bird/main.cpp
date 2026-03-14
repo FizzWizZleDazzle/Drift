@@ -12,6 +12,8 @@
 #include <drift/components/Camera.h>
 #include <drift/plugins/DefaultPlugins.hpp>
 #include <drift/resources/InputResource.hpp>
+#include <drift/resources/AudioResource.hpp>
+#include <drift/resources/Time.hpp>
 
 #include <cmath>
 #include <cstdio>
@@ -48,12 +50,12 @@ struct PipeState {
     float gapY = 0.f;
     bool  scored = false;
     bool  active = false;
-    Entity topEntity = InvalidEntity;
-    Entity botEntity = InvalidEntity;
+    EntityId topEntity = InvalidEntityId;
+    EntityId botEntity = InvalidEntityId;
 };
 
 struct FlappyState : public Resource {
-    const char* name() const override { return "FlappyState"; }
+    DRIFT_RESOURCE(FlappyState)
 
     GamePhase state = STATE_MENU;
     float birdY = SCREEN_H * 0.4f;
@@ -68,13 +70,13 @@ struct FlappyState : public Resource {
     PipeState pipes[MAX_PIPES] = {};
 
     // Entities
-    Entity camera = InvalidEntity;
-    Entity bgEntity = InvalidEntity;
-    Entity birdEntity = InvalidEntity;
-    Entity baseEntities[2] = {};
-    Entity scoreDigits[MAX_SCORE_DIGITS] = {};
-    Entity menuEntity = InvalidEntity;
-    Entity gameoverEntity = InvalidEntity;
+    EntityId camera = InvalidEntityId;
+    EntityId bgEntity = InvalidEntityId;
+    EntityId birdEntity = InvalidEntityId;
+    EntityId baseEntities[2] = {};
+    EntityId scoreDigits[MAX_SCORE_DIGITS] = {};
+    EntityId menuEntity = InvalidEntityId;
+    EntityId gameoverEntity = InvalidEntityId;
 
     // Textures
     TextureHandle texBg;
@@ -122,85 +124,97 @@ static void spawnPipe(FlappyState& g, Commands& cmd) {
             float maxY = BASE_Y - PIPE_GAP * 0.5f - 20.f;
             g.pipes[i].gapY = minY + (static_cast<float>(rand()) / RAND_MAX) * (maxY - minY);
             g.pipes[i].scored = false;
-            if (g.pipes[i].botEntity == InvalidEntity) {
-                g.pipes[i].botEntity = cmd.spawnSprite(g.texPipe, {0, 0}, 5.f);
-                g.pipes[i].topEntity = cmd.spawnSprite(g.texPipe, {0, 0}, 5.f);
+            if (g.pipes[i].botEntity == InvalidEntityId) {
+                g.pipes[i].botEntity = cmd.spawn()
+                    .insert<Transform2D>({})
+                    .insert<Sprite>({.texture = g.texPipe, .zOrder = 5.f});
+                g.pipes[i].topEntity = cmd.spawn()
+                    .insert<Transform2D>({})
+                    .insert<Sprite>({.texture = g.texPipe, .zOrder = 5.f});
             }
             return;
         }
     }
 }
 
-static void doFlap(FlappyState& g, AssetServer* assets) {
+static void doFlap(FlappyState& g, AudioResource* audio) {
     g.birdVel = FLAP_VELOCITY;
-    if (g.sndWing.valid() && assets) assets->playSound(g.sndWing, 0.6f);
+    if (g.sndWing.valid() && audio) audio->playSound(g.sndWing, 0.6f);
 }
 
 // --- Startup ---
 void flappyStartup(ResMut<FlappyState> game, ResMut<AssetServer> assets,
-                    Commands& cmd, float) {
+                    Commands& cmd) {
     // Textures
-    game->texBg       = assets->loadTexture("assets/background.png");
-    game->texBase     = assets->loadTexture("assets/base.png");
-    game->texPipe     = assets->loadTexture("assets/pipe.png");
-    game->texBird[0]  = assets->loadTexture("assets/bird-down.png");
-    game->texBird[1]  = assets->loadTexture("assets/bird-mid.png");
-    game->texBird[2]  = assets->loadTexture("assets/bird-up.png");
-    game->texGameover = assets->loadTexture("assets/gameover.png");
-    game->texMessage  = assets->loadTexture("assets/message.png");
+    game->texBg       = assets->load<Texture>("assets/background.png");
+    game->texBase     = assets->load<Texture>("assets/base.png");
+    game->texPipe     = assets->load<Texture>("assets/pipe.png");
+    game->texBird[0]  = assets->load<Texture>("assets/bird-down.png");
+    game->texBird[1]  = assets->load<Texture>("assets/bird-mid.png");
+    game->texBird[2]  = assets->load<Texture>("assets/bird-up.png");
+    game->texGameover = assets->load<Texture>("assets/gameover.png");
+    game->texMessage  = assets->load<Texture>("assets/message.png");
     for (int i = 0; i < 10; ++i) {
         char path[64];
         snprintf(path, sizeof(path), "assets/num%d.png", i);
-        game->texNum[i] = assets->loadTexture(path);
+        game->texNum[i] = assets->load<Texture>(path);
     }
 
     // Sounds
-    game->sndWing   = assets->loadSound("assets/wing.wav");
-    game->sndHit    = assets->loadSound("assets/hit.wav");
-    game->sndPoint  = assets->loadSound("assets/point.wav");
-    game->sndDie    = assets->loadSound("assets/die.wav");
-    game->sndSwoosh = assets->loadSound("assets/swoosh.wav");
+    game->sndWing   = assets->load<Sound>("assets/wing.wav");
+    game->sndHit    = assets->load<Sound>("assets/hit.wav");
+    game->sndPoint  = assets->load<Sound>("assets/point.wav");
+    game->sndDie    = assets->load<Sound>("assets/die.wav");
+    game->sndSwoosh = assets->load<Sound>("assets/swoosh.wav");
 
     // Camera (pixel-perfect)
-    game->camera = cmd.spawnCamera(
-        {SCREEN_W * 0.5f, SCREEN_H * 0.5f},
-        static_cast<float>(WINDOW_SCALE), true);
+    game->camera = cmd.spawn()
+        .insert<Transform2D>({.position = {SCREEN_W * 0.5f, SCREEN_H * 0.5f}})
+        .insert<Camera>({.zoom = static_cast<float>(WINDOW_SCALE), .active = true});
 
     // Background
-    game->bgEntity = cmd.spawnSprite(game->texBg, {0, 0}, 0.f);
+    game->bgEntity = cmd.spawn()
+        .insert<Transform2D>({})
+        .insert<Sprite>({.texture = game->texBg, .zOrder = 0.f});
 
     // Bird
-    game->birdEntity = cmd.spawnSprite(game->texBird[1], {BIRD_X, SCREEN_H * 0.4f}, 20.f);
+    game->birdEntity = cmd.spawn()
+        .insert<Transform2D>({.position = {BIRD_X, SCREEN_H * 0.4f}})
+        .insert<Sprite>({.texture = game->texBird[1], .zOrder = 20.f});
 
     // Base tiles
-    game->baseEntities[0] = cmd.spawnSprite(game->texBase, {0, BASE_Y}, 10.f);
-    game->baseEntities[1] = cmd.spawnSprite(game->texBase, {336, BASE_Y}, 10.f);
+    game->baseEntities[0] = cmd.spawn()
+        .insert<Transform2D>({.position = {0, BASE_Y}})
+        .insert<Sprite>({.texture = game->texBase, .zOrder = 10.f});
+    game->baseEntities[1] = cmd.spawn()
+        .insert<Transform2D>({.position = {336, BASE_Y}})
+        .insert<Sprite>({.texture = game->texBase, .zOrder = 10.f});
 
     // Score digits (hidden until needed)
     for (int i = 0; i < MAX_SCORE_DIGITS; ++i) {
-        game->scoreDigits[i] = cmd.spawnSprite(game->texNum[0], {0, 0}, 50.f);
-        Sprite s;
-        s.visible = false;
-        cmd.setSprite(game->scoreDigits[i], s);
+        game->scoreDigits[i] = cmd.spawn()
+            .insert<Transform2D>({})
+            .insert<Sprite>({.texture = game->texNum[0], .zOrder = 50.f, .visible = false});
     }
 
     // Menu overlay
-    game->menuEntity = cmd.spawnSprite(game->texMessage, {0, 0}, 60.f);
+    game->menuEntity = cmd.spawn()
+        .insert<Transform2D>({})
+        .insert<Sprite>({.texture = game->texMessage, .zOrder = 60.f});
 
     // Game over overlay (hidden)
-    game->gameoverEntity = cmd.spawnSprite(game->texGameover, {0, 0}, 60.f);
-    {
-        Sprite s;
-        s.visible = false;
-        cmd.setSprite(game->gameoverEntity, s);
-    }
+    game->gameoverEntity = cmd.spawn()
+        .insert<Transform2D>({})
+        .insert<Sprite>({.texture = game->texGameover, .zOrder = 60.f, .visible = false});
 
     resetGame(*game);
 }
 
 // --- Update ---
-void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
-                  ResMut<AssetServer> assets, Commands& cmd, float dt) {
+void flappyUpdate(Res<InputResource> input, Res<Time> time,
+                  ResMut<FlappyState> game,
+                  ResMut<AudioResource> audio, Commands& cmd) {
+    float dt = time->delta;
     bool action = input->keyPressed(Key::Space) ||
                   input->mouseButtonPressed(MouseButton::Left);
 
@@ -213,7 +227,7 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
         }
         game->birdY = SCREEN_H * 0.4f + sinf(game->birdAnimTimer * 20.f) * 8.f;
         game->baseScroll += PIPE_SPEED * dt;
-        if (action) { game->state = STATE_PLAYING; doFlap(*game, assets.ptr); }
+        if (action) { game->state = STATE_PLAYING; doFlap(*game, audio.ptr); }
         break;
 
     case STATE_PLAYING:
@@ -230,7 +244,7 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
             game->birdAnimTimer = 0.f;
             game->birdFrame = (game->birdFrame + 1) % 3;
         }
-        if (action) doFlap(*game, assets.ptr);
+        if (action) doFlap(*game, audio.ptr);
         game->baseScroll += PIPE_SPEED * dt;
 
         game->pipeTimer += dt;
@@ -247,7 +261,7 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
             if (!p.scored && p.x + PIPE_WIDTH < BIRD_X) {
                 p.scored = true;
                 game->score++;
-                if (game->sndPoint.valid()) assets->playSound(game->sndPoint, 0.7f);
+                if (game->sndPoint.valid()) audio->playSound(game->sndPoint, 0.7f);
             }
             float topBottom = p.gapY - PIPE_GAP * 0.5f;
             float botTop    = p.gapY + PIPE_GAP * 0.5f;
@@ -263,7 +277,7 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
         if (game->birdY + BIRD_H * 0.5f >= BASE_Y || game->birdY < 0)
             game->state = STATE_DEAD;
         if (game->state == STATE_DEAD) {
-            if (game->sndHit.valid()) assets->playSound(game->sndHit, 0.8f);
+            if (game->sndHit.valid()) audio->playSound(game->sndHit, 0.8f);
             game->hitPlayed = true;
         }
         break;
@@ -279,7 +293,7 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
         }
         if (action) {
             resetGame(*game);
-            if (game->sndSwoosh.valid()) assets->playSound(game->sndSwoosh, 0.5f);
+            if (game->sndSwoosh.valid()) audio->playSound(game->sndSwoosh, 0.5f);
         }
         break;
     }
@@ -292,34 +306,32 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
         s.texture = game->texBg;
         s.srcRect = {0, 0, static_cast<float>(SCREEN_W), static_cast<float>(SCREEN_H)};
         s.zOrder = 0.f;
-        cmd.setSprite(game->bgEntity, s);
+        cmd.entity(game->bgEntity).insert<Sprite>(s);
     }
 
     // Bird
     {
-        Transform2D t;
-        t.position = {BIRD_X, game->birdY};
-        t.rotation = game->birdRot;
-        cmd.setTransform(game->birdEntity, t);
+        cmd.entity(game->birdEntity)
+            .insert<Transform2D>({.position = {BIRD_X, game->birdY}, .rotation = game->birdRot});
 
         Sprite s;
         s.texture = game->texBird[game->birdFrame];
         s.srcRect = {0, 0, BIRD_W, BIRD_H};
         s.origin = {BIRD_W * 0.5f, BIRD_H * 0.5f};
         s.zOrder = 20.f;
-        cmd.setSprite(game->birdEntity, s);
+        cmd.entity(game->birdEntity).insert<Sprite>(s);
     }
 
     // Pipes
     for (int i = 0; i < MAX_PIPES; ++i) {
         PipeState& p = game->pipes[i];
-        if (p.botEntity == InvalidEntity) continue;
+        if (p.botEntity == InvalidEntityId) continue;
 
         if (!p.active) {
             Sprite hidden;
             hidden.visible = false;
-            cmd.setSprite(p.botEntity, hidden);
-            cmd.setSprite(p.topEntity, hidden);
+            cmd.entity(p.botEntity).insert<Sprite>(hidden);
+            cmd.entity(p.topEntity).insert<Sprite>(hidden);
             continue;
         }
 
@@ -328,27 +340,25 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
 
         // Bottom pipe
         {
-            Transform2D t;
-            t.position = {p.x, botTop};
-            cmd.setTransform(p.botEntity, t);
+            cmd.entity(p.botEntity)
+                .insert<Transform2D>({.position = {p.x, botTop}});
             Sprite s;
             s.texture = game->texPipe;
             s.srcRect = {0, 0, PIPE_WIDTH, PIPE_HEIGHT};
             s.zOrder = 5.f;
-            cmd.setSprite(p.botEntity, s);
+            cmd.entity(p.botEntity).insert<Sprite>(s);
         }
         // Top pipe (flipped)
         {
-            Transform2D t;
-            t.position = {p.x, topBottom};
-            cmd.setTransform(p.topEntity, t);
+            cmd.entity(p.topEntity)
+                .insert<Transform2D>({.position = {p.x, topBottom}});
             Sprite s;
             s.texture = game->texPipe;
             s.srcRect = {0, 0, PIPE_WIDTH, PIPE_HEIGHT};
             s.origin = {0, PIPE_HEIGHT};
             s.flip = Flip::V;
             s.zOrder = 5.f;
-            cmd.setSprite(p.topEntity, s);
+            cmd.entity(p.topEntity).insert<Sprite>(s);
         }
     }
 
@@ -356,14 +366,13 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
     {
         float baseX = -fmodf(game->baseScroll, 48.f);
         for (int i = 0; i < 2; ++i) {
-            Transform2D t;
-            t.position = {baseX + i * 336.f, BASE_Y};
-            cmd.setTransform(game->baseEntities[i], t);
+            cmd.entity(game->baseEntities[i])
+                .insert<Transform2D>({.position = {baseX + i * 336.f, BASE_Y}});
             Sprite s;
             s.texture = game->texBase;
             s.srcRect = {0, 0, 336, BASE_H};
             s.zOrder = 10.f;
-            cmd.setSprite(game->baseEntities[i], s);
+            cmd.entity(game->baseEntities[i]).insert<Sprite>(s);
         }
     }
 
@@ -381,20 +390,19 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
                 int digit = buf[i] - '0';
                 if (digit < 0 || digit > 9) digit = 0;
 
-                Transform2D t;
-                t.position = {startX + i * 26.f, 40.f};
-                cmd.setTransform(game->scoreDigits[i], t);
+                cmd.entity(game->scoreDigits[i])
+                    .insert<Transform2D>({.position = {startX + i * 26.f, 40.f}});
 
                 Sprite s;
                 s.texture = game->texNum[digit];
                 s.srcRect = {0, 0, 24, 36};
                 s.zOrder = 50.f;
                 s.visible = true;
-                cmd.setSprite(game->scoreDigits[i], s);
+                cmd.entity(game->scoreDigits[i]).insert<Sprite>(s);
             } else {
                 Sprite s;
                 s.visible = false;
-                cmd.setSprite(game->scoreDigits[i], s);
+                cmd.entity(game->scoreDigits[i]).insert<Sprite>(s);
             }
         }
     }
@@ -406,11 +414,10 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
         s.srcRect = {0, 0, 184, 267};
         s.zOrder = 60.f;
         s.visible = (game->state == STATE_MENU);
-        cmd.setSprite(game->menuEntity, s);
+        cmd.entity(game->menuEntity).insert<Sprite>(s);
 
-        Transform2D t;
-        t.position = {(SCREEN_W - 184) * 0.5f, SCREEN_H * 0.2f};
-        cmd.setTransform(game->menuEntity, t);
+        cmd.entity(game->menuEntity)
+            .insert<Transform2D>({.position = {(SCREEN_W - 184) * 0.5f, SCREEN_H * 0.2f}});
     }
 
     // Game over overlay
@@ -420,11 +427,10 @@ void flappyUpdate(Res<InputResource> input, ResMut<FlappyState> game,
         s.srcRect = {0, 0, 192, 42};
         s.zOrder = 60.f;
         s.visible = (game->state == STATE_DEAD);
-        cmd.setSprite(game->gameoverEntity, s);
+        cmd.entity(game->gameoverEntity).insert<Sprite>(s);
 
-        Transform2D t;
-        t.position = {(SCREEN_W - 192) * 0.5f, SCREEN_H * 0.3f};
-        cmd.setTransform(game->gameoverEntity, t);
+        cmd.entity(game->gameoverEntity)
+            .insert<Transform2D>({.position = {(SCREEN_W - 192) * 0.5f, SCREEN_H * 0.3f}});
     }
 }
 

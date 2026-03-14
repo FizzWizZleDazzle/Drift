@@ -21,7 +21,7 @@ public:
     virtual void onDestroy() {}
 
     // Context accessors (set by ScriptSystem before calling virtuals)
-    Entity entity() const { return entity_; }
+    EntityId entity() const { return entity_; }
     World& world() const { return *world_; }
     App& app() const { return *app_; }
 
@@ -42,26 +42,26 @@ public:
     // C++ template escape hatch (not SWIG-visible)
     template<typename T>
     const T* getComponent(ComponentId compId) const {
-        if (!world_ || entity_ == InvalidEntity) return nullptr;
+        if (!world_ || entity_ == InvalidEntityId) return nullptr;
         return world_->get<T>(entity_, compId);
     }
 
     template<typename T>
     T* getComponentMut(ComponentId compId) {
-        if (!world_ || entity_ == InvalidEntity) return nullptr;
+        if (!world_ || entity_ == InvalidEntityId) return nullptr;
         return world_->getMut<T>(entity_, compId);
     }
 #endif
 
     // Internal: set by ScriptSystem, not for user code
-    void _bind(Entity e, World* w, App* a) {
+    void _bind(EntityId e, World* w, App* a) {
         entity_ = e;
         world_ = w;
         app_ = a;
     }
 
 private:
-    Entity entity_ = InvalidEntity;
+    EntityId entity_ = InvalidEntityId;
     World* world_ = nullptr;
     App* app_ = nullptr;
 };

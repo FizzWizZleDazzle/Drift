@@ -10,7 +10,7 @@ class WorldResource : public Resource {
 public:
     explicit WorldResource(World& world) : world_(world) {}
 
-    const char* name() const override { return "WorldResource"; }
+    DRIFT_RESOURCE(WorldResource)
 
     World& world() { return world_; }
     const World& world() const { return world_; }

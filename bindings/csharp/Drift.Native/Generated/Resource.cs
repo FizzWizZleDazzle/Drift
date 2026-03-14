@@ -58,7 +58,7 @@ public class Resource : global::System.IDisposable {
   }
 
   public virtual string name() {
-    string ret = driftPINVOKE.Resource_name(swigCPtr);
+    string ret = (SwigDerivedClassHasMethod("name", swigMethodTypes0) ? driftPINVOKE.Resource_nameSwigExplicitResource(swigCPtr) : driftPINVOKE.Resource_name(swigCPtr));
     return ret;
   }
 

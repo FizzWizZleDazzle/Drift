@@ -16,7 +16,7 @@ public:
     explicit UIResource(App& app);
     ~UIResource() override;
 
-    const char* name() const override { return "UIResource"; }
+    DRIFT_RESOURCE(UIResource)
 
     void beginFrame();
     void endFrame();

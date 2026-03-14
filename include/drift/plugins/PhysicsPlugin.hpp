@@ -3,11 +3,12 @@
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
 #include <drift/resources/PhysicsResource.hpp>
+#include <drift/resources/Time.hpp>
 
 namespace drift {
 
 #ifndef SWIG
-inline void physics_step(ResMut<PhysicsResource> physics, float dt) { physics->step(dt); }
+inline void physics_step(ResMut<PhysicsResource> physics, Res<Time> time) { physics->step(time->delta); }
 #endif
 
 class PhysicsPlugin : public Plugin {

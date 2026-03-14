@@ -13,7 +13,7 @@ public:
     explicit ParticleResource(RendererResource& renderer);
     ~ParticleResource() override;
 
-    const char* name() const override { return "ParticleResource"; }
+    DRIFT_RESOURCE(ParticleResource)
 
     EmitterHandle createEmitter(const EmitterDef& def);
     void destroyEmitter(EmitterHandle emitter);

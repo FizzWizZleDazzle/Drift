@@ -13,7 +13,7 @@ public:
     InputResource();
     ~InputResource() override;
 
-    const char* name() const override { return "InputResource"; }
+    DRIFT_RESOURCE(InputResource)
 
     // Called each frame before polling events
     void beginFrame();

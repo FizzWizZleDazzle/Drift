@@ -249,8 +249,8 @@ inline PanelFlags operator|(PanelFlags a, PanelFlags b) { return static_cast<Pan
 inline bool operator&(PanelFlags a, PanelFlags b) { return (static_cast<int>(a) & static_cast<int>(b)) != 0; }
 
 // ---- ECS types ----
-using Entity = uint64_t;
-constexpr Entity InvalidEntity = 0;
+using EntityId = uint64_t;
+constexpr EntityId InvalidEntityId = 0;
 using ComponentId = uint64_t;
 
 // ---- Log levels ----

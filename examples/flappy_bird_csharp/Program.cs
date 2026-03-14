@@ -112,18 +112,24 @@ class FlappyState : drift.Resource
                 Pipes[i].scored = false;
                 if (Pipes[i].botEntity == 0)
                 {
-                    Pipes[i].botEntity = cmd.spawnSprite(TexPipe, new drift.Vec2(0, 0), 5f);
-                    Pipes[i].topEntity = cmd.spawnSprite(TexPipe, new drift.Vec2(0, 0), 5f);
+                    Pipes[i].botEntity = cmd.spawn()
+                        .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
+                        .insert(new drift.Sprite { texture = TexPipe, zOrder = 5f })
+                        .id();
+                    Pipes[i].topEntity = cmd.spawn()
+                        .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
+                        .insert(new drift.Sprite { texture = TexPipe, zOrder = 5f })
+                        .id();
                 }
                 return;
             }
         }
     }
 
-    public void Flap(drift.AssetServer assets)
+    public void Flap(drift.AudioResource audio)
     {
         BirdVel = C.FlapVelocity;
-        if (SndWing.valid()) assets.playSound(SndWing, 0.6f);
+        if (SndWing.valid()) audio.playSound(SndWing, 0.6f);
     }
 }
 
@@ -161,7 +167,7 @@ class Program
             s.texture = game.TexBg;
             s.srcRect = new drift.Rect(0, 0, C.ScreenW, C.ScreenH);
             s.zOrder = 0f;
-            cmd.setSprite(game.BgEntity, s);
+            cmd.entity(game.BgEntity).insert(s);
         }
 
         // Bird
@@ -169,14 +175,12 @@ class Program
             var t = new drift.Transform2D();
             t.position = new drift.Vec2(C.BirdX, game.BirdY);
             t.rotation = game.BirdRot;
-            cmd.setTransform(game.BirdEntity, t);
-
             var s = new drift.Sprite();
             s.texture = game.TexBird[game.BirdFrame];
             s.srcRect = new drift.Rect(0, 0, C.BirdW, C.BirdH);
             s.origin = new drift.Vec2(C.BirdW * 0.5f, C.BirdH * 0.5f);
             s.zOrder = 20f;
-            cmd.setSprite(game.BirdEntity, s);
+            cmd.entity(game.BirdEntity).insert(t).insert(s);
         }
 
         // Pipes
@@ -188,8 +192,8 @@ class Program
             if (!p.active)
             {
                 var hidden = new drift.Sprite(); hidden.visible = false;
-                cmd.setSprite(p.botEntity, hidden);
-                cmd.setSprite(p.topEntity, hidden);
+                cmd.entity(p.botEntity).insert(hidden);
+                cmd.entity(p.topEntity).insert(hidden);
                 continue;
             }
 
@@ -200,25 +204,23 @@ class Program
             {
                 var t = new drift.Transform2D();
                 t.position = new drift.Vec2(p.x, botTop);
-                cmd.setTransform(p.botEntity, t);
                 var s = new drift.Sprite();
                 s.texture = game.TexPipe;
                 s.srcRect = new drift.Rect(0, 0, C.PipeWidth, C.PipeHeight);
                 s.zOrder = 5f;
-                cmd.setSprite(p.botEntity, s);
+                cmd.entity(p.botEntity).insert(t).insert(s);
             }
             // Top
             {
                 var t = new drift.Transform2D();
                 t.position = new drift.Vec2(p.x, topBottom);
-                cmd.setTransform(p.topEntity, t);
                 var s = new drift.Sprite();
                 s.texture = game.TexPipe;
                 s.srcRect = new drift.Rect(0, 0, C.PipeWidth, C.PipeHeight);
                 s.origin = new drift.Vec2(0, C.PipeHeight);
                 s.flip = drift.Flip.V;
                 s.zOrder = 5f;
-                cmd.setSprite(p.topEntity, s);
+                cmd.entity(p.topEntity).insert(t).insert(s);
             }
         }
 
@@ -229,12 +231,11 @@ class Program
             {
                 var t = new drift.Transform2D();
                 t.position = new drift.Vec2(baseX + i * 336f, C.BaseY);
-                cmd.setTransform(game.BaseEntities[i], t);
                 var s = new drift.Sprite();
                 s.texture = game.TexBase;
                 s.srcRect = new drift.Rect(0, 0, 336, C.BaseH);
                 s.zOrder = 10f;
-                cmd.setSprite(game.BaseEntities[i], s);
+                cmd.entity(game.BaseEntities[i]).insert(t).insert(s);
             }
         }
 
@@ -252,17 +253,16 @@ class Program
                     int d = digits[i] - '0';
                     var t = new drift.Transform2D();
                     t.position = new drift.Vec2(startX + i * 26f, 40f);
-                    cmd.setTransform(game.ScoreDigits[i], t);
                     var s = new drift.Sprite();
                     s.texture = game.TexNum[d];
                     s.srcRect = new drift.Rect(0, 0, 24, 36);
                     s.zOrder = 50f; s.visible = true;
-                    cmd.setSprite(game.ScoreDigits[i], s);
+                    cmd.entity(game.ScoreDigits[i]).insert(t).insert(s);
                 }
                 else
                 {
                     var s = new drift.Sprite(); s.visible = false;
-                    cmd.setSprite(game.ScoreDigits[i], s);
+                    cmd.entity(game.ScoreDigits[i]).insert(s);
                 }
             }
         }
@@ -273,10 +273,9 @@ class Program
             s.texture = game.TexMessage;
             s.srcRect = new drift.Rect(0, 0, 184, 267);
             s.zOrder = 60f; s.visible = game.State == GameState.Menu;
-            cmd.setSprite(game.MenuEntity, s);
             var t = new drift.Transform2D();
             t.position = new drift.Vec2((C.ScreenW - 184) * 0.5f, C.ScreenH * 0.2f);
-            cmd.setTransform(game.MenuEntity, t);
+            cmd.entity(game.MenuEntity).insert(t).insert(s);
         }
 
         // Game over
@@ -285,10 +284,9 @@ class Program
             s.texture = game.TexGameover;
             s.srcRect = new drift.Rect(0, 0, 192, 42);
             s.zOrder = 60f; s.visible = game.State == GameState.Dead;
-            cmd.setSprite(game.GameoverEntity, s);
             var t = new drift.Transform2D();
             t.position = new drift.Vec2((C.ScreenW - 192) * 0.5f, C.ScreenH * 0.3f);
-            cmd.setTransform(game.GameoverEntity, t);
+            cmd.entity(game.GameoverEntity).insert(t).insert(s);
         }
     }
 
@@ -331,25 +329,43 @@ class Program
             game.SndDie    = assets.loadSound("assets/die.wav");
             game.SndSwoosh = assets.loadSound("assets/swoosh.wav");
 
-            game.Camera = cmd.spawnCamera(
-                new drift.Vec2(C.ScreenW * 0.5f, C.ScreenH * 0.5f),
-                C.WindowScale, true);
-            game.BgEntity = cmd.spawnSprite(game.TexBg, new drift.Vec2(0, 0), 0f);
-            game.BirdEntity = cmd.spawnSprite(game.TexBird[1],
-                new drift.Vec2(C.BirdX, C.ScreenH * 0.4f), 20f);
-            game.BaseEntities[0] = cmd.spawnSprite(game.TexBase, new drift.Vec2(0, C.BaseY), 10f);
-            game.BaseEntities[1] = cmd.spawnSprite(game.TexBase, new drift.Vec2(336, C.BaseY), 10f);
+            game.Camera = cmd.spawn()
+                .insert(new drift.Transform2D { position = new drift.Vec2(C.ScreenW * 0.5f, C.ScreenH * 0.5f) })
+                .insert(new drift.Camera { zoom = C.WindowScale, active = true })
+                .id();
+            game.BgEntity = cmd.spawn()
+                .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
+                .insert(new drift.Sprite { texture = game.TexBg, zOrder = 0f })
+                .id();
+            game.BirdEntity = cmd.spawn()
+                .insert(new drift.Transform2D { position = new drift.Vec2(C.BirdX, C.ScreenH * 0.4f) })
+                .insert(new drift.Sprite { texture = game.TexBird[1], zOrder = 20f })
+                .id();
+            game.BaseEntities[0] = cmd.spawn()
+                .insert(new drift.Transform2D { position = new drift.Vec2(0, C.BaseY) })
+                .insert(new drift.Sprite { texture = game.TexBase, zOrder = 10f })
+                .id();
+            game.BaseEntities[1] = cmd.spawn()
+                .insert(new drift.Transform2D { position = new drift.Vec2(336, C.BaseY) })
+                .insert(new drift.Sprite { texture = game.TexBase, zOrder = 10f })
+                .id();
 
             for (int i = 0; i < C.MaxScoreDigits; i++)
             {
-                game.ScoreDigits[i] = cmd.spawnSprite(game.TexNum[0], new drift.Vec2(0, 0), 50f);
-                var s = new drift.Sprite(); s.visible = false;
-                cmd.setSprite(game.ScoreDigits[i], s);
+                game.ScoreDigits[i] = cmd.spawn()
+                    .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
+                    .insert(new drift.Sprite { texture = game.TexNum[0], zOrder = 50f, visible = false })
+                    .id();
             }
 
-            game.MenuEntity = cmd.spawnSprite(game.TexMessage, new drift.Vec2(0, 0), 60f);
-            game.GameoverEntity = cmd.spawnSprite(game.TexGameover, new drift.Vec2(0, 0), 60f);
-            { var s = new drift.Sprite(); s.visible = false; cmd.setSprite(game.GameoverEntity, s); }
+            game.MenuEntity = cmd.spawn()
+                .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
+                .insert(new drift.Sprite { texture = game.TexMessage, zOrder = 60f })
+                .id();
+            game.GameoverEntity = cmd.spawn()
+                .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
+                .insert(new drift.Sprite { texture = game.TexGameover, zOrder = 60f, visible = false })
+                .id();
 
             game.Reset();
         });
@@ -358,7 +374,7 @@ class Program
         app.AddSystem("update", drift.Phase.Update, (a, dt) =>
         {
             var input = a.getInputResource();
-            var assets = a.getAssetServer();
+            var audio = a.getAudioResource();
             var cmd = a.getCommands();
             var game = gameState;
 
@@ -373,7 +389,7 @@ class Program
                     { game.BirdAnimTimer = 0; game.BirdFrame = (game.BirdFrame + 1) % 3; }
                     game.BirdY = C.ScreenH * 0.4f + MathF.Sin(game.BirdAnimTimer * 20f) * 8f;
                     game.BaseScroll += C.PipeSpeed * dt;
-                    if (action) { game.State = GameState.Playing; game.Flap(assets); }
+                    if (action) { game.State = GameState.Playing; game.Flap(audio); }
                     break;
 
                 case GameState.Playing:
@@ -385,7 +401,7 @@ class Program
                     game.BirdAnimTimer += dt;
                     if (game.BirdAnimTimer >= C.BirdAnimSpeed)
                     { game.BirdAnimTimer = 0; game.BirdFrame = (game.BirdFrame + 1) % 3; }
-                    if (action) game.Flap(assets);
+                    if (action) game.Flap(audio);
                     game.BaseScroll += C.PipeSpeed * dt;
                     game.PipeTimer += dt;
                     if (game.PipeTimer >= C.PipeSpawnInterval)
@@ -398,7 +414,7 @@ class Program
                         p.x -= C.PipeSpeed * dt;
                         if (p.x < -C.PipeWidth - 10f) { p.active = false; continue; }
                         if (!p.scored && p.x + C.PipeWidth < C.BirdX)
-                        { p.scored = true; game.Score++; if (game.SndPoint.valid()) assets.playSound(game.SndPoint, 0.7f); }
+                        { p.scored = true; game.Score++; if (game.SndPoint.valid()) audio.playSound(game.SndPoint, 0.7f); }
                         float topB = p.gapY - C.PipeGap * 0.5f;
                         float botT = p.gapY + C.PipeGap * 0.5f;
                         if (C.Overlap(C.BirdX - C.BirdW * 0.4f, game.BirdY - C.BirdH * 0.4f,
@@ -412,7 +428,7 @@ class Program
                     if (game.BirdY + C.BirdH * 0.5f >= C.BaseY || game.BirdY < 0)
                         game.State = GameState.Dead;
                     if (game.State == GameState.Dead)
-                    { if (game.SndHit.valid()) assets.playSound(game.SndHit, 0.8f); game.HitPlayed = true; }
+                    { if (game.SndHit.valid()) audio.playSound(game.SndHit, 0.8f); game.HitPlayed = true; }
                     break;
 
                 case GameState.Dead:
@@ -421,7 +437,7 @@ class Program
                     game.BirdRot = MathF.Min(game.BirdRot + 4f * dt, 1.57f);
                     if (game.BirdY + C.BirdH * 0.5f > C.BaseY)
                     { game.BirdY = C.BaseY - C.BirdH * 0.5f; game.BirdVel = 0; }
-                    if (action) { game.Reset(); if (game.SndSwoosh.valid()) assets.playSound(game.SndSwoosh, 0.5f); }
+                    if (action) { game.Reset(); if (game.SndSwoosh.valid()) audio.playSound(game.SndSwoosh, 0.5f); }
                     break;
             }
 

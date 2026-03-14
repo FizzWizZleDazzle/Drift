@@ -7,7 +7,7 @@
 namespace drift {
 
 #ifndef SWIG
-inline void input_begin_frame(ResMut<InputResource> input, float) { input->beginFrame(); }
+inline void input_begin_frame(ResMut<InputResource> input) { input->beginFrame(); }
 #endif
 
 class InputPlugin : public Plugin {

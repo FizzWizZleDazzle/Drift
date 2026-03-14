@@ -244,6 +244,15 @@ HANDLE_CSHARP_CODE(CameraTag)
 %}
 
 // ---------------------------------------------------------------------------
+// EntityCommands: C# property for entity ID
+// ---------------------------------------------------------------------------
+%typemap(cscode) drift::EntityCommands %{
+  public ulong Id {
+    get { return id(); }
+  }
+%}
+
+// ---------------------------------------------------------------------------
 // EntityBuilder: return self for chaining in C#
 // ---------------------------------------------------------------------------
 %typemap(cscode) drift::EntityBuilder %{

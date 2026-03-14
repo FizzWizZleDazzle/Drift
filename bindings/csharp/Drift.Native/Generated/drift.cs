@@ -14,9 +14,9 @@ using System;
 using System.Runtime.InteropServices;
 
 public class drift {
-  public static ulong InvalidEntity {
+  public static ulong InvalidEntityId {
     get {
-      ulong ret = driftPINVOKE.InvalidEntity_get();
+      ulong ret = driftPINVOKE.InvalidEntityId_get();
       return ret;
     } 
   }

@@ -10,20 +10,20 @@
 
 namespace drift {
 
-public class Commands : global::System.IDisposable {
+public class EntityCommands : global::System.IDisposable {
   private global::System.Runtime.InteropServices.HandleRef swigCPtr;
   protected bool swigCMemOwn;
 
-  internal Commands(global::System.IntPtr cPtr, bool cMemoryOwn) {
+  internal EntityCommands(global::System.IntPtr cPtr, bool cMemoryOwn) {
     swigCMemOwn = cMemoryOwn;
     swigCPtr = new global::System.Runtime.InteropServices.HandleRef(this, cPtr);
   }
 
-  internal static global::System.Runtime.InteropServices.HandleRef getCPtr(Commands obj) {
+  internal static global::System.Runtime.InteropServices.HandleRef getCPtr(EntityCommands obj) {
     return (obj == null) ? new global::System.Runtime.InteropServices.HandleRef(null, global::System.IntPtr.Zero) : obj.swigCPtr;
   }
 
-  internal static global::System.Runtime.InteropServices.HandleRef swigRelease(Commands obj) {
+  internal static global::System.Runtime.InteropServices.HandleRef swigRelease(EntityCommands obj) {
     if (obj != null) {
       if (!obj.swigCMemOwn)
         throw new global::System.ApplicationException("Cannot release ownership as memory is not owned");
@@ -36,7 +36,7 @@ public class Commands : global::System.IDisposable {
     }
   }
 
-  ~Commands() {
+  ~EntityCommands() {
     Dispose(false);
   }
 
@@ -50,33 +50,42 @@ public class Commands : global::System.IDisposable {
       if (swigCPtr.Handle != global::System.IntPtr.Zero) {
         if (swigCMemOwn) {
           swigCMemOwn = false;
-          driftPINVOKE.delete_Commands(swigCPtr);
+          driftPINVOKE.delete_EntityCommands(swigCPtr);
         }
         swigCPtr = new global::System.Runtime.InteropServices.HandleRef(null, global::System.IntPtr.Zero);
       }
     }
   }
 
-  public EntityCommands spawn() {
-    EntityCommands ret = new EntityCommands(driftPINVOKE.Commands_spawn(swigCPtr), true);
+  public ulong Id {
+    get { return id(); }
+  }
+
+  public EntityCommands(Commands cmd, ulong e) : this(driftPINVOKE.new_EntityCommands(Commands.getCPtr(cmd), e), true) {
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+  }
+
+  public EntityCommands insert(Transform2D t) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insert__SWIG_0(swigCPtr, Transform2D.getCPtr(t)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
     return ret;
   }
 
-  public EntityCommands entity(ulong e) {
-    EntityCommands ret = new EntityCommands(driftPINVOKE.Commands_entity(swigCPtr, e), true);
+  public EntityCommands insert(Sprite s) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insert__SWIG_1(swigCPtr, Sprite.getCPtr(s)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
     return ret;
   }
 
-  public void insert(ulong entity, ulong comp, System.IntPtr data, uint size) {
-    driftPINVOKE.Commands_insert(swigCPtr, entity, comp, data, size);
+  public EntityCommands insert(Camera c) {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_insert__SWIG_2(swigCPtr, Camera.getCPtr(c)), false);
+    if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
+    return ret;
   }
 
-  public void despawn(ulong entity) {
-    driftPINVOKE.Commands_despawn(swigCPtr, entity);
-  }
-
-  public void remove(ulong entity, ulong comp) {
-    driftPINVOKE.Commands_remove(swigCPtr, entity, comp);
+  public ulong id() {
+    ulong ret = driftPINVOKE.EntityCommands_id(swigCPtr);
+    return ret;
   }
 
 }

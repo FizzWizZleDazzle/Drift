@@ -10,18 +10,18 @@
 
 namespace drift {
 
-public class AssetServer : Resource {
+public class Time : Resource {
   private global::System.Runtime.InteropServices.HandleRef swigCPtr;
 
-  internal AssetServer(global::System.IntPtr cPtr, bool cMemoryOwn) : base(driftPINVOKE.AssetServer_SWIGUpcast(cPtr), cMemoryOwn) {
+  internal Time(global::System.IntPtr cPtr, bool cMemoryOwn) : base(driftPINVOKE.Time_SWIGUpcast(cPtr), cMemoryOwn) {
     swigCPtr = new global::System.Runtime.InteropServices.HandleRef(this, cPtr);
   }
 
-  internal static global::System.Runtime.InteropServices.HandleRef getCPtr(AssetServer obj) {
+  internal static global::System.Runtime.InteropServices.HandleRef getCPtr(Time obj) {
     return (obj == null) ? new global::System.Runtime.InteropServices.HandleRef(null, global::System.IntPtr.Zero) : obj.swigCPtr;
   }
 
-  internal static global::System.Runtime.InteropServices.HandleRef swigRelease(AssetServer obj) {
+  internal static global::System.Runtime.InteropServices.HandleRef swigRelease(Time obj) {
     if (obj != null) {
       if (!obj.swigCMemOwn)
         throw new global::System.ApplicationException("Cannot release ownership as memory is not owned");
@@ -39,7 +39,7 @@ public class AssetServer : Resource {
       if (swigCPtr.Handle != global::System.IntPtr.Zero) {
         if (swigCMemOwn) {
           swigCMemOwn = false;
-          driftPINVOKE.delete_AssetServer(swigCPtr);
+          driftPINVOKE.delete_Time(swigCPtr);
         }
         swigCPtr = new global::System.Runtime.InteropServices.HandleRef(null, global::System.IntPtr.Zero);
       }
@@ -47,34 +47,49 @@ public class AssetServer : Resource {
     }
   }
 
-  public AssetServer() : this(driftPINVOKE.new_AssetServer(), true) {
-    SwigDirectorConnect();
-  }
-
   public override string name() {
-    string ret = (SwigDerivedClassHasMethod("name", swigMethodTypes0) ? driftPINVOKE.AssetServer_nameSwigExplicitAssetServer(swigCPtr) : driftPINVOKE.AssetServer_name(swigCPtr));
+    string ret = (SwigDerivedClassHasMethod("name", swigMethodTypes0) ? driftPINVOKE.Time_nameSwigExplicitTime(swigCPtr) : driftPINVOKE.Time_name(swigCPtr));
     return ret;
   }
 
-  public TextureHandle loadTexture(string path) {
-    TextureHandle ret = new TextureHandle(driftPINVOKE.AssetServer_loadTexture(swigCPtr, path), true);
-    return ret;
+  public float delta {
+    set {
+      driftPINVOKE.Time_delta_set(swigCPtr, value);
+    } 
+    get {
+      float ret = driftPINVOKE.Time_delta_get(swigCPtr);
+      return ret;
+    } 
   }
 
-  public SoundHandle loadSound(string path) {
-    SoundHandle ret = new SoundHandle(driftPINVOKE.AssetServer_loadSound(swigCPtr, path), true);
-    return ret;
+  public double elapsed {
+    set {
+      driftPINVOKE.Time_elapsed_set(swigCPtr, value);
+    } 
+    get {
+      double ret = driftPINVOKE.Time_elapsed_get(swigCPtr);
+      return ret;
+    } 
   }
 
-  public FontHandle loadFont(string path, int sizePx) {
-    FontHandle ret = new FontHandle(driftPINVOKE.AssetServer_loadFont(swigCPtr, path, sizePx), true);
-    return ret;
+  public ulong frame {
+    set {
+      driftPINVOKE.Time_frame_set(swigCPtr, value);
+    } 
+    get {
+      ulong ret = driftPINVOKE.Time_frame_get(swigCPtr);
+      return ret;
+    } 
+  }
+
+  public Time() : this(driftPINVOKE.new_Time(), true) {
+    SwigDirectorConnect();
   }
 
   private void SwigDirectorConnect() {
     if (SwigDerivedClassHasMethod("name", swigMethodTypes0))
-      swigDelegate0 = new SwigDelegateAssetServer_0(SwigDirectorMethodname);
-    driftPINVOKE.AssetServer_director_connect(swigCPtr, swigDelegate0);
+      swigDelegate0 = new SwigDelegateTime_0(SwigDirectorMethodname);
+    driftPINVOKE.Time_director_connect(swigCPtr, swigDelegate0);
   }
 
   private bool SwigDerivedClassHasMethod(string methodName, global::System.Type[] methodTypes) {
@@ -102,7 +117,7 @@ public class AssetServer : Resource {
       if (!parametersMatch)
         continue;
 
-      if (methodInfo.IsVirtual && (methodInfo.DeclaringType.IsSubclassOf(typeof(AssetServer))) &&
+      if (methodInfo.IsVirtual && (methodInfo.DeclaringType.IsSubclassOf(typeof(Time))) &&
         methodInfo.DeclaringType != methodInfo.GetBaseDefinition().DeclaringType) {
         return true;
       }
@@ -115,9 +130,9 @@ public class AssetServer : Resource {
     return name();
   }
 
-  public delegate string SwigDelegateAssetServer_0();
+  public delegate string SwigDelegateTime_0();
 
-  private SwigDelegateAssetServer_0 swigDelegate0;
+  private SwigDelegateTime_0 swigDelegate0;
 
   private static global::System.Type[] swigMethodTypes0 = new global::System.Type[] {  };
 }

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <drift/Types.hpp>
+#include <drift/EntityAllocator.hpp>
+#include <drift/ComponentRegistry.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -16,10 +18,10 @@ struct QueryIter {
 };
 
 // ECS World wrapper around flecs
-class World {
+class World : public EntityAllocator {
 public:
     World();
-    ~World();
+    ~World() override;
 
     // Progress (tick all flecs systems)
     void progress(float dt);
@@ -29,36 +31,39 @@ public:
     ComponentId lookupComponent(const char* name) const;
 
     // Entities
-    Entity createEntity();
-    void destroyEntity(Entity entity);
-    bool isAlive(Entity entity) const;
+    EntityId createEntity();
+    void destroyEntity(EntityId entity);
+    bool isAlive(EntityId entity) const;
 
-    void addComponent(Entity entity, ComponentId component);
-    void removeComponent(Entity entity, ComponentId component);
-    void setComponent(Entity entity, ComponentId component, const void* data, size_t size);
-    const void* getComponent(Entity entity, ComponentId component) const;
-    void* getComponentMut(Entity entity, ComponentId component);
-    bool hasComponent(Entity entity, ComponentId component) const;
+    void addComponent(EntityId entity, ComponentId component);
+    void removeComponent(EntityId entity, ComponentId component);
+    void setComponent(EntityId entity, ComponentId component, const void* data, size_t size);
+    const void* getComponent(EntityId entity, ComponentId component) const;
+    void* getComponentMut(EntityId entity, ComponentId component);
+    bool hasComponent(EntityId entity, ComponentId component) const;
 
     // Typed component helpers (C++ only)
 #ifndef SWIG
     template<typename T>
     ComponentId registerComponent(const char* name) {
-        return registerComponent(name, sizeof(T), alignof(T));
+        ComponentId id = registerComponent(name, sizeof(T), alignof(T));
+        registry_.add<T>(id);
+        registry_.addByName(name, id);
+        return id;
     }
 
     template<typename T>
-    void set(Entity entity, ComponentId component, const T& value) {
+    void set(EntityId entity, ComponentId component, const T& value) {
         setComponent(entity, component, &value, sizeof(T));
     }
 
     template<typename T>
-    const T* get(Entity entity, ComponentId component) const {
+    const T* get(EntityId entity, ComponentId component) const {
         return static_cast<const T*>(getComponent(entity, component));
     }
 
     template<typename T>
-    T* getMut(Entity entity, ComponentId component) {
+    T* getMut(EntityId entity, ComponentId component) {
         return static_cast<T*>(getComponentMut(entity, component));
     }
 #endif
@@ -72,17 +77,20 @@ public:
     QueryIter queryIter(const char* queryExpr);
     bool queryNext(QueryIter* iter);
     void* queryField(QueryIter* iter, int32_t index, size_t size);
-    Entity* queryEntities(QueryIter* iter);
+    EntityId* queryEntities(QueryIter* iter);
     void queryFini(QueryIter* iter);
 
-    // Pre-allocate an Entity ID without creating it in flecs.
-    // Used by Commands to return valid IDs before flush.
-    Entity allocateEntity();
+    // EntityAllocator interface
+    EntityId allocate() override;
 
     // Built-in component IDs
     ComponentId transform2dId() const;
     ComponentId spriteId() const;
     ComponentId cameraId() const;
+
+    // Component registry
+    const ComponentRegistry& componentRegistry() const { return registry_; }
+    ComponentRegistry& componentRegistry() { return registry_; }
 
     // Internal access
     void* flecsWorld() const;
@@ -90,6 +98,7 @@ public:
 private:
     struct Impl;
     Impl* impl_;
+    ComponentRegistry registry_;
 };
 
 } // namespace drift

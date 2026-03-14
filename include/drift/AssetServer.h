@@ -4,35 +4,51 @@
 #include <drift/Handle.hpp>
 #include <drift/Types.hpp>
 
+#include <functional>
+#include <type_traits>
+
 namespace drift {
 
-class RendererResource;
-class AudioResource;
-class FontResource;
+// Asset type tags for load<T>()
+struct Texture {};
+struct Sound {};
+struct Font {};
 
 class AssetServer : public Resource {
 public:
-    AssetServer(RendererResource* renderer, AudioResource* audio, FontResource* font);
+    AssetServer();
     ~AssetServer() override;
 
-    const char* name() const override { return "AssetServer"; }
+    DRIFT_RESOURCE(AssetServer)
 
-    // Textures
+    // Registration (called by plugins during build)
+    void setTextureLoader(std::function<TextureHandle(const char*)> fn);
+    void setSoundLoader(std::function<SoundHandle(const char*)> fn);
+    void setFontLoader(std::function<FontHandle(const char*, int)> fn);
+
+#ifndef SWIG
+    // C++ generic API
+    template<typename T, typename... Args>
+    auto load(const char* path, Args&&... args) {
+        if constexpr (std::is_same_v<T, Texture>) {
+            return textureLoader_ ? textureLoader_(path) : TextureHandle{};
+        } else if constexpr (std::is_same_v<T, Sound>) {
+            return soundLoader_ ? soundLoader_(path) : SoundHandle{};
+        } else if constexpr (std::is_same_v<T, Font>) {
+            return fontLoader_ ? fontLoader_(path, std::forward<Args>(args)...) : FontHandle{};
+        }
+    }
+#endif
+
+    // SWIG-compatible named methods
     TextureHandle loadTexture(const char* path);
-    void destroyTexture(TextureHandle texture);
-    void getTextureSize(TextureHandle texture, int32_t* w, int32_t* h) const;
-
-    // Sounds
     SoundHandle loadSound(const char* path);
-    PlayingSoundHandle playSound(SoundHandle sound, float volume = 1.f, float pan = 0.f);
-
-    // Fonts
     FontHandle loadFont(const char* path, int sizePx);
 
 private:
-    RendererResource* renderer_;
-    AudioResource* audio_;
-    FontResource* font_;
+    std::function<TextureHandle(const char*)> textureLoader_;
+    std::function<SoundHandle(const char*)> soundLoader_;
+    std::function<FontHandle(const char*, int)> fontLoader_;
 };
 
 } // namespace drift

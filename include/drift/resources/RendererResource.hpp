@@ -13,7 +13,7 @@ public:
     explicit RendererResource(App& app);
     ~RendererResource() override;
 
-    const char* name() const override { return "RendererResource"; }
+    DRIFT_RESOURCE(RendererResource)
 
     // Frame lifecycle
     void beginFrame();

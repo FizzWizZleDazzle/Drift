@@ -5,9 +5,7 @@
 #include <drift/WorldResource.h>
 #include <drift/RenderSnapshot.h>
 #include <drift/AssetServer.h>
-#include <drift/resources/RendererResource.hpp>
-#include <drift/resources/AudioResource.hpp>
-#include <drift/resources/FontResource.hpp>
+#include <drift/resources/Time.hpp>
 
 #include <SDL3/SDL.h>
 
@@ -24,8 +22,8 @@ struct SystemEntry {
     std::string name;
     Phase phase;
     std::vector<AccessDescriptor> deps;
-    std::function<void(float)> fn;        // typed system function
-    std::function<void(App&, float)> lambdaFn; // lambda shorthand
+    std::function<void()> fn;             // typed system function
+    std::function<void(App&)> lambdaFn;   // lambda shorthand
     SystemBase* rawSystem = nullptr;      // SWIG system (owned)
     bool isLambda = false;
     bool isRaw = false;
@@ -42,7 +40,7 @@ struct App::Impl {
 
     // ECS World + Commands (owned by App)
     World world;
-    Commands commands{world};
+    Commands commands{world, world.componentRegistry()};
 
     // Frame timing
     uint64_t lastCounter = 0;
@@ -87,14 +85,14 @@ struct App::Impl {
         return updateSystems;
     }
 
-    void runSystems(std::vector<SystemEntry>& systems, App& app, float dt) {
+    void runSystems(std::vector<SystemEntry>& systems, App& app) {
         for (auto& sys : systems) {
             if (sys.isRaw && sys.rawSystem) {
                 sys.rawSystem->execute(app, dt);
             } else if (sys.isLambda) {
-                sys.lambdaFn(app, dt);
+                sys.lambdaFn(app);
             } else if (sys.fn) {
-                sys.fn(dt);
+                sys.fn();
             }
         }
     }
@@ -184,7 +182,7 @@ void App::addEventHandler(EventHandler* handler) {
     if (handler) impl_->eventHandlers.push_back(handler);
 }
 
-void App::addSystem(const char* name, Phase phase, std::function<void(App&, float)> fn) {
+void App::addSystem(const char* name, Phase phase, std::function<void(App&)> fn) {
     SystemEntry entry;
     entry.name = name ? name : "";
     entry.phase = phase;
@@ -195,7 +193,10 @@ void App::addSystem(const char* name, Phase phase, std::function<void(App&, floa
 
 void App::addResourceImpl(std::type_index type, Resource* res) {
     impl_->resourcesByType[type] = res;
-    impl_->resourcesByName[res->name()] = res;
+    const char* n = res->name();
+    if (n && n[0] != '\0') {
+        impl_->resourcesByName[n] = res;
+    }
     impl_->ownedResources.push_back(res);
 }
 
@@ -206,7 +207,7 @@ Resource* App::getResourceImpl(std::type_index type) const {
 
 void App::registerSystemFn(const char* name, Phase phase,
                            const std::vector<AccessDescriptor>& deps,
-                           std::function<void(float)> fn) {
+                           std::function<void()> fn) {
     SystemEntry entry;
     entry.name = name ? name : "";
     entry.phase = phase;
@@ -270,7 +271,7 @@ int App::run() {
 
     DRIFT_LOG_INFO("Drift engine initialised (%dx%d)", w, h);
 
-    // ---- Register core resources (WorldResource + RenderSnapshot) ----
+    // ---- Register core resources ----
     {
         auto* worldRes = new WorldResource(s.world);
         addResourceImpl(std::type_index(typeid(WorldResource)), worldRes);
@@ -279,6 +280,10 @@ int App::run() {
         auto* snapshot = new RenderSnapshot();
         addResourceImpl(std::type_index(typeid(RenderSnapshot)), snapshot);
     }
+    // Time resource
+    auto* timeRes = addResource<Time>();
+    // AssetServer (empty, loaders registered by plugins)
+    addResource<AssetServer>();
 
     // ---- Build plugins (deferred so window/GPU are available) ----
     for (auto* g : s.pluginGroups) {
@@ -288,17 +293,9 @@ int App::run() {
         p->build(*this);
     }
 
-    // ---- Register AssetServer (after plugins so underlying resources exist) ----
-    {
-        auto* renderer = getResource<RendererResource>();
-        auto* audio = getResource<AudioResource>();
-        auto* font = getResource<FontResource>();
-        addResource<AssetServer>(renderer, audio, font);
-    }
-
     // ---- Run startup systems ----
-    s.runSystems(s.startupSystems, *this, 0.f);
-    s.commands.flush();
+    s.runSystems(s.startupSystems, *this);
+    s.commands.flush(s.world);
 
     // ---- Main loop ----
     s.running = true;
@@ -319,9 +316,15 @@ int App::run() {
             : instantFps;
         s.fps = s.smoothedFps;
 
+        // Update Time resource
+        timeRes->delta = s.dt;
+        timeRes->elapsed = static_cast<double>(now - s.startCounter) /
+                           static_cast<double>(s.perfFrequency);
+        timeRes->frame = s.frame;
+
         // PreUpdate: beginFrame() snapshots previous state before new events
-        s.runSystems(s.preUpdateSystems, *this, s.dt);
-        s.commands.flush();
+        s.runSystems(s.preUpdateSystems, *this);
+        s.commands.flush(s.world);
 
         // Poll events (updates current state for this frame)
         SDL_Event event;
@@ -338,21 +341,21 @@ int App::run() {
         if (!s.running) break;
 
         // Update phase
-        s.runSystems(s.updateSystems, *this, s.dt);
-        s.commands.flush();
+        s.runSystems(s.updateSystems, *this);
+        s.commands.flush(s.world);
 
         // PostUpdate phase
-        s.runSystems(s.postUpdateSystems, *this, s.dt);
-        s.commands.flush();
+        s.runSystems(s.postUpdateSystems, *this);
+        s.commands.flush(s.world);
 
         // Extract phase: fill render snapshot
-        s.runSystems(s.extractSystems, *this, s.dt);
+        s.runSystems(s.extractSystems, *this);
 
         // Render phase: auto-render from snapshot + user manual draws
-        s.runSystems(s.renderSystems, *this, s.dt);
+        s.runSystems(s.renderSystems, *this);
 
         // RenderFlush phase: endFrame + present
-        s.runSystems(s.renderFlushSystems, *this, s.dt);
+        s.runSystems(s.renderFlushSystems, *this);
 
         s.frame++;
     }

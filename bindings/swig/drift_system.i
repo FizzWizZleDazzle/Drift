@@ -19,6 +19,8 @@
 #include <drift/RenderSnapshot.h>
 #include <drift/WorldResource.h>
 #include <drift/AssetServer.h>
+#include <drift/ComponentRegistry.hpp>
+#include <drift/EntityAllocator.hpp>
 #include <drift/components/Sprite.h>
 #include <drift/components/Camera.h>
 
@@ -32,6 +34,7 @@
 #include <drift/resources/ParticleResource.hpp>
 #include <drift/resources/TilemapResource.hpp>
 #include <drift/resources/UIResource.hpp>
+#include <drift/resources/Time.hpp>
 
 // Plugin headers (for DefaultPlugins/MinimalPlugins)
 #include <drift/plugins/DefaultPlugins.hpp>
@@ -78,7 +81,7 @@
 // App: hide template methods and private helpers (guarded by #ifndef SWIG)
 %ignore drift::App::addResource;
 %ignore drift::App::getResource;
-%ignore drift::App::addSystem(const char*, Phase, std::function<void(App&, float)>);
+%ignore drift::App::addSystem(const char*, Phase, std::function<void(App&)>);
 %ignore drift::App::addResourceImpl;
 %ignore drift::App::getResourceImpl;
 %ignore drift::App::registerSystemFn;
@@ -94,9 +97,35 @@
 %ignore drift::World::getMut;
 %ignore drift::World::set;
 %ignore drift::World::registerComponent(const char*);
+%ignore drift::World::componentRegistry;
 
-// Commands: hide template insert
-%ignore drift::Commands::insert(Entity, ComponentId, const T&);
+// App: world()/commands() are exposed via %extend getWorld()/getCommands()
+%ignore drift::App::world;
+%ignore drift::App::commands;
+
+// C++-only types: EntityAllocator, ComponentRegistry, Query, QueryMut
+%ignore drift::EntityAllocator;
+%ignore drift::ComponentRegistry;
+%ignore drift::Query;
+%ignore drift::QueryMut;
+%ignore drift::With;
+%ignore drift::Without;
+%ignore drift::Texture;
+%ignore drift::Sound;
+%ignore drift::Font;
+
+// Commands: hide C++-only methods
+%ignore drift::Commands::Commands;          // constructor (internal)
+%ignore drift::Commands::flush;             // internal (called by App)
+%ignore drift::Commands::registry;          // C++ only
+
+// EntityCommands: hide operator SWIG can't handle, keep template insert hidden
+%ignore drift::EntityCommands::operator EntityId;
+
+// AssetServer: hide loader registration (called by plugins, not users)
+%ignore drift::AssetServer::setTextureLoader;
+%ignore drift::AssetServer::setSoundLoader;
+%ignore drift::AssetServer::setFontLoader;
 
 // Script: hide template getComponent/getComponentMut
 %ignore drift::Script::getComponent;
@@ -242,6 +271,10 @@
         return static_cast<drift::AssetServer*>(
             $self->getResourceByName("AssetServer"));
     }
+    drift::Time* getTime() {
+        return static_cast<drift::Time*>(
+            $self->getResourceByName("Time"));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +286,8 @@
 %include "drift/System.hpp"
 %include "drift/Log.hpp"
 %include "drift/App.hpp"
+%include "drift/EntityAllocator.hpp"
+%include "drift/ComponentRegistry.hpp"
 %include "drift/World.hpp"
 %include "drift/Entity.hpp"
 %include "drift/components/Sprite.h"
@@ -275,6 +310,7 @@
 %include "drift/resources/ParticleResource.hpp"
 %include "drift/resources/TilemapResource.hpp"
 %include "drift/resources/UIResource.hpp"
+%include "drift/resources/Time.hpp"
 
 // ---------------------------------------------------------------------------
 // Built-in plugin classes (DefaultPlugins, MinimalPlugins)

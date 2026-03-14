@@ -45,6 +45,9 @@ namespace Drift
         public static drift.UIResource? GetUI(this drift.App app)
             => app.getUIResource();
 
+        public static drift.Time? GetTime(this drift.App app)
+            => app.getTime();
+
         // ====================================================================
         // World + Commands + AssetServer access
         // ====================================================================

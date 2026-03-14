@@ -58,6 +58,7 @@ public class World : global::System.IDisposable {
   }
 
   public World() : this(driftPINVOKE.new_World(), true) {
+    SwigDirectorConnect();
   }
 
   public void progress(float dt) {
@@ -139,8 +140,8 @@ public class World : global::System.IDisposable {
     driftPINVOKE.World_queryFini(swigCPtr, QueryIter.getCPtr(iter));
   }
 
-  public ulong allocateEntity() {
-    ulong ret = driftPINVOKE.World_allocateEntity(swigCPtr);
+  public ulong allocate() {
+    ulong ret = driftPINVOKE.World_allocate(swigCPtr);
     return ret;
   }
 
@@ -159,6 +160,55 @@ public class World : global::System.IDisposable {
     return ret;
   }
 
+  private void SwigDirectorConnect() {
+    if (SwigDerivedClassHasMethod("allocate", swigMethodTypes0))
+      swigDelegate0 = new SwigDelegateWorld_0(SwigDirectorMethodallocate);
+    driftPINVOKE.World_director_connect(swigCPtr, swigDelegate0);
+  }
+
+  private bool SwigDerivedClassHasMethod(string methodName, global::System.Type[] methodTypes) {
+    global::System.Reflection.MethodInfo[] methodInfos = this.GetType().GetMethods(
+        global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Instance);
+    foreach (global::System.Reflection.MethodInfo methodInfo in methodInfos) {
+      if (methodInfo.DeclaringType == null)
+        continue;
+
+      if (methodInfo.Name != methodName)
+        continue;
+
+      var parameters = methodInfo.GetParameters();
+      if (parameters.Length != methodTypes.Length)
+        continue;
+
+      bool parametersMatch = true;
+      for (var i = 0; i < parameters.Length; i++) {
+        if (parameters[i].ParameterType != methodTypes[i]) {
+          parametersMatch = false;
+          break;
+        }
+      }
+
+      if (!parametersMatch)
+        continue;
+
+      if (methodInfo.IsVirtual && (methodInfo.DeclaringType.IsSubclassOf(typeof(World))) &&
+        methodInfo.DeclaringType != methodInfo.GetBaseDefinition().DeclaringType) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private ulong SwigDirectorMethodallocate() {
+    return allocate();
+  }
+
+  public delegate ulong SwigDelegateWorld_0();
+
+  private SwigDelegateWorld_0 swigDelegate0;
+
+  private static global::System.Type[] swigMethodTypes0 = new global::System.Type[] {  };
 }
 
 }

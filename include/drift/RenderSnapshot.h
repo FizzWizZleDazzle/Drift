@@ -25,7 +25,7 @@ struct CameraSnapshot {
 
 class RenderSnapshot : public Resource {
 public:
-    const char* name() const override { return "RenderSnapshot"; }
+    DRIFT_RESOURCE(RenderSnapshot)
 
     // Called during Extract phase: queries World for Sprite+Transform2D
     // and the active Camera+Transform2D

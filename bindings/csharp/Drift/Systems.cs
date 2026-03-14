@@ -57,6 +57,7 @@ namespace Drift
             RegisterAccessor("WorldResource", a => a.getWorldResource());
             RegisterAccessor("RenderSnapshot", a => a.getRenderSnapshot());
             RegisterAccessor("AssetServer", a => a.getAssetServer());
+            RegisterAccessor("Time", a => a.getTime());
         }
 
         public static void RegisterAccessor(string name, Func<drift.App, drift.Resource> fn)

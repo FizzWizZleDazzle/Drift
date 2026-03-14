@@ -44,10 +44,10 @@ World::World()
         return;
     }
 
-    // Register built-in components
-    impl_->transform2dId = registerComponent("Transform2D", sizeof(Transform2D), alignof(Transform2D));
-    impl_->spriteId = registerComponent("Sprite", sizeof(Sprite), alignof(Sprite));
-    impl_->cameraId = registerComponent("Camera", sizeof(Camera), alignof(Camera));
+    // Register built-in components (also populate ComponentRegistry)
+    impl_->transform2dId = registerComponent<Transform2D>("Transform2D");
+    impl_->spriteId = registerComponent<Sprite>("Sprite");
+    impl_->cameraId = registerComponent<Camera>("Camera");
 
     DRIFT_LOG_INFO("ECS world created (flecs)");
 }
@@ -96,50 +96,50 @@ ComponentId World::lookupComponent(const char* name) const {
 // Entities
 // ---------------------------------------------------------------------------
 
-Entity World::createEntity() {
-    if (!impl_->ecs) return InvalidEntity;
-    return static_cast<Entity>(ecs_new(impl_->ecs));
+EntityId World::createEntity() {
+    if (!impl_->ecs) return InvalidEntityId;
+    return static_cast<EntityId>(ecs_new(impl_->ecs));
 }
 
-void World::destroyEntity(Entity entity) {
+void World::destroyEntity(EntityId entity) {
     if (!impl_->ecs) return;
     ecs_delete(impl_->ecs, static_cast<ecs_entity_t>(entity));
 }
 
-bool World::isAlive(Entity entity) const {
+bool World::isAlive(EntityId entity) const {
     if (!impl_->ecs) return false;
     return ecs_is_alive(impl_->ecs, static_cast<ecs_entity_t>(entity));
 }
 
-void World::addComponent(Entity entity, ComponentId component) {
+void World::addComponent(EntityId entity, ComponentId component) {
     if (!impl_->ecs) return;
     ecs_add_id(impl_->ecs, static_cast<ecs_entity_t>(entity), static_cast<ecs_id_t>(component));
 }
 
-void World::removeComponent(Entity entity, ComponentId component) {
+void World::removeComponent(EntityId entity, ComponentId component) {
     if (!impl_->ecs) return;
     ecs_remove_id(impl_->ecs, static_cast<ecs_entity_t>(entity), static_cast<ecs_id_t>(component));
 }
 
-void World::setComponent(Entity entity, ComponentId component, const void* data, size_t size) {
+void World::setComponent(EntityId entity, ComponentId component, const void* data, size_t size) {
     if (!impl_->ecs || !data) return;
     ecs_set_id(impl_->ecs, static_cast<ecs_entity_t>(entity),
                static_cast<ecs_id_t>(component), size, data);
 }
 
-const void* World::getComponent(Entity entity, ComponentId component) const {
+const void* World::getComponent(EntityId entity, ComponentId component) const {
     if (!impl_->ecs) return nullptr;
     return ecs_get_id(impl_->ecs, static_cast<ecs_entity_t>(entity),
                       static_cast<ecs_id_t>(component));
 }
 
-void* World::getComponentMut(Entity entity, ComponentId component) {
+void* World::getComponentMut(EntityId entity, ComponentId component) {
     if (!impl_->ecs) return nullptr;
     return ecs_get_mut_id(impl_->ecs, static_cast<ecs_entity_t>(entity),
                           static_cast<ecs_id_t>(component));
 }
 
-bool World::hasComponent(Entity entity, ComponentId component) const {
+bool World::hasComponent(EntityId entity, ComponentId component) const {
     if (!impl_->ecs) return false;
     return ecs_has_id(impl_->ecs, static_cast<ecs_entity_t>(entity),
                       static_cast<ecs_id_t>(component));
@@ -210,10 +210,10 @@ void* World::queryField(QueryIter* iter, int32_t index, size_t size) {
     return ecs_field_w_size(&qi->iter, size, index);
 }
 
-Entity* World::queryEntities(QueryIter* iter) {
+EntityId* World::queryEntities(QueryIter* iter) {
     if (!iter || !iter->_internal) return nullptr;
     auto* qi = static_cast<QueryIterInternal*>(iter->_internal);
-    return reinterpret_cast<Entity*>(const_cast<ecs_entity_t*>(qi->iter.entities));
+    return reinterpret_cast<EntityId*>(const_cast<ecs_entity_t*>(qi->iter.entities));
 }
 
 void World::queryFini(QueryIter* iter) {
@@ -231,10 +231,10 @@ void World::queryFini(QueryIter* iter) {
 // Built-in IDs
 // ---------------------------------------------------------------------------
 
-Entity World::allocateEntity() {
-    if (!impl_->ecs) return InvalidEntity;
+EntityId World::allocate() {
+    if (!impl_->ecs) return InvalidEntityId;
     // ecs_new creates an empty entity in flecs (no components yet)
-    return static_cast<Entity>(ecs_new(impl_->ecs));
+    return static_cast<EntityId>(ecs_new(impl_->ecs));
 }
 
 ComponentId World::transform2dId() const {

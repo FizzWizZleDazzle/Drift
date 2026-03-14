@@ -20,7 +20,7 @@ public:
     explicit TilemapResource(RendererResource& renderer);
     ~TilemapResource() override;
 
-    const char* name() const override { return "TilemapResource"; }
+    DRIFT_RESOURCE(TilemapResource)
 
     TilemapHandle loadTilemap(const char* path);
     void destroyTilemap(TilemapHandle map);

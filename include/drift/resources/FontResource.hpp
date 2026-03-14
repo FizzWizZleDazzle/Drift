@@ -13,7 +13,7 @@ public:
     explicit FontResource(RendererResource& renderer);
     ~FontResource() override;
 
-    const char* name() const override { return "FontResource"; }
+    DRIFT_RESOURCE(FontResource)
 
     FontHandle loadFont(const char* path, float sizePx);
     void destroyFont(FontHandle font);

@@ -123,16 +123,6 @@ public class App : global::System.IDisposable {
     return ret;
   }
 
-  public World world() {
-    World ret = new World(driftPINVOKE.App_world(swigCPtr), false);
-    return ret;
-  }
-
-  public Commands commands() {
-    Commands ret = new Commands(driftPINVOKE.App_commands(swigCPtr), false);
-    return ret;
-  }
-
   public RendererResource getRendererResource() {
     global::System.IntPtr cPtr = driftPINVOKE.App_getRendererResource(swigCPtr);
     RendererResource ret = (cPtr == global::System.IntPtr.Zero) ? null : new RendererResource(cPtr, false);
@@ -214,6 +204,12 @@ public class App : global::System.IDisposable {
   public AssetServer getAssetServer() {
     global::System.IntPtr cPtr = driftPINVOKE.App_getAssetServer(swigCPtr);
     AssetServer ret = (cPtr == global::System.IntPtr.Zero) ? null : new AssetServer(cPtr, false);
+    return ret;
+  }
+
+  public Time getTime() {
+    global::System.IntPtr cPtr = driftPINVOKE.App_getTime(swigCPtr);
+    Time ret = (cPtr == global::System.IntPtr.Zero) ? null : new Time(cPtr, false);
     return ret;
   }
 

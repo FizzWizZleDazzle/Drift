@@ -6,6 +6,7 @@
 #include <drift/Resource.hpp>
 #include <drift/Plugin.hpp>
 #include <drift/System.hpp>
+#include <drift/World.hpp>
 
 #include <memory>
 #include <functional>
@@ -16,7 +17,6 @@ union SDL_Event;
 
 namespace drift {
 
-class World;
 class Commands;
 
 // EventHandler: receives raw SDL events (for InputResource, UIResource, etc.)
@@ -99,52 +99,58 @@ public:
     void addSystem(const char* name, Phase phase) {
         using Traits = SystemTraits<decltype(Fn)>;
         auto deps = Traits::dependencies();
-        registerSystemFn(name, phase, deps, [this](float dt) {
-            invokeSystem<Fn>(dt);
+        registerSystemFn(name, phase, deps, [this]() {
+            invokeSystem<Fn>();
         });
     }
 
     // Lambda shorthand (for plugins registering internal systems)
-    void addSystem(const char* name, Phase phase, std::function<void(App&, float)> fn);
+    void addSystem(const char* name, Phase phase, std::function<void(App&)> fn);
 
 private:
     void addResourceImpl(std::type_index type, Resource* res);
     Resource* getResourceImpl(std::type_index type) const;
     void registerSystemFn(const char* name, Phase phase,
                           const std::vector<AccessDescriptor>& deps,
-                          std::function<void(float)> fn);
+                          std::function<void()> fn);
 
     // Invoke a typed system function by constructing Res/ResMut wrappers
     template<auto Fn, typename... Args>
-    void invokeSystemHelper(float dt, void(*)(Args...)) {
-        Fn(buildParam<Args>(dt)...);
+    void invokeSystemHelper(void(*)(Args...)) {
+        Fn(buildParam<Args>()...);
     }
 
     template<auto Fn>
-    void invokeSystem(float dt) {
-        invokeSystemHelper<Fn>(dt, Fn);
+    void invokeSystem() {
+        invokeSystemHelper<Fn>(Fn);
     }
 
     template<typename T>
-    auto buildParam(float dt) -> std::enable_if_t<std::is_same_v<T, float>, float> {
-        return dt;
-    }
-
-    template<typename T>
-    auto buildParam(float) -> std::enable_if_t<IsRes<T>::value, T> {
+    auto buildParam() -> std::enable_if_t<IsRes<T>::value, T> {
         using Inner = typename InnerType<T>::type;
         return T(getResource<Inner>());
     }
 
     template<typename T>
-    auto buildParam(float) -> std::enable_if_t<IsResMut<T>::value, T> {
+    auto buildParam() -> std::enable_if_t<IsResMut<T>::value, T> {
         using Inner = typename InnerType<T>::type;
         return T(getResource<Inner>());
     }
 
     template<typename T>
-    auto buildParam(float) -> std::enable_if_t<std::is_same_v<T, Commands&>, Commands&> {
+    auto buildParam() -> std::enable_if_t<std::is_same_v<T, Commands&>, Commands&> {
         return commands();
+    }
+
+    // Query/QueryMut parameter building
+    template<typename T>
+    auto buildParam() -> std::enable_if_t<IsQuery<T>::value, T> {
+        return T(world(), world().componentRegistry());
+    }
+
+    template<typename T>
+    auto buildParam() -> std::enable_if_t<IsQueryMut<T>::value, T> {
+        return T(world(), world().componentRegistry());
     }
 #endif
 

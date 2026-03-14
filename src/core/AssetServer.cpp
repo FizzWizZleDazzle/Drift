@@ -1,43 +1,32 @@
 #include <drift/AssetServer.h>
-#include <drift/resources/RendererResource.hpp>
-#include <drift/resources/AudioResource.hpp>
-#include <drift/resources/FontResource.hpp>
 
 namespace drift {
 
-AssetServer::AssetServer(RendererResource* renderer, AudioResource* audio, FontResource* font)
-    : renderer_(renderer), audio_(audio), font_(font)
-{
-}
-
+AssetServer::AssetServer() = default;
 AssetServer::~AssetServer() = default;
 
+void AssetServer::setTextureLoader(std::function<TextureHandle(const char*)> fn) {
+    textureLoader_ = std::move(fn);
+}
+
+void AssetServer::setSoundLoader(std::function<SoundHandle(const char*)> fn) {
+    soundLoader_ = std::move(fn);
+}
+
+void AssetServer::setFontLoader(std::function<FontHandle(const char*, int)> fn) {
+    fontLoader_ = std::move(fn);
+}
+
 TextureHandle AssetServer::loadTexture(const char* path) {
-    if (!renderer_) return {};
-    return renderer_->loadTexture(path);
-}
-
-void AssetServer::destroyTexture(TextureHandle texture) {
-    if (renderer_) renderer_->destroyTexture(texture);
-}
-
-void AssetServer::getTextureSize(TextureHandle texture, int32_t* w, int32_t* h) const {
-    if (renderer_) renderer_->getTextureSize(texture, w, h);
+    return textureLoader_ ? textureLoader_(path) : TextureHandle{};
 }
 
 SoundHandle AssetServer::loadSound(const char* path) {
-    if (!audio_) return {};
-    return audio_->loadSound(path);
-}
-
-PlayingSoundHandle AssetServer::playSound(SoundHandle sound, float volume, float pan) {
-    if (!audio_) return {};
-    return audio_->playSound(sound, volume, pan);
+    return soundLoader_ ? soundLoader_(path) : SoundHandle{};
 }
 
 FontHandle AssetServer::loadFont(const char* path, int sizePx) {
-    if (!font_) return {};
-    return font_->loadFont(path, sizePx);
+    return fontLoader_ ? fontLoader_(path, sizePx) : FontHandle{};
 }
 
 } // namespace drift

@@ -12,6 +12,10 @@ namespace drift {
 class App;
 class Commands;
 
+// Forward declarations for Query types
+template<typename... Args> class Query;
+template<typename... Args> class QueryMut;
+
 // Access mode for dependency tracking.
 enum class AccessMode { Read, Write };
 
@@ -43,6 +47,14 @@ template<typename T> struct IsRes<Res<T>> : std::true_type {};
 template<typename T> struct IsResMut : std::false_type {};
 template<typename T> struct IsResMut<ResMut<T>> : std::true_type {};
 
+// Type trait: is this a Query<...>?
+template<typename T> struct IsQuery : std::false_type {};
+template<typename... Args> struct IsQuery<Query<Args...>> : std::true_type {};
+
+// Type trait: is this a QueryMut<...>?
+template<typename T> struct IsQueryMut : std::false_type {};
+template<typename... Args> struct IsQueryMut<QueryMut<Args...>> : std::true_type {};
+
 // Extract the inner type from Res<T> or ResMut<T>
 template<typename T> struct InnerType { using type = T; };
 template<typename T> struct InnerType<Res<T>> { using type = T; };
@@ -55,14 +67,6 @@ struct DepsCollector;
 template<>
 struct DepsCollector<> {
     static void collect(std::vector<AccessDescriptor>&) {}
-};
-
-// Skip float (dt parameter)
-template<typename... Rest>
-struct DepsCollector<float, Rest...> {
-    static void collect(std::vector<AccessDescriptor>& deps) {
-        DepsCollector<Rest...>::collect(deps);
-    }
 };
 
 // Skip Commands& (injected from App, not a resource dependency)
@@ -89,11 +93,26 @@ struct DepsCollector<ResMut<T>, Rest...> {
     }
 };
 
+// Skip Query<...> and QueryMut<...> (not resource deps, they use World)
+template<typename... QArgs, typename... Rest>
+struct DepsCollector<Query<QArgs...>, Rest...> {
+    static void collect(std::vector<AccessDescriptor>& deps) {
+        DepsCollector<Rest...>::collect(deps);
+    }
+};
+
+template<typename... QArgs, typename... Rest>
+struct DepsCollector<QueryMut<QArgs...>, Rest...> {
+    static void collect(std::vector<AccessDescriptor>& deps) {
+        DepsCollector<Rest...>::collect(deps);
+    }
+};
+
 // SystemTraits: decompose a function pointer into its dependencies
 template<typename Fn>
 struct SystemTraits;
 
-// For function pointers: void(*)(Res<A>, ResMut<B>, ..., float)
+// For function pointers: void(*)(Res<A>, ResMut<B>, ...)
 template<typename... Args>
 struct SystemTraits<void(*)(Args...)> {
     static std::vector<AccessDescriptor> dependencies() {
@@ -115,11 +134,6 @@ struct ParamBuilder<Res<T>> {
 template<typename T>
 struct ParamBuilder<ResMut<T>> {
     static ResMut<T> build(App& app);
-};
-
-template<>
-struct ParamBuilder<float> {
-    static float build(App& app, float dt) { return dt; }
 };
 
 #endif // SWIG
