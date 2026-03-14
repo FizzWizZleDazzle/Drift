@@ -9,6 +9,7 @@ class Plugin {
 public:
     virtual ~Plugin() = default;
     virtual void build(App& app) = 0;
+    virtual void finish(App& app) {}
     virtual const char* name() const = 0;
 };
 

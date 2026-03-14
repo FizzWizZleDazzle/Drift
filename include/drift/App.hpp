@@ -27,6 +27,28 @@ public:
     virtual void processEvent(const SDL_Event& event) = 0;
 };
 
+class App;
+
+using SystemSetId = int;
+
+#ifndef SWIG
+// Handle returned by phase shortcuts for chaining .before()/.after() ordering
+class SystemHandle {
+public:
+    SystemHandle(App& app, size_t index, Phase phase)
+        : app_(app), index_(index), phase_(phase) {}
+
+    SystemHandle& before(const char* name);
+    SystemHandle& after(const char* name);
+    SystemHandle& inSet(SystemSetId setId);
+
+private:
+    App& app_;
+    size_t index_;
+    Phase phase_;
+};
+#endif
+
 class App {
 public:
     App();
@@ -44,9 +66,6 @@ public:
     int run();
     void quit();
 
-    float deltaTime() const;
-    double time() const;
-    uint64_t frameCount() const;
     const Config& config() const;
 
     // World + Commands access
@@ -64,6 +83,13 @@ public:
         T* res = new T(std::forward<Args>(args)...);
         addResourceImpl(std::type_index(typeid(T)), res);
         return res;
+    }
+
+    template<typename T, typename... Args>
+    T* initResource(Args&&... args) {
+        T* existing = getResource<T>();
+        if (existing) return existing;
+        return addResource<T>(std::forward<Args>(args)...);
     }
 
     template<typename T>
@@ -88,37 +114,51 @@ public:
         return addPlugins(g);
     }
 
-    // Phase shortcuts
-    template<auto Fn> void startup(const char* n = "startup") { addSystem<Fn>(n, Phase::Startup); }
-    template<auto Fn> void update(const char* n = "update")   { addSystem<Fn>(n, Phase::Update); }
-    template<auto Fn> void render(const char* n = "render")   { addSystem<Fn>(n, Phase::Render); }
-    template<auto Fn> void preUpdate(const char* n = "preUpdate")   { addSystem<Fn>(n, Phase::PreUpdate); }
-    template<auto Fn> void postUpdate(const char* n = "postUpdate") { addSystem<Fn>(n, Phase::PostUpdate); }
+    // Phase shortcuts (return SystemHandle for .before()/.after() chaining)
+    template<auto Fn> SystemHandle startup(const char* n = "startup") { return addSystem<Fn>(n, Phase::Startup); }
+    template<auto Fn> SystemHandle update(const char* n = "update")   { return addSystem<Fn>(n, Phase::Update); }
+    template<auto Fn> SystemHandle render(const char* n = "render")   { return addSystem<Fn>(n, Phase::Render); }
+    template<auto Fn> SystemHandle preUpdate(const char* n = "preUpdate")   { return addSystem<Fn>(n, Phase::PreUpdate); }
+    template<auto Fn> SystemHandle postUpdate(const char* n = "postUpdate") { return addSystem<Fn>(n, Phase::PostUpdate); }
 
     // Phase shortcuts with RunCondition
-    template<auto Fn> void update(const char* n, RunCondition cond)   { addSystem<Fn>(n, Phase::Update, std::move(cond)); }
-    template<auto Fn> void render(const char* n, RunCondition cond)   { addSystem<Fn>(n, Phase::Render, std::move(cond)); }
-    template<auto Fn> void preUpdate(const char* n, RunCondition cond)   { addSystem<Fn>(n, Phase::PreUpdate, std::move(cond)); }
-    template<auto Fn> void postUpdate(const char* n, RunCondition cond) { addSystem<Fn>(n, Phase::PostUpdate, std::move(cond)); }
+    template<auto Fn> SystemHandle update(const char* n, RunCondition cond)   { return addSystem<Fn>(n, Phase::Update, std::move(cond)); }
+    template<auto Fn> SystemHandle render(const char* n, RunCondition cond)   { return addSystem<Fn>(n, Phase::Render, std::move(cond)); }
+    template<auto Fn> SystemHandle preUpdate(const char* n, RunCondition cond)   { return addSystem<Fn>(n, Phase::PreUpdate, std::move(cond)); }
+    template<auto Fn> SystemHandle postUpdate(const char* n, RunCondition cond) { return addSystem<Fn>(n, Phase::PostUpdate, std::move(cond)); }
 
     // Bevy-style: system function with typed params
     template<auto Fn>
-    void addSystem(const char* name, Phase phase) {
+    SystemHandle addSystem(const char* name, Phase phase) {
         using Traits = SystemTraits<decltype(Fn)>;
         auto deps = Traits::dependencies();
         registerSystemFn(name, phase, deps, [this]() {
             invokeSystem<Fn>();
         });
+        return SystemHandle(*this, lastSystemIndex(phase), phase);
     }
 
     // Bevy-style with RunCondition
     template<auto Fn>
-    void addSystem(const char* name, Phase phase, RunCondition cond) {
+    SystemHandle addSystem(const char* name, Phase phase, RunCondition cond) {
         using Traits = SystemTraits<decltype(Fn)>;
         auto deps = Traits::dependencies();
         registerSystemFn(name, phase, deps, [this]() {
             invokeSystem<Fn>();
         }, std::move(cond));
+        return SystemHandle(*this, lastSystemIndex(phase), phase);
+    }
+
+    // Batch system registration
+    template<auto Fn>
+    struct System { const char* name; };
+
+    template<auto Fn, auto... Rest>
+    void addSystems(Phase phase, System<Fn> first, System<Rest>... rest) {
+        addSystem<Fn>(first.name, phase);
+        if constexpr (sizeof...(Rest) > 0) {
+            addSystems(phase, rest...);
+        }
     }
 
     // Lambda shorthand (for plugins registering internal systems)
@@ -190,6 +230,23 @@ public:
         registerOnExitFn(std::type_index(typeid(T)), static_cast<int>(state),
                          name, {}, std::move(fn));
     }
+
+    // System set ordering
+    void configureSetOrder(Phase phase, const std::vector<SystemSetId>& order);
+
+    template<typename T>
+    void configureSets(Phase phase, std::initializer_list<T> sets) {
+        std::vector<SystemSetId> order;
+        for (auto s : sets) order.push_back(static_cast<SystemSetId>(s));
+        configureSetOrder(phase, order);
+    }
+
+    // Ordering internals (used by SystemHandle)
+    friend class SystemHandle;
+    size_t lastSystemIndex(Phase phase);
+    void addSystemOrderAfter(Phase phase, size_t index, const char* depName);
+    void addSystemOrderBefore(Phase phase, size_t index, const char* targetName);
+    void setSystemSet(Phase phase, size_t index, SystemSetId setId);
 
 private:
     void addResourceImpl(std::type_index type, Resource* res);
@@ -306,6 +363,22 @@ private:
 };
 
 #ifndef SWIG
+// SystemHandle inline implementations
+inline SystemHandle& SystemHandle::before(const char* name) {
+    app_.addSystemOrderBefore(phase_, index_, name);
+    return *this;
+}
+
+inline SystemHandle& SystemHandle::after(const char* name) {
+    app_.addSystemOrderAfter(phase_, index_, name);
+    return *this;
+}
+
+inline SystemHandle& SystemHandle::inSet(SystemSetId setId) {
+    app_.setSystemSet(phase_, index_, setId);
+    return *this;
+}
+
 // Free function: returns a RunCondition that checks if State<T>::current == value
 template<typename T>
 RunCondition inState(T value) {

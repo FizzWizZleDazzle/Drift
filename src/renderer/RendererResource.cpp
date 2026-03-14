@@ -52,6 +52,7 @@ struct SpriteInstance {
     TextureHandle texture;
     int32_t tex_w;              // cached texture width  (for UV calc)
     int32_t tex_h;              // cached texture height (for UV calc)
+    uint8_t blend_mode = 0;     // 0 = alpha, 1 = additive
 };
 
 struct SpriteVertex {
@@ -261,7 +262,8 @@ struct RendererResource::Impl {
     std::vector<SpriteInstance> spriteQueue;
 
     // GPU pipeline and resources
-    SDL_GPUGraphicsPipeline* spritePipeline = nullptr;
+    SDL_GPUGraphicsPipeline* spritePipeline = nullptr;       // alpha blend
+    SDL_GPUGraphicsPipeline* additivePipeline = nullptr;     // additive blend
     SDL_GPUBuffer*           vertexBuffer   = nullptr;
     SDL_GPUBuffer*           indexBuffer    = nullptr;
     uint32_t                 vertexBufCap   = 0; // in bytes
@@ -411,6 +413,7 @@ static void upload_to_gpu_buffer(SDL_GPUDevice* dev, SDL_GPUBuffer* dst,
 // =============================================================================
 static bool sprite_sort_cmp(const SpriteInstance& a, const SpriteInstance& b) {
     if (a.z_order != b.z_order) return a.z_order < b.z_order;
+    if (a.blend_mode != b.blend_mode) return a.blend_mode < b.blend_mode;
     return a.texture.id < b.texture.id;
 }
 
@@ -575,6 +578,17 @@ RendererResource::RendererResource(App& app)
                 SDL_Log("RendererResource: failed to create sprite pipeline: %s",
                         SDL_GetError());
             }
+
+            // Additive blend pipeline: SRC_ALPHA / ONE
+            ct_desc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            ct_desc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            pip_ci.target_info.color_target_descriptions = &ct_desc;
+
+            impl_->additivePipeline = SDL_CreateGPUGraphicsPipeline(dev, &pip_ci);
+            if (!impl_->additivePipeline) {
+                SDL_Log("RendererResource: failed to create additive pipeline: %s",
+                        SDL_GetError());
+            }
         } else {
             SDL_Log("RendererResource: failed to create GPU shaders: vert=%p frag=%p: %s",
                     (void*)vert_shader, (void*)frag_shader, SDL_GetError());
@@ -643,10 +657,14 @@ RendererResource::~RendererResource() {
             impl_->indexBufCap = 0;
         }
 
-        // Release pipeline.
+        // Release pipelines.
         if (impl_->spritePipeline) {
             SDL_ReleaseGPUGraphicsPipeline(dev, impl_->spritePipeline);
             impl_->spritePipeline = nullptr;
+        }
+        if (impl_->additivePipeline) {
+            SDL_ReleaseGPUGraphicsPipeline(dev, impl_->additivePipeline);
+            impl_->additivePipeline = nullptr;
         }
     }
 
@@ -808,10 +826,8 @@ void RendererResource::endFrame() {
 
     SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(impl_->cmdBuf, &color_target, 1, nullptr);
 
-    // --- Issue batched draw calls (one per texture run) ---
+    // --- Issue batched draw calls (one per texture/blend-mode run) ---
     if (pass && impl_->spritePipeline && sprite_count > 0) {
-        SDL_BindGPUGraphicsPipeline(pass, impl_->spritePipeline);
-
         SDL_GPUBufferBinding vb_bind{};
         vb_bind.buffer = impl_->vertexBuffer;
         vb_bind.offset = 0;
@@ -822,14 +838,28 @@ void RendererResource::endFrame() {
         ib_bind.offset = 0;
         SDL_BindGPUIndexBuffer(pass, &ib_bind, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
-        // Walk sorted sprites and emit one draw per texture batch.
+        // Track current blend mode to minimize pipeline switches
+        uint8_t cur_blend = impl_->spriteQueue[0].blend_mode;
+        SDL_BindGPUGraphicsPipeline(pass,
+            cur_blend == 1 && impl_->additivePipeline ? impl_->additivePipeline : impl_->spritePipeline);
+
+        // Walk sorted sprites and emit one draw per texture+blend batch.
         size_t batch_start = 0;
         while (batch_start < sprite_count) {
             uint32_t cur_tex_id = impl_->spriteQueue[batch_start].texture.id;
+            uint8_t batch_blend = impl_->spriteQueue[batch_start].blend_mode;
             size_t batch_end = batch_start + 1;
             while (batch_end < sprite_count &&
-                   impl_->spriteQueue[batch_end].texture.id == cur_tex_id) {
+                   impl_->spriteQueue[batch_end].texture.id == cur_tex_id &&
+                   impl_->spriteQueue[batch_end].blend_mode == batch_blend) {
                 ++batch_end;
+            }
+
+            // Switch pipeline if blend mode changed
+            if (batch_blend != cur_blend) {
+                cur_blend = batch_blend;
+                SDL_BindGPUGraphicsPipeline(pass,
+                    cur_blend == 1 && impl_->additivePipeline ? impl_->additivePipeline : impl_->spritePipeline);
             }
 
             // Bind the texture + sampler for this batch.
@@ -964,7 +994,8 @@ void RendererResource::getTextureSize(TextureHandle texture, int32_t* w, int32_t
 
 void RendererResource::drawSprite(TextureHandle texture, Vec2 position, Rect srcRect,
                                   Vec2 scale, float rotation, Vec2 origin,
-                                  Color tint, Flip flip, float zOrder) {
+                                  Color tint, Flip flip, float zOrder,
+                                  bool additive) {
     const TextureEntry* entry = impl_->textures.get(texture);
     if (!entry) {
         return; // invalid texture
@@ -982,6 +1013,7 @@ void RendererResource::drawSprite(TextureHandle texture, Vec2 position, Rect src
     inst.texture    = texture;
     inst.tex_w      = entry->width;
     inst.tex_h      = entry->height;
+    inst.blend_mode = additive ? 1 : 0;
 
     // If src_rect is zero-sized, use full texture.
     if (inst.src_rect.w <= 0.0f || inst.src_rect.h <= 0.0f) {
@@ -992,6 +1024,42 @@ void RendererResource::drawSprite(TextureHandle texture, Vec2 position, Rect src
     }
 
     impl_->spriteQueue.push_back(inst);
+}
+
+void RendererResource::drawSpriteBatch(TextureHandle texture, Rect srcRect,
+                                       const Vec2* positions, const float* sizes,
+                                       const float* rotations, const Color* tints,
+                                       int32_t count, float zOrder, bool additive) {
+    const TextureEntry* entry = impl_->textures.get(texture);
+    if (!entry || count <= 0) return;
+
+    int32_t tw = entry->width;
+    int32_t th = entry->height;
+
+    Rect src = srcRect;
+    if (src.w <= 0.0f || src.h <= 0.0f) {
+        src = {0.f, 0.f, static_cast<float>(tw), static_cast<float>(th)};
+    }
+
+    uint8_t bm = additive ? 1 : 0;
+
+    impl_->spriteQueue.reserve(impl_->spriteQueue.size() + count);
+    for (int32_t i = 0; i < count; ++i) {
+        SpriteInstance inst;
+        inst.position   = positions[i];
+        inst.scale      = {sizes[i], sizes[i]};
+        inst.rotation   = rotations[i];
+        inst.src_rect   = src;
+        inst.tint       = tints[i];
+        inst.origin     = {sizes[i] * 0.5f, sizes[i] * 0.5f};
+        inst.flip       = Flip::None;
+        inst.z_order    = zOrder;
+        inst.texture    = texture;
+        inst.tex_w      = tw;
+        inst.tex_h      = th;
+        inst.blend_mode = bm;
+        impl_->spriteQueue.push_back(inst);
+    }
 }
 
 void RendererResource::drawSprite(TextureHandle texture, Vec2 position, float zOrder) {

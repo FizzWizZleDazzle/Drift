@@ -137,6 +137,7 @@ set(DRIFT_SOURCES
     src/sprite/SpriteResource.cpp
     src/font/FontResource.cpp
     src/particles/ParticleResource.cpp
+    src/particles/ParticleSystem.cpp
     src/tilemap/TilemapResource.cpp
     src/ui/UIResource.cpp
 )

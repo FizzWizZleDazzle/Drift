@@ -37,7 +37,14 @@ public:
     void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect = {},
                     Vec2 scale = Vec2::one(), float rotation = 0.f,
                     Vec2 origin = {}, Color tint = Color::white(),
-                    Flip flip = Flip::None, float zOrder = 0.f);
+                    Flip flip = Flip::None, float zOrder = 0.f,
+                    bool additive = false);
+
+    // Bulk sprite push for particle systems (avoids per-particle function call overhead)
+    void drawSpriteBatch(TextureHandle texture, Rect srcRect,
+                         const Vec2* positions, const float* sizes,
+                         const float* rotations, const Color* tints,
+                         int32_t count, float zOrder, bool additive = false);
 
     // Primitive drawing
     void drawRect(Rect rect, Color color);

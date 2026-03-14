@@ -160,6 +160,11 @@ public class World : global::System.IDisposable {
     return ret;
   }
 
+  public SWIGTYPE_p_std__mutex queryMutex() {
+    SWIGTYPE_p_std__mutex ret = new SWIGTYPE_p_std__mutex(driftPINVOKE.World_queryMutex(swigCPtr), false);
+    return ret;
+  }
+
   private void SwigDirectorConnect() {
     if (SwigDerivedClassHasMethod("allocate", swigMethodTypes0))
       swigDelegate0 = new SwigDelegateWorld_0(SwigDirectorMethodallocate);

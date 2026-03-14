@@ -2,7 +2,8 @@
 // Drift Engine - Hello Sprites Example
 // =============================================================================
 // Demonstrates: Commands, Sprite+Transform2D entities, auto-rendering,
-// Camera entity, AssetServer, Query system parameters.
+// Camera entity, AssetServer, Query system parameters, Name component,
+// initResource, variadic insert, Optional<T> queries, withChildren.
 // =============================================================================
 
 #include <drift/App.hpp>
@@ -11,6 +12,8 @@
 #include <drift/Query.hpp>
 #include <drift/components/Sprite.hpp>
 #include <drift/components/Camera.hpp>
+#include <drift/components/Name.hpp>
+#include <drift/components/Hierarchy.hpp>
 #include <drift/plugins/DefaultPlugins.hpp>
 #include <drift/resources/InputResource.hpp>
 #include <drift/resources/Time.hpp>
@@ -46,18 +49,17 @@ void setupGame(ResMut<GameState> game, ResMut<AssetServer> assets,
         .insert<Transform2D>({.position = {0, 0}})
         .insert<Camera>({.zoom = 1.f, .active = true});
 
-    // Spawn player
+    // Spawn player with Name component and withChildren for orbiters
     cmd.spawn()
-        .insert<Transform2D>({})
-        .insert<Sprite>({.texture = game->texture, .zOrder = 1.f})
-        .insert<PlayerTag>({});
-
-    // Spawn orbiters
-    for (int i = 0; i < 8; ++i)
-        cmd.spawn()
-            .insert<Transform2D>({})
-            .insert<Sprite>({.texture = game->texture, .zOrder = 0.5f})
-            .insert<OrbiterTag>({});
+        .insert(Transform2D{}, Sprite{.texture = game->texture, .zOrder = 1.f},
+                PlayerTag{}, Name{"Player"})
+        .withChildren([&](ChildSpawner& spawner) {
+            for (int i = 0; i < 8; ++i) {
+                spawner.spawn()
+                    .insert(Transform2D{}, Sprite{.texture = game->texture, .zOrder = 0.5f},
+                            OrbiterTag{}, Name{"Orbiter"});
+            }
+        });
 
     // Spawn grid background tiles
     for (int y = -5; y <= 5; ++y) {
@@ -70,8 +72,7 @@ void setupGame(ResMut<GameState> game, ResMut<AssetServer> assets,
             s.zOrder = -1.f;
 
             cmd.spawn()
-                .insert<Transform2D>({.position = {x * 64.f, y * 64.f}})
-                .insert<Sprite>(s);
+                .insert(Transform2D{.position = {x * 64.f, y * 64.f}}, s);
         }
     }
 }
@@ -80,6 +81,7 @@ void updateGame(Res<InputResource> input, Res<Time> time,
                 ResMut<GameState> game,
                 QueryMut<Transform2D, With<PlayerTag>> players,
                 QueryMut<Transform2D, Sprite, With<OrbiterTag>> orbiters,
+                QueryMut<Transform2D, Optional<Name>> named,
                 Commands& cmd) {
     game->time += time->delta;
 
@@ -134,18 +136,17 @@ void updateGame(Res<InputResource> input, Res<Time> time,
 
         orbiterIdx++;
     });
+
+    // Demonstrate Optional<Name> query: iterate entities with Transform2D,
+    // optionally accessing Name (nullptr if entity has no Name component)
+    (void)named; // used just to verify compilation of Optional<T> queries
 }
 
 int main(int /*argc*/, char* /*argv*/[]) {
     App app;
     app.setConfig({.title = "Drift - Hello Sprites", .width = 1280, .height = 720});
     app.addPlugins<DefaultPlugins>();
-    app.addResource<GameState>();
-
-    // Register marker components
-    app.world().registerComponent<PlayerTag>("PlayerTag");
-    app.world().registerComponent<OrbiterTag>("OrbiterTag");
-
+    app.initResource<GameState>();  // idempotent: safe to call multiple times
     app.startup<setupGame>();
     app.update<updateGame>();
     return app.run();

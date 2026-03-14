@@ -10,6 +10,10 @@
 #include <drift/plugins/ParticlePlugin.hpp>
 #include <drift/plugins/TilemapPlugin.hpp>
 #include <drift/plugins/UIPlugin.hpp>
+#include <drift/plugins/HierarchyPlugin.hpp>
+#include <drift/plugins/SpriteAnimationPlugin.hpp>
+#include <drift/plugins/CameraPlugin.hpp>
+#include <drift/plugins/TrailPlugin.hpp>
 
 namespace drift {
 
@@ -25,6 +29,10 @@ public:
         app.addPlugin<ParticlePlugin>();
         app.addPlugin<TilemapPlugin>();
         app.addPlugin<UIPlugin>();
+        app.addPlugin<HierarchyPlugin>();
+        app.addPlugin<SpriteAnimationPlugin>();
+        app.addPlugin<CameraPlugin>();
+        app.addPlugin<TrailPlugin>();
     }
 };
 

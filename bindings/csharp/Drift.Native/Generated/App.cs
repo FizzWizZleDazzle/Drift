@@ -103,21 +103,6 @@ public class App : global::System.IDisposable {
     driftPINVOKE.App_quit(swigCPtr);
   }
 
-  public float deltaTime() {
-    float ret = driftPINVOKE.App_deltaTime(swigCPtr);
-    return ret;
-  }
-
-  public double time() {
-    double ret = driftPINVOKE.App_time(swigCPtr);
-    return ret;
-  }
-
-  public ulong frameCount() {
-    ulong ret = driftPINVOKE.App_frameCount(swigCPtr);
-    return ret;
-  }
-
   public Config config() {
     Config ret = new Config(driftPINVOKE.App_config(swigCPtr), false);
     return ret;

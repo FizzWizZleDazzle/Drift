@@ -32,6 +32,9 @@
 
 using namespace drift;
 
+// --- System sets for ordering ---
+enum class FlappySets { Input, Physics, Rendering };
+
 // --- Constants ---
 static constexpr int   WINDOW_SCALE       = 2;
 static constexpr int   SCREEN_W           = 288;
@@ -256,7 +259,7 @@ void onEnterMenu(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
 }
 
 void onEnterPlaying(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
-    doFlap(*game, audio.ptr);
+    doFlap(*game, audio.get());
 }
 
 void onEnterDead(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
@@ -305,7 +308,7 @@ void playingUpdate(Res<InputResource> input, Res<Time> time,
         game->birdAnimTimer = 0.f;
         game->birdFrame = (game->birdFrame + 1) % 3;
     }
-    if (action) doFlap(*game, audio.ptr);
+    if (action) doFlap(*game, audio.get());
     game->baseScroll += PIPE_SPEED * dt;
 
     game->pipeTimer += dt;
@@ -570,25 +573,23 @@ int main(int /*argc*/, char* /*argv*/[]) {
     });
     app.addPlugins<DefaultPlugins>();
     app.addResource<FlappyState>();
-
-    // Register marker components for collision queries
-    app.world().registerComponent<Bird>("Bird");
-    app.world().registerComponent<Pipe>("Pipe");
-
     app.initState<GamePhase>(GamePhase::Menu);
+
+    // Configure system set ordering: Input -> Physics -> Rendering
+    app.configureSets(Phase::Update, {FlappySets::Input, FlappySets::Physics, FlappySets::Rendering});
 
     app.startup<flappyStartup>("flappy_startup");
 
-    // State-specific update systems
-    app.update<menuUpdate>("menu_update", inState(GamePhase::Menu));
-    app.update<playingUpdate>("playing_update", inState(GamePhase::Playing));
-    app.update<deadUpdate>("dead_update", inState(GamePhase::Dead));
+    // State-specific update systems (in Input set)
+    app.update<menuUpdate>("menu_update", inState(GamePhase::Menu)).inSet(static_cast<SystemSetId>(FlappySets::Input));
+    app.update<playingUpdate>("playing_update", inState(GamePhase::Playing)).inSet(static_cast<SystemSetId>(FlappySets::Input));
+    app.update<deadUpdate>("dead_update", inState(GamePhase::Dead)).inSet(static_cast<SystemSetId>(FlappySets::Input));
 
-    // ECS collision detection via sensor events (replaces manual rectsOverlap)
-    app.update<checkCollision>("check_collision");
+    // ECS collision detection via sensor events (in Physics set)
+    app.update<checkCollision>("check_collision").inSet(static_cast<SystemSetId>(FlappySets::Physics));
 
-    // Entity sync runs every frame (no run condition)
-    app.update<flappySyncEntities>("sync_entities");
+    // Entity sync runs every frame (in Rendering set)
+    app.update<flappySyncEntities>("sync_entities").inSet(static_cast<SystemSetId>(FlappySets::Rendering));
 
     // OnEnter callbacks
     app.onEnter<onEnterMenu>(GamePhase::Menu, "enter_menu");

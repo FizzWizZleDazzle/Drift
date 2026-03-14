@@ -1,5 +1,6 @@
 #include <drift/resources/UIResource.hpp>
 #include <drift/resources/RendererResource.hpp>
+#include <drift/resources/Time.hpp>
 #include <drift/App.hpp>
 #include <drift/Log.hpp>
 
@@ -418,14 +419,15 @@ void UIResource::devRender() {
         ImGuiWindowFlags_NoFocusOnAppearing;
 
     if (ImGui::Begin("Drift Dev Overlay", &impl_->devVisible, flags)) {
-        float dt = impl_->app.deltaTime();
+        auto* timeRes = impl_->app.getResource<Time>();
+        float dt = timeRes ? timeRes->delta : 0.f;
         float fps = (dt > 0.f) ? (1.f / dt) : 0.f;
         ImGui::Text("FPS: %.1f (%.2f ms)", fps, dt * 1000.f);
 
         ImGui::Separator();
         ImGui::Text("Frame: %llu",
-                     static_cast<unsigned long long>(impl_->app.frameCount()));
-        ImGui::Text("Time:  %.2f s", impl_->app.time());
+                     static_cast<unsigned long long>(timeRes ? timeRes->frame : 0));
+        ImGui::Text("Time:  %.2f s", timeRes ? timeRes->elapsed : 0.0);
 
         ImGui::Separator();
         if (ImGui::Button("Close")) {

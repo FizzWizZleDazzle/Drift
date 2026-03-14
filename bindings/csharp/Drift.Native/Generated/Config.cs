@@ -64,9 +64,11 @@ public class Config : global::System.IDisposable {
   public string title {
     set {
       driftPINVOKE.Config_title_set(swigCPtr, value);
+      if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
     } 
     get {
       string ret = driftPINVOKE.Config_title_get(swigCPtr);
+      if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
       return ret;
     } 
   }
@@ -117,6 +119,16 @@ public class Config : global::System.IDisposable {
     } 
     get {
       bool ret = driftPINVOKE.Config_resizable_get(swigCPtr);
+      return ret;
+    } 
+  }
+
+  public int threadCount {
+    set {
+      driftPINVOKE.Config_threadCount_set(swigCPtr, value);
+    } 
+    get {
+      int ret = driftPINVOKE.Config_threadCount_get(swigCPtr);
       return ret;
     } 
   }

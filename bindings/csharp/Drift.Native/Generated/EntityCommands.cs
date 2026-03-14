@@ -83,6 +83,11 @@ public class EntityCommands : global::System.IDisposable {
     return ret;
   }
 
+  public EntityCommands despawn() {
+    EntityCommands ret = new EntityCommands(driftPINVOKE.EntityCommands_despawn(swigCPtr), false);
+    return ret;
+  }
+
   public ulong id() {
     ulong ret = driftPINVOKE.EntityCommands_id(swigCPtr);
     return ret;

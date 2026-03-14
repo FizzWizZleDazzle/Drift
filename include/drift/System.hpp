@@ -3,6 +3,7 @@
 #include <drift/Types.hpp>
 #include <drift/Resource.hpp>
 #include <drift/Events.hpp>
+#include <drift/QueryTraits.hpp>
 
 #include <vector>
 #include <functional>
@@ -14,18 +15,24 @@ class App;
 class Commands;
 
 // Forward declarations for Query types
-template<typename... Args> class Query;
-template<typename... Args> class QueryMut;
+template<QueryAccess, typename...> class QueryBase;
+template<typename... Args> using Query = QueryBase<QueryAccess::ReadOnly, Args...>;
+template<typename... Args> using QueryMut = QueryBase<QueryAccess::ReadWrite, Args...>;
 
 // Access mode for dependency tracking.
 enum class AccessMode { Read, Write };
 
-// Describes one resource dependency of a system.
+// Distinguishes resource access from component access.
+enum class AccessKind { Resource, Component };
+
+// Describes one dependency of a system (resource or component).
 struct AccessDescriptor {
     std::type_index typeId;
     AccessMode mode;
+    AccessKind kind;
 
-    AccessDescriptor(std::type_index t, AccessMode m) : typeId(t), mode(m) {}
+    AccessDescriptor(std::type_index t, AccessMode m, AccessKind k = AccessKind::Resource)
+        : typeId(t), mode(m), kind(k) {}
 };
 
 // Base class for systems that can be registered from C# via SWIG.
@@ -50,11 +57,11 @@ template<typename T> struct IsResMut<ResMut<T>> : std::true_type {};
 
 // Type trait: is this a Query<...>?
 template<typename T> struct IsQuery : std::false_type {};
-template<typename... Args> struct IsQuery<Query<Args...>> : std::true_type {};
+template<typename... Args> struct IsQuery<QueryBase<QueryAccess::ReadOnly, Args...>> : std::true_type {};
 
 // Type trait: is this a QueryMut<...>?
 template<typename T> struct IsQueryMut : std::false_type {};
-template<typename... Args> struct IsQueryMut<QueryMut<Args...>> : std::true_type {};
+template<typename... Args> struct IsQueryMut<QueryBase<QueryAccess::ReadWrite, Args...>> : std::true_type {};
 
 // Type trait: is this an EventWriter<T>?
 template<typename T> struct IsEventWriter : std::false_type {};
@@ -107,17 +114,57 @@ struct DepsCollector<ResMut<T>, Rest...> {
     }
 };
 
-// Skip Query<...> and QueryMut<...> (not resource deps, they use World)
+// ---- Collect component deps from Query/QueryMut template args ----
+
+template<typename... Args>
+struct QueryDepsCollector;
+
+template<>
+struct QueryDepsCollector<> {
+    static void collect(std::vector<AccessDescriptor>&, AccessMode) {}
+};
+
+template<typename T, typename... Rest>
+struct QueryDepsCollector<T, Rest...> {
+    static void collect(std::vector<AccessDescriptor>& deps, AccessMode defaultMode) {
+        if constexpr (detail::IsWithFilter<T>::value) {
+            // With<F> is a structural read
+            using Inner = typename detail::FilterInner<T>::type;
+            deps.emplace_back(std::type_index(typeid(Inner)), AccessMode::Read, AccessKind::Component);
+        } else if constexpr (detail::IsWithoutFilter<T>::value) {
+            // Without<F> is a structural read
+            using Inner = typename detail::FilterInner<T>::type;
+            deps.emplace_back(std::type_index(typeid(Inner)), AccessMode::Read, AccessKind::Component);
+        } else if constexpr (detail::IsChangedFilter<T>::value || detail::IsAddedFilter<T>::value) {
+            // Changed<F>/Added<F> is a structural read
+            using Inner = typename detail::FilterInner<T>::type;
+            deps.emplace_back(std::type_index(typeid(Inner)), AccessMode::Read, AccessKind::Component);
+        } else if constexpr (detail::IsOptional<T>::value) {
+            // Optional<T> uses the default mode
+            using Inner = typename detail::OptionalInner<T>::type;
+            deps.emplace_back(std::type_index(typeid(Inner)), defaultMode, AccessKind::Component);
+        } else {
+            // Data component: uses the default mode (Read for Query, Write for QueryMut)
+            deps.emplace_back(std::type_index(typeid(T)), defaultMode, AccessKind::Component);
+        }
+        QueryDepsCollector<Rest...>::collect(deps, defaultMode);
+    }
+};
+
+// Query<...> reads components
 template<typename... QArgs, typename... Rest>
-struct DepsCollector<Query<QArgs...>, Rest...> {
+struct DepsCollector<QueryBase<QueryAccess::ReadOnly, QArgs...>, Rest...> {
     static void collect(std::vector<AccessDescriptor>& deps) {
+        QueryDepsCollector<QArgs...>::collect(deps, AccessMode::Read);
         DepsCollector<Rest...>::collect(deps);
     }
 };
 
+// QueryMut<...> writes components
 template<typename... QArgs, typename... Rest>
-struct DepsCollector<QueryMut<QArgs...>, Rest...> {
+struct DepsCollector<QueryBase<QueryAccess::ReadWrite, QArgs...>, Rest...> {
     static void collect(std::vector<AccessDescriptor>& deps) {
+        QueryDepsCollector<QArgs...>::collect(deps, AccessMode::Write);
         DepsCollector<Rest...>::collect(deps);
     }
 };

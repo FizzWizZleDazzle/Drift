@@ -966,6 +966,12 @@ class driftPINVOKE {
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Config_resizable_get")]
   public static extern bool Config_resizable_get(global::System.Runtime.InteropServices.HandleRef jarg1);
 
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Config_threadCount_set")]
+  public static extern void Config_threadCount_set(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Config_threadCount_get")]
+  public static extern int Config_threadCount_get(global::System.Runtime.InteropServices.HandleRef jarg1);
+
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_Config")]
   public static extern global::System.IntPtr new_Config();
 
@@ -1395,15 +1401,6 @@ class driftPINVOKE {
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_quit")]
   public static extern void App_quit(global::System.Runtime.InteropServices.HandleRef jarg1);
 
-  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_deltaTime")]
-  public static extern float App_deltaTime(global::System.Runtime.InteropServices.HandleRef jarg1);
-
-  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_time")]
-  public static extern double App_time(global::System.Runtime.InteropServices.HandleRef jarg1);
-
-  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_frameCount")]
-  public static extern ulong App_frameCount(global::System.Runtime.InteropServices.HandleRef jarg1);
-
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_App_config")]
   public static extern global::System.IntPtr App_config(global::System.Runtime.InteropServices.HandleRef jarg1);
 
@@ -1542,6 +1539,9 @@ class driftPINVOKE {
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_cameraId")]
   public static extern ulong World_cameraId(global::System.Runtime.InteropServices.HandleRef jarg1);
 
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_queryMutex")]
+  public static extern global::System.IntPtr World_queryMutex(global::System.Runtime.InteropServices.HandleRef jarg1);
+
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_World_director_connect")]
   public static extern void World_director_connect(global::System.Runtime.InteropServices.HandleRef jarg1, World.SwigDelegateWorld_0 delegate0);
 
@@ -1646,6 +1646,9 @@ class driftPINVOKE {
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_EntityCommands_insert__SWIG_2")]
   public static extern global::System.IntPtr EntityCommands_insert__SWIG_2(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_EntityCommands_despawn")]
+  public static extern global::System.IntPtr EntityCommands_despawn(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_EntityCommands_id")]
   public static extern ulong EntityCommands_id(global::System.Runtime.InteropServices.HandleRef jarg1);

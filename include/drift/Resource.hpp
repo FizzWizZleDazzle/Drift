@@ -20,21 +20,28 @@ public:
 // Res<T> = read-only resource access. Used as system parameter.
 template<typename T>
 struct Res {
-    const T* ptr;
-    explicit Res(const T* p) : ptr(p) {}
-    const T& operator*() const { assert(ptr && "Res<T>: null resource access"); return *ptr; }
-    const T* operator->() const { assert(ptr && "Res<T>: null resource access"); return ptr; }
+    explicit Res(const T* p) : ptr_(p) {}
+    const T& operator*() const { assert(ptr_ && "Res<T>: null resource access"); return *ptr_; }
+    const T* operator->() const { assert(ptr_ && "Res<T>: null resource access"); return ptr_; }
+    const T* get() const { return ptr_; }
+
+private:
+    const T* ptr_;
 };
 
 // ResMut<T> = read-write resource access. Used as system parameter.
 template<typename T>
 struct ResMut {
-    T* ptr;
-    explicit ResMut(T* p) : ptr(p) {}
-    T& operator*() { assert(ptr && "ResMut<T>: null resource access"); return *ptr; }
-    T* operator->() { assert(ptr && "ResMut<T>: null resource access"); return ptr; }
-    const T& operator*() const { assert(ptr && "ResMut<T>: null resource access"); return *ptr; }
-    const T* operator->() const { assert(ptr && "ResMut<T>: null resource access"); return ptr; }
+    explicit ResMut(T* p) : ptr_(p) {}
+    T& operator*() { assert(ptr_ && "ResMut<T>: null resource access"); return *ptr_; }
+    T* operator->() { assert(ptr_ && "ResMut<T>: null resource access"); return ptr_; }
+    const T& operator*() const { assert(ptr_ && "ResMut<T>: null resource access"); return *ptr_; }
+    const T* operator->() const { assert(ptr_ && "ResMut<T>: null resource access"); return ptr_; }
+    T* get() { return ptr_; }
+    const T* get() const { return ptr_; }
+
+private:
+    T* ptr_;
 };
 #endif
 

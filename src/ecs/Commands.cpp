@@ -1,13 +1,14 @@
 #include <drift/Commands.hpp>
 #include <drift/EntityAllocator.hpp>
 #include <drift/World.hpp>
+#include <drift/components/Hierarchy.hpp>
 
 #include <cstring>
 
 namespace drift {
 
-Commands::Commands(EntityAllocator& allocator, const ComponentRegistry& registry)
-    : allocator_(allocator), registry_(registry)
+Commands::Commands(EntityAllocator& allocator, const ComponentRegistry& registry, World* world)
+    : allocator_(allocator), registry_(registry), world_(world)
 {
 }
 
@@ -22,6 +23,15 @@ EntityCommands& EntityCommands::insert(const Sprite& s) {
 }
 EntityCommands& EntityCommands::insert(const Camera& c) {
     cmd_.insert(entity_, cmd_.registry().getByName("Camera"), &c, sizeof(c));
+    return *this;
+}
+EntityCommands& EntityCommands::insert(const Name& n) {
+    cmd_.insert(entity_, cmd_.registry().getByName("Name"), &n, sizeof(n));
+    return *this;
+}
+
+EntityCommands& EntityCommands::despawn() {
+    cmd_.despawn(entity_);
     return *this;
 }
 
@@ -78,6 +88,19 @@ void Commands::flush(World& world) {
 
             case CommandEntry::Despawn:
                 if (world.isAlive(cmd.entity)) {
+                    // Recursively despawn children
+                    ComponentId childrenId = world.componentRegistry().getByName("Children");
+                    if (childrenId != 0) {
+                        const auto* ch = static_cast<const Children*>(
+                            world.getComponent(cmd.entity, childrenId));
+                        if (ch) {
+                            for (int ci = 0; ci < ch->count; ++ci) {
+                                if (world.isAlive(ch->ids[ci])) {
+                                    world.destroyEntity(ch->ids[ci]);
+                                }
+                            }
+                        }
+                    }
                     world.destroyEntity(cmd.entity);
                 }
                 break;
@@ -93,6 +116,10 @@ void Commands::flush(World& world) {
                 if (world.isAlive(cmd.entity) && cmd.component != 0) {
                     world.removeComponent(cmd.entity, cmd.component);
                 }
+                break;
+
+            case CommandEntry::Custom:
+                if (cmd.customFn) cmd.customFn(world);
                 break;
         }
     }

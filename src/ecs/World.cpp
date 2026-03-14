@@ -2,6 +2,8 @@
 #include <drift/Log.hpp>
 #include <drift/components/Sprite.hpp>
 #include <drift/components/Camera.hpp>
+#include <drift/components/Name.hpp>
+#include <drift/components/Hierarchy.hpp>
 
 #include "flecs.h"
 
@@ -30,6 +32,9 @@ struct World::Impl {
     ComponentId transform2dId = 0;
     ComponentId spriteId = 0;
     ComponentId cameraId = 0;
+    ComponentId nameId = 0;
+    ComponentId parentId = 0;
+    ComponentId childrenId = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -49,6 +54,9 @@ World::World()
     impl_->transform2dId = registerComponent<Transform2D>("Transform2D");
     impl_->spriteId = registerComponent<Sprite>("Sprite");
     impl_->cameraId = registerComponent<Camera>("Camera");
+    impl_->nameId = registerComponent<Name>("Name");
+    impl_->parentId = registerComponent<Parent>("Parent");
+    impl_->childrenId = registerComponent<Children>("Children");
 
     DRIFT_LOG_INFO("ECS world created (flecs)");
 }
@@ -104,6 +112,15 @@ EntityId World::createEntity() {
 
 void World::destroyEntity(EntityId entity) {
     if (!impl_->ecs) return;
+    // Clean up tick maps for this entity
+    for (auto it = changeTicks_.begin(); it != changeTicks_.end(); ) {
+        if (it->first.entity == entity) it = changeTicks_.erase(it);
+        else ++it;
+    }
+    for (auto it = addTicks_.begin(); it != addTicks_.end(); ) {
+        if (it->first.entity == entity) it = addTicks_.erase(it);
+        else ++it;
+    }
     ecs_delete(impl_->ecs, static_cast<ecs_entity_t>(entity));
 }
 
@@ -124,8 +141,14 @@ void World::removeComponent(EntityId entity, ComponentId component) {
 
 void World::setComponent(EntityId entity, ComponentId component, const void* data, size_t size) {
     if (!impl_->ecs || !data) return;
+    bool hadBefore = hasComponent(entity, component);
     ecs_set_id(impl_->ecs, static_cast<ecs_entity_t>(entity),
                static_cast<ecs_id_t>(component), size, data);
+    TickKey key{entity, component};
+    changeTicks_[key] = currentTick_;
+    if (!hadBefore) {
+        addTicks_[key] = currentTick_;
+    }
 }
 
 const void* World::getComponent(EntityId entity, ComponentId component) const {
@@ -176,6 +199,8 @@ QueryIter World::queryIter(const char* queryExpr) {
     QueryIter result{};
     if (!impl_->ecs || !queryExpr) return result;
 
+    std::lock_guard<std::mutex> lock(queryMutex_);
+
     ecs_query_desc_t desc = {};
     desc.expr = queryExpr;
 
@@ -215,6 +240,13 @@ void* World::queryField(QueryIter* iter, int32_t index, size_t size) {
     return ecs_field_w_size(&qi->iter, size, index);
 }
 
+void* World::queryFieldOptional(QueryIter* iter, int32_t index, size_t size) {
+    if (!iter || !iter->_internal) return nullptr;
+    auto* qi = static_cast<QueryIterInternal*>(iter->_internal);
+    if (!ecs_field_is_set(&qi->iter, index)) return nullptr;
+    return ecs_field_w_size(&qi->iter, size, index);
+}
+
 EntityId* World::queryEntities(QueryIter* iter) {
     if (!iter || !iter->_internal) return nullptr;
     auto* qi = static_cast<QueryIterInternal*>(iter->_internal);
@@ -224,6 +256,9 @@ EntityId* World::queryEntities(QueryIter* iter) {
 void World::queryFini(QueryIter* iter) {
     if (!iter || !iter->_internal) return;
     auto* qi = static_cast<QueryIterInternal*>(iter->_internal);
+
+    std::lock_guard<std::mutex> lock(queryMutex_);
+
     // If the iterator was started but not fully consumed (early break),
     // we must call ecs_iter_fini to clean up flecs' stack allocator.
     if (qi->started && !qi->exhausted) {
@@ -259,8 +294,34 @@ ComponentId World::cameraId() const {
     return impl_->cameraId;
 }
 
+ComponentId World::nameId() const {
+    return impl_->nameId;
+}
+
+void World::setCurrentTick(uint32_t tick) {
+    currentTick_ = tick;
+}
+
+uint32_t World::currentTick() const {
+    return currentTick_;
+}
+
+uint32_t World::getComponentChangeTick(EntityId entity, ComponentId component) const {
+    auto it = changeTicks_.find(TickKey{entity, component});
+    return it != changeTicks_.end() ? it->second : 0;
+}
+
+uint32_t World::getComponentAddTick(EntityId entity, ComponentId component) const {
+    auto it = addTicks_.find(TickKey{entity, component});
+    return it != addTicks_.end() ? it->second : 0;
+}
+
 void* World::flecsWorld() const {
     return impl_->ecs;
+}
+
+std::mutex& World::queryMutex() {
+    return queryMutex_;
 }
 
 } // namespace drift
