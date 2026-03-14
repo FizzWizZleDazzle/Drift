@@ -105,8 +105,8 @@ public:
     // Internal access
     void* flecsWorld() const;
 
-    // Mutex for thread-safe query init/fini (parallel scheduler)
-    std::mutex& queryMutex();
+    // Mutex for thread-safe query lifecycle (parallel scheduler)
+    std::recursive_mutex& queryMutex();
 
 private:
     // Tick key: entity + component packed into a single 128-bit key
@@ -124,7 +124,7 @@ private:
     struct Impl;
     Impl* impl_;
     ComponentRegistry registry_;
-    std::mutex queryMutex_;
+    std::recursive_mutex queryMutex_;
     uint32_t currentTick_ = 0;
     std::unordered_map<TickKey, uint32_t, TickKeyHash> changeTicks_;
     std::unordered_map<TickKey, uint32_t, TickKeyHash> addTicks_;

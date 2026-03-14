@@ -255,6 +255,7 @@ public:
 
     template<typename Fn>
     void iter(Fn&& fn) {
+        std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
         QueryIter qi = world_.queryIter(expr.c_str());
 
@@ -281,6 +282,7 @@ public:
     // Iterate with entity ID as first callback param
     template<typename Fn>
     void iterWithEntity(Fn&& fn) {
+        std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
         QueryIter qi = world_.queryIter(expr.c_str());
 
@@ -305,6 +307,7 @@ public:
 
     // Returns true if the query matches no entities
     bool isEmpty() {
+        std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
         QueryIter qi = world_.queryIter(expr.c_str());
 
@@ -322,6 +325,7 @@ public:
     auto single() {
         static_assert(DataCount > 0, "single() requires at least one data component");
 
+        std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
         QueryIter qi = world_.queryIter(expr.c_str());
 

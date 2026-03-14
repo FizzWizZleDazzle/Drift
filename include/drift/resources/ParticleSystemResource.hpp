@@ -19,6 +19,8 @@ struct EmitterState {
     bool finished = false;
     std::vector<int32_t> burstCyclesDone;
     std::vector<float> burstTimers;
+    Vec2 prevPosition = {};
+    bool hasPrevPosition = false;
 };
 
 struct ParticleSystemResource : public Resource {

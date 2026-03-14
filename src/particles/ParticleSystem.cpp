@@ -31,7 +31,7 @@ static float rngRange(uint32_t& state, float lo, float hi) {
 // Spawn a single particle
 // ---------------------------------------------------------------------------
 static void spawnParticle(EmitterState& state, const EmitterConfig& config,
-                          Vec2 emitterPos) {
+                          Vec2 emitterPos, Vec2 inheritedVel = {}) {
     int32_t idx = state.pool.spawn();
     if (idx < 0) return;
 
@@ -66,10 +66,11 @@ static void spawnParticle(EmitterState& state, const EmitterConfig& config,
 
     state.pool.positions[idx] = pos;
 
-    // Velocity from speed + angle
+    // Velocity from speed + angle + inherited emitter velocity
     float spd = config.speed.sample(rng);
     float ang = config.angle.sample(rng);
-    state.pool.velocities[idx] = {spd * std::cos(ang), spd * std::sin(ang)};
+    state.pool.velocities[idx] = {spd * std::cos(ang) + inheritedVel.x,
+                                   spd * std::sin(ang) + inheritedVel.y};
 
     // Lifetime
     state.pool.lifetimes[idx] = config.lifetime.sample(rng);
@@ -160,12 +161,22 @@ void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
 
         Vec2 emitterPos = transform.position;
 
+        // Compute emitter velocity for velocity inheritance
+        Vec2 emitterVel = {};
+        if (state.hasPrevPosition && dt > 0.f) {
+            emitterVel = (emitterPos - state.prevPosition) * (1.f / dt);
+        }
+        state.prevPosition = emitterPos;
+        state.hasPrevPosition = true;
+
+        Vec2 inheritedVel = emitterVel * emitter.config.velocityInheritance;
+
         if (emitter.playing) {
             // Continuous spawning
             if (emitter.config.spawnRate > 0.f) {
                 state.spawnAccumulator += dt * emitter.config.spawnRate;
                 while (state.spawnAccumulator >= 1.f && state.pool.count < state.pool.capacity) {
-                    spawnParticle(state, emitter.config, emitterPos);
+                    spawnParticle(state, emitter.config, emitterPos, inheritedVel);
                     state.spawnAccumulator -= 1.f;
                 }
             }
@@ -179,7 +190,7 @@ void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
                     float interval = burst.interval > 0.f ? burst.interval : 999999.f;
                     while (state.burstTimers[b] >= interval || state.burstCyclesDone[b] == 0) {
                         for (int32_t c = 0; c < burst.count && state.pool.count < state.pool.capacity; ++c) {
-                            spawnParticle(state, emitter.config, emitterPos);
+                            spawnParticle(state, emitter.config, emitterPos, inheritedVel);
                         }
                         state.burstCyclesDone[b]++;
                         if (burst.cycles > 0 && state.burstCyclesDone[b] >= burst.cycles) break;
@@ -214,6 +225,25 @@ void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
             // Integrate position
             pool.positions[i].x += pool.velocities[i].x * dt;
             pool.positions[i].y += pool.velocities[i].y * dt;
+
+            // Bounds clamping
+            if (emitter.config.boundsMin.x != emitter.config.boundsMax.x ||
+                emitter.config.boundsMin.y != emitter.config.boundsMax.y) {
+                if (pool.positions[i].x < emitter.config.boundsMin.x) {
+                    pool.positions[i].x = emitter.config.boundsMin.x;
+                    pool.velocities[i].x = 0.f;
+                } else if (pool.positions[i].x > emitter.config.boundsMax.x) {
+                    pool.positions[i].x = emitter.config.boundsMax.x;
+                    pool.velocities[i].x = 0.f;
+                }
+                if (pool.positions[i].y < emitter.config.boundsMin.y) {
+                    pool.positions[i].y = emitter.config.boundsMin.y;
+                    pool.velocities[i].y = 0.f;
+                } else if (pool.positions[i].y > emitter.config.boundsMax.y) {
+                    pool.positions[i].y = emitter.config.boundsMax.y;
+                    pool.velocities[i].y = 0.f;
+                }
+            }
 
             // Rotation
             pool.rotations[i] += pool.angularVelocities[i] * dt;

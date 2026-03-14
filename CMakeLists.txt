@@ -201,6 +201,9 @@ if(DRIFT_BUILD_EXAMPLES)
     add_executable(hello_sprites examples/hello_sprites/main.cpp)
     target_link_libraries(hello_sprites PRIVATE drift)
 
+    add_executable(fireball examples/fireball/main.cpp)
+    target_link_libraries(fireball PRIVATE drift)
+
     add_executable(flappy_bird examples/flappy_bird/main.cpp)
     target_link_libraries(flappy_bird PRIVATE drift)
     option(DRIFT_FLAPPY_IMGUI_UI "Use ImGui for Flappy Bird UI instead of sprite overlays" OFF)

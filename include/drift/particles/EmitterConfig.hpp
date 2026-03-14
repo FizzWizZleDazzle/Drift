@@ -52,6 +52,7 @@ struct EmitterConfig {
     // Initial motion
     ValueRange speed = {10.f, 50.f};
     ValueRange angle = {0.f, 6.2831853f};
+    float velocityInheritance = 0.f;  // 0-1, fraction of emitter velocity added to particle
 
     // Forces
     Vec2 gravity = {0.f, 0.f};
@@ -82,6 +83,11 @@ struct EmitterConfig {
 
     // Pre-warm: simulate this many seconds at startup
     float preWarmTime = 0.f;
+
+    // Bounds clamping (particles stick to walls)
+    // If boundsMin == boundsMax, bounds are disabled
+    Vec2 boundsMin = {};
+    Vec2 boundsMax = {};
 
     // RNG seed (0 = random)
     uint32_t seed = 0;

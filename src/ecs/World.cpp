@@ -199,7 +199,7 @@ QueryIter World::queryIter(const char* queryExpr) {
     QueryIter result{};
     if (!impl_->ecs || !queryExpr) return result;
 
-    std::lock_guard<std::mutex> lock(queryMutex_);
+    std::lock_guard<std::recursive_mutex> lock(queryMutex_);
 
     ecs_query_desc_t desc = {};
     desc.expr = queryExpr;
@@ -257,7 +257,7 @@ void World::queryFini(QueryIter* iter) {
     if (!iter || !iter->_internal) return;
     auto* qi = static_cast<QueryIterInternal*>(iter->_internal);
 
-    std::lock_guard<std::mutex> lock(queryMutex_);
+    std::lock_guard<std::recursive_mutex> lock(queryMutex_);
 
     // If the iterator was started but not fully consumed (early break),
     // we must call ecs_iter_fini to clean up flecs' stack allocator.
@@ -320,7 +320,7 @@ void* World::flecsWorld() const {
     return impl_->ecs;
 }
 
-std::mutex& World::queryMutex() {
+std::recursive_mutex& World::queryMutex() {
     return queryMutex_;
 }
 
