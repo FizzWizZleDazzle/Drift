@@ -1,7 +1,7 @@
 #include <drift/World.hpp>
 #include <drift/Log.hpp>
-#include <drift/components/Sprite.h>
-#include <drift/components/Camera.h>
+#include <drift/components/Sprite.hpp>
+#include <drift/components/Camera.hpp>
 
 #include "flecs.h"
 
@@ -18,6 +18,7 @@ struct QueryIterInternal {
     ecs_query_t* query = nullptr;
     ecs_iter_t iter = {};
     bool started = false;
+    bool exhausted = false;  // true when queryNext returned false (iter already cleaned up)
 };
 
 // ---------------------------------------------------------------------------
@@ -200,7 +201,11 @@ bool World::queryNext(QueryIter* iter) {
 
     bool hasNext = ecs_query_next(&qi->iter);
     iter->count = hasNext ? qi->iter.count : 0;
-    if (hasNext) qi->started = true;
+    if (hasNext) {
+        qi->started = true;
+    } else {
+        qi->exhausted = true;  // flecs already cleaned up the iterator
+    }
     return hasNext;
 }
 
@@ -219,6 +224,11 @@ EntityId* World::queryEntities(QueryIter* iter) {
 void World::queryFini(QueryIter* iter) {
     if (!iter || !iter->_internal) return;
     auto* qi = static_cast<QueryIterInternal*>(iter->_internal);
+    // If the iterator was started but not fully consumed (early break),
+    // we must call ecs_iter_fini to clean up flecs' stack allocator.
+    if (qi->started && !qi->exhausted) {
+        ecs_iter_fini(&qi->iter);
+    }
     if (qi->query) {
         ecs_query_fini(qi->query);
     }

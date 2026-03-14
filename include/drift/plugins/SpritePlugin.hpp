@@ -2,7 +2,7 @@
 
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
-#include <drift/RenderSnapshot.h>
+#include <drift/RenderSnapshot.hpp>
 #include <drift/resources/SpriteResource.hpp>
 #include <drift/resources/RendererResource.hpp>
 
@@ -17,7 +17,7 @@ public:
         // Extract system: query Sprite+Transform2D+Camera entities into snapshot
         app.addSystem("sprite_extract", Phase::Extract, [](App& a) {
             auto* snapshot = a.getResource<RenderSnapshot>();
-            snapshot->extract(a.world());
+            snapshot->extract(a.world(), a.world().componentRegistry());
             snapshot->swap();
         });
 

@@ -1,19 +1,21 @@
 #include <drift/App.hpp>
 #include <drift/Log.hpp>
 #include <drift/World.hpp>
-#include <drift/Commands.h>
+#include <drift/Commands.hpp>
 #include <drift/WorldResource.h>
-#include <drift/RenderSnapshot.h>
-#include <drift/AssetServer.h>
+#include <drift/RenderSnapshot.hpp>
+#include <drift/AssetServer.hpp>
 #include <drift/resources/Time.hpp>
 
 #include <SDL3/SDL.h>
 
 #include <unordered_map>
+#include <map>
 #include <string>
 #include <typeindex>
 #include <vector>
 #include <algorithm>
+#include <utility>
 
 namespace drift {
 
@@ -25,9 +27,13 @@ struct SystemEntry {
     std::function<void()> fn;             // typed system function
     std::function<void(App&)> lambdaFn;   // lambda shorthand
     SystemBase* rawSystem = nullptr;      // SWIG system (owned)
+    RunCondition runCondition;            // optional run condition
     bool isLambda = false;
     bool isRaw = false;
 };
+
+// Key for onEnter/onExit maps: (type_index of enum, int-cast enum value)
+using StateKey = std::pair<std::type_index, int>;
 
 struct App::Impl {
     Config config;
@@ -65,8 +71,17 @@ struct App::Impl {
     std::vector<SystemEntry> renderSystems;
     std::vector<SystemEntry> renderFlushSystems;
 
+    // State management
+    std::map<StateKey, std::vector<SystemEntry>> onEnterSystems;
+    std::map<StateKey, std::vector<SystemEntry>> onExitSystems;
+    std::vector<std::function<void()>> stateTransitionProcessors;
+    std::vector<std::function<void()>> initialStateEnters;
+
     // Event handlers
     std::vector<EventHandler*> eventHandlers;
+
+    // Event update callbacks (called at frame start to swap buffers)
+    std::vector<std::function<void()>> eventUpdateFns;
 
     // Plugins (owned)
     std::vector<Plugin*> plugins;
@@ -87,6 +102,11 @@ struct App::Impl {
 
     void runSystems(std::vector<SystemEntry>& systems, App& app) {
         for (auto& sys : systems) {
+            // Check run condition
+            if (sys.runCondition && !sys.runCondition(app)) {
+                continue;
+            }
+
             if (sys.isRaw && sys.rawSystem) {
                 sys.rawSystem->execute(app, dt);
             } else if (sys.isLambda) {
@@ -101,9 +121,9 @@ struct App::Impl {
 App::App() : impl_(std::make_unique<Impl>()) {}
 
 App::~App() {
-    // Clean up resources
-    for (auto* r : impl_->ownedResources) {
-        delete r;
+    // Clean up resources in reverse order (later resources may depend on earlier ones)
+    for (auto it = impl_->ownedResources.rbegin(); it != impl_->ownedResources.rend(); ++it) {
+        delete *it;
     }
     // Clean up plugins
     for (auto* p : impl_->plugins) delete p;
@@ -121,6 +141,9 @@ App::~App() {
     cleanSystems(impl_->extractSystems);
     cleanSystems(impl_->renderSystems);
     cleanSystems(impl_->renderFlushSystems);
+    // Clean up raw systems in onEnter/onExit maps
+    for (auto& [key, systems] : impl_->onEnterSystems) cleanSystems(systems);
+    for (auto& [key, systems] : impl_->onExitSystems) cleanSystems(systems);
 
     // Shutdown SDL
     if (impl_->gpuDevice) {
@@ -216,6 +239,101 @@ void App::registerSystemFn(const char* name, Phase phase,
     impl_->systemsForPhase(phase).push_back(std::move(entry));
 }
 
+void App::registerSystemFn(const char* name, Phase phase,
+                           const std::vector<AccessDescriptor>& deps,
+                           std::function<void()> fn,
+                           RunCondition cond) {
+    SystemEntry entry;
+    entry.name = name ? name : "";
+    entry.phase = phase;
+    entry.deps = deps;
+    entry.fn = std::move(fn);
+    entry.runCondition = std::move(cond);
+    impl_->systemsForPhase(phase).push_back(std::move(entry));
+}
+
+// ---- Event management implementation ----
+
+void App::registerEventUpdate(std::function<void()> fn) {
+    impl_->eventUpdateFns.push_back(std::move(fn));
+}
+
+// ---- State management implementation ----
+
+void App::flushCommands() {
+    impl_->commands.flush(impl_->world);
+}
+
+void App::registerStateTransitionImpl(std::function<void()> processor) {
+    impl_->stateTransitionProcessors.push_back(std::move(processor));
+}
+
+void App::registerInitialStateEnter(std::function<void()> fn) {
+    impl_->initialStateEnters.push_back(std::move(fn));
+}
+
+void App::registerOnEnterFn(std::type_index type, int stateVal, const char* name,
+                            const std::vector<AccessDescriptor>& deps,
+                            std::function<void()> fn) {
+    SystemEntry entry;
+    entry.name = name ? name : "";
+    entry.deps = deps;
+    entry.fn = std::move(fn);
+    impl_->onEnterSystems[{type, stateVal}].push_back(std::move(entry));
+}
+
+void App::registerOnEnterFn(std::type_index type, int stateVal, const char* name,
+                            const std::vector<AccessDescriptor>& deps,
+                            std::function<void(App&)> fn) {
+    SystemEntry entry;
+    entry.name = name ? name : "";
+    entry.deps = deps;
+    entry.lambdaFn = std::move(fn);
+    entry.isLambda = true;
+    impl_->onEnterSystems[{type, stateVal}].push_back(std::move(entry));
+}
+
+void App::registerOnExitFn(std::type_index type, int stateVal, const char* name,
+                           const std::vector<AccessDescriptor>& deps,
+                           std::function<void()> fn) {
+    SystemEntry entry;
+    entry.name = name ? name : "";
+    entry.deps = deps;
+    entry.fn = std::move(fn);
+    impl_->onExitSystems[{type, stateVal}].push_back(std::move(entry));
+}
+
+void App::registerOnExitFn(std::type_index type, int stateVal, const char* name,
+                           const std::vector<AccessDescriptor>& deps,
+                           std::function<void(App&)> fn) {
+    SystemEntry entry;
+    entry.name = name ? name : "";
+    entry.deps = deps;
+    entry.lambdaFn = std::move(fn);
+    entry.isLambda = true;
+    impl_->onExitSystems[{type, stateVal}].push_back(std::move(entry));
+}
+
+void App::runOnEnterSystems(std::type_index type, int stateVal) {
+    auto it = impl_->onEnterSystems.find({type, stateVal});
+    if (it == impl_->onEnterSystems.end()) return;
+    impl_->runSystems(it->second, *this);
+}
+
+void App::runOnExitSystems(std::type_index type, int stateVal) {
+    auto it = impl_->onExitSystems.find({type, stateVal});
+    if (it == impl_->onExitSystems.end()) return;
+    impl_->runSystems(it->second, *this);
+}
+
+void App::processStateTransitions() {
+    for (auto& processor : impl_->stateTransitionProcessors) {
+        processor();
+    }
+}
+
+// ---- End state management ----
+
 World& App::world() {
     return impl_->world;
 }
@@ -297,6 +415,13 @@ int App::run() {
     s.runSystems(s.startupSystems, *this);
     s.commands.flush(s.world);
 
+    // ---- Run initial OnEnter callbacks ----
+    for (auto& fn : s.initialStateEnters) {
+        fn();
+    }
+    s.commands.flush(s.world);
+    s.initialStateEnters.clear();
+
     // ---- Main loop ----
     s.running = true;
     while (s.running) {
@@ -322,6 +447,11 @@ int App::run() {
                            static_cast<double>(s.perfFrequency);
         timeRes->frame = s.frame;
 
+        // Swap event buffers at frame start (events written last frame become readable)
+        for (auto& fn : s.eventUpdateFns) {
+            fn();
+        }
+
         // PreUpdate: beginFrame() snapshots previous state before new events
         s.runSystems(s.preUpdateSystems, *this);
         s.commands.flush(s.world);
@@ -339,6 +469,9 @@ int App::run() {
         }
 
         if (!s.running) break;
+
+        // State transitions (between event poll and Update phase)
+        processStateTransitions();
 
         // Update phase
         s.runSystems(s.updateSystems, *this);

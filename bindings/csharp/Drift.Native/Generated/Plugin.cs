@@ -62,8 +62,8 @@ public class Plugin : global::System.IDisposable {
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 
-  public virtual string getName() {
-    string ret = driftPINVOKE.Plugin_getName(swigCPtr);
+  public virtual string name() {
+    string ret = driftPINVOKE.Plugin_name(swigCPtr);
     return ret;
   }
 
@@ -74,8 +74,8 @@ public class Plugin : global::System.IDisposable {
   private void SwigDirectorConnect() {
     if (SwigDerivedClassHasMethod("build", swigMethodTypes0))
       swigDelegate0 = new SwigDelegatePlugin_0(SwigDirectorMethodbuild);
-    if (SwigDerivedClassHasMethod("getName", swigMethodTypes1))
-      swigDelegate1 = new SwigDelegatePlugin_1(SwigDirectorMethodgetName);
+    if (SwigDerivedClassHasMethod("name", swigMethodTypes1))
+      swigDelegate1 = new SwigDelegatePlugin_1(SwigDirectorMethodname);
     driftPINVOKE.Plugin_director_connect(swigCPtr, swigDelegate0, swigDelegate1);
   }
 
@@ -117,8 +117,8 @@ public class Plugin : global::System.IDisposable {
     build(new App(app, false));
   }
 
-  private string SwigDirectorMethodgetName() {
-    return getName();
+  private string SwigDirectorMethodname() {
+    return name();
   }
 
   public delegate void SwigDelegatePlugin_0(global::System.IntPtr app);

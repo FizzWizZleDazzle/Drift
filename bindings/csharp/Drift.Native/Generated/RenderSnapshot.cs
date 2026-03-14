@@ -52,8 +52,8 @@ public class RenderSnapshot : Resource {
     return ret;
   }
 
-  public void extract(World world) {
-    driftPINVOKE.RenderSnapshot_extract(swigCPtr, World.getCPtr(world));
+  public void extract(World world, SWIGTYPE_p_drift__ComponentRegistry registry) {
+    driftPINVOKE.RenderSnapshot_extract(swigCPtr, World.getCPtr(world), SWIGTYPE_p_drift__ComponentRegistry.getCPtr(registry));
     if (driftPINVOKE.SWIGPendingException.Pending) throw driftPINVOKE.SWIGPendingException.Retrieve();
   }
 

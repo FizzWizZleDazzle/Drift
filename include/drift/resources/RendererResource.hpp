@@ -4,6 +4,8 @@
 #include <drift/Handle.hpp>
 #include <drift/Types.hpp>
 
+#include <functional>
+
 namespace drift {
 
 class App;
@@ -63,6 +65,12 @@ public:
     // Internal access for other subsystems
     void* getGPUDevice() const;
     void* getWindow() const;
+
+    // Overlay callbacks (used by UIResource for ImGui rendering)
+    using PrePassFn = std::function<void(void* cmdBuf)>;
+    using InPassFn  = std::function<void(void* cmdBuf, void* renderPass)>;
+    void setPrePassCallback(PrePassFn fn);
+    void setInPassCallback(InPassFn fn);
 
 private:
     struct Impl;

@@ -1,11 +1,11 @@
 #pragma once
 
 #include <drift/Types.hpp>
+#include <drift/Log.hpp>
 
 #include <typeindex>
 #include <unordered_map>
 #include <string>
-#include <cassert>
 
 namespace drift {
 
@@ -20,7 +20,11 @@ public:
     template<typename T>
     ComponentId get() const {
         auto it = ids_.find(std::type_index(typeid(T)));
-        assert(it != ids_.end() && "Component type not registered in ComponentRegistry");
+        if (it == ids_.end()) {
+            DRIFT_LOG_ERROR("Component type not registered in ComponentRegistry: %s",
+                            typeid(T).name());
+            return 0;
+        }
         return it->second;
     }
 

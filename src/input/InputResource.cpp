@@ -214,7 +214,7 @@ void InputResource::processEvent(const SDL_Event& event)
             if (axis >= 0 && axis < MAX_GAMEPAD_AXES) {
                 // SDL axis range is -32768..32767 -- normalise to -1..1
                 impl_->gamepads[slot].axes[axis] =
-                    static_cast<float>(event.gaxis.value) / 32767.0f;
+                    static_cast<float>(event.gaxis.value) / 32768.0f;
             }
         }
     } break;

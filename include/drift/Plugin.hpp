@@ -9,7 +9,7 @@ class Plugin {
 public:
     virtual ~Plugin() = default;
     virtual void build(App& app) = 0;
-    virtual const char* getName() const = 0;
+    virtual const char* name() const = 0;
 };
 
 // PluginGroup: bundles multiple plugins together (e.g. DefaultPlugins).
@@ -22,5 +22,5 @@ public:
 } // namespace drift
 
 #ifndef SWIG
-#define DRIFT_PLUGIN(Name) const char* getName() const override { return #Name; }
+#define DRIFT_PLUGIN(Name) const char* name() const override { return #Name; }
 #endif

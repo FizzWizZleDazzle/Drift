@@ -2,8 +2,9 @@
 
 #include <drift/Resource.hpp>
 #include <drift/Types.hpp>
-#include <drift/components/Sprite.h>
-#include <drift/components/Camera.h>
+#include <drift/ComponentRegistry.hpp>
+#include <drift/components/Sprite.hpp>
+#include <drift/components/Camera.hpp>
 
 #include <vector>
 
@@ -29,7 +30,7 @@ public:
 
     // Called during Extract phase: queries World for Sprite+Transform2D
     // and the active Camera+Transform2D
-    void extract(World& world);
+    void extract(World& world, const ComponentRegistry& registry);
 
     // Read access for the renderer (returns the read buffer)
     const std::vector<SpriteEntry>& sprites() const;

@@ -2,7 +2,7 @@
 
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
-#include <drift/AssetServer.h>
+#include <drift/AssetServer.hpp>
 #include <drift/resources/RendererResource.hpp>
 
 namespace drift {

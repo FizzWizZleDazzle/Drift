@@ -253,6 +253,7 @@ void PhysicsResource::setBodyPosition(PhysicsBody body, Vec2 pos) {
     if (!b2Body_IsValid(id)) return;
     b2Rot rot = b2Body_GetRotation(id);
     b2Body_SetTransform(id, to_b2_vec2(pos), rot);
+    b2Body_SetAwake(id, true);
 }
 
 void PhysicsResource::setBodyRotation(PhysicsBody body, float rotation) {

@@ -144,47 +144,51 @@ struct AudioResource::Impl {
         if (ms->playing && !ms->paused && ms->buffer) {
             const float* src     = reinterpret_cast<const float*>(ms->buffer);
             const int    src_len = static_cast<int>(ms->length / sizeof(float) / AUDIO_CHANNELS);
-            int          pos     = static_cast<int>(ms->position);
+            if (src_len <= 0) {
+                ms->playing = false;
+            } else {
+                int pos = static_cast<int>(ms->position);
 
-            float vol = clampf(ms->volume, 0.f, 2.f);
+                float vol = clampf(ms->volume, 0.f, 2.f);
 
-            int remaining  = samples_to_mix;
-            int out_offset = 0;
+                int remaining  = samples_to_mix;
+                int out_offset = 0;
 
-            while (remaining > 0 && ms->playing) {
-                int avail = src_len - pos;
-                if (avail <= 0) {
-                    if (ms->looping) {
-                        pos   = 0;
-                        avail = src_len;
-                    } else {
-                        ms->playing = false;
-                        break;
+                while (remaining > 0 && ms->playing) {
+                    int avail = src_len - pos;
+                    if (avail <= 0) {
+                        if (ms->looping) {
+                            pos   = 0;
+                            avail = src_len;
+                        } else {
+                            ms->playing = false;
+                            break;
+                        }
+                    }
+                    int n = remaining < avail ? remaining : avail;
+
+                    for (int i = 0; i < n; ++i) {
+                        int si = (pos + i) * AUDIO_CHANNELS;
+                        int di = (out_offset + i) * AUDIO_CHANNELS;
+                        mix_buf[di + 0] += src[si + 0] * vol;
+                        mix_buf[di + 1] += src[si + 1] * vol;
+                    }
+
+                    pos        += n;
+                    out_offset += n;
+                    remaining  -= n;
+
+                    if (pos >= src_len) {
+                        if (ms->looping) {
+                            pos = 0;
+                        } else {
+                            ms->playing = false;
+                        }
                     }
                 }
-                int n = remaining < avail ? remaining : avail;
 
-                for (int i = 0; i < n; ++i) {
-                    int si = (pos + i) * AUDIO_CHANNELS;
-                    int di = (out_offset + i) * AUDIO_CHANNELS;
-                    mix_buf[di + 0] += src[si + 0] * vol;
-                    mix_buf[di + 1] += src[si + 1] * vol;
-                }
-
-                pos        += n;
-                out_offset += n;
-                remaining  -= n;
-
-                if (pos >= src_len) {
-                    if (ms->looping) {
-                        pos = 0;
-                    } else {
-                        ms->playing = false;
-                    }
-                }
+                ms->position = static_cast<uint32_t>(pos);
             }
-
-            ms->position = static_cast<uint32_t>(pos);
         }
 
         // ---- Clamp output -----------------------------------------------------

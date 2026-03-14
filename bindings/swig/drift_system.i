@@ -15,14 +15,14 @@
 #include <drift/Entity.hpp>
 #include <drift/Script.hpp>
 #include <drift/Log.hpp>
-#include <drift/Commands.h>
-#include <drift/RenderSnapshot.h>
+#include <drift/Commands.hpp>
+#include <drift/RenderSnapshot.hpp>
 #include <drift/WorldResource.h>
-#include <drift/AssetServer.h>
+#include <drift/AssetServer.hpp>
 #include <drift/ComponentRegistry.hpp>
 #include <drift/EntityAllocator.hpp>
-#include <drift/components/Sprite.h>
-#include <drift/components/Camera.h>
+#include <drift/components/Sprite.hpp>
+#include <drift/components/Camera.hpp>
 
 // Resource headers
 #include <drift/resources/RendererResource.hpp>
@@ -141,6 +141,8 @@
 %ignore drift::App::gpuDevice;
 %ignore drift::RendererResource::getGPUDevice;
 %ignore drift::RendererResource::getWindow;
+%ignore drift::RendererResource::setPrePassCallback;
+%ignore drift::RendererResource::setInPassCallback;
 
 // Ignore World internals
 %ignore drift::World::flecsWorld;
@@ -290,13 +292,13 @@
 %include "drift/ComponentRegistry.hpp"
 %include "drift/World.hpp"
 %include "drift/Entity.hpp"
-%include "drift/components/Sprite.h"
-%include "drift/components/Camera.h"
-%include "drift/Commands.h"
+%include "drift/components/Sprite.hpp"
+%include "drift/components/Camera.hpp"
+%include "drift/Commands.hpp"
 %include "drift/Script.hpp"
-%include "drift/RenderSnapshot.h"
+%include "drift/RenderSnapshot.hpp"
 %include "drift/WorldResource.h"
-%include "drift/AssetServer.h"
+%include "drift/AssetServer.hpp"
 
 // ---------------------------------------------------------------------------
 // Resource classes

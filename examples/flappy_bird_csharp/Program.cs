@@ -1,8 +1,8 @@
 // =============================================================================
 // Flappy Bird — Drift C# SDK
 // =============================================================================
-// All rendering via entities. Zero manual drawSprite. Uses AssetServer +
-// Commands for spawning/syncing entities.
+// Game visuals via entities, UI via ImGui (UIResource).
+// Uses AssetServer + Commands for spawning/syncing entities.
 // =============================================================================
 
 using System;
@@ -33,7 +33,8 @@ static class C
     public const float BirdX             = 60f;
     public const float BirdAnimSpeed     = 0.12f;
     public const int   MaxPipes          = 8;
-    public const int   MaxScoreDigits    = 6;
+    public const int   WindowW           = ScreenW * WindowScale;
+    public const int   WindowH           = ScreenH * WindowScale;
 
     public static bool Overlap(float ax, float ay, float aw, float ah,
                                float bx, float by, float bw, float bh)
@@ -69,13 +70,10 @@ class FlappyState : drift.Resource
     // Entities
     public ulong Camera, BgEntity, BirdEntity;
     public ulong[] BaseEntities = new ulong[2];
-    public ulong[] ScoreDigits = new ulong[C.MaxScoreDigits];
-    public ulong MenuEntity, GameoverEntity;
 
     // Textures
-    public drift.TextureHandle TexBg, TexBase, TexPipe, TexGameover, TexMessage;
+    public drift.TextureHandle TexBg, TexBase, TexPipe;
     public drift.TextureHandle[] TexBird = new drift.TextureHandle[3];
-    public drift.TextureHandle[] TexNum  = new drift.TextureHandle[10];
 
     // Sounds
     public drift.SoundHandle SndWing, SndHit, SndPoint, SndDie, SndSwoosh;
@@ -239,55 +237,6 @@ class Program
             }
         }
 
-        // Score
-        {
-            bool show = game.State == GameState.Playing || game.State == GameState.Dead;
-            string digits = show ? game.Score.ToString() : "";
-            float totalW = digits.Length * 26f;
-            float startX = (C.ScreenW - totalW) * 0.5f;
-
-            for (int i = 0; i < C.MaxScoreDigits; i++)
-            {
-                if (i < digits.Length)
-                {
-                    int d = digits[i] - '0';
-                    var t = new drift.Transform2D();
-                    t.position = new drift.Vec2(startX + i * 26f, 40f);
-                    var s = new drift.Sprite();
-                    s.texture = game.TexNum[d];
-                    s.srcRect = new drift.Rect(0, 0, 24, 36);
-                    s.zOrder = 50f; s.visible = true;
-                    cmd.entity(game.ScoreDigits[i]).insert(t).insert(s);
-                }
-                else
-                {
-                    var s = new drift.Sprite(); s.visible = false;
-                    cmd.entity(game.ScoreDigits[i]).insert(s);
-                }
-            }
-        }
-
-        // Menu
-        {
-            var s = new drift.Sprite();
-            s.texture = game.TexMessage;
-            s.srcRect = new drift.Rect(0, 0, 184, 267);
-            s.zOrder = 60f; s.visible = game.State == GameState.Menu;
-            var t = new drift.Transform2D();
-            t.position = new drift.Vec2((C.ScreenW - 184) * 0.5f, C.ScreenH * 0.2f);
-            cmd.entity(game.MenuEntity).insert(t).insert(s);
-        }
-
-        // Game over
-        {
-            var s = new drift.Sprite();
-            s.texture = game.TexGameover;
-            s.srcRect = new drift.Rect(0, 0, 192, 42);
-            s.zOrder = 60f; s.visible = game.State == GameState.Dead;
-            var t = new drift.Transform2D();
-            t.position = new drift.Vec2((C.ScreenW - 192) * 0.5f, C.ScreenH * 0.3f);
-            cmd.entity(game.GameoverEntity).insert(t).insert(s);
-        }
     }
 
     static int Main(string[] args)
@@ -318,10 +267,6 @@ class Program
             game.TexBird[0]  = assets.loadTexture("assets/bird-down.png");
             game.TexBird[1]  = assets.loadTexture("assets/bird-mid.png");
             game.TexBird[2]  = assets.loadTexture("assets/bird-up.png");
-            game.TexGameover = assets.loadTexture("assets/gameover.png");
-            game.TexMessage  = assets.loadTexture("assets/message.png");
-            for (int i = 0; i < 10; i++)
-                game.TexNum[i] = assets.loadTexture($"assets/num{i}.png");
 
             game.SndWing   = assets.loadSound("assets/wing.wav");
             game.SndHit    = assets.loadSound("assets/hit.wav");
@@ -348,23 +293,6 @@ class Program
             game.BaseEntities[1] = cmd.spawn()
                 .insert(new drift.Transform2D { position = new drift.Vec2(336, C.BaseY) })
                 .insert(new drift.Sprite { texture = game.TexBase, zOrder = 10f })
-                .id();
-
-            for (int i = 0; i < C.MaxScoreDigits; i++)
-            {
-                game.ScoreDigits[i] = cmd.spawn()
-                    .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
-                    .insert(new drift.Sprite { texture = game.TexNum[0], zOrder = 50f, visible = false })
-                    .id();
-            }
-
-            game.MenuEntity = cmd.spawn()
-                .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
-                .insert(new drift.Sprite { texture = game.TexMessage, zOrder = 60f })
-                .id();
-            game.GameoverEntity = cmd.spawn()
-                .insert(new drift.Transform2D { position = new drift.Vec2(0, 0) })
-                .insert(new drift.Sprite { texture = game.TexGameover, zOrder = 60f, visible = false })
                 .id();
 
             game.Reset();
@@ -442,6 +370,34 @@ class Program
             }
 
             SyncEntities(game, cmd);
+
+            // ImGui UI overlay via UIResource
+            var ui = a.getUIResource();
+            if (ui != null)
+            {
+                if (game.State == GameState.Playing || game.State == GameState.Dead)
+                {
+                    float scoreW = game.Score.ToString().Length * 20f;
+                    ui.label(game.Score.ToString(),
+                             new drift.Vec2((C.WindowW - scoreW) * 0.5f, C.WindowH * 0.05f));
+                }
+
+                if (game.State == GameState.Menu)
+                {
+                    ui.label("Flappy Bird",
+                             new drift.Vec2(C.WindowW * 0.5f - 80, C.WindowH * 0.2f));
+                    ui.label("Press Space or Click to Start",
+                             new drift.Vec2(C.WindowW * 0.5f - 140, C.WindowH * 0.45f));
+                }
+
+                if (game.State == GameState.Dead)
+                {
+                    ui.label("GAME OVER",
+                             new drift.Vec2(C.WindowW * 0.5f - 60, C.WindowH * 0.3f));
+                    ui.label("Press Space or Click to Restart",
+                             new drift.Vec2(C.WindowW * 0.5f - 150, C.WindowH * 0.42f));
+                }
+            }
         });
 
         return app.run();

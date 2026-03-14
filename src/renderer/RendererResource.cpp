@@ -277,6 +277,10 @@ struct RendererResource::Impl {
     // Stats
     int32_t drawCallCount  = 0;
     int32_t spriteCountVal = 0;
+
+    // Overlay callbacks
+    RendererResource::PrePassFn prePassCallback;
+    RendererResource::InPassFn  inPassCallback;
 };
 
 // =============================================================================
@@ -682,7 +686,7 @@ void RendererResource::endFrame() {
     impl_->spriteCountVal = static_cast<int32_t>(sprite_count);
 
     std::vector<SpriteVertex> vertices;
-    std::vector<uint16_t>     indices;
+    std::vector<uint32_t>     indices;
     vertices.reserve(sprite_count * 4);
     indices.reserve(sprite_count * 6);
 
@@ -725,7 +729,7 @@ void RendererResource::endFrame() {
         float uv_u[4] = { u0, u1, u1, u0 };
         float uv_v[4] = { v0, v0, v1, v1 };
 
-        uint16_t base = static_cast<uint16_t>(vertices.size());
+        uint32_t base = static_cast<uint32_t>(vertices.size());
 
         for (int j = 0; j < 4; ++j) {
             // Rotate around origin, then translate to world position.
@@ -759,7 +763,7 @@ void RendererResource::endFrame() {
 
     // --- Upload vertex / index data to GPU buffers ---
     uint32_t vb_size = static_cast<uint32_t>(vertices.size() * sizeof(SpriteVertex));
-    uint32_t ib_size = static_cast<uint32_t>(indices.size() * sizeof(uint16_t));
+    uint32_t ib_size = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
 
     if (vb_size > 0) {
         ensure_gpu_buffer(dev, &impl_->vertexBuffer, &impl_->vertexBufCap, vb_size,
@@ -770,6 +774,11 @@ void RendererResource::endFrame() {
         ensure_gpu_buffer(dev, &impl_->indexBuffer, &impl_->indexBufCap, ib_size,
                           SDL_GPU_BUFFERUSAGE_INDEX);
         upload_to_gpu_buffer(dev, impl_->indexBuffer, indices.data(), ib_size);
+    }
+
+    // --- Pre-pass overlay callback (e.g. ImGui PrepareDrawData) ---
+    if (impl_->prePassCallback) {
+        impl_->prePassCallback(impl_->cmdBuf);
     }
 
     // --- Acquire swapchain texture and begin render pass ---
@@ -811,7 +820,7 @@ void RendererResource::endFrame() {
         SDL_GPUBufferBinding ib_bind{};
         ib_bind.buffer = impl_->indexBuffer;
         ib_bind.offset = 0;
-        SDL_BindGPUIndexBuffer(pass, &ib_bind, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+        SDL_BindGPUIndexBuffer(pass, &ib_bind, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
         // Walk sorted sprites and emit one draw per texture batch.
         size_t batch_start = 0;
@@ -841,6 +850,11 @@ void RendererResource::endFrame() {
 
             batch_start = batch_end;
         }
+    }
+
+    // --- In-pass overlay callback (e.g. ImGui RenderDrawData) ---
+    if (pass && impl_->inPassCallback) {
+        impl_->inPassCallback(impl_->cmdBuf, pass);
     }
 
     if (pass) {
@@ -993,27 +1007,76 @@ void RendererResource::drawSprite(TextureHandle texture, Vec2 position, Rect src
 // =============================================================================
 
 void RendererResource::drawRect(Rect rect, Color color) {
-    (void)rect; (void)color;
-    // TODO: Implement rectangle outline drawing.
-    // Will render four line segments forming the rectangle border.
+    float x = rect.x, y = rect.y, w = rect.w, h = rect.h;
+    // Four 1px-thick edges
+    drawLine({x, y},         {x + w, y},     color, 1.f); // top
+    drawLine({x, y + h},     {x + w, y + h}, color, 1.f); // bottom
+    drawLine({x, y},         {x, y + h},     color, 1.f); // left
+    drawLine({x + w, y},     {x + w, y + h}, color, 1.f); // right
 }
 
 void RendererResource::drawRectFilled(Rect rect, Color color) {
-    (void)rect; (void)color;
-    // TODO: Implement filled rectangle drawing.
-    // Will use the white texture with a coloured quad.
+    if (!impl_->whiteTexture.valid()) return;
+
+    SpriteInstance inst;
+    inst.position   = {rect.x, rect.y};
+    inst.scale      = {1.f, 1.f};
+    inst.rotation   = 0.f;
+    inst.src_rect   = {0.f, 0.f, rect.w, rect.h};
+    inst.tint       = color;
+    inst.origin     = {0.f, 0.f};
+    inst.flip       = Flip::None;
+    inst.z_order    = 0.f;
+    inst.texture    = impl_->whiteTexture;
+    inst.tex_w      = 1;
+    inst.tex_h      = 1;
+    // Override src_rect for white texture: UVs will be 0..rect.w on a 1px texture,
+    // but we want 0..1 UVs. Use full texture extents instead.
+    inst.src_rect   = {0.f, 0.f, 1.f, 1.f};
+    inst.scale      = {rect.w, rect.h};
+
+    impl_->spriteQueue.push_back(inst);
 }
 
 void RendererResource::drawLine(Vec2 start, Vec2 end, Color color, float thickness) {
-    (void)start; (void)end; (void)color; (void)thickness;
-    // TODO: Implement line drawing.
-    // Will generate a rotated quad from start to end with the given thickness.
+    if (!impl_->whiteTexture.valid()) return;
+
+    float dx = end.x - start.x;
+    float dy = end.y - start.y;
+    float len = sqrtf(dx * dx + dy * dy);
+    if (len < 0.0001f) return;
+
+    float angle = atan2f(dy, dx);
+
+    SpriteInstance inst;
+    inst.position   = start;
+    inst.scale      = {len, thickness};
+    inst.rotation   = angle;
+    inst.src_rect   = {0.f, 0.f, 1.f, 1.f};
+    inst.tint       = color;
+    inst.origin     = {0.f, 0.5f}; // center vertically on the line
+    inst.flip       = Flip::None;
+    inst.z_order    = 0.f;
+    inst.texture    = impl_->whiteTexture;
+    inst.tex_w      = 1;
+    inst.tex_h      = 1;
+
+    impl_->spriteQueue.push_back(inst);
 }
 
 void RendererResource::drawCircle(Vec2 center, float radius, Color color, int segments) {
-    (void)center; (void)radius; (void)color; (void)segments;
-    // TODO: Implement circle outline drawing.
-    // Will generate a line strip of `segments` edges approximating the circle.
+    if (segments < 3) segments = 3;
+
+    float step = 2.f * 3.14159265358979f / static_cast<float>(segments);
+    for (int i = 0; i < segments; ++i) {
+        float a0 = step * static_cast<float>(i);
+        float a1 = step * static_cast<float>(i + 1);
+
+        Vec2 p0 = {center.x + cosf(a0) * radius, center.y + sinf(a0) * radius};
+        Vec2 p1 = {center.x + cosf(a1) * radius, center.y + sinf(a1) * radius};
+
+        drawLine(p0, p1, color, 1.f);
+    }
 }
 
 // =============================================================================
@@ -1157,6 +1220,14 @@ void* RendererResource::getGPUDevice() const {
 
 void* RendererResource::getWindow() const {
     return impl_->window;
+}
+
+void RendererResource::setPrePassCallback(PrePassFn fn) {
+    impl_->prePassCallback = std::move(fn);
+}
+
+void RendererResource::setInPassCallback(InPassFn fn) {
+    impl_->inPassCallback = std::move(fn);
 }
 
 } // namespace drift

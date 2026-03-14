@@ -1,4 +1,4 @@
-#include <drift/AssetServer.h>
+#include <drift/AssetServer.hpp>
 
 namespace drift {
 

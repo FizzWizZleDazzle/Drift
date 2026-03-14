@@ -1,24 +1,34 @@
 // =============================================================================
 // Flappy Bird — built with Drift 2D Engine
 // =============================================================================
-// All rendering via Sprite+Transform2D entities. Zero manual drawSprite.
-// Game state in FlappyState resource, synced to entities via Commands.
+// Demonstrates: Events, BoxCollider2D sensors, Query::contains(),
+// ECS-based collision detection via SensorStart events.
+// Game state managed via drift::State<GamePhase> with OnEnter/OnExit systems.
 // =============================================================================
 
 #include <drift/App.hpp>
-#include <drift/Commands.h>
-#include <drift/AssetServer.h>
-#include <drift/components/Sprite.h>
-#include <drift/components/Camera.h>
+#include <drift/Commands.hpp>
+#include <drift/AssetServer.hpp>
+#include <drift/Events.hpp>
+#include <drift/Query.hpp>
+#include <drift/components/Sprite.hpp>
+#include <drift/components/Camera.hpp>
+#include <drift/components/Physics.hpp>
 #include <drift/plugins/DefaultPlugins.hpp>
 #include <drift/resources/InputResource.hpp>
 #include <drift/resources/AudioResource.hpp>
 #include <drift/resources/Time.hpp>
 
+#ifdef FLAPPY_IMGUI_UI
+#include "imgui.h"
+#endif
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#ifndef FLAPPY_IMGUI_UI
 #include <cstring>
+#endif
 
 using namespace drift;
 
@@ -40,11 +50,18 @@ static constexpr float BASE_Y             = static_cast<float>(SCREEN_H) - BASE_
 static constexpr int   MAX_PIPES          = 8;
 static constexpr float BIRD_X             = 60.f;
 static constexpr float BIRD_ANIM_SPEED    = 0.12f;
+#ifndef FLAPPY_IMGUI_UI
 static constexpr int   MAX_SCORE_DIGITS   = 6;
+#endif
 
-// --- Game state ---
-enum GamePhase { STATE_MENU, STATE_PLAYING, STATE_DEAD };
+// --- Marker components for collision queries ---
+struct Bird {};
+struct Pipe {};
 
+// --- State enum (managed by engine) ---
+enum class GamePhase { Menu, Playing, Dead };
+
+// --- Game data ---
 struct PipeState {
     float x = 0.f;
     float gapY = 0.f;
@@ -57,7 +74,6 @@ struct PipeState {
 struct FlappyState : public Resource {
     DRIFT_RESOURCE(FlappyState)
 
-    GamePhase state = STATE_MENU;
     float birdY = SCREEN_H * 0.4f;
     float birdVel = 0.f;
     float birdRot = 0.f;
@@ -74,18 +90,22 @@ struct FlappyState : public Resource {
     EntityId bgEntity = InvalidEntityId;
     EntityId birdEntity = InvalidEntityId;
     EntityId baseEntities[2] = {};
+#ifndef FLAPPY_IMGUI_UI
     EntityId scoreDigits[MAX_SCORE_DIGITS] = {};
     EntityId menuEntity = InvalidEntityId;
     EntityId gameoverEntity = InvalidEntityId;
+#endif
 
     // Textures
     TextureHandle texBg;
     TextureHandle texBase;
     TextureHandle texPipe;
     TextureHandle texBird[3];
+#ifndef FLAPPY_IMGUI_UI
     TextureHandle texGameover;
     TextureHandle texMessage;
     TextureHandle texNum[10];
+#endif
 
     // Sounds
     SoundHandle sndWing;
@@ -96,13 +116,7 @@ struct FlappyState : public Resource {
 };
 
 // --- Helpers ---
-static bool rectsOverlap(float ax, float ay, float aw, float ah,
-                          float bx, float by, float bw, float bh) {
-    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
-}
-
 static void resetGame(FlappyState& g) {
-    g.state         = STATE_MENU;
     g.birdY         = SCREEN_H * 0.4f;
     g.birdVel       = 0.f;
     g.birdRot       = 0.f;
@@ -125,12 +139,26 @@ static void spawnPipe(FlappyState& g, Commands& cmd) {
             g.pipes[i].gapY = minY + (static_cast<float>(rand()) / RAND_MAX) * (maxY - minY);
             g.pipes[i].scored = false;
             if (g.pipes[i].botEntity == InvalidEntityId) {
+                // Bottom pipe: position at top-left, collider offset to center
                 g.pipes[i].botEntity = cmd.spawn()
                     .insert<Transform2D>({})
-                    .insert<Sprite>({.texture = g.texPipe, .zOrder = 5.f});
+                    .insert<Sprite>({.texture = g.texPipe, .zOrder = 5.f})
+                    .insert<Pipe>({})
+                    .insert<RigidBody2D>({.type = BodyType::Kinematic, .fixedRotation = true})
+                    .insert<BoxCollider2D>({
+                        .halfSize = {PIPE_WIDTH * 0.5f, PIPE_HEIGHT * 0.5f},
+                        .offset = {PIPE_WIDTH * 0.5f, PIPE_HEIGHT * 0.5f},
+                    });
+                // Top pipe: position at bottom-left, collider offset to center (upward)
                 g.pipes[i].topEntity = cmd.spawn()
                     .insert<Transform2D>({})
-                    .insert<Sprite>({.texture = g.texPipe, .zOrder = 5.f});
+                    .insert<Sprite>({.texture = g.texPipe, .zOrder = 5.f})
+                    .insert<Pipe>({})
+                    .insert<RigidBody2D>({.type = BodyType::Kinematic, .fixedRotation = true})
+                    .insert<BoxCollider2D>({
+                        .halfSize = {PIPE_WIDTH * 0.5f, PIPE_HEIGHT * 0.5f},
+                        .offset = {PIPE_WIDTH * 0.5f, -PIPE_HEIGHT * 0.5f},
+                    });
             }
             return;
         }
@@ -152,6 +180,7 @@ void flappyStartup(ResMut<FlappyState> game, ResMut<AssetServer> assets,
     game->texBird[0]  = assets->load<Texture>("assets/bird-down.png");
     game->texBird[1]  = assets->load<Texture>("assets/bird-mid.png");
     game->texBird[2]  = assets->load<Texture>("assets/bird-up.png");
+#ifndef FLAPPY_IMGUI_UI
     game->texGameover = assets->load<Texture>("assets/gameover.png");
     game->texMessage  = assets->load<Texture>("assets/message.png");
     for (int i = 0; i < 10; ++i) {
@@ -159,6 +188,7 @@ void flappyStartup(ResMut<FlappyState> game, ResMut<AssetServer> assets,
         snprintf(path, sizeof(path), "assets/num%d.png", i);
         game->texNum[i] = assets->load<Texture>(path);
     }
+#endif
 
     // Sounds
     game->sndWing   = assets->load<Sound>("assets/wing.wav");
@@ -177,10 +207,17 @@ void flappyStartup(ResMut<FlappyState> game, ResMut<AssetServer> assets,
         .insert<Transform2D>({})
         .insert<Sprite>({.texture = game->texBg, .zOrder = 0.f});
 
-    // Bird
+    // Bird — dynamic body (gravityScale=0, game handles gravity) so Box2D
+    // detects sensor overlaps with kinematic pipe bodies
     game->birdEntity = cmd.spawn()
         .insert<Transform2D>({.position = {BIRD_X, SCREEN_H * 0.4f}})
-        .insert<Sprite>({.texture = game->texBird[1], .zOrder = 20.f});
+        .insert<Sprite>({.texture = game->texBird[1], .zOrder = 20.f})
+        .insert<Bird>({})
+        .insert<RigidBody2D>({.type = BodyType::Dynamic, .fixedRotation = true, .gravityScale = 0.f})
+        .insert<BoxCollider2D>({
+            .halfSize = {BIRD_W * 0.4f, BIRD_H * 0.4f},
+            .isSensor = true
+        });
 
     // Base tiles
     game->baseEntities[0] = cmd.spawn()
@@ -190,6 +227,7 @@ void flappyStartup(ResMut<FlappyState> game, ResMut<AssetServer> assets,
         .insert<Transform2D>({.position = {336, BASE_Y}})
         .insert<Sprite>({.texture = game->texBase, .zOrder = 10.f});
 
+#ifndef FLAPPY_IMGUI_UI
     // Score digits (hidden until needed)
     for (int i = 0; i < MAX_SCORE_DIGITS; ++i) {
         game->scoreDigits[i] = cmd.spawn()
@@ -206,100 +244,145 @@ void flappyStartup(ResMut<FlappyState> game, ResMut<AssetServer> assets,
     game->gameoverEntity = cmd.spawn()
         .insert<Transform2D>({})
         .insert<Sprite>({.texture = game->texGameover, .zOrder = 60.f, .visible = false});
+#endif
 
     resetGame(*game);
 }
 
-// --- Update ---
-void flappyUpdate(Res<InputResource> input, Res<Time> time,
-                  ResMut<FlappyState> game,
-                  ResMut<AudioResource> audio, Commands& cmd) {
+// --- OnEnter systems ---
+void onEnterMenu(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
+    resetGame(*game);
+    if (game->sndSwoosh.valid()) audio->playSound(game->sndSwoosh, 0.5f);
+}
+
+void onEnterPlaying(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
+    doFlap(*game, audio.ptr);
+}
+
+void onEnterDead(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
+    if (game->sndHit.valid()) audio->playSound(game->sndHit, 0.8f);
+    game->hitPlayed = true;
+}
+
+// --- State-specific update systems ---
+void menuUpdate(Res<InputResource> input, Res<Time> time,
+                ResMut<FlappyState> game,
+                ResMut<NextState<GamePhase>> next) {
     float dt = time->delta;
     bool action = input->keyPressed(Key::Space) ||
                   input->mouseButtonPressed(MouseButton::Left);
 
-    switch (game->state) {
-    case STATE_MENU:
-        game->birdAnimTimer += dt;
-        if (game->birdAnimTimer >= BIRD_ANIM_SPEED) {
-            game->birdAnimTimer = 0.f;
-            game->birdFrame = (game->birdFrame + 1) % 3;
-        }
-        game->birdY = SCREEN_H * 0.4f + sinf(game->birdAnimTimer * 20.f) * 8.f;
-        game->baseScroll += PIPE_SPEED * dt;
-        if (action) { game->state = STATE_PLAYING; doFlap(*game, audio.ptr); }
-        break;
+    game->birdAnimTimer += dt;
+    if (game->birdAnimTimer >= BIRD_ANIM_SPEED) {
+        game->birdAnimTimer = 0.f;
+        game->birdFrame = (game->birdFrame + 1) % 3;
+    }
+    game->birdY = SCREEN_H * 0.4f + sinf(game->birdAnimTimer * 20.f) * 8.f;
+    game->baseScroll += PIPE_SPEED * dt;
 
-    case STATE_PLAYING:
-        game->birdVel += GRAVITY * dt;
-        game->birdY += game->birdVel * dt;
-        if (game->birdVel < 0) {
-            game->birdRot = -25.f * (3.14159f / 180.f);
-        } else {
-            game->birdRot += 3.f * dt;
-            if (game->birdRot > 1.57f) game->birdRot = 1.57f;
-        }
-        game->birdAnimTimer += dt;
-        if (game->birdAnimTimer >= BIRD_ANIM_SPEED) {
-            game->birdAnimTimer = 0.f;
-            game->birdFrame = (game->birdFrame + 1) % 3;
-        }
-        if (action) doFlap(*game, audio.ptr);
-        game->baseScroll += PIPE_SPEED * dt;
+    if (action) {
+        next->set(GamePhase::Playing);
+    }
+}
 
-        game->pipeTimer += dt;
-        if (game->pipeTimer >= PIPE_SPAWN_INTERVAL) {
-            game->pipeTimer = 0.f;
-            spawnPipe(*game, cmd);
-        }
+void playingUpdate(Res<InputResource> input, Res<Time> time,
+                   ResMut<FlappyState> game, ResMut<AudioResource> audio,
+                   ResMut<NextState<GamePhase>> next, Commands& cmd) {
+    float dt = time->delta;
+    bool action = input->keyPressed(Key::Space) ||
+                  input->mouseButtonPressed(MouseButton::Left);
 
-        for (int i = 0; i < MAX_PIPES; ++i) {
-            PipeState& p = game->pipes[i];
-            if (!p.active) continue;
-            p.x -= PIPE_SPEED * dt;
-            if (p.x < -PIPE_WIDTH - 10.f) { p.active = false; continue; }
-            if (!p.scored && p.x + PIPE_WIDTH < BIRD_X) {
-                p.scored = true;
-                game->score++;
-                if (game->sndPoint.valid()) audio->playSound(game->sndPoint, 0.7f);
-            }
-            float topBottom = p.gapY - PIPE_GAP * 0.5f;
-            float botTop    = p.gapY + PIPE_GAP * 0.5f;
-            if (rectsOverlap(BIRD_X - BIRD_W * 0.4f, game->birdY - BIRD_H * 0.4f,
-                             BIRD_W * 0.8f, BIRD_H * 0.8f,
-                             p.x, topBottom - PIPE_HEIGHT, PIPE_WIDTH, PIPE_HEIGHT) ||
-                rectsOverlap(BIRD_X - BIRD_W * 0.4f, game->birdY - BIRD_H * 0.4f,
-                             BIRD_W * 0.8f, BIRD_H * 0.8f,
-                             p.x, botTop, PIPE_WIDTH, PIPE_HEIGHT)) {
-                game->state = STATE_DEAD;
-            }
-        }
-        if (game->birdY + BIRD_H * 0.5f >= BASE_Y || game->birdY < 0)
-            game->state = STATE_DEAD;
-        if (game->state == STATE_DEAD) {
-            if (game->sndHit.valid()) audio->playSound(game->sndHit, 0.8f);
-            game->hitPlayed = true;
-        }
-        break;
-
-    case STATE_DEAD:
-        game->birdVel += GRAVITY * dt;
-        game->birdY += game->birdVel * dt;
-        game->birdRot += 4.f * dt;
+    game->birdVel += GRAVITY * dt;
+    game->birdY += game->birdVel * dt;
+    if (game->birdVel < 0) {
+        game->birdRot = -25.f * (3.14159f / 180.f);
+    } else {
+        game->birdRot += 3.f * dt;
         if (game->birdRot > 1.57f) game->birdRot = 1.57f;
-        if (game->birdY + BIRD_H * 0.5f > BASE_Y) {
-            game->birdY = BASE_Y - BIRD_H * 0.5f;
-            game->birdVel = 0.f;
-        }
-        if (action) {
-            resetGame(*game);
-            if (game->sndSwoosh.valid()) audio->playSound(game->sndSwoosh, 0.5f);
-        }
-        break;
+    }
+    game->birdAnimTimer += dt;
+    if (game->birdAnimTimer >= BIRD_ANIM_SPEED) {
+        game->birdAnimTimer = 0.f;
+        game->birdFrame = (game->birdFrame + 1) % 3;
+    }
+    if (action) doFlap(*game, audio.ptr);
+    game->baseScroll += PIPE_SPEED * dt;
+
+    game->pipeTimer += dt;
+    if (game->pipeTimer >= PIPE_SPAWN_INTERVAL) {
+        game->pipeTimer = 0.f;
+        spawnPipe(*game, cmd);
     }
 
-    // ---- Sync all entities from state ----
+    // Move pipes and check scoring
+    for (int i = 0; i < MAX_PIPES; ++i) {
+        PipeState& p = game->pipes[i];
+        if (!p.active) continue;
+        p.x -= PIPE_SPEED * dt;
+        if (p.x < -PIPE_WIDTH - 10.f) { p.active = false; continue; }
+        if (!p.scored && p.x + PIPE_WIDTH < BIRD_X) {
+            p.scored = true;
+            game->score++;
+            if (game->sndPoint.valid()) audio->playSound(game->sndPoint, 0.7f);
+        }
+    }
 
+    // Boundary check (floor/ceiling)
+    if (game->birdY + BIRD_H * 0.5f >= BASE_Y || game->birdY < 0) {
+        next->set(GamePhase::Dead);
+    }
+}
+
+// Collision detection via ECS sensor events — replaces manual rectsOverlap()
+void checkCollision(EventReader<SensorStart> sensors,
+                    EventReader<CollisionStart> collisions,
+                    Query<Bird> birds, Query<Pipe> pipes,
+                    ResMut<NextState<GamePhase>> next,
+                    Res<State<GamePhase>> state) {
+    if (state->current != GamePhase::Playing) return;
+
+    // Check sensor events (bird sensor overlapping pipe)
+    for (auto& event : sensors) {
+        if ((birds.contains(event.sensorEntity) && pipes.contains(event.visitorEntity)) ||
+            (birds.contains(event.visitorEntity) && pipes.contains(event.sensorEntity))) {
+            next->set(GamePhase::Dead);
+            return;
+        }
+    }
+
+    // Also check contact events as fallback
+    for (auto& event : collisions) {
+        if ((birds.contains(event.entityA) && pipes.contains(event.entityB)) ||
+            (birds.contains(event.entityB) && pipes.contains(event.entityA))) {
+            next->set(GamePhase::Dead);
+            return;
+        }
+    }
+}
+
+void deadUpdate(Res<InputResource> input, Res<Time> time,
+                ResMut<FlappyState> game,
+                ResMut<NextState<GamePhase>> next) {
+    float dt = time->delta;
+    bool action = input->keyPressed(Key::Space) ||
+                  input->mouseButtonPressed(MouseButton::Left);
+
+    game->birdVel += GRAVITY * dt;
+    game->birdY += game->birdVel * dt;
+    game->birdRot += 4.f * dt;
+    if (game->birdRot > 1.57f) game->birdRot = 1.57f;
+    if (game->birdY + BIRD_H * 0.5f > BASE_Y) {
+        game->birdY = BASE_Y - BIRD_H * 0.5f;
+        game->birdVel = 0.f;
+    }
+    if (action) {
+        next->set(GamePhase::Menu);
+    }
+}
+
+// --- Entity sync (runs every frame regardless of state) ---
+void flappySyncEntities(Res<State<GamePhase>> state,
+                        ResMut<FlappyState> game, Commands& cmd) {
     // Background
     {
         Sprite s;
@@ -332,6 +415,9 @@ void flappyUpdate(Res<InputResource> input, Res<Time> time,
             hidden.visible = false;
             cmd.entity(p.botEntity).insert<Sprite>(hidden);
             cmd.entity(p.topEntity).insert<Sprite>(hidden);
+            // Move inactive pipes far off-screen so sensors don't trigger
+            cmd.entity(p.botEntity).insert<Transform2D>({.position = {-1000.f, -1000.f}});
+            cmd.entity(p.topEntity).insert<Transform2D>({.position = {-1000.f, -1000.f}});
             continue;
         }
 
@@ -376,9 +462,10 @@ void flappyUpdate(Res<InputResource> input, Res<Time> time,
         }
     }
 
-    // Score digits
+#ifndef FLAPPY_IMGUI_UI
+    // Score digits (sprite overlay)
     {
-        bool showScore = (game->state == STATE_PLAYING || game->state == STATE_DEAD);
+        bool showScore = (state->current == GamePhase::Playing || state->current == GamePhase::Dead);
         char buf[16];
         snprintf(buf, sizeof(buf), "%d", game->score);
         int len = showScore ? static_cast<int>(strlen(buf)) : 0;
@@ -407,32 +494,69 @@ void flappyUpdate(Res<InputResource> input, Res<Time> time,
         }
     }
 
-    // Menu overlay
+    // Menu overlay (sprite)
     {
         Sprite s;
         s.texture = game->texMessage;
         s.srcRect = {0, 0, 184, 267};
         s.zOrder = 60.f;
-        s.visible = (game->state == STATE_MENU);
+        s.visible = (state->current == GamePhase::Menu);
         cmd.entity(game->menuEntity).insert<Sprite>(s);
 
         cmd.entity(game->menuEntity)
             .insert<Transform2D>({.position = {(SCREEN_W - 184) * 0.5f, SCREEN_H * 0.2f}});
     }
 
-    // Game over overlay
+    // Game over overlay (sprite)
     {
         Sprite s;
         s.texture = game->texGameover;
         s.srcRect = {0, 0, 192, 42};
         s.zOrder = 60.f;
-        s.visible = (game->state == STATE_DEAD);
+        s.visible = (state->current == GamePhase::Dead);
         cmd.entity(game->gameoverEntity).insert<Sprite>(s);
 
         cmd.entity(game->gameoverEntity)
             .insert<Transform2D>({.position = {(SCREEN_W - 192) * 0.5f, SCREEN_H * 0.3f}});
     }
+#endif
 }
+
+#ifdef FLAPPY_IMGUI_UI
+// --- ImGui UI overlay ---
+void flappyUI(Res<State<GamePhase>> state, Res<FlappyState> game) {
+    ImGuiIO& io = ImGui::GetIO();
+    float sw = io.DisplaySize.x;
+    float sh = io.DisplaySize.y;
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImFont* font = ImGui::GetFont();
+
+    auto drawCenteredText = [&](const char* text, float y, float fontSize, ImU32 color) {
+        ImVec2 size = font->CalcTextSizeA(fontSize, FLT_MAX, 0.f, text);
+        float x = (sw - size.x) * 0.5f;
+        dl->AddText(font, fontSize, ImVec2(x + 2, y + 2), IM_COL32(0, 0, 0, 180), text);
+        dl->AddText(font, fontSize, ImVec2(x, y), color, text);
+    };
+
+    if (state->current == GamePhase::Playing || state->current == GamePhase::Dead) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", game->score);
+        drawCenteredText(buf, sh * 0.05f, 64.f, IM_COL32(255, 255, 255, 255));
+    }
+
+    if (state->current == GamePhase::Menu) {
+        drawCenteredText("Flappy Bird", sh * 0.2f, 56.f, IM_COL32(255, 255, 255, 255));
+        drawCenteredText("Press Space or Click to Start", sh * 0.45f, 24.f,
+                         IM_COL32(255, 255, 255, 220));
+    }
+
+    if (state->current == GamePhase::Dead) {
+        drawCenteredText("GAME OVER", sh * 0.3f, 48.f, IM_COL32(255, 80, 80, 255));
+        drawCenteredText("Press Space or Click to Restart", sh * 0.42f, 24.f,
+                         IM_COL32(255, 255, 255, 220));
+    }
+}
+#endif
 
 int main(int /*argc*/, char* /*argv*/[]) {
     srand(42);
@@ -446,7 +570,33 @@ int main(int /*argc*/, char* /*argv*/[]) {
     });
     app.addPlugins<DefaultPlugins>();
     app.addResource<FlappyState>();
+
+    // Register marker components for collision queries
+    app.world().registerComponent<Bird>("Bird");
+    app.world().registerComponent<Pipe>("Pipe");
+
+    app.initState<GamePhase>(GamePhase::Menu);
+
     app.startup<flappyStartup>("flappy_startup");
-    app.update<flappyUpdate>("flappy_update");
+
+    // State-specific update systems
+    app.update<menuUpdate>("menu_update", inState(GamePhase::Menu));
+    app.update<playingUpdate>("playing_update", inState(GamePhase::Playing));
+    app.update<deadUpdate>("dead_update", inState(GamePhase::Dead));
+
+    // ECS collision detection via sensor events (replaces manual rectsOverlap)
+    app.update<checkCollision>("check_collision");
+
+    // Entity sync runs every frame (no run condition)
+    app.update<flappySyncEntities>("sync_entities");
+
+    // OnEnter callbacks
+    app.onEnter<onEnterMenu>(GamePhase::Menu, "enter_menu");
+    app.onEnter<onEnterPlaying>(GamePhase::Playing, "enter_playing");
+    app.onEnter<onEnterDead>(GamePhase::Dead, "enter_dead");
+
+#ifdef FLAPPY_IMGUI_UI
+    app.update<flappyUI>("flappy_ui");
+#endif
     return app.run();
 }

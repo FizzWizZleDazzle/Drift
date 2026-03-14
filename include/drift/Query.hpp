@@ -77,20 +77,64 @@ private:
         if constexpr (IsWithFilter<T>::value) {
             using Inner = typename FilterInner<T>::type;
             ComponentId id = registry.get<Inner>();
-            expr += "[none] ";
+            expr += "[none] #";
             expr += std::to_string(id);
         } else if constexpr (IsWithoutFilter<T>::value) {
             using Inner = typename FilterInner<T>::type;
             ComponentId id = registry.get<Inner>();
-            expr += "!";
+            expr += "!#";
             expr += std::to_string(id);
         } else {
             ComponentId id = registry.get<T>();
+            expr += "#";
             expr += std::to_string(id);
         }
 
         if constexpr (sizeof...(Rest) > 0) {
             buildImpl<Rest...>(registry, expr);
+        }
+    }
+};
+
+// Check if an entity matches all component requirements in Args...
+template<typename... Args>
+struct EntityMatcher;
+
+template<>
+struct EntityMatcher<> {
+    static bool matches(World&, const ComponentRegistry&, EntityId) { return true; }
+};
+
+template<typename T, typename... Rest>
+struct EntityMatcher<T, Rest...> {
+    static bool matches(World& world, const ComponentRegistry& registry, EntityId entity) {
+        if constexpr (IsWithFilter<T>::value) {
+            using Inner = typename FilterInner<T>::type;
+            if (!world.hasComponent(entity, registry.get<Inner>())) return false;
+        } else if constexpr (IsWithoutFilter<T>::value) {
+            using Inner = typename FilterInner<T>::type;
+            if (world.hasComponent(entity, registry.get<Inner>())) return false;
+        } else {
+            if (!world.hasComponent(entity, registry.get<T>())) return false;
+        }
+        return EntityMatcher<Rest...>::matches(world, registry, entity);
+    }
+};
+
+// Helper to invoke lambda with entity ID + component pointers
+template<typename Tuple, typename IndexSeq>
+struct QueryInvokerWithEntity;
+
+template<typename... Ts, size_t... Is>
+struct QueryInvokerWithEntity<std::tuple<Ts...>, std::index_sequence<Is...>> {
+    template<bool Mutable, typename Fn>
+    static void invoke(Fn& fn, EntityId* entities, void** fields, int32_t count) {
+        for (int32_t i = 0; i < count; ++i) {
+            if constexpr (Mutable) {
+                fn(entities[i], static_cast<Ts*>(fields[Is])[i]...);
+            } else {
+                fn(entities[i], static_cast<const Ts*>(fields[Is])[i]...);
+            }
         }
     }
 };
@@ -126,6 +170,12 @@ class Query {
 public:
     Query(World& w, const ComponentRegistry& r) : world_(w), registry_(r) {}
 
+    // Check if an entity matches this query's component requirements
+    bool contains(EntityId entity) const {
+        if (!world_.isAlive(entity)) return false;
+        return detail::EntityMatcher<Args...>::matches(world_, registry_, entity);
+    }
+
     template<typename Fn>
     void iter(Fn&& fn) {
         std::string expr = detail::QueryExprBuilder<Args...>::build(registry_);
@@ -137,6 +187,23 @@ public:
 
             detail::QueryInvoker<DataTuple, std::make_index_sequence<DataCount>>::template invoke<false>(
                 fn, fields, qi.count);
+        }
+        world_.queryFini(&qi);
+    }
+
+    // Iterate with entity ID as first callback param: fn(EntityId, const T&, ...)
+    template<typename Fn>
+    void iterWithEntity(Fn&& fn) {
+        std::string expr = detail::QueryExprBuilder<Args...>::build(registry_);
+        QueryIter qi = world_.queryIter(expr.c_str());
+
+        while (world_.queryNext(&qi)) {
+            void* fields[DataCount > 0 ? DataCount : 1];
+            fillFields<Args...>(qi, fields, 0);
+            EntityId* entities = world_.queryEntities(&qi);
+
+            detail::QueryInvokerWithEntity<DataTuple, std::make_index_sequence<DataCount>>::template invoke<false>(
+                fn, entities, fields, qi.count);
         }
         world_.queryFini(&qi);
     }
@@ -168,6 +235,12 @@ class QueryMut {
 public:
     QueryMut(World& w, const ComponentRegistry& r) : world_(w), registry_(r) {}
 
+    // Check if an entity matches this query's component requirements
+    bool contains(EntityId entity) const {
+        if (!world_.isAlive(entity)) return false;
+        return detail::EntityMatcher<Args...>::matches(world_, registry_, entity);
+    }
+
     template<typename Fn>
     void iter(Fn&& fn) {
         std::string expr = detail::QueryExprBuilder<Args...>::build(registry_);
@@ -179,6 +252,23 @@ public:
 
             detail::QueryInvoker<DataTuple, std::make_index_sequence<DataCount>>::template invoke<true>(
                 fn, fields, qi.count);
+        }
+        world_.queryFini(&qi);
+    }
+
+    // Iterate with entity ID as first callback param: fn(EntityId, T&, ...)
+    template<typename Fn>
+    void iterWithEntity(Fn&& fn) {
+        std::string expr = detail::QueryExprBuilder<Args...>::build(registry_);
+        QueryIter qi = world_.queryIter(expr.c_str());
+
+        while (world_.queryNext(&qi)) {
+            void* fields[DataCount > 0 ? DataCount : 1];
+            fillFields<Args...>(qi, fields, 0);
+            EntityId* entities = world_.queryEntities(&qi);
+
+            detail::QueryInvokerWithEntity<DataTuple, std::make_index_sequence<DataCount>>::template invoke<true>(
+                fn, entities, fields, qi.count);
         }
         world_.queryFini(&qi);
     }

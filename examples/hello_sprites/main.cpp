@@ -6,11 +6,11 @@
 // =============================================================================
 
 #include <drift/App.hpp>
-#include <drift/Commands.h>
-#include <drift/AssetServer.h>
+#include <drift/Commands.hpp>
+#include <drift/AssetServer.hpp>
 #include <drift/Query.hpp>
-#include <drift/components/Sprite.h>
-#include <drift/components/Camera.h>
+#include <drift/components/Sprite.hpp>
+#include <drift/components/Camera.hpp>
 #include <drift/plugins/DefaultPlugins.hpp>
 #include <drift/resources/InputResource.hpp>
 #include <drift/resources/Time.hpp>

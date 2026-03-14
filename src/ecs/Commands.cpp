@@ -1,4 +1,4 @@
-#include <drift/Commands.h>
+#include <drift/Commands.hpp>
 #include <drift/EntityAllocator.hpp>
 #include <drift/World.hpp>
 

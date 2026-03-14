@@ -2,7 +2,7 @@
 
 #include <drift/Types.hpp>
 #include <drift/World.hpp>
-#include <drift/components/Sprite.h>
+#include <drift/components/Sprite.hpp>
 
 namespace drift {
 

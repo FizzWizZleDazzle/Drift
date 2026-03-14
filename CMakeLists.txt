@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(drift VERSION 0.2.0 LANGUAGES C CXX)
+project(drift VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -202,4 +202,8 @@ if(DRIFT_BUILD_EXAMPLES)
 
     add_executable(flappy_bird examples/flappy_bird/main.cpp)
     target_link_libraries(flappy_bird PRIVATE drift)
+    option(DRIFT_FLAPPY_IMGUI_UI "Use ImGui for Flappy Bird UI instead of sprite overlays" OFF)
+    if(DRIFT_FLAPPY_IMGUI_UI)
+        target_compile_definitions(flappy_bird PRIVATE FLAPPY_IMGUI_UI)
+    endif()
 endif()

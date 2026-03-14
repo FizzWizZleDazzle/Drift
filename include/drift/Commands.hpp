@@ -3,8 +3,8 @@
 #include <drift/Types.hpp>
 #include <drift/Handle.hpp>
 #include <drift/ComponentRegistry.hpp>
-#include <drift/components/Sprite.h>
-#include <drift/components/Camera.h>
+#include <drift/components/Sprite.hpp>
+#include <drift/components/Camera.hpp>
 
 #include <vector>
 #include <cstdint>

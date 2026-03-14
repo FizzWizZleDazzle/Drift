@@ -1317,8 +1317,8 @@ class driftPINVOKE {
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Plugin_build")]
   public static extern void Plugin_build(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
 
-  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Plugin_getName")]
-  public static extern string Plugin_getName(global::System.Runtime.InteropServices.HandleRef jarg1);
+  [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_Plugin_name")]
+  public static extern string Plugin_name(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_new_Plugin")]
   public static extern global::System.IntPtr new_Plugin();
@@ -1795,7 +1795,7 @@ class driftPINVOKE {
   public static extern string RenderSnapshot_nameSwigExplicitRenderSnapshot(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_extract")]
-  public static extern void RenderSnapshot_extract(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern void RenderSnapshot_extract(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("drift_csharp", EntryPoint="CSharp_drift_RenderSnapshot_camera")]
   public static extern global::System.IntPtr RenderSnapshot_camera(global::System.Runtime.InteropServices.HandleRef jarg1);

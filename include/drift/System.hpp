@@ -2,6 +2,7 @@
 
 #include <drift/Types.hpp>
 #include <drift/Resource.hpp>
+#include <drift/Events.hpp>
 
 #include <vector>
 #include <functional>
@@ -55,10 +56,23 @@ template<typename... Args> struct IsQuery<Query<Args...>> : std::true_type {};
 template<typename T> struct IsQueryMut : std::false_type {};
 template<typename... Args> struct IsQueryMut<QueryMut<Args...>> : std::true_type {};
 
+// Type trait: is this an EventWriter<T>?
+template<typename T> struct IsEventWriter : std::false_type {};
+template<typename T> struct IsEventWriter<EventWriter<T>> : std::true_type {};
+
+// Type trait: is this an EventReader<T>?
+template<typename T> struct IsEventReader : std::false_type {};
+template<typename T> struct IsEventReader<EventReader<T>> : std::true_type {};
+
 // Extract the inner type from Res<T> or ResMut<T>
 template<typename T> struct InnerType { using type = T; };
 template<typename T> struct InnerType<Res<T>> { using type = T; };
 template<typename T> struct InnerType<ResMut<T>> { using type = T; };
+
+// Extract the event type from EventWriter<T> or EventReader<T>
+template<typename T> struct EventInnerType;
+template<typename T> struct EventInnerType<EventWriter<T>> { using type = T; };
+template<typename T> struct EventInnerType<EventReader<T>> { using type = T; };
 
 // Collect AccessDescriptors from a parameter pack
 template<typename... Args>
@@ -104,6 +118,24 @@ struct DepsCollector<Query<QArgs...>, Rest...> {
 template<typename... QArgs, typename... Rest>
 struct DepsCollector<QueryMut<QArgs...>, Rest...> {
     static void collect(std::vector<AccessDescriptor>& deps) {
+        DepsCollector<Rest...>::collect(deps);
+    }
+};
+
+// EventWriter<T> writes to Events<T>
+template<typename T, typename... Rest>
+struct DepsCollector<EventWriter<T>, Rest...> {
+    static void collect(std::vector<AccessDescriptor>& deps) {
+        deps.emplace_back(std::type_index(typeid(Events<T>)), AccessMode::Write);
+        DepsCollector<Rest...>::collect(deps);
+    }
+};
+
+// EventReader<T> reads from Events<T>
+template<typename T, typename... Rest>
+struct DepsCollector<EventReader<T>, Rest...> {
+    static void collect(std::vector<AccessDescriptor>& deps) {
+        deps.emplace_back(std::type_index(typeid(Events<T>)), AccessMode::Read);
         DepsCollector<Rest...>::collect(deps);
     }
 };

@@ -69,6 +69,7 @@ struct UIResource::Impl {
     UITheme theme;
     Anchor currentAnchor = Anchor::TopLeft;
     int widgetWindowId = 0;
+    int panelCounter = 0;
     std::vector<FontHandle> fontStack;
 
 #ifdef DRIFT_DEV
@@ -139,7 +140,7 @@ UIResource::UIResource(App& app)
 
     ImGui_ImplSDLGPU3_InitInfo gpuInitInfo = {};
     gpuInitInfo.Device            = device;
-    gpuInitInfo.ColorTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    gpuInitInfo.ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(device, window);
     gpuInitInfo.MSAASamples       = SDL_GPU_SAMPLECOUNT_1;
 
     if (!ImGui_ImplSDLGPU3_Init(&gpuInitInfo)) {
@@ -152,11 +153,39 @@ UIResource::UIResource(App& app)
 
     applyTheme(impl_->theme);
     impl_->initialised = true;
+
+    // Register overlay callbacks so ImGui draw data is submitted to the GPU
+    auto* renderer = app.getResource<RendererResource>();
+    if (renderer) {
+        renderer->setPrePassCallback([](void* cmdBuf) {
+            ImDrawData* drawData = ImGui::GetDrawData();
+            if (drawData) {
+                Imgui_ImplSDLGPU3_PrepareDrawData(drawData,
+                    static_cast<SDL_GPUCommandBuffer*>(cmdBuf));
+            }
+        });
+        renderer->setInPassCallback([](void* cmdBuf, void* renderPass) {
+            ImDrawData* drawData = ImGui::GetDrawData();
+            if (drawData) {
+                ImGui_ImplSDLGPU3_RenderDrawData(drawData,
+                    static_cast<SDL_GPUCommandBuffer*>(cmdBuf),
+                    static_cast<SDL_GPURenderPass*>(renderPass));
+            }
+        });
+    }
+
     DRIFT_LOG_INFO("UIResource: initialised");
 }
 
 UIResource::~UIResource() {
     if (impl_->initialised) {
+        // Clear overlay callbacks before shutting down ImGui
+        auto* renderer = impl_->app.getResource<RendererResource>();
+        if (renderer) {
+            renderer->setPrePassCallback(nullptr);
+            renderer->setInPassCallback(nullptr);
+        }
+
         ImGui_ImplSDLGPU3_Shutdown();
         ImGui_ImplSDL3_Shutdown();
         if (impl_->imguiCtx) {
@@ -173,6 +202,7 @@ void UIResource::beginFrame() {
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
     impl_->widgetWindowId = 0;
+    impl_->panelCounter = 0;
 }
 
 void UIResource::endFrame() {
@@ -292,9 +322,8 @@ void UIResource::progressBar(float fraction, Rect rect) {
 void UIResource::panelBegin(Rect rect, PanelFlags flags) {
     if (!impl_->initialised) return;
 
-    static int panelCounter = 0;
     char name[64];
-    std::snprintf(name, sizeof(name), "##drift_panel_%d", panelCounter++);
+    std::snprintf(name, sizeof(name), "##drift_panel_%d", impl_->panelCounter++);
 
     ImGui::SetNextWindowPos(ImVec2(rect.x, rect.y), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(rect.w, rect.h), ImGuiCond_Always);

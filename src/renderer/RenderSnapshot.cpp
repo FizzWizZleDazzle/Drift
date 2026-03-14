@@ -1,14 +1,24 @@
-#include <drift/RenderSnapshot.h>
+#include <drift/RenderSnapshot.hpp>
 #include <drift/World.hpp>
+
+#include <string>
 
 namespace drift {
 
-void RenderSnapshot::extract(World& world) {
+void RenderSnapshot::extract(World& world, const ComponentRegistry& registry) {
+    // Build query expressions from registry instead of hardcoded strings
+    ComponentId transformId = registry.get<Transform2D>();
+    ComponentId spriteId    = registry.get<Sprite>();
+    ComponentId cameraId    = registry.get<Camera>();
+
+    std::string spriteExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(spriteId);
+    std::string cameraExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(cameraId);
+
     // Extract sprites
     auto& buf = writeSpriteBuffer();
     buf.clear();
 
-    QueryIter spriteIter = world.queryIter("Transform2D, Sprite");
+    QueryIter spriteIter = world.queryIter(spriteExpr.c_str());
     while (world.queryNext(&spriteIter)) {
         auto* transforms = static_cast<Transform2D*>(
             world.queryField(&spriteIter, 0, sizeof(Transform2D)));
@@ -25,7 +35,7 @@ void RenderSnapshot::extract(World& world) {
     auto& cam = writeCameraBuffer();
     cam = {};
 
-    QueryIter camIter = world.queryIter("Transform2D, Camera");
+    QueryIter camIter = world.queryIter(cameraExpr.c_str());
     while (world.queryNext(&camIter)) {
         auto* transforms = static_cast<Transform2D*>(
             world.queryField(&camIter, 0, sizeof(Transform2D)));
