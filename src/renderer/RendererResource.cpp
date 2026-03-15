@@ -249,6 +249,10 @@ struct RendererResource::Impl {
     SDL_Window*    window = nullptr;
     SDL_GPUDevice* device = nullptr;
 
+    // Logical resolution (from Config, never changes)
+    float logicalW = 0.0f;
+    float logicalH = 0.0f;
+
     // Texture storage
     HandlePool<TextureTag, TextureEntry> textures;
     TextureHandle whiteTexture;
@@ -372,8 +376,10 @@ static void ensure_gpu_buffer(SDL_GPUDevice* dev,
 }
 
 // Upload raw bytes to a GPU buffer via a transient transfer buffer.
-static void upload_to_gpu_buffer(SDL_GPUDevice* dev, SDL_GPUBuffer* dst,
-                                 const void* data, uint32_t size) {
+// Uses the caller's command buffer to avoid creating a second in-flight command buffer,
+// which can cause Vulkan driver contention/deadlock.
+static void upload_to_gpu_buffer(SDL_GPUDevice* dev, SDL_GPUCommandBuffer* cmd,
+                                 SDL_GPUBuffer* dst, const void* data, uint32_t size) {
     if (size == 0) return;
 
     SDL_GPUTransferBufferCreateInfo tb_ci{};
@@ -389,7 +395,6 @@ static void upload_to_gpu_buffer(SDL_GPUDevice* dev, SDL_GPUBuffer* dst,
     }
     SDL_UnmapGPUTransferBuffer(dev, tb);
 
-    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(dev);
     SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
 
     SDL_GPUTransferBufferLocation src{};
@@ -403,7 +408,6 @@ static void upload_to_gpu_buffer(SDL_GPUDevice* dev, SDL_GPUBuffer* dst,
 
     SDL_UploadToGPUBuffer(copy, &src, &dst_region, false);
     SDL_EndGPUCopyPass(copy);
-    SDL_SubmitGPUCommandBuffer(cmd);
 
     SDL_ReleaseGPUTransferBuffer(dev, tb);
 }
@@ -420,17 +424,12 @@ static bool sprite_sort_cmp(const SpriteInstance& a, const SpriteInstance& b) {
 // =============================================================================
 // Build combined view-projection from active camera and window size
 // =============================================================================
-static Mat3 build_view_projection(SDL_Window* window, const HandlePool<CameraTag, CameraData>& cameras, CameraHandle activeCamera) {
-    int w_px = 0, h_px = 0;
-    SDL_GetWindowSize(window, &w_px, &h_px);
-    if (w_px == 0 || h_px == 0) {
+static Mat3 build_view_projection(float logicalW, float logicalH, const HandlePool<CameraTag, CameraData>& cameras, CameraHandle activeCamera) {
+    if (logicalW <= 0.0f || logicalH <= 0.0f) {
         return Mat3::identity();
     }
 
-    float wf = static_cast<float>(w_px);
-    float hf = static_cast<float>(h_px);
-
-    Mat3 proj = Mat3::ortho(wf, hf);
+    Mat3 proj = Mat3::ortho(logicalW, logicalH);
 
     if (!activeCamera.valid()) {
         return proj; // no camera -> identity view
@@ -447,7 +446,7 @@ static Mat3 build_view_projection(SDL_Window* window, const HandlePool<CameraTag
     view = Mat3::translate(-cam->position.x, -cam->position.y) * view;
     view = Mat3::rotate(-cam->rotation) * view;
     view = Mat3::scale(cam->zoom, cam->zoom) * view;
-    view = Mat3::translate(wf * 0.5f, hf * 0.5f) * view;
+    view = Mat3::translate(logicalW * 0.5f, logicalH * 0.5f) * view;
 
     return proj * view;
 }
@@ -461,6 +460,11 @@ RendererResource::RendererResource(App& app)
 {
     impl_->window = static_cast<SDL_Window*>(app.sdlWindow());
     impl_->device = static_cast<SDL_GPUDevice*>(app.gpuDevice());
+
+    // Store logical resolution from config
+    const auto& cfg = app.config();
+    impl_->logicalW = static_cast<float>(cfg.width > 0 ? cfg.width : 1280);
+    impl_->logicalH = static_cast<float>(cfg.height > 0 ? cfg.height : 720);
 
     SDL_GPUDevice* dev = impl_->device;
     if (!dev) {
@@ -601,15 +605,11 @@ RendererResource::RendererResource(App& app)
         impl_->spritePipeline = nullptr;
     }
 
-    // Create a default camera centred on the window with zoom=1.
+    // Create a default camera centred on the logical resolution with zoom=1.
     {
-        int w_px = 0, h_px = 0;
-        if (impl_->window) {
-            SDL_GetWindowSize(impl_->window, &w_px, &h_px);
-        }
         CameraData cam;
-        cam.position = {static_cast<float>(w_px) * 0.5f,
-                        static_cast<float>(h_px) * 0.5f};
+        cam.position = {impl_->logicalW * 0.5f,
+                        impl_->logicalH * 0.5f};
         cam.zoom     = 1.0f;
         cam.rotation = 0.0f;
         impl_->defaultCamera = impl_->cameras.create(cam);
@@ -708,7 +708,7 @@ void RendererResource::endFrame() {
     vertices.reserve(sprite_count * 4);
     indices.reserve(sprite_count * 6);
 
-    Mat3 vp = build_view_projection(impl_->window, impl_->cameras, impl_->activeCamera);
+    Mat3 vp = build_view_projection(impl_->logicalW, impl_->logicalH, impl_->cameras, impl_->activeCamera);
 
     for (size_t i = 0; i < sprite_count; ++i) {
         const SpriteInstance& s = impl_->spriteQueue[i];
@@ -786,12 +786,12 @@ void RendererResource::endFrame() {
     if (vb_size > 0) {
         ensure_gpu_buffer(dev, &impl_->vertexBuffer, &impl_->vertexBufCap, vb_size,
                           SDL_GPU_BUFFERUSAGE_VERTEX);
-        upload_to_gpu_buffer(dev, impl_->vertexBuffer, vertices.data(), vb_size);
+        upload_to_gpu_buffer(dev, impl_->cmdBuf, impl_->vertexBuffer, vertices.data(), vb_size);
     }
     if (ib_size > 0) {
         ensure_gpu_buffer(dev, &impl_->indexBuffer, &impl_->indexBufCap, ib_size,
                           SDL_GPU_BUFFERUSAGE_INDEX);
-        upload_to_gpu_buffer(dev, impl_->indexBuffer, indices.data(), ib_size);
+        upload_to_gpu_buffer(dev, impl_->cmdBuf, impl_->indexBuffer, indices.data(), ib_size);
     }
 
     // --- Pre-pass overlay callback (e.g. ImGui PrepareDrawData) ---
@@ -1224,11 +1224,10 @@ Vec2 RendererResource::screenToWorld(CameraHandle camera, Vec2 screenPos) const 
         return screenPos;
     }
 
-    int w_px = 0, h_px = 0;
-    SDL_GetWindowSize(impl_->window, &w_px, &h_px);
-    float wf = static_cast<float>(w_px);
-    float hf = static_cast<float>(h_px);
+    float wf = impl_->logicalW;
+    float hf = impl_->logicalH;
 
+    // screenPos is already in logical coords (InputResource scales mouse)
     // Reverse of the view transform:
     //   world = cam.pos + rotate(cam.rot, (screen - screen_centre) / cam.zoom)
     float dx = (screenPos.x - wf * 0.5f) / cam->zoom;
@@ -1249,10 +1248,8 @@ Vec2 RendererResource::worldToScreen(CameraHandle camera, Vec2 worldPos) const {
         return worldPos;
     }
 
-    int w_px = 0, h_px = 0;
-    SDL_GetWindowSize(impl_->window, &w_px, &h_px);
-    float wf = static_cast<float>(w_px);
-    float hf = static_cast<float>(h_px);
+    float wf = impl_->logicalW;
+    float hf = impl_->logicalH;
 
     float dx = worldPos.x - cam->position.x;
     float dy = worldPos.y - cam->position.y;
@@ -1264,6 +1261,14 @@ Vec2 RendererResource::worldToScreen(CameraHandle camera, Vec2 worldPos) const {
     screen.x = (dx * cosR - dy * sinR) * cam->zoom + wf * 0.5f;
     screen.y = (dx * sinR + dy * cosR) * cam->zoom + hf * 0.5f;
     return screen;
+}
+
+float RendererResource::logicalWidth() const {
+    return impl_->logicalW;
+}
+
+float RendererResource::logicalHeight() const {
+    return impl_->logicalH;
 }
 
 // =============================================================================

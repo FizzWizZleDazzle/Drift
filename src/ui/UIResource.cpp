@@ -201,6 +201,30 @@ void UIResource::beginFrame() {
 
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
+
+    // Override display size to logical resolution so UI widgets use the same
+    // coordinate space regardless of actual window size.
+    auto* renderer = impl_->app.getResource<RendererResource>();
+    if (renderer) {
+        float lw = renderer->logicalWidth();
+        float lh = renderer->logicalHeight();
+        if (lw > 0.f && lh > 0.f) {
+            ImGuiIO& io = ImGui::GetIO();
+            float actualW = io.DisplaySize.x;
+            float actualH = io.DisplaySize.y;
+
+            io.DisplaySize = ImVec2(lw, lh);
+
+            if (actualW > 0.f && actualH > 0.f) {
+                // Scale framebuffer so ImGui renders at the actual resolution
+                io.DisplayFramebufferScale = ImVec2(actualW / lw, actualH / lh);
+                // Scale mouse from actual window coords to logical coords
+                io.MousePos.x = io.MousePos.x * (lw / actualW);
+                io.MousePos.y = io.MousePos.y * (lh / actualH);
+            }
+        }
+    }
+
     ImGui::NewFrame();
     impl_->widgetWindowId = 0;
     impl_->panelCounter = 0;

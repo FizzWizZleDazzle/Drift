@@ -45,6 +45,11 @@ struct InputResource::Impl {
     bool  mouse_buttons_previous[MAX_MOUSE_BTNS + 1] = {};
     float mouse_wheel_delta = 0.0f;
 
+    // Logical resolution scaling
+    float logicalW = 0.0f;
+    float logicalH = 0.0f;
+    SDL_Window* window = nullptr;
+
     // Gamepads
     GamepadState gamepads[MAX_GAMEPADS] = {};
 
@@ -253,14 +258,43 @@ bool InputResource::keyReleased(Key key) const
 // Mouse queries
 // ---------------------------------------------------------------------------
 
+void InputResource::setLogicalSize(float w, float h)
+{
+    impl_->logicalW = w;
+    impl_->logicalH = h;
+}
+
+void InputResource::setWindow(void* window)
+{
+    impl_->window = static_cast<SDL_Window*>(window);
+}
+
 Vec2 InputResource::mousePosition() const
 {
-    return impl_->mouse_pos;
+    Vec2 pos = impl_->mouse_pos;
+    if (impl_->logicalW > 0.0f && impl_->logicalH > 0.0f && impl_->window) {
+        int actualW = 0, actualH = 0;
+        SDL_GetWindowSize(impl_->window, &actualW, &actualH);
+        if (actualW > 0 && actualH > 0) {
+            pos.x = pos.x * (impl_->logicalW / static_cast<float>(actualW));
+            pos.y = pos.y * (impl_->logicalH / static_cast<float>(actualH));
+        }
+    }
+    return pos;
 }
 
 Vec2 InputResource::mouseDelta() const
 {
-    return impl_->mouse_delta;
+    Vec2 delta = impl_->mouse_delta;
+    if (impl_->logicalW > 0.0f && impl_->logicalH > 0.0f && impl_->window) {
+        int actualW = 0, actualH = 0;
+        SDL_GetWindowSize(impl_->window, &actualW, &actualH);
+        if (actualW > 0 && actualH > 0) {
+            delta.x = delta.x * (impl_->logicalW / static_cast<float>(actualW));
+            delta.y = delta.y * (impl_->logicalH / static_cast<float>(actualH));
+        }
+    }
+    return delta;
 }
 
 bool InputResource::mouseButtonPressed(MouseButton button) const

@@ -186,11 +186,19 @@ inline void physics_sync_ecs_to_box2d(App& app) {
         }
     }
 
-    // Sync all body positions from ECS to Box2D (applying collider offset).
-    // This allows game code to control entity positions directly via Transform2D.
+    // Sync body positions from ECS to Box2D for non-physics-driven entities.
+    // Entities with Velocity2D are driven by Box2D — don't teleport them every frame,
+    // as b2Body_SetTransform resets center0=center which disrupts velocity integration.
     ComponentId transformComp = registry.get<Transform2D>();
+    bool hasVelocity = registry.has<Velocity2D>();
+    ComponentId velocity2dComp = hasVelocity ? registry.get<Velocity2D>() : 0;
+
     for (auto& [entity, body] : bridge->entityToBody) {
         if (!world.isAlive(entity)) continue;
+
+        // Skip position sync for physics-driven bodies (Velocity2D present)
+        if (hasVelocity && world.hasComponent(entity, velocity2dComp)) continue;
+
         auto* t = world.get<Transform2D>(entity, transformComp);
         if (!t) continue;
 

@@ -24,6 +24,10 @@ public:
     bool keyHeld(Key key) const;
     bool keyReleased(Key key) const;
 
+    // Logical resolution scaling (called by App after window creation)
+    void setLogicalSize(float w, float h);
+    void setWindow(void* window);
+
     // Mouse
     Vec2 mousePosition() const;
     Vec2 mouseDelta() const;

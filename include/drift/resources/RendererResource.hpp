@@ -65,6 +65,10 @@ public:
     Vec2 screenToWorld(CameraHandle camera, Vec2 screenPos) const;
     Vec2 worldToScreen(CameraHandle camera, Vec2 worldPos) const;
 
+    // Logical resolution
+    float logicalWidth() const;
+    float logicalHeight() const;
+
     // Stats
     int32_t drawCalls() const;
     int32_t spriteCount() const;

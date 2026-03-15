@@ -234,6 +234,16 @@ struct ChangeFilter<T, Rest...> {
 
 } // namespace detail
 
+// RAII guard ensuring queryFini is called even if a callback throws
+struct QueryIterGuard {
+    World& world;
+    QueryIter qi;
+    QueryIterGuard(World& w, QueryIter q) : world(w), qi(q) {}
+    ~QueryIterGuard() { world.queryFini(&qi); }
+    QueryIterGuard(const QueryIterGuard&) = delete;
+    QueryIterGuard& operator=(const QueryIterGuard&) = delete;
+};
+
 // Unified query implementation parameterized by access mode
 template<QueryAccess Access, typename... Args>
 class QueryBase {
@@ -257,26 +267,24 @@ public:
     void iter(Fn&& fn) {
         std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
-        QueryIter qi = world_.queryIter(expr.c_str());
+        QueryIterGuard guard{world_, world_.queryIter(expr.c_str())};
 
-        while (world_.queryNext(&qi)) {
+        while (world_.queryNext(&guard.qi)) {
             void* fields[DataCount > 0 ? DataCount : 1];
-            fillFields<Args...>(qi, fields, 0);
+            fillFields<Args...>(guard.qi, fields, 0);
 
             if constexpr (HasChangeFilters) {
-                // Must check per-entity with entity IDs
-                EntityId* entities = world_.queryEntities(&qi);
-                for (int32_t i = 0; i < qi.count; ++i) {
+                EntityId* entities = world_.queryEntities(&guard.qi);
+                for (int32_t i = 0; i < guard.qi.count; ++i) {
                     if (detail::ChangeFilter<Args...>::passes(world_, registry_, entities[i])) {
                         invokeAtIndex<DataTuple>(fn, fields, i);
                     }
                 }
             } else {
                 detail::QueryInvoker<DataTuple, std::make_index_sequence<DataCount>>::template invoke<Mutable>(
-                    fn, fields, qi.count);
+                    fn, fields, guard.qi.count);
             }
         }
-        world_.queryFini(&qi);
     }
 
     // Iterate with entity ID as first callback param
@@ -284,38 +292,36 @@ public:
     void iterWithEntity(Fn&& fn) {
         std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
-        QueryIter qi = world_.queryIter(expr.c_str());
+        QueryIterGuard guard{world_, world_.queryIter(expr.c_str())};
 
-        while (world_.queryNext(&qi)) {
+        while (world_.queryNext(&guard.qi)) {
             void* fields[DataCount > 0 ? DataCount : 1];
-            fillFields<Args...>(qi, fields, 0);
-            EntityId* entities = world_.queryEntities(&qi);
+            fillFields<Args...>(guard.qi, fields, 0);
+            EntityId* entities = world_.queryEntities(&guard.qi);
 
             if constexpr (HasChangeFilters) {
-                for (int32_t i = 0; i < qi.count; ++i) {
+                for (int32_t i = 0; i < guard.qi.count; ++i) {
                     if (detail::ChangeFilter<Args...>::passes(world_, registry_, entities[i])) {
                         invokeWithEntityAtIndex<DataTuple>(fn, entities, fields, i);
                     }
                 }
             } else {
                 detail::QueryInvokerWithEntity<DataTuple, std::make_index_sequence<DataCount>>::template invoke<Mutable>(
-                    fn, entities, fields, qi.count);
+                    fn, entities, fields, guard.qi.count);
             }
         }
-        world_.queryFini(&qi);
     }
 
     // Returns true if the query matches no entities
     bool isEmpty() {
         std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
-        QueryIter qi = world_.queryIter(expr.c_str());
+        QueryIterGuard guard{world_, world_.queryIter(expr.c_str())};
 
         bool found = false;
-        while (world_.queryNext(&qi)) {
-            if (qi.count > 0) { found = true; break; }
+        while (world_.queryNext(&guard.qi)) {
+            if (guard.qi.count > 0) { found = true; break; }
         }
-        world_.queryFini(&qi);
         return !found;
     }
 
@@ -327,24 +333,23 @@ public:
 
         std::lock_guard<std::recursive_mutex> qlock(world_.queryMutex());
         std::string expr = detail::QueryExprBuilder<Args...>::build(world_, registry_);
-        QueryIter qi = world_.queryIter(expr.c_str());
+        QueryIterGuard guard{world_, world_.queryIter(expr.c_str())};
 
         using ResultType = decltype(
             detail::QueryElementExtractor<DataTuple, std::make_index_sequence<DataCount>>::template extract<Mutable>(nullptr, 0));
         std::optional<ResultType> result;
         int totalCount = 0;
 
-        while (world_.queryNext(&qi)) {
-            if (qi.count > 0) {
+        while (world_.queryNext(&guard.qi)) {
+            if (guard.qi.count > 0) {
                 void* fields[DataCount > 0 ? DataCount : 1];
-                fillFields<Args...>(qi, fields, 0);
+                fillFields<Args...>(guard.qi, fields, 0);
                 if (!result.has_value()) {
                     result = detail::QueryElementExtractor<DataTuple, std::make_index_sequence<DataCount>>::template extract<Mutable>(fields, 0);
                 }
-                totalCount += qi.count;
+                totalCount += guard.qi.count;
             }
         }
-        world_.queryFini(&qi);
 
         assert(totalCount == 1 && "single() expects exactly one matching entity");
         return result.value();

@@ -210,4 +210,10 @@ if(DRIFT_BUILD_EXAMPLES)
     if(DRIFT_FLAPPY_IMGUI_UI)
         target_compile_definitions(flappy_bird PRIVATE FLAPPY_IMGUI_UI)
     endif()
+
+    add_executable(asteroid_field examples/asteroid_field/main.cpp)
+    target_link_libraries(asteroid_field PRIVATE drift)
+
+    add_executable(particle_storm examples/particle_storm/main.cpp)
+    target_link_libraries(particle_storm PRIVATE drift)
 endif()

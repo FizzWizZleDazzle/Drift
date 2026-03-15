@@ -40,8 +40,8 @@ public:
         {
             std::lock_guard<std::mutex> lock(mutex_);
             stop_ = true;
+            cv_.notify_all();
         }
-        cv_.notify_all();
         for (auto& t : workers_) {
             t.join();
         }
@@ -51,23 +51,36 @@ public:
     void runBatch(std::vector<std::function<void()>>& tasks) {
         if (tasks.empty()) return;
 
-        remaining_.store(static_cast<int>(tasks.size()), std::memory_order_relaxed);
-
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            remaining_.store(static_cast<int>(tasks.size()), std::memory_order_relaxed);
             batchTasks_ = &tasks;
             nextTask_.store(1, std::memory_order_relaxed);  // main takes index 0
             batchGen_.fetch_add(1, std::memory_order_relaxed);
+            cv_.notify_all();
         }
-        cv_.notify_all();
 
         // Main thread executes task 0
-        tasks[0]();
+        try {
+            tasks[0]();
+        } catch (const std::exception& e) {
+            DRIFT_LOG_ERROR("ThreadPool: main-thread task threw: %s", e.what());
+        } catch (...) {
+            DRIFT_LOG_ERROR("ThreadPool: main-thread task threw unknown exception");
+        }
         remaining_.fetch_sub(1, std::memory_order_acq_rel);
 
-        // Wait for all tasks to complete
+        // Wait for all tasks to complete (with deadlock detection)
         std::unique_lock<std::mutex> lock(mutex_);
-        doneCv_.wait(lock, [this] { return remaining_.load(std::memory_order_acquire) == 0; });
+        while (remaining_.load(std::memory_order_acquire) != 0) {
+            auto status = doneCv_.wait_for(lock, std::chrono::seconds(5));
+            if (status == std::cv_status::timeout && remaining_.load(std::memory_order_acquire) != 0) {
+                DRIFT_LOG_ERROR("ThreadPool: possible deadlock — remaining=%d, batchGen=%llu, tasks=%d",
+                                remaining_.load(std::memory_order_acquire),
+                                (unsigned long long)batchGen_.load(std::memory_order_relaxed),
+                                batchTasks_ ? (int)batchTasks_->size() : 0);
+            }
+        }
 
         batchTasks_ = nullptr;
     }
@@ -98,9 +111,16 @@ private:
             }
 
             if (task) {
-                task();
+                try {
+                    task();
+                } catch (const std::exception& e) {
+                    DRIFT_LOG_ERROR("ThreadPool: worker task threw: %s", e.what());
+                } catch (...) {
+                    DRIFT_LOG_ERROR("ThreadPool: worker task threw unknown exception");
+                }
                 int prev = remaining_.fetch_sub(1, std::memory_order_acq_rel);
                 if (prev == 1) {
+                    std::lock_guard<std::mutex> lock(mutex_);
                     doneCv_.notify_one();
                 }
             }
@@ -154,6 +174,9 @@ struct SystemEntry {
     // Ordering constraints (Phase 5)
     std::vector<std::string> mustRunAfter;
     std::vector<std::string> mustRunBefore;
+
+    // Profiling
+    uint64_t lastDurationUs = 0;
 };
 
 // Key for onEnter/onExit maps: (type_index of enum, int-cast enum value)
@@ -241,6 +264,7 @@ struct App::Impl {
                 continue;
             }
 
+            uint64_t t0 = SDL_GetPerformanceCounter();
             if (sys.isRaw && sys.rawSystem) {
                 sys.rawSystem->execute(app, dt);
             } else if (sys.isLambda) {
@@ -248,6 +272,8 @@ struct App::Impl {
             } else if (sys.fn) {
                 sys.fn();
             }
+            uint64_t t1 = SDL_GetPerformanceCounter();
+            sys.lastDurationUs = (t1 - t0) * 1000000 / perfFrequency;
         }
     }
 
@@ -375,6 +401,7 @@ struct App::Impl {
             if (batch.size() == 1) {
                 // Single system: run on main thread directly
                 auto& sys = systems[batch[0]];
+                uint64_t t0 = SDL_GetPerformanceCounter();
                 if (sys.isRaw && sys.rawSystem) {
                     sys.rawSystem->execute(app, dt);
                 } else if (sys.isLambda) {
@@ -382,6 +409,7 @@ struct App::Impl {
                 } else if (sys.fn) {
                     sys.fn();
                 }
+                sys.lastDurationUs = (SDL_GetPerformanceCounter() - t0) * 1000000 / perfFrequency;
             } else {
                 // Multiple systems: dispatch in parallel
                 std::vector<std::function<void()>> tasks;
@@ -395,9 +423,11 @@ struct App::Impl {
                         if (threadSlot < static_cast<int>(threadCommands.size())) {
                             tl_commands = threadCommands[threadSlot].get();
                         }
+                        uint64_t t0 = SDL_GetPerformanceCounter();
                         if (sys.fn) {
                             sys.fn();
                         }
+                        sys.lastDurationUs = (SDL_GetPerformanceCounter() - t0) * 1000000 / perfFrequency;
                         tl_commands = nullptr;
                     });
                 }
@@ -821,8 +851,10 @@ int App::run() {
         }
 
         // PreUpdate: beginFrame() snapshots previous state before new events
+        uint64_t phaseT0 = SDL_GetPerformanceCounter();
         s.runSystemsParallel(s.preUpdateSystems, *this);
         s.commands.flush(s.world);
+        uint64_t preUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
         // Poll events (updates current state for this frame)
         SDL_Event event;
@@ -842,21 +874,57 @@ int App::run() {
         processStateTransitions();
 
         // Update phase
+        phaseT0 = SDL_GetPerformanceCounter();
         s.runSystemsParallel(s.updateSystems, *this);
         s.commands.flush(s.world);
+        uint64_t updateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
         // PostUpdate phase
+        phaseT0 = SDL_GetPerformanceCounter();
         s.runSystemsParallel(s.postUpdateSystems, *this);
         s.commands.flush(s.world);
+        uint64_t postUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
         // Extract phase: fill render snapshot (sequential - GPU ops)
+        phaseT0 = SDL_GetPerformanceCounter();
         s.runSystems(s.extractSystems, *this);
+        uint64_t extractUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
         // Render phase: auto-render from snapshot + user manual draws (sequential)
+        phaseT0 = SDL_GetPerformanceCounter();
         s.runSystems(s.renderSystems, *this);
+        uint64_t renderUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
         // RenderFlush phase: endFrame + present (sequential)
+        phaseT0 = SDL_GetPerformanceCounter();
         s.runSystems(s.renderFlushSystems, *this);
+        uint64_t renderFlushUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+#ifdef DRIFT_PROFILE_SYSTEMS
+        if (s.frame > 0 && s.frame % 10000 == 0) {
+            DRIFT_LOG_INFO("=== Frame %llu profile (%.1f FPS, dt=%.2fms) ===",
+                           (unsigned long long)s.frame, s.fps, s.dt * 1000.f);
+            DRIFT_LOG_INFO("  Phases: PreUpdate=%lluus  Update=%lluus  PostUpdate=%lluus  Extract=%lluus  Render=%lluus  RenderFlush=%lluus",
+                           (unsigned long long)preUpdateUs, (unsigned long long)updateUs,
+                           (unsigned long long)postUpdateUs, (unsigned long long)extractUs,
+                           (unsigned long long)renderUs, (unsigned long long)renderFlushUs);
+
+            auto printSystems = [](const char* label, std::vector<SystemEntry>& systems) {
+                for (auto& sys : systems) {
+                    if (sys.lastDurationUs > 0) {
+                        DRIFT_LOG_INFO("    [%s] %s: %lluus", label, sys.name.c_str(),
+                                       (unsigned long long)sys.lastDurationUs);
+                    }
+                }
+            };
+            printSystems("PreUpdate", s.preUpdateSystems);
+            printSystems("Update", s.updateSystems);
+            printSystems("PostUpdate", s.postUpdateSystems);
+            printSystems("Extract", s.extractSystems);
+            printSystems("Render", s.renderSystems);
+            printSystems("RenderFlush", s.renderFlushSystems);
+        }
+#endif
 
         s.frame++;
     }
