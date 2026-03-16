@@ -11,7 +11,6 @@ namespace drift {
 class SpritePlugin : public Plugin {
 public:
     void build(App& app) override {
-#ifndef SWIG
         app.addResource<SpriteResource>(*app.getResource<RendererResource>());
 
         // Extract system: query Sprite+Transform2D+Camera entities into snapshot
@@ -50,7 +49,6 @@ public:
                     entry.sprite.zOrder);
             }
         });
-#endif
     }
     DRIFT_PLUGIN(SpritePlugin)
 };

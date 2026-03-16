@@ -13,13 +13,11 @@ public:
 
     EntityId id() const { return entity_; }
 
-#ifndef SWIG
     template<typename T>
     EntityBuilder& set(ComponentId component, const T& value) {
         world_.set<T>(entity_, component, value);
         return *this;
     }
-#endif
 
     EntityBuilder& add(ComponentId component) {
         world_.addComponent(entity_, component);

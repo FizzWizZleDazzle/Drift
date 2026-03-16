@@ -11,14 +11,11 @@
 
 namespace drift {
 
-#ifndef SWIG
 inline void physics_step(ResMut<PhysicsResource> physics, Res<Time> time) { physics->step(time->delta); }
-#endif
 
 class PhysicsPlugin : public Plugin {
 public:
     void build(App& app) override {
-#ifndef SWIG
         app.addResource<PhysicsResource>(Vec2{0.f, 9.8f});
 
         // Register physics components
@@ -112,7 +109,6 @@ public:
                     cb->addSensorEnd(ea, eb);
             }
         });
-#endif
     }
     DRIFT_PLUGIN(PhysicsPlugin)
 };

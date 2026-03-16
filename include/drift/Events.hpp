@@ -7,8 +7,6 @@
 
 namespace drift {
 
-#ifndef SWIG
-
 // Double-buffered event storage. Events written in frame N are readable in frame N+1.
 template<typename T>
 class Events : public Resource {
@@ -80,7 +78,5 @@ struct EventReader {
 private:
     const Events<T>* ptr_;
 };
-
-#endif // SWIG
 
 } // namespace drift

@@ -11,7 +11,6 @@ class Commands;
 
 // Unity-style Script base class.
 // Attach to an entity as a component. ScriptSystem calls the virtuals.
-// SWIG directors enable C# subclassing.
 class Script {
 public:
     virtual ~Script() = default;
@@ -38,8 +37,6 @@ public:
     // Commands access (for spawn/despawn from scripts)
     Commands& commands() const;
 
-#ifndef SWIG
-    // C++ template escape hatch (not SWIG-visible)
     template<typename T>
     const T* getComponent(ComponentId compId) const {
         if (!world_ || entity_ == InvalidEntityId) return nullptr;
@@ -51,7 +48,6 @@ public:
         if (!world_ || entity_ == InvalidEntityId) return nullptr;
         return world_->getMut<T>(entity_, compId);
     }
-#endif
 
     // Internal: set by ScriptSystem, not for user code
     void _bind(EntityId e, World* w, App* a) {

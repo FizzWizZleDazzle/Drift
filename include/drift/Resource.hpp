@@ -13,10 +13,9 @@ public:
     virtual const char* name() const { return ""; }
 };
 
-// Macro for engine resources that need SWIG-visible names.
+// Macro for engine resources.
 #define DRIFT_RESOURCE(Name) const char* name() const override { return #Name; }
 
-#ifndef SWIG
 // Res<T> = read-only resource access. Used as system parameter.
 template<typename T>
 struct Res {
@@ -43,6 +42,5 @@ struct ResMut {
 private:
     T* ptr_;
 };
-#endif
 
 } // namespace drift

@@ -10,9 +10,7 @@ namespace drift {
 class TilemapPlugin : public Plugin {
 public:
     void build(App& app) override {
-#ifndef SWIG
         app.addResource<TilemapResource>(*app.getResource<RendererResource>());
-#endif
     }
     DRIFT_PLUGIN(TilemapPlugin)
 };

@@ -12,24 +12,6 @@ Commands::Commands(EntityAllocator& allocator, const ComponentRegistry& registry
 {
 }
 
-// Typed inserts for SWIG-visible components
-EntityCommands& EntityCommands::insert(const Transform2D& t) {
-    cmd_.insert(entity_, cmd_.registry().getByName("Transform2D"), &t, sizeof(t));
-    return *this;
-}
-EntityCommands& EntityCommands::insert(const Sprite& s) {
-    cmd_.insert(entity_, cmd_.registry().getByName("Sprite"), &s, sizeof(s));
-    return *this;
-}
-EntityCommands& EntityCommands::insert(const Camera& c) {
-    cmd_.insert(entity_, cmd_.registry().getByName("Camera"), &c, sizeof(c));
-    return *this;
-}
-EntityCommands& EntityCommands::insert(const Name& n) {
-    cmd_.insert(entity_, cmd_.registry().getByName("Name"), &n, sizeof(n));
-    return *this;
-}
-
 EntityCommands& EntityCommands::despawn() {
     cmd_.despawn(entity_);
     return *this;

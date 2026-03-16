@@ -9,8 +9,6 @@ namespace drift {
 
 class App;
 
-#ifndef SWIG
-
 // RunCondition: predicate checked before running a system
 using RunCondition = std::function<bool(const App&)>;
 
@@ -31,7 +29,5 @@ struct NextState : public Resource {
 private:
     std::optional<T> pending_;
 };
-
-#endif // SWIG
 
 } // namespace drift

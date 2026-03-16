@@ -26,8 +26,7 @@ public:
     void setSoundLoader(std::function<SoundHandle(const char*)> fn);
     void setFontLoader(std::function<FontHandle(const char*, int)> fn);
 
-#ifndef SWIG
-    // C++ generic API
+    // Generic API
     template<typename T, typename... Args>
     auto load(const char* path, Args&&... args) {
         if constexpr (std::is_same_v<T, Texture>) {
@@ -38,9 +37,8 @@ public:
             return fontLoader_ ? fontLoader_(path, std::forward<Args>(args)...) : FontHandle{};
         }
     }
-#endif
 
-    // SWIG-compatible named methods
+    // Named methods
     TextureHandle loadTexture(const char* path);
     SoundHandle loadSound(const char* path);
     FontHandle loadFont(const char* path, int sizePx);

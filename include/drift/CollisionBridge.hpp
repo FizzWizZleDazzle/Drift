@@ -6,8 +6,7 @@
 
 namespace drift {
 
-// SWIG-friendly indexed access to collision events per frame.
-// Populated by a C++ system that reads Events<CollisionStart> etc.
+// Indexed access to collision events per frame.
 class CollisionBridge : public Resource {
 public:
     struct Entry {
@@ -35,8 +34,7 @@ public:
     EntityId sensorEndA(int i) const { return (i >= 0 && i < (int)sensorEnds_.size()) ? sensorEnds_[i].a : InvalidEntityId; }
     EntityId sensorEndB(int i) const { return (i >= 0 && i < (int)sensorEnds_.size()) ? sensorEnds_[i].b : InvalidEntityId; }
 
-    // Called by the C++ bridge system each frame
-#ifndef SWIG
+    // Called by the bridge system each frame
     void clear() {
         starts_.clear();
         ends_.clear();
@@ -48,7 +46,6 @@ public:
     void addCollisionEnd(EntityId a, EntityId b) { ends_.push_back({a, b}); }
     void addSensorStart(EntityId a, EntityId b) { sensorStarts_.push_back({a, b}); }
     void addSensorEnd(EntityId a, EntityId b) { sensorEnds_.push_back({a, b}); }
-#endif
 
     DRIFT_RESOURCE(CollisionBridge)
 

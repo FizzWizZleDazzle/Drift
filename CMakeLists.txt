@@ -170,32 +170,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(drift PUBLIC m dl pthread)
 endif()
 
-# ---------- Shared library (for C# P/Invoke) ----------
-add_library(drift_shared SHARED ${DRIFT_SOURCES})
-target_include_directories(drift_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(drift_shared PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${stb_SOURCE_DIR}
-    ${cute_aseprite_SOURCE_DIR}
-)
-target_link_libraries(drift_shared PUBLIC
-    SDL3::SDL3-static
-    flecs::flecs_static
-    box2d
-    imgui_lib
-    nlohmann_json::nlohmann_json
-)
-if(DRIFT_DEV)
-    target_compile_definitions(drift_shared PUBLIC DRIFT_DEV=1)
-endif()
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_libraries(drift_shared PUBLIC m dl pthread)
-endif()
-set_target_properties(drift_shared PROPERTIES OUTPUT_NAME "drift")
-
-# ---------- SWIG C# Bindings (optional) ----------
-include(cmake/DriftSwig.cmake)
-
 # ---------- Examples ----------
 if(DRIFT_BUILD_EXAMPLES)
     add_executable(hello_sprites examples/hello_sprites/main.cpp)

@@ -14,7 +14,6 @@
 
 namespace drift {
 
-#ifndef SWIG
 struct TrailPoint {
     Vec2 position;
     float age;
@@ -151,17 +150,14 @@ inline void trailRender(Res<TrailSystemResource> trailRes,
         }
     });
 }
-#endif
 
 class TrailPlugin : public Plugin {
 public:
     void build(App& app) override {
-#ifndef SWIG
         app.world().registerComponent<TrailRenderer>("TrailRenderer");
         app.initResource<TrailSystemResource>();
         app.addSystem<trailUpdate>("trail_update", Phase::PostUpdate);
         app.addSystem<trailRender>("trail_render", Phase::Render);
-#endif
     }
     DRIFT_PLUGIN(TrailPlugin)
 };

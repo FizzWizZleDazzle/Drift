@@ -22,6 +22,4 @@ public:
 
 } // namespace drift
 
-#ifndef SWIG
 #define DRIFT_PLUGIN(Name) const char* name() const override { return #Name; }
-#endif

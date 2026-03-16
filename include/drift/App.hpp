@@ -31,7 +31,6 @@ class App;
 
 using SystemSetId = int;
 
-#ifndef SWIG
 // Handle returned by phase shortcuts for chaining .before()/.after() ordering
 class SystemHandle {
 public:
@@ -47,7 +46,6 @@ private:
     size_t index_;
     Phase phase_;
 };
-#endif
 
 class App {
 public:
@@ -56,11 +54,8 @@ public:
 
     // Builder
     App& setConfig(const Config& cfg);
-    App& addPlugin(Plugin* plugin);       // SWIG-visible: takes ownership
-    App& addPlugins(PluginGroup* group);  // SWIG-visible: takes ownership
-    void addResourceByName(const char* name, Resource* res);  // SWIG-visible: takes ownership
-    Resource* getResourceByName(const char* name);
-    void addSystemRaw(const char* name, Phase phase, SystemBase* sys); // SWIG-visible
+    App& addPlugin(Plugin* plugin);
+    App& addPlugins(PluginGroup* group);
     void addEventHandler(EventHandler* handler);
 
     int run();
@@ -76,8 +71,7 @@ public:
     void* sdlWindow() const;
     void* gpuDevice() const;
 
-#ifndef SWIG
-    // C++ template API
+    // Template API
     template<typename T, typename... Args>
     T* addResource(Args&&... args) {
         T* res = new T(std::forward<Args>(args)...);
@@ -355,14 +349,12 @@ private:
         initEvent<Inner>();
         return T(getResource<Events<Inner>>());
     }
-#endif
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
 
-#ifndef SWIG
 // SystemHandle inline implementations
 inline SystemHandle& SystemHandle::before(const char* name) {
     app_.addSystemOrderBefore(phase_, index_, name);
@@ -387,6 +379,5 @@ RunCondition inState(T value) {
         return state && state->current == value;
     };
 }
-#endif
 
 } // namespace drift

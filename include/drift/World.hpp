@@ -44,8 +44,7 @@ public:
     void* getComponentMut(EntityId entity, ComponentId component);
     bool hasComponent(EntityId entity, ComponentId component) const;
 
-    // Typed component helpers (C++ only)
-#ifndef SWIG
+    // Typed component helpers
     template<typename T>
     ComponentId registerComponent(const char* name) {
         ComponentId id = registerComponent(name, sizeof(T), alignof(T));
@@ -68,7 +67,6 @@ public:
     T* getMut(EntityId entity, ComponentId component) {
         return static_cast<T*>(getComponentMut(entity, component));
     }
-#endif
 
     // Singletons
     void setSingleton(ComponentId component, const void* data, size_t size);

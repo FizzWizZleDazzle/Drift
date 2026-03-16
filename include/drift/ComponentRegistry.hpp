@@ -11,7 +11,6 @@ namespace drift {
 
 class ComponentRegistry {
 public:
-#ifndef SWIG
     template<typename T>
     void add(ComponentId id) {
         ids_[std::type_index(typeid(T))] = id;
@@ -32,7 +31,6 @@ public:
     bool has() const {
         return ids_.find(std::type_index(typeid(T))) != ids_.end();
     }
-#endif
 
     void addByName(const char* name, ComponentId id) {
         if (name) idsByName_[name] = id;

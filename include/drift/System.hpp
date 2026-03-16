@@ -35,16 +35,6 @@ struct AccessDescriptor {
         : typeId(t), mode(m), kind(k) {}
 };
 
-// Base class for systems that can be registered from C# via SWIG.
-class SystemBase {
-public:
-    virtual ~SystemBase() = default;
-    virtual void execute(App& app, float dt) = 0;
-    virtual std::vector<AccessDescriptor> getDependencies() const { return {}; }
-};
-
-#ifndef SWIG
-
 // ---- Template machinery for extracting resource deps from function signatures ----
 
 // Type trait: is this a Res<T>?
@@ -214,7 +204,5 @@ template<typename T>
 struct ParamBuilder<ResMut<T>> {
     static ResMut<T> build(App& app);
 };
-
-#endif // SWIG
 
 } // namespace drift

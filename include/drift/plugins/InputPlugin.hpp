@@ -6,14 +6,11 @@
 
 namespace drift {
 
-#ifndef SWIG
 inline void input_begin_frame(ResMut<InputResource> input) { input->beginFrame(); }
-#endif
 
 class InputPlugin : public Plugin {
 public:
     void build(App& app) override {
-#ifndef SWIG
         auto* input = app.addResource<InputResource>();
         app.addEventHandler(input);
 
@@ -25,7 +22,6 @@ public:
         input->setWindow(app.sdlWindow());
 
         app.addSystem<input_begin_frame>("input_begin_frame", Phase::PreUpdate);
-#endif
     }
     DRIFT_PLUGIN(InputPlugin)
 };

@@ -26,7 +26,6 @@ class EntityCommands {
 public:
     EntityCommands(Commands& cmd, EntityId e) : cmd_(cmd), entity_(e) {}
 
-#ifndef SWIG
     template<typename T>
     EntityCommands& insert(const T& value);
 
@@ -44,13 +43,6 @@ public:
     // Spawn children: withChildren([](ChildSpawner& spawner) { spawner.spawn().insert(...); })
     template<typename Fn>
     EntityCommands& withChildren(Fn&& fn);
-#endif
-
-    // SWIG-visible typed inserts for built-in components
-    EntityCommands& insert(const Transform2D& t);
-    EntityCommands& insert(const Sprite& s);
-    EntityCommands& insert(const Camera& c);
-    EntityCommands& insert(const Name& n);
 
     EntityCommands& despawn();
 
@@ -70,13 +62,12 @@ public:
     EntityCommands spawn();
     EntityCommands entity(EntityId e);
 
-    // Raw API (also SWIG-visible)
+    // Raw API
     void insert(EntityId entity, ComponentId comp, const void* data, size_t size);
     void despawn(EntityId entity);
     void remove(EntityId entity, ComponentId comp);
 
-#ifndef SWIG
-    // Typed insert (C++ only). Auto-registers unknown component types if World* is available.
+    // Typed insert. Auto-registers unknown component types if World* is available.
     template<typename T>
     void insert(EntityId entity, const T& value) {
         if (!registry_.has<T>() && world_) {
@@ -94,7 +85,6 @@ public:
         entry.customFn = std::move(fn);
         queue_.push_back(std::move(entry));
     }
-#endif
 
     // Apply all queued commands to the World (exclusive access)
     void flush(World& world);
@@ -111,15 +101,12 @@ private:
         EntityId entity;
         ComponentId component;
         std::vector<uint8_t> data;
-#ifndef SWIG
         std::function<void(World&)> customFn;
-#endif
     };
 
     std::vector<CommandEntry> queue_;
 };
 
-#ifndef SWIG
 template<typename T>
 EntityCommands& EntityCommands::insert(const T& value) {
     cmd_.insert<T>(entity_, value);
@@ -181,6 +168,5 @@ EntityCommands& EntityCommands::withChildren(Fn&& fn) {
     insert<Children>(children);
     return *this;
 }
-#endif
 
 } // namespace drift

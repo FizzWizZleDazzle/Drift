@@ -165,10 +165,8 @@ struct SystemEntry {
     std::vector<AccessDescriptor> deps;
     std::function<void()> fn;             // typed system function
     std::function<void(App&)> lambdaFn;   // lambda shorthand
-    SystemBase* rawSystem = nullptr;      // SWIG system (owned)
     RunCondition runCondition;            // optional run condition
     bool isLambda = false;
-    bool isRaw = false;
     SystemSetId systemSet = -1;           // -1 = no set
 
     // Ordering constraints (Phase 5)
@@ -211,9 +209,8 @@ struct App::Impl {
     uint64_t frame = 0;
     uint64_t startCounter = 0;
 
-    // Resources: dual storage for C++ fast path + SWIG name path
+    // Resources
     std::unordered_map<std::type_index, Resource*> resourcesByType;
-    std::unordered_map<std::string, Resource*> resourcesByName;
     std::vector<Resource*> ownedResources;
 
     // Systems grouped by phase
@@ -265,9 +262,7 @@ struct App::Impl {
             }
 
             uint64_t t0 = SDL_GetPerformanceCounter();
-            if (sys.isRaw && sys.rawSystem) {
-                sys.rawSystem->execute(app, dt);
-            } else if (sys.isLambda) {
+            if (sys.isLambda) {
                 sys.lambdaFn(app);
             } else if (sys.fn) {
                 sys.fn();
@@ -279,9 +274,9 @@ struct App::Impl {
 
     // ---- Parallel scheduler (Phase 4) ----
 
-    // A system is exclusive if it needs full App access (lambda/raw) or has no tracked deps
+    // A system is exclusive if it needs full App access (lambda) or has no tracked deps
     static bool isExclusive(const SystemEntry& sys) {
-        return sys.isLambda || sys.isRaw || (!sys.fn);
+        return sys.isLambda || (!sys.fn);
     }
 
     // Two systems conflict if they share any typeId where at least one is Write
@@ -402,9 +397,7 @@ struct App::Impl {
                 // Single system: run on main thread directly
                 auto& sys = systems[batch[0]];
                 uint64_t t0 = SDL_GetPerformanceCounter();
-                if (sys.isRaw && sys.rawSystem) {
-                    sys.rawSystem->execute(app, dt);
-                } else if (sys.isLambda) {
+                if (sys.isLambda) {
                     sys.lambdaFn(app);
                 } else if (sys.fn) {
                     sys.fn();
@@ -466,22 +459,6 @@ App::~App() {
     // Clean up plugins
     for (auto* p : impl_->plugins) delete p;
     for (auto* g : impl_->pluginGroups) delete g;
-    // Clean up raw systems
-    auto cleanSystems = [](std::vector<SystemEntry>& systems) {
-        for (auto& s : systems) {
-            if (s.isRaw) delete s.rawSystem;
-        }
-    };
-    cleanSystems(impl_->startupSystems);
-    cleanSystems(impl_->preUpdateSystems);
-    cleanSystems(impl_->updateSystems);
-    cleanSystems(impl_->postUpdateSystems);
-    cleanSystems(impl_->extractSystems);
-    cleanSystems(impl_->renderSystems);
-    cleanSystems(impl_->renderFlushSystems);
-    // Clean up raw systems in onEnter/onExit maps
-    for (auto& [key, systems] : impl_->onEnterSystems) cleanSystems(systems);
-    for (auto& [key, systems] : impl_->onExitSystems) cleanSystems(systems);
 
     // Shutdown SDL
     if (impl_->gpuDevice) {
@@ -516,29 +493,6 @@ App& App::addPlugins(PluginGroup* group) {
     return *this;
 }
 
-void App::addResourceByName(const char* name, Resource* res) {
-    if (!name || !res) return;
-    impl_->resourcesByName[name] = res;
-    impl_->ownedResources.push_back(res);
-}
-
-Resource* App::getResourceByName(const char* name) {
-    if (!name) return nullptr;
-    auto it = impl_->resourcesByName.find(name);
-    return it != impl_->resourcesByName.end() ? it->second : nullptr;
-}
-
-void App::addSystemRaw(const char* name, Phase phase, SystemBase* sys) {
-    if (!sys) return;
-    SystemEntry entry;
-    entry.name = name ? name : "";
-    entry.phase = phase;
-    entry.rawSystem = sys;
-    entry.isRaw = true;
-    if (sys) entry.deps = sys->getDependencies();
-    impl_->systemsForPhase(phase).push_back(std::move(entry));
-}
-
 void App::addEventHandler(EventHandler* handler) {
     if (handler) impl_->eventHandlers.push_back(handler);
 }
@@ -554,10 +508,6 @@ void App::addSystem(const char* name, Phase phase, std::function<void(App&)> fn)
 
 void App::addResourceImpl(std::type_index type, Resource* res) {
     impl_->resourcesByType[type] = res;
-    const char* n = res->name();
-    if (n && n[0] != '\0') {
-        impl_->resourcesByName[n] = res;
-    }
     impl_->ownedResources.push_back(res);
 }
 

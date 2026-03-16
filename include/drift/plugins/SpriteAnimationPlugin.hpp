@@ -9,7 +9,6 @@
 
 namespace drift {
 
-#ifndef SWIG
 inline void spriteAnimationUpdate(Res<Time> time,
                                   QueryMut<SpriteAnimator, Sprite> animated) {
     float dt = time->delta;
@@ -43,15 +42,12 @@ inline void spriteAnimationUpdate(Res<Time> time,
         sprite.srcRect = clip.frames[animator.currentFrame];
     });
 }
-#endif
 
 class SpriteAnimationPlugin : public Plugin {
 public:
     void build(App& app) override {
-#ifndef SWIG
         app.world().registerComponent<SpriteAnimator>("SpriteAnimator");
         app.addSystem<spriteAnimationUpdate>("sprite_animation_update", Phase::PostUpdate);
-#endif
     }
     DRIFT_PLUGIN(SpriteAnimationPlugin)
 };

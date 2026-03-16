@@ -12,3 +12,4 @@ compile_commands.json
 *.user
 bin/
 obj/
+docs/book/

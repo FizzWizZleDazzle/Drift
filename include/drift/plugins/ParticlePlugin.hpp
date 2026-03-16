@@ -11,7 +11,6 @@
 
 namespace drift {
 
-#ifndef SWIG
 // New ECS-based particle system functions (defined in ParticleSystem.cpp)
 void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
                           Res<Time> time,
@@ -24,12 +23,10 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
 // Legacy system functions
 inline void particles_update(ResMut<ParticleResource> particles, Res<Time> time) { particles->update(time->delta); }
 inline void particles_render(ResMut<ParticleResource> particles) { particles->render(); }
-#endif
 
 class ParticlePlugin : public Plugin {
 public:
     void build(App& app) override {
-#ifndef SWIG
         // Legacy resource (for backward compatibility)
         app.addResource<ParticleResource>(*app.getResource<RendererResource>());
         app.addSystem<particles_update>("particles_update", Phase::PostUpdate);
@@ -39,7 +36,6 @@ public:
         app.initResource<ParticleSystemResource>();
         app.addSystem<particleSystemUpdate>("particle_system_update", Phase::PostUpdate);
         app.addSystem<particleSystemRender>("particle_system_render", Phase::Render);
-#endif
     }
     DRIFT_PLUGIN(ParticlePlugin)
 };
