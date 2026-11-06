@@ -52,7 +52,9 @@ This is the only directory you need to include in your project. Every `#include 
 | `Resource.hpp` | `Resource` base class, `Res<T>` (read-only) and `ResMut<T>` (read-write) wrappers used as system parameters. |
 | `Plugin.hpp` | `Plugin` and `PluginGroup` base classes for modular subsystem registration. |
 | `System.hpp` | System traits, `AccessDescriptor`, and compile-time dependency extraction from system function signatures. |
-| `AssetServer.hpp` | `AssetServer` resource with `load<Texture>()`, `load<Sound>()`, `load<Font>()` template API. |
+| `AssetServer.hpp` | `AssetServer` resource with `load<Texture>()`, `load<Sound>()`, `load<Font>()` template API, path lookup and hot reload hooks. |
+| `Reflect.hpp` | Component reflection: describe a component's fields once for scenes and the inspector. |
+| `Scene.hpp` | `SceneResource`: save, load and spawn JSON scenes and prefabs. |
 | `World.hpp` | Low-level ECS world (wraps flecs). Typically accessed indirectly through `Query` and `Commands`. |
 | `Events.hpp` | `Events<T>` double-buffered storage, `EventWriter<T>`, `EventReader<T>` system parameters. |
 | `State.hpp` | `State<T>`, `NextState<T>` for finite state machines with `OnEnter`/`OnExit` system hooks. |
@@ -102,6 +104,8 @@ Plugins are header-only. Each one registers resources and systems in its `build(
 | `SpriteAnimationPlugin.hpp` | `SpriteAnimationPlugin` | Updates `Sprite::srcRect` from `SpriteAnimator` each frame. |
 | `CameraPlugin.hpp` | `CameraPlugin` | `CameraFollow` and `CameraShake` systems in PostUpdate. |
 | `TrailPlugin.hpp` | `TrailPlugin` | Trail update and rendering systems. |
+| `ScenePlugin.hpp` | `ScenePlugin` | `SceneResource` for JSON scenes and prefabs. |
+| `HotReloadPlugin.hpp` | `HotReloadPlugin` | Reloads textures and scenes when their files change (desktop; in `DefaultPlugins` with `DRIFT_DEV`). |
 
 #### `include/drift/resources/` -- Resource types
 
@@ -132,17 +136,19 @@ Resources are singleton objects stored in `App`. Systems access them through `Re
 
 The `src/` directory mirrors the subsystem layout. Each subdirectory contains the `.cpp` files for one subsystem:
 
-- `src/core/` -- `App.cpp`, `AssetServer.cpp`, `Log.cpp`
-- `src/ecs/` -- `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
-- `src/renderer/` -- `RendererResource.cpp`, `RenderSnapshot.cpp`
-- `src/input/` -- `InputResource.cpp`
-- `src/audio/` -- `AudioResource.cpp`
-- `src/physics/` -- `PhysicsResource.cpp`
-- `src/sprite/` -- `SpriteResource.cpp`
-- `src/font/` -- `FontResource.cpp`
-- `src/particles/` -- `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
-- `src/tilemap/` -- `TilemapResource.cpp`
-- `src/ui/` -- `UIResource.cpp`
+- `src/core/`: `App.cpp`, `AssetServer.cpp`, `Reflect.cpp`, `Log.cpp`
+- `src/ecs/`: `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
+- `src/renderer/`: `RendererResource.cpp`, `RenderSnapshot.cpp`
+- `src/input/`: `InputResource.cpp`
+- `src/audio/`: `AudioResource.cpp`
+- `src/physics/`: `PhysicsResource.cpp`
+- `src/sprite/`: `SpriteResource.cpp`
+- `src/font/`: `FontResource.cpp`
+- `src/particles/`: `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
+- `src/tilemap/`: `TilemapResource.cpp`
+- `src/ui/`: `UIResource.cpp`, `DevInspector.cpp`, `DevPerformance.cpp`
+- `src/scene/`: `SceneResource.cpp`
+- `src/hotreload/`: `HotReload.cpp`
 
 You should not need to read or modify these files when building a game. They are linked into the `drift` static library automatically.
 
@@ -157,6 +163,7 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `flappy_bird` | State machines, collision events, sprite animation, UI |
 | `asteroid_field` | Entity spawning/despawning, physics bodies, collision handling |
 | `particle_storm` | Advanced particle system configuration, multiple emitters |
+| `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
 
 ## Typical user project structure
 

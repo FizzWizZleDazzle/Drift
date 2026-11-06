@@ -1,6 +1,7 @@
 #pragma once
 
 #include <drift/Plugin.hpp>
+#include <drift/Reflect.hpp>
 #include <drift/App.hpp>
 #include <drift/Query.hpp>
 #include <drift/Commands.hpp>
@@ -73,7 +74,10 @@ public:
     DRIFT_PLUGIN(HierarchyPlugin)
 
     void build(App& app) override {
-        app.world().registerComponent<GlobalTransform2D>("GlobalTransform2D");
+        reflect::component<GlobalTransform2D>(app.world(), "GlobalTransform2D")
+            .field("position", &GlobalTransform2D::position)
+            .field("rotation", &GlobalTransform2D::rotation)
+            .field("scale", &GlobalTransform2D::scale);
         app.postUpdate<propagateTransforms>("propagate_transforms");
     }
 };

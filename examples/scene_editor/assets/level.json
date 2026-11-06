@@ -1,0 +1,126 @@
+{
+  "drift_scene": 1,
+  "entities": [
+    {
+      "id": 0,
+      "components": {
+        "Name": { "value": "Camera" },
+        "Transform2D": { "position": [0, 0] },
+        "Camera": { "active": true, "zoom": 1.0 }
+      }
+    },
+    {
+      "id": 1,
+      "components": {
+        "Name": { "value": "Ground" },
+        "Transform2D": { "position": [0, 250], "scale": [15.625, 2] },
+        "Sprite": { "texture": "assets/ground.png", "origin": [32, 8] },
+        "RigidBody2D": { "type": "Static" },
+        "BoxCollider2D": { "halfSize": [500, 16] }
+      }
+    },
+    {
+      "id": 2,
+      "components": {
+        "Name": { "value": "Crate A" },
+        "Transform2D": { "position": [-320, 210], "scale": [1.5, 1.5] },
+        "Sprite": { "texture": "assets/crate.png", "origin": [16, 16], "zOrder": 1 },
+        "RigidBody2D": { "type": "Static" },
+        "BoxCollider2D": { "halfSize": [24, 24] }
+      }
+    },
+    {
+      "id": 3,
+      "components": {
+        "Name": { "value": "Crate B" },
+        "Transform2D": { "position": [-272, 210], "scale": [1.5, 1.5] },
+        "Sprite": { "texture": "assets/crate.png", "origin": [16, 16], "zOrder": 1 },
+        "RigidBody2D": { "type": "Static" },
+        "BoxCollider2D": { "halfSize": [24, 24] }
+      }
+    },
+    {
+      "id": 4,
+      "components": {
+        "Name": { "value": "Crate C" },
+        "Transform2D": { "position": [-296, 162], "scale": [1.5, 1.5], "rotation": 0.1 },
+        "Sprite": { "texture": "assets/crate.png", "origin": [16, 16], "zOrder": 1, "tint": [255, 220, 200, 255] },
+        "RigidBody2D": { "type": "Static" },
+        "BoxCollider2D": { "halfSize": [24, 24] }
+      }
+    },
+    {
+      "id": 5,
+      "components": {
+        "Name": { "value": "Ball" },
+        "Transform2D": { "position": [-60, -200] },
+        "Sprite": { "texture": "assets/ball.png", "origin": [12, 12], "zOrder": 2 },
+        "RigidBody2D": { "type": "Dynamic", "gravityScale": 40 },
+        "CircleCollider2D": { "radius": 12, "restitution": 0.7 },
+        "Velocity2D": { "linear": [60, 0] }
+      }
+    },
+    {
+      "id": 6,
+      "components": {
+        "Name": { "value": "Spinner" },
+        "Transform2D": { "position": [100, 20] },
+        "GlobalTransform2D": {},
+        "Sprite": { "texture": "assets/crate.png", "origin": [16, 16], "zOrder": 1 },
+        "Spin": { "speed": 1.2 }
+      }
+    },
+    {
+      "id": 7,
+      "components": {
+        "Name": { "value": "Orbit coin 1" },
+        "Parent": { "entity": 6 },
+        "Transform2D": { "position": [70, 0] },
+        "GlobalTransform2D": {},
+        "Sprite": { "texture": "assets/coin.png", "origin": [8, 8], "zOrder": 2 }
+      }
+    },
+    {
+      "id": 8,
+      "components": {
+        "Name": { "value": "Orbit coin 2" },
+        "Parent": { "entity": 6 },
+        "Transform2D": { "position": [-70, 0] },
+        "GlobalTransform2D": {},
+        "Sprite": { "texture": "assets/coin.png", "origin": [8, 8], "zOrder": 2 }
+      }
+    },
+    {
+      "id": 9,
+      "components": {
+        "Name": { "value": "Orbit coin 3" },
+        "Parent": { "entity": 6 },
+        "Transform2D": { "position": [0, 70] },
+        "GlobalTransform2D": {},
+        "Sprite": { "texture": "assets/coin.png", "origin": [8, 8], "zOrder": 2 }
+      }
+    },
+    {
+      "id": 10,
+      "components": {
+        "Name": { "value": "Sparkles" },
+        "Transform2D": { "position": [-460, -120] },
+        "ParticleEmitter": {
+          "config": {
+            "texture": "assets/coin.png",
+            "shape": "Circle",
+            "shapeRadius": 12,
+            "spawnRate": 40,
+            "lifetime": { "min": 0.6, "max": 1.4 },
+            "speed": { "min": 20, "max": 70 },
+            "sizeStart": { "min": 0.4, "max": 0.8 },
+            "sizeEnd": { "min": 0, "max": 0.1 },
+            "colorStart": [1.0, 0.9, 0.4, 1.0],
+            "colorEnd": [1.0, 0.4, 0.1, 0.0],
+            "blendMode": "Additive"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <drift/Plugin.hpp>
+#include <drift/Reflect.hpp>
 #include <drift/App.hpp>
 #include <drift/Query.hpp>
 #include <drift/Resource.hpp>
@@ -154,7 +155,14 @@ inline void trailRender(Res<TrailSystemResource> trailRes,
 class TrailPlugin : public Plugin {
 public:
     void build(App& app) override {
-        app.world().registerComponent<TrailRenderer>("TrailRenderer");
+        reflect::component<TrailRenderer>(app.world(), "TrailRenderer")
+            .field("width", &TrailRenderer::width)
+            .field("lifetime", &TrailRenderer::lifetime)
+            .field("colorStart", &TrailRenderer::colorStart)
+            .field("colorEnd", &TrailRenderer::colorEnd)
+            .field("minDistance", &TrailRenderer::minDistance)
+            .field("maxPoints", &TrailRenderer::maxPoints)
+            .field("zOrder", &TrailRenderer::zOrder);
         app.initResource<TrailSystemResource>();
         app.addSystem<trailUpdate>("trail_update", Phase::PostUpdate);
         app.addSystem<trailRender>("trail_render", Phase::Render);

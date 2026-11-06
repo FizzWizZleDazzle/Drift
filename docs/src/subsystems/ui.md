@@ -214,17 +214,20 @@ void drawUI(ResMut<UIResource> ui, Res<Fonts> fonts) {
 
 ## Dev Overlay
 
-When built with `DRIFT_DEV`, the UI resource includes a developer overlay for inspecting engine internals:
+When built with `DRIFT_DEV`, the UI resource hosts the developer overlay: an entity inspector, a performance panel, physics debug drawing and scene tools. Press F1 to show it. See [Dev Tools](dev-tools.md) for what each panel does.
 
 ```cpp
 #ifdef DRIFT_DEV
+using DevPanel = std::function<void(App&)>;
+void addDevPanel(const char* name, DevPanel draw, bool open = false);
+void setDevToggleKey(Key key);   // default Key::F1
 void devToggle();
-void devRender();
+void devRender();                // called by UIPlugin each frame
 bool devIsVisible() const;
 #endif
 ```
 
-This is handled automatically by the engine in development builds. You do not typically need to call these yourself.
+`addDevPanel` adds a window of your own to the overlay's menu; the function draws its contents with ImGui calls.
 
 ## Complete Example: Pause Menu
 

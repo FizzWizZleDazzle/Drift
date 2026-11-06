@@ -76,7 +76,7 @@ Drift exposes several CMake options you can toggle at configure time:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `DRIFT_DEV` | `ON` | Enables the developer overlay and debug tools (ImGui-based). Defines the `DRIFT_DEV=1` preprocessor macro. Turn this off for release/shipping builds. |
+| `DRIFT_DEV` | `ON` | Enables the developer overlay (entity inspector, performance and physics panels) and hot reload of textures and scenes. Defines the `DRIFT_DEV=1` preprocessor macro. Turn this off for release/shipping builds. |
 | `DRIFT_BUILD_EXAMPLES` | `ON` | Builds the example programs in the `examples/` directory. Turn this off if you only want the engine library. |
 
 To change an option, pass it with `-D` during the configure step:

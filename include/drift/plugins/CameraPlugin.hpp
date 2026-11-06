@@ -3,6 +3,7 @@
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
 #include <drift/Query.hpp>
+#include <drift/Reflect.hpp>
 #include <drift/components/Camera.hpp>
 #include <drift/components/CameraController.hpp>
 #include <drift/resources/Time.hpp>
@@ -75,8 +76,16 @@ inline void cameraShakeSystem(Res<Time> time,
 class CameraPlugin : public Plugin {
 public:
     void build(App& app) override {
-        app.world().registerComponent<CameraFollow>("CameraFollow");
-        app.world().registerComponent<CameraShake>("CameraShake");
+        reflect::component<CameraFollow>(app.world(), "CameraFollow")
+            .entity("target", &CameraFollow::target)
+            .field("smoothing", &CameraFollow::smoothing)
+            .field("offset", &CameraFollow::offset)
+            .field("deadZone", &CameraFollow::deadZone);
+        reflect::component<CameraShake>(app.world(), "CameraShake")
+            .field("intensity", &CameraShake::intensity)
+            .field("decay", &CameraShake::decay)
+            .field("frequency", &CameraShake::frequency)
+            .field("elapsed", &CameraShake::elapsed);
         app.addSystem<cameraFollowSystem>("camera_follow", Phase::PostUpdate);
         app.addSystem<cameraShakeSystem>("camera_shake", Phase::PostUpdate);
     }

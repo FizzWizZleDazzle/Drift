@@ -1,0 +1,16 @@
+{
+  "drift_scene": 1,
+  "entities": [
+    {
+      "id": 0,
+      "components": {
+        "Name": { "value": "Coin" },
+        "Transform2D": {},
+        "Sprite": { "texture": "assets/coin.png", "origin": [8, 8], "zOrder": 3 },
+        "RigidBody2D": { "type": "Dynamic", "gravityScale": 40 },
+        "CircleCollider2D": { "radius": 8, "restitution": 0.5 },
+        "Velocity2D": {}
+      }
+    }
+  ]
+}

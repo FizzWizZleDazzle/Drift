@@ -1,6 +1,7 @@
 #pragma once
 
 #include <drift/Plugin.hpp>
+#include <drift/Reflect.hpp>
 #include <drift/App.hpp>
 #include <drift/Query.hpp>
 #include <drift/components/Sprite.hpp>
@@ -46,7 +47,16 @@ inline void spriteAnimationUpdate(Res<Time> time,
 class SpriteAnimationPlugin : public Plugin {
 public:
     void build(App& app) override {
-        app.world().registerComponent<SpriteAnimator>("SpriteAnimator");
+        reflect::type<AnimationClip>("AnimationClip")
+            .field("frames", &AnimationClip::frames)
+            .field("frameDuration", &AnimationClip::frameDuration)
+            .field("looping", &AnimationClip::looping);
+        reflect::component<SpriteAnimator>(app.world(), "SpriteAnimator")
+            .field("clips", &SpriteAnimator::clips)
+            .field("currentClip", &SpriteAnimator::currentClip)
+            .field("currentFrame", &SpriteAnimator::currentFrame)
+            .field("elapsed", &SpriteAnimator::elapsed)
+            .field("playing", &SpriteAnimator::playing);
         app.addSystem<spriteAnimationUpdate>("sprite_animation_update", Phase::PostUpdate);
     }
     DRIFT_PLUGIN(SpriteAnimationPlugin)

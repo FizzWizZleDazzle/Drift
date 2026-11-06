@@ -14,6 +14,10 @@
 #include <drift/plugins/SpriteAnimationPlugin.hpp>
 #include <drift/plugins/CameraPlugin.hpp>
 #include <drift/plugins/TrailPlugin.hpp>
+#include <drift/plugins/ScenePlugin.hpp>
+#ifdef DRIFT_DEV
+#include <drift/plugins/HotReloadPlugin.hpp>
+#endif
 
 namespace drift {
 
@@ -33,6 +37,10 @@ public:
         app.addPlugin<SpriteAnimationPlugin>();
         app.addPlugin<CameraPlugin>();
         app.addPlugin<TrailPlugin>();
+        app.addPlugin<ScenePlugin>();
+#ifdef DRIFT_DEV
+        app.addPlugin<HotReloadPlugin>();
+#endif
     }
 };
 

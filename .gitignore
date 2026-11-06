@@ -13,3 +13,4 @@ compile_commands.json
 bin/
 obj/
 docs/book/
+examples/scene_editor/level.json

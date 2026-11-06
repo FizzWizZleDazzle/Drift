@@ -13,6 +13,8 @@ A lightweight 2D game engine written in C++20, built on a Bevy-inspired Entity C
 - **Tilemap rendering** -- Tiled JSON map loading and rendering
 - **Parallel scheduler** -- Automatic multi-threaded system dispatch based on dependency analysis
 - **ImGui integration** -- Built-in developer overlay via Dear ImGui
+- **Scenes and prefabs**: Save and load entities as JSON through component reflection; spawn prefabs with per-copy overrides
+- **Dev tools**: In-game entity inspector, performance panel, physics debug drawing, and hot reload of textures and scenes
 
 ## Quick Start
 
@@ -90,6 +92,7 @@ target_link_libraries(my_game PRIVATE drift)
 | `asteroid_field` | Physics bodies, collision handling, trail renderers, camera shake |
 | `particle_storm` | Advanced particle configuration, multiple emitters, emission shapes |
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
+| `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
 
 Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`.
 

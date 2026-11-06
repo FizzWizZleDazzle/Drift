@@ -12,6 +12,8 @@
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** — Tiled JSON map loading and rendering
 - **ImGui integration** — Built-in debug UI via Dear ImGui
+- **Scenes and prefabs**: Save and load entities as JSON through component reflection; spawn prefabs with per-copy overrides
+- **Dev tools**: In-game entity inspector, performance panel, physics debug drawing, and hot reload of textures and scenes
 - **Parallel scheduler** — Automatic multi-threaded system dispatch based on dependency analysis
 
 ## Architecture Overview

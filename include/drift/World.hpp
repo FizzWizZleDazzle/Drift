@@ -7,7 +7,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <new>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace drift {
 
@@ -17,6 +21,15 @@ class App;
 struct QueryIter {
     void* _internal = nullptr;
     int32_t count = 0;
+};
+
+// Constructor, destructor, copy and move for component types that are not
+// plain bytes (a std::vector member, for example).
+struct ComponentLifecycle {
+    void (*construct)(void* p) = nullptr;
+    void (*destroy)(void* p) = nullptr;
+    void (*copy)(void* dst, const void* src) = nullptr;   // dst already constructed
+    void (*move)(void* dst, void* src) = nullptr;         // dst already constructed
 };
 
 // ECS World wrapper around flecs
@@ -31,6 +44,7 @@ public:
     // Components
     ComponentId registerComponent(const char* name, size_t size, size_t alignment);
     ComponentId lookupComponent(const char* name) const;
+    void setComponentLifecycle(ComponentId component, const ComponentLifecycle& lifecycle);
 
     // Entities
     EntityId createEntity();
@@ -43,11 +57,21 @@ public:
     const void* getComponent(EntityId entity, ComponentId component) const;
     void* getComponentMut(EntityId entity, ComponentId component);
     bool hasComponent(EntityId entity, ComponentId component) const;
+    // Every entity that has `component`.
+    std::vector<EntityId> entitiesWith(ComponentId component);
 
     // Typed component helpers
     template<typename T>
     ComponentId registerComponent(const char* name) {
         ComponentId id = registerComponent(name, sizeof(T), alignof(T));
+        if constexpr (!std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>) {
+            ComponentLifecycle lc;
+            lc.construct = [](void* p) { new (p) T(); };
+            lc.destroy = [](void* p) { static_cast<T*>(p)->~T(); };
+            lc.copy = [](void* d, const void* s) { *static_cast<T*>(d) = *static_cast<const T*>(s); };
+            lc.move = [](void* d, void* s) { *static_cast<T*>(d) = std::move(*static_cast<T*>(s)); };
+            setComponentLifecycle(id, lc);
+        }
         registry_.add<T>(id);
         registry_.addByName(name, id);
         return id;

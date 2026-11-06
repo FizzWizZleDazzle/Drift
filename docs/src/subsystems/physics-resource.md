@@ -263,3 +263,27 @@ The default gravity is `{0, 9.8}` (downward in screen coordinates where Y increa
 ```cpp
 int32_t bodyCount() const;  // total active physics bodies
 ```
+
+## Debug Drawing
+
+```cpp
+void setDebugDraw(const PhysicsDebugDraw& options);
+const PhysicsDebugDraw& debugDraw() const;
+void drawDebug(RendererResource& renderer) const;
+```
+
+With `enabled` set, `PhysicsPlugin` draws Box2D's view of the world every frame in world space, above the scene: collider outlines (filled for solid bodies), and optionally bounding boxes, contact points and normals, and joints.
+
+```cpp
+struct PhysicsDebugDraw {
+    bool enabled = false;
+    bool shapes = true;
+    bool aabbs = false;
+    bool contacts = false;
+    bool joints = false;
+};
+
+physics->setDebugDraw({.enabled = true, .contacts = true});
+```
+
+`drawDebug` queues the same shapes on the renderer yourself, for example into a different layer. In development builds the Physics panel of the [dev overlay](dev-tools.md) toggles these options.
