@@ -11,6 +11,8 @@ drift/
     plugins/               <-- Plugin headers (header-only)
     resources/             <-- Resource types (singletons)
     particles/             <-- Particle system types
+    gameplay/              <-- Gameplay toolkit: tweens, timers, input actions, save data, spatial hash, pathfinding
+    math/                  <-- Vector helpers, intersection tests, random numbers, noise
   src/                     <-- implementation files (not public)
     core/                  <-- App, AssetServer, Log
     ecs/                   <-- World, Commands, ScriptSystem
@@ -26,6 +28,9 @@ drift/
     particles/             <-- ParticleResource (legacy), ParticleSystem (ECS-based)
     tilemap/               <-- TilemapResource
     ui/                    <-- UIResource
+    gameplay/              <-- Gameplay toolkit implementations
+    math/                  <-- Noise
+  tests/                   <-- unit tests (run with ctest)
   examples/                <-- example programs
     hello_sprites/
     fireball/
@@ -33,6 +38,7 @@ drift/
     asteroid_field/
     particle_storm/
     render_showcase/
+    toolkit/
   docs/                    <-- this documentation (mdBook)
   CMakeLists.txt           <-- build configuration
 ```
@@ -102,6 +108,12 @@ Plugins are header-only. Each one registers resources and systems in its `build(
 | `SpriteAnimationPlugin.hpp` | `SpriteAnimationPlugin` | Updates `Sprite::srcRect` from `SpriteAnimator` each frame. |
 | `CameraPlugin.hpp` | `CameraPlugin` | `CameraFollow` and `CameraShake` systems in PostUpdate. |
 | `TrailPlugin.hpp` | `TrailPlugin` | Trail update and rendering systems. |
+| `TimerPlugin.hpp` | `TimerPlugin` | Ticks `Timer` components and sends `TimerFinished` events. |
+| `InputActionsPlugin.hpp` | `InputActionsPlugin` | `InputActions` resource: named actions and axes over `InputResource`. |
+| `SpatialPlugin.hpp` | `SpatialPlugin` | `SpatialIndex` resource rebuilt from entities with `SpatialBounds`. |
+| `TweenPlugin.hpp` | `TweenPlugin` | `Tweens` resource, advanced in PostUpdate; `TweenFinished` events. |
+| `YSortPlugin.hpp` | `YSortPlugin` | Sets `Sprite::zOrder` from y for entities with `YSort`. |
+| `SavePlugin.hpp` | `SavePlugin` | `SaveData` opened on the per-user save directory. Not in `DefaultPlugins`; it needs your game's name. |
 
 #### `include/drift/resources/` -- Resource types
 
@@ -128,6 +140,29 @@ Resources are singleton objects stored in `App`. Systems access them through `Re
 | `EmitterConfig.hpp` | `EmitterConfig` | Full emitter configuration: emission shapes, bursts, drag, rotation, local/world space, pre-warm. |
 | `ParticlePool.hpp` | `ParticlePool` | SoA (Structure of Arrays) compact storage with O(1) swap-remove. |
 
+#### `include/drift/gameplay/` -- Gameplay toolkit
+
+Each header stands alone; use the ones your game needs. See the Gameplay chapter.
+
+| Header | Types | Description |
+|--------|-------|-------------|
+| `Easing.hpp` | `Ease`, `ease()` | Easing curves (Penner set, Back, Elastic, Bounce, Spring). |
+| `Tween.hpp` | `Tweens`, `TweenBuilder`, `TweenFinished` | Animate transforms, tint, alpha, camera zoom, or any float. |
+| `Timer.hpp` | `Timer`, `Cooldown`, `TimerFinished` | One-shot and repeating timers, cooldowns. |
+| `InputActions.hpp` | `InputActions`, `InputBinding` | Named actions and axes, rebinding, JSON round trip. |
+| `SaveData.hpp` | `SaveData` | Persistent JSON key-value store in the per-user directory. |
+| `SpatialHash.hpp` | `SpatialHash` | Uniform-grid neighbour and area queries. |
+| `Pathfinding.hpp` | `NavGrid`, `findPath` | Grid A* with weights and diagonal rules. |
+
+#### `include/drift/math/` -- Math utilities
+
+| Header | Types | Description |
+|--------|-------|-------------|
+| `Vector.hpp` | free functions | `lerp`, `clamp`, `cross`, `perp`, `rotate`, `angle`, `moveTowards`, `smoothDamp`, `approx`, and more. |
+| `Intersect.hpp` | `Circle`, `Segment`, `RayHit` | Overlap and intersection tests between rects, circles, segments and rays. |
+| `Random.hpp` | `Rng` | Seeded PCG32 generator: ranges, weighted pick, shuffle. |
+| `Noise.hpp` | `Noise` | Seeded 2D value, Perlin and simplex noise with fBm. |
+
 ### `src/` -- Implementation files
 
 The `src/` directory mirrors the subsystem layout. Each subdirectory contains the `.cpp` files for one subsystem:
@@ -143,6 +178,8 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 - `src/particles/` -- `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
 - `src/tilemap/` -- `TilemapResource.cpp`
 - `src/ui/` -- `UIResource.cpp`
+- `src/gameplay/` -- `Tween.cpp`, `InputActions.cpp`, `SaveData.cpp`, `SpatialHash.cpp`, `Pathfinding.cpp`
+- `src/math/` -- `Noise.cpp`
 
 You should not need to read or modify these files when building a game. They are linked into the `drift` static library automatically.
 
@@ -157,6 +194,7 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `flappy_bird` | State machines, collision events, sprite animation, UI |
 | `asteroid_field` | Entity spawning/despawning, physics bodies, collision handling |
 | `particle_storm` | Advanced particle system configuration, multiple emitters |
+| `toolkit` | Tweens, timers, input actions with rebinding, A* on a noise-generated grid, spatial queries, Y-sort, save data |
 
 ## Typical user project structure
 

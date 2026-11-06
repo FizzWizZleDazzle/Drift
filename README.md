@@ -11,6 +11,7 @@ A lightweight 2D game engine written in C++20, built on a Bevy-inspired Entity C
 - **Particle system** -- Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** -- Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** -- Tiled JSON map loading and rendering
+- **Gameplay toolkit**: tweens and easing, timers, rebindable input actions, save data, grid A* pathfinding, spatial hash queries, Y-sorting, seeded random numbers and noise
 - **Parallel scheduler** -- Automatic multi-threaded system dispatch based on dependency analysis
 - **ImGui integration** -- Built-in developer overlay via Dear ImGui
 
@@ -90,8 +91,9 @@ target_link_libraries(my_game PRIVATE drift)
 | `asteroid_field` | Physics bodies, collision handling, trail renderers, camera shake |
 | `particle_storm` | Advanced particle configuration, multiple emitters, emission shapes |
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
+| `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, Y-sort, save data |
 
-Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`.
+Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`. Run the unit tests with `ctest --test-dir build`.
 
 ## Technology
 

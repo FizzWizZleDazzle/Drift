@@ -44,9 +44,19 @@
 - [UI](subsystems/ui.md)
 - [Asset Server](subsystems/asset-server.md)
 
+# Gameplay
+
+- [Tweening](gameplay/tweening.md)
+- [Timers](gameplay/timers.md)
+- [Input Actions](gameplay/input-actions.md)
+- [Save Data](gameplay/save-data.md)
+- [Spatial Queries, Pathfinding and Y-Sort](gameplay/spatial-and-pathfinding.md)
+
 # Math
 
 - [Types](math/types.md)
+- [Vector Helpers and Intersections](math/utilities.md)
+- [Random Numbers and Noise](math/random-and-noise.md)
 
 # Examples
 
@@ -56,6 +66,7 @@
 - [Fireball](examples/fireball.md)
 - [Particle Storm](examples/particle-storm.md)
 - [Render Showcase](examples/render-showcase.md)
+- [Gameplay Toolkit](examples/toolkit.md)
 
 # Reference
 

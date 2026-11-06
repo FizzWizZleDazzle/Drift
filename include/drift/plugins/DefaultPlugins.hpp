@@ -14,6 +14,11 @@
 #include <drift/plugins/SpriteAnimationPlugin.hpp>
 #include <drift/plugins/CameraPlugin.hpp>
 #include <drift/plugins/TrailPlugin.hpp>
+#include <drift/plugins/TweenPlugin.hpp>
+#include <drift/plugins/TimerPlugin.hpp>
+#include <drift/plugins/InputActionsPlugin.hpp>
+#include <drift/plugins/SpatialPlugin.hpp>
+#include <drift/plugins/YSortPlugin.hpp>
 
 namespace drift {
 
@@ -33,6 +38,11 @@ public:
         app.addPlugin<SpriteAnimationPlugin>();
         app.addPlugin<CameraPlugin>();
         app.addPlugin<TrailPlugin>();
+        app.addPlugin<TimerPlugin>();
+        app.addPlugin<InputActionsPlugin>();
+        app.addPlugin<SpatialPlugin>();
+        app.addPlugin<TweenPlugin>();
+        app.addPlugin<YSortPlugin>();
     }
 };
 

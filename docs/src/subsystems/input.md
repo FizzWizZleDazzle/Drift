@@ -6,6 +6,8 @@ The `InputResource` provides keyboard, mouse, and gamepad input. It processes SD
 
 **Plugin:** `InputPlugin` (included in `DefaultPlugins`)
 
+For named actions that players can rebind ("jump", "move") across keyboard, mouse and gamepad, use [Input Actions](../gameplay/input-actions.md) on top of this resource.
+
 ## Accessing Input in Systems
 
 `InputResource` is a read-only resource in most gameplay systems. Access it via `Res<InputResource>`.
