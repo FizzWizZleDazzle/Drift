@@ -99,14 +99,14 @@ struct GlobalTransform2D {
 | `compose(parent, local)` | Computes a child's world transform given the parent's `GlobalTransform2D` and the child's local `Transform2D`. Handles rotation, scale, and position correctly. |
 | `from(transform)` | Creates a `GlobalTransform2D` directly from a `Transform2D` (used for root entities with no parent). |
 
-You generally do not set `GlobalTransform2D` yourself -- the `HierarchyPlugin` computes it automatically.
+You do not add or set `GlobalTransform2D` yourself: the `HierarchyPlugin` adds it to every entity in a tree, root included, and keeps it up to date. Sprites, text and lights in a tree render at their `GlobalTransform2D`.
 
 ## Plugin
 
 The `HierarchyPlugin` is included in `DefaultPlugins`. It:
 
 1. Registers the `GlobalTransform2D` component.
-2. Adds a **transform propagation** system in `PostUpdate` that performs a BFS traversal from root entities (those without a `Parent` component) down through the tree, composing `GlobalTransform2D` at each level.
+2. Adds a **transform propagation** system in `PostUpdate` that walks each tree from its root (an entity with `Children` and no `Parent`) and composes `GlobalTransform2D` at each level.
 
 If you are not using `DefaultPlugins`, add it manually:
 

@@ -197,20 +197,9 @@ void setupUI(ResMut<UIResource> ui) {
 }
 ```
 
-### Custom Fonts
+### Fonts
 
-Push a custom font for subsequent widget rendering:
-
-```cpp
-void drawUI(ResMut<UIResource> ui, Res<Fonts> fonts) {
-    ui->pushFont(fonts->heading);
-    ui->label("Title", Vec2{100, 50});
-    ui->popFont();
-
-    // Back to default font
-    ui->label("Body text", Vec2{100, 100});
-}
-```
+Widgets draw with Dear ImGui's built-in font. For game text in your own fonts (HUD labels, dialogue, scores), use `FontResource::drawText` or the `Text` component on `ScreenLayer`; see [Fonts](fonts.md).
 
 ## Dev Overlay
 

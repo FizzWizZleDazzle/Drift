@@ -25,8 +25,6 @@ public:
 
     // Theming
     void setGameTheme(const UITheme& theme);
-    void pushFont(FontHandle font);
-    void popFont();
 
     // Widgets
     bool button(const char* label, Rect rect);

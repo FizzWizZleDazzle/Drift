@@ -10,9 +10,11 @@
 
 namespace drift {
 
-// Propagate transforms: BFS from root entities (Without<Parent>), composing down the tree
+// Propagate transforms: depth-first from root entities (Without<Parent>) that
+// have Children, composing down the tree. Every entity in a tree, root
+// included, gets a GlobalTransform2D; nothing has to be added by hand.
 inline void propagateTransforms(
-    QueryMut<Transform2D, GlobalTransform2D, Without<Parent>> roots,
+    Query<Transform2D, Children, Without<Parent>> roots,
     ResMut<WorldResource> worldRes)
 {
     auto& world = worldRes->world();
@@ -23,26 +25,24 @@ inline void propagateTransforms(
 
     if (childrenId == 0 || globalTransformId == 0) return;
 
-    // Update root entities: GlobalTransform2D = Transform2D
-    roots.iterWithEntity([&](EntityId id, Transform2D& t, GlobalTransform2D& gt) {
-        gt = GlobalTransform2D::from(t);
-    });
-
-    // BFS propagation
-    // Use a simple iterative approach: process entities that have Children
     struct StackEntry { EntityId entity; GlobalTransform2D parentGT; };
     std::vector<StackEntry> stack;
+    std::vector<std::pair<EntityId, GlobalTransform2D>> rootGTs;
 
-    roots.iterWithEntity([&](EntityId id, Transform2D&, GlobalTransform2D& gt) {
-        const auto* ch = static_cast<const Children*>(world.getComponent(id, childrenId));
-        if (ch) {
-            for (int i = 0; i < ch->count; ++i) {
-                if (world.isAlive(ch->ids[i])) {
-                    stack.push_back({ch->ids[i], gt});
-                }
-            }
-        }
+    // Collect first: setting components while the query iterates would
+    // change the tables under it.
+    roots.iterWithEntity([&](EntityId id, const Transform2D& t, const Children&) {
+        rootGTs.push_back({id, GlobalTransform2D::from(t)});
     });
+
+    for (auto& [id, gt] : rootGTs) {
+        world.setComponent(id, globalTransformId, &gt, sizeof(gt));
+        const auto* ch = static_cast<const Children*>(world.getComponent(id, childrenId));
+        if (!ch) continue;
+        for (int i = 0; i < ch->count; ++i) {
+            if (world.isAlive(ch->ids[i])) stack.push_back({ch->ids[i], gt});
+        }
+    }
 
     while (!stack.empty()) {
         auto [entityId, parentGT] = stack.back();

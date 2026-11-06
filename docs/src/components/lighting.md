@@ -54,7 +54,7 @@ A cone of light. It has every `PointLight2D` field plus the cone:
 cmd.entity(player).insert(SpotLight2D{.radius = 450.f, .angle = 0.6f, .softness = 0.3f});
 ```
 
-Lights follow the entity's `GlobalTransform2D` when it has one, so a light can be the child of a moving entity (see [Hierarchy](hierarchy.md)). The root of that hierarchy needs a `GlobalTransform2D` component for its children's transforms to be computed.
+Lights follow the entity's `GlobalTransform2D` when it has one, so a light can be the child of a moving entity (see [Hierarchy](hierarchy.md)).
 
 ## LightOccluder2D
 

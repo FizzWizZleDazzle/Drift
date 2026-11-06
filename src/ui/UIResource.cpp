@@ -72,7 +72,6 @@ struct UIResource::Impl {
     Anchor currentAnchor = Anchor::TopLeft;
     int widgetWindowId = 0;
     int panelCounter = 0;
-    std::vector<FontHandle> fontStack;
     ImVec2 displayOffset = ImVec2(0.f, 0.f);
     ImVec2 framebufferSize = ImVec2(0.f, 0.f);
 
@@ -243,18 +242,6 @@ void UIResource::setGameTheme(const UITheme& theme) {
     if (impl_->initialised) {
         applyTheme(impl_->theme);
     }
-}
-
-void UIResource::pushFont(FontHandle font) {
-    impl_->fontStack.push_back(font);
-    // NOTE: Proper implementation would call ImGui::PushFont with the
-    // ImFont* associated with this FontHandle.
-}
-
-void UIResource::popFont() {
-    if (impl_->fontStack.empty()) return;
-    impl_->fontStack.pop_back();
-    // NOTE: Would call ImGui::PopFont() here once ImFont integration is done.
 }
 
 // Widgets
