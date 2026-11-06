@@ -10,7 +10,7 @@
 - **Box2D physics** — Full 2D rigid body physics with collision events and sensors
 - **Particle system** — Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support
-- **Tilemap rendering** — Tiled JSON map loading and rendering
+- **Tilemaps**: Tiled and LDtk levels with chunked rendering, parallax, animated tiles, autotiling, merged Box2D colliders, and object spawning
 - **ImGui integration** — Built-in debug UI via Dear ImGui
 - **Parallel scheduler** — Automatic multi-threaded system dispatch based on dependency analysis
 
@@ -55,4 +55,4 @@ int main() {
 | Fonts | stb_truetype |
 | Images | stb_image |
 | Spritesheets | cute_aseprite |
-| Tilemaps | nlohmann/json (Tiled format) |
+| Tilemaps | nlohmann/json (Tiled and LDtk formats) |

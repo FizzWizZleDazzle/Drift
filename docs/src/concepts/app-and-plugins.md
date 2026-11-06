@@ -154,7 +154,7 @@ app.addPlugins<GamePlugins>();
 | `SpritePlugin` | Sprite component registration and rendering |
 | `FontPlugin` | Font loading and text rendering |
 | `ParticlePlugin` | Particle system management |
-| `TilemapPlugin` | Tile-based map rendering |
+| `TilemapPlugin` | Tiled and LDtk maps: drawing, colliders, object spawning |
 | `UIPlugin` | Immediate-mode UI (ImGui) |
 | `HierarchyPlugin` | Parent/child transforms, cascading despawn |
 | `SpriteAnimationPlugin` | Frame-based sprite animation |

@@ -141,6 +141,10 @@ set(DRIFT_SOURCES
     src/particles/ParticleResource.cpp
     src/particles/ParticleSystem.cpp
     src/tilemap/TilemapResource.cpp
+    src/tilemap/TilemapCommon.cpp
+    src/tilemap/TiledLoader.cpp
+    src/tilemap/LdtkLoader.cpp
+    src/tilemap/TilemapPlugin.cpp
     src/ui/UIResource.cpp
 )
 
@@ -251,4 +255,7 @@ if(DRIFT_BUILD_EXAMPLES)
 
     add_executable(render_showcase examples/render_showcase/main.cpp)
     target_link_libraries(render_showcase PRIVATE drift)
+
+    add_executable(tilemap examples/tilemap/main.cpp)
+    target_link_libraries(tilemap PRIVATE drift)
 endif()

@@ -56,6 +56,7 @@
 - [Fireball](examples/fireball.md)
 - [Particle Storm](examples/particle-storm.md)
 - [Render Showcase](examples/render-showcase.md)
+- [Tilemap](examples/tilemap.md)
 
 # Reference
 
