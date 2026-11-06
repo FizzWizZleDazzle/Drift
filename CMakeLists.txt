@@ -10,6 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(DRIFT_DEV "Enable dev overlay and tools" ON)
 option(DRIFT_BUILD_EXAMPLES "Build example programs" ON)
+option(DRIFT_BUILD_TESTS "Build engine tests" ${PROJECT_IS_TOP_LEVEL})
 option(DRIFT_BACKEND_GL "Build the OpenGL / WebGL2 renderer backend" ON)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DriftShaders.cmake)
@@ -71,6 +72,13 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 
+# dr_libs (dr_wav, dr_mp3 for audio decoding)
+FetchContent_Declare(
+    dr_libs
+    GIT_REPOSITORY https://github.com/mackron/dr_libs.git
+    GIT_TAG        35b5c392cc15456736c440a68dbe073178bbffe0
+)
+
 # nlohmann/json (for Tiled JSON)
 FetchContent_Declare(
     json
@@ -92,6 +100,12 @@ endif()
 FetchContent_GetProperties(cute_aseprite)
 if(NOT cute_aseprite_POPULATED)
     FetchContent_Populate(cute_aseprite)
+endif()
+
+# dr_libs - header-only
+FetchContent_GetProperties(dr_libs)
+if(NOT dr_libs_POPULATED)
+    FetchContent_Populate(dr_libs)
 endif()
 
 # imgui - build as a static library
@@ -138,6 +152,8 @@ set(DRIFT_SOURCES
     src/renderer/RendererResource.cpp
     src/input/InputResource.cpp
     src/audio/AudioResource.cpp
+    src/audio/Decoder.cpp
+    src/audio/Mixer.cpp
     src/physics/PhysicsResource.cpp
     src/sprite/SpriteResource.cpp
     src/font/FontResource.cpp
@@ -211,6 +227,7 @@ target_include_directories(drift PRIVATE
     ${DRIFT_GEN_DIR}
     ${stb_SOURCE_DIR}
     ${cute_aseprite_SOURCE_DIR}
+    ${dr_libs_SOURCE_DIR}
 )
 
 target_link_libraries(drift PUBLIC
@@ -280,4 +297,19 @@ if(DRIFT_BUILD_EXAMPLES)
     else()
         drift_web_app(render_showcase ASSETS examples/render_showcase/assets)
     endif()
+
+    add_executable(audio examples/audio/main.cpp)
+    target_link_libraries(audio PRIVATE drift)
+    drift_web_app(audio)
+endif()
+
+# ---------- Tests ----------
+if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
+    enable_testing()
+    add_executable(drift_audio_tests tests/audio_tests.cpp)
+    target_link_libraries(drift_audio_tests PRIVATE drift)
+    target_include_directories(drift_audio_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_definitions(drift_audio_tests PRIVATE
+        DRIFT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    add_test(NAME audio COMMAND drift_audio_tests)
 endif()

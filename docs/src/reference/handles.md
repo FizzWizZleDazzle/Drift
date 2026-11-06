@@ -70,6 +70,7 @@ Each resource category has a tag struct and a corresponding type alias:
 | `AnimationHandle` | `AnimationTag` | Sprite animation clip data |
 | `SoundHandle` | `SoundTag` | Loaded audio samples |
 | `PlayingSoundHandle` | `PlayingSoundTag` | A currently-playing sound instance (for stopping/querying) |
+| `BusHandle` | `BusTag` | An audio mixer bus (declared in `AudioResource.hpp`) |
 | `FontHandle` | `FontTag` | Loaded bitmap or TTF fonts |
 | `TilemapHandle` | `TilemapTag` | Tile map data |
 | `EmitterHandle` | `EmitterTag` | Legacy particle emitter instances (handle-based API) |
@@ -95,7 +96,7 @@ void startup(ResMut<GameState> game, ResMut<AssetServer> assets) {
 
 ```cpp
 if (game->jumpSound.valid()) {
-    audio->playSound(game->jumpSound, 0.8f);
+    audio->playSound(game->jumpSound, {.volume = 0.8f});
 }
 ```
 

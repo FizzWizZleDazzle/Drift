@@ -11,6 +11,7 @@
 - **Particle system** — Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** — Tiled JSON map loading and rendering
+- **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
 - **ImGui integration** — Built-in debug UI via Dear ImGui
 - **Parallel scheduler** — Automatic multi-threaded system dispatch based on dependency analysis
 
@@ -54,5 +55,6 @@ int main() {
 | Debug UI | [Dear ImGui](https://github.com/ocornut/imgui) |
 | Fonts | stb_truetype |
 | Images | stb_image |
+| Audio decoding | stb_vorbis, dr_wav, dr_mp3 |
 | Spritesheets | cute_aseprite |
 | Tilemaps | nlohmann/json (Tiled format) |

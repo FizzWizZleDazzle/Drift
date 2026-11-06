@@ -19,7 +19,7 @@ drift/
       gl/                  <-- OpenGL 3.3 / WebGL2 backend
       shaders/             <-- built-in shaders and the shader prelude
     input/                 <-- InputResource
-    audio/                 <-- AudioResource
+    audio/                 <-- AudioResource, mixer, decoders
     physics/               <-- PhysicsResource
     sprite/                <-- SpriteResource
     font/                  <-- FontResource
@@ -33,6 +33,8 @@ drift/
     asteroid_field/
     particle_storm/
     render_showcase/
+    audio/
+  tests/                   <-- engine tests (ctest)
   cmake/                   <-- drift_add_shaders, drift_web_app, web page template
   docs/                    <-- this documentation (mdBook)
   CMakeLists.txt           <-- build configuration
@@ -82,6 +84,7 @@ Components are plain structs attached to entities. They carry data but no behavi
 | `SpriteAnimator.hpp` | `SpriteAnimator` | Sprite sheet animation with `AnimationClip` definitions. |
 | `CameraController.hpp` | `CameraShake`, `CameraFollow` | Camera shake (trigger with magnitude, auto-decay) and smooth follow (target entity, smoothing, dead zone). |
 | `TrailRenderer.hpp` | `TrailRenderer` | Trail rendering with width, lifetime, color lerp, and minimum distance. |
+| `AudioSource.hpp` | `AudioSource`, `AudioListener` | A sound played from an entity, optionally positional, and the entity it is heard from. |
 
 #### `include/drift/plugins/` -- Plugins
 
@@ -92,7 +95,7 @@ Plugins are header-only. Each one registers resources and systems in its `build(
 | `DefaultPlugins.hpp` | `DefaultPlugins` | All plugins below as a group. Also provides `MinimalPlugins` (input + renderer only). |
 | `RendererPlugin.hpp` | `RendererPlugin` | `RendererResource` and the frame begin/end systems. |
 | `InputPlugin.hpp` | `InputPlugin` | `InputResource` for keyboard, mouse, and gamepad state. |
-| `AudioPlugin.hpp` | `AudioPlugin` | `AudioResource` for sound playback. |
+| `AudioPlugin.hpp` | `AudioPlugin` | `AudioResource`, the `AudioSource`/`AudioListener` components and the system that plays and positions them. |
 | `PhysicsPlugin.hpp` | `PhysicsPlugin` | `PhysicsResource`, physics step system, body sync, collision events. |
 | `SpritePlugin.hpp` | `SpritePlugin` | `SpriteResource`, sprite rendering extraction. |
 | `FontPlugin.hpp` | `FontPlugin` | `FontResource` for text rendering. |
@@ -113,7 +116,7 @@ Resources are singleton objects stored in `App`. Systems access them through `Re
 | `Time.hpp` | `Time` | `delta` (float, seconds), `elapsed` (double, seconds), `frame` (uint64_t) |
 | `RendererResource.hpp` | `RendererResource` | Textures, sprites, shapes, cameras, render targets, shaders, post effects. |
 | `InputResource.hpp` | `InputResource` | `keyHeld()`, `keyPressed()`, `keyReleased()`, `mousePosition()`, `mouseButtonHeld()`, `mouseWheelDelta()` |
-| `AudioResource.hpp` | `AudioResource` | Sound playback and mixing. |
+| `AudioResource.hpp` | `AudioResource` | Sound loading (WAV, OGG, MP3), playback, mixer buses, music. |
 | `PhysicsResource.hpp` | `PhysicsResource` | Box2D world wrapper, body creation, raycasting, contact queries. |
 | `SpriteResource.hpp` | `SpriteResource` | Sprite sheet and texture management internals. |
 | `FontResource.hpp` | `FontResource` | Font atlas and text rendering internals. |
@@ -137,7 +140,7 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 - `src/ecs/` -- `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
 - `src/renderer/` -- `RendererResource.cpp`, `RenderSnapshot.cpp`
 - `src/input/` -- `InputResource.cpp`
-- `src/audio/` -- `AudioResource.cpp`
+- `src/audio/` -- `AudioResource.cpp`, `Mixer.cpp` (voices, buses, music), `Decoder.cpp` (WAV, OGG, MP3)
 - `src/physics/` -- `PhysicsResource.cpp`
 - `src/sprite/` -- `SpriteResource.cpp`
 - `src/font/` -- `FontResource.cpp`
@@ -158,6 +161,7 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `flappy_bird` | State machines, collision events, sprite animation, UI |
 | `asteroid_field` | Entity spawning/despawning, physics bodies, collision handling |
 | `particle_storm` | Advanced particle system configuration, multiple emitters |
+| `audio` | Spatial audio sources, mixer buses, music crossfades and playlists |
 
 ## Typical user project structure
 
