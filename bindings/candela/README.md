@@ -18,7 +18,7 @@ Build the native library once, from this directory:
 Then write a game in a folder inside the package, for example `mygame/game.cdl`, and run it:
 
 ```rust
-import "../src/main.cdl";
+import "../src/main.cdl" { start, config, vec2, rgb, Key };
 
 fn main() {
     let app = start(config("Hello", 640, 360));
@@ -37,8 +37,9 @@ candela run game.cdl
 ```
 
 `app.frame()` presents the previous frame, then polls input and runs the
-engine for the next one; it returns `false` once the window closes. Import the
-package bare, as above, so enum variants such as `Key::Left` resolve.
+engine for the next one; it returns `false` once the window closes. List the
+names you use in the import's braces, as above; a type brings its methods and
+variants along. Requires candela 0.1.6 or newer.
 
 ## What it covers
 

@@ -9,7 +9,9 @@
 // thousands of frames a second.
 
 import "std/assert" as assert;
-import "../examples/coin_dash/main.cdl";
+import "std/fs";
+import "../src/main.cdl" { Key, config, start, vec2 };
+import "../examples/coin_dash/main.cdl" { setup, update };
 
 fn main() {
     let dir = ".";
@@ -82,11 +84,11 @@ fn main() {
         update(app, g);
     }
     print("moved", moved, "collected", collected, "hit", hit, "restarted", restarted);
-    assert::assert_true(moved);
-    assert::assert_true(collected);
-    assert::assert_true(hit);
-    assert::assert_true(restarted);
-    assert::assert_eq(g.save.get_int("best", 0), 1);
+    assert::is_true(moved);
+    assert::is_true(collected);
+    assert::is_true(hit);
+    assert::is_true(restarted);
+    assert::eq(g.save.get_int("best", 0), 1);
     fs::delete(save_path);
     print("coin dash: ok");
 }

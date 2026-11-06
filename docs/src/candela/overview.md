@@ -28,14 +28,14 @@ cd bindings/candela
 ./build-native.sh
 ```
 
-Configuring the whole repository with `-DDRIFT_BUILD_CANDELA=ON` does the same and also registers the candela tests with `ctest`. You need the candela toolchain (`candela --version`) to run games and tests, but not to build the library.
+Configuring the whole repository with `-DDRIFT_BUILD_CANDELA=ON` does the same and also registers the candela tests with `ctest`. You need candela 0.1.6 or newer (`candela --version`) to run games and tests, but not to build the library.
 
 ## Quick start
 
 Put a game in a folder inside the package, for example `bindings/candela/mygame/game.cdl`:
 
 ```rust
-import "../src/main.cdl";
+import "../src/main.cdl" { start, config, vec2, rgb, Key };
 
 fn main() {
     let app = start(config("Hello", 640, 360));
@@ -54,7 +54,7 @@ cd bindings/candela/mygame
 candela run game.cdl
 ```
 
-Import the package bare (no `as`), so enum variants such as `Key::Left` and `Ease::OutBack` resolve. Paths for assets are relative to the directory you run from.
+List the names you use in the import's braces; types bring their methods along, so `Key` makes `Key::Left` available and `start` returns an `App` whose methods need no import. `import "../src/main.cdl" as drift;` works too, with every name written `drift::start`, `drift::Key::Left`. Paths for assets are relative to the directory you run from.
 
 `frame()` returns `false` when the window closes or the game calls `app.quit()`, and the engine shuts down at that point. A game that leaves its loop early calls `app.close()`.
 

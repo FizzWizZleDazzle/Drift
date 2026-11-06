@@ -5,7 +5,7 @@
 //
 //     candela run bindings/candela/examples/coin_dash/main.cdl
 
-import "../../src/main.cdl";
+import "../../src/main.cdl" { Align, App, Binding, Blend, BodyKind, Color, Ease, Entity, Filter, GamepadAxis, GamepadButton, Key, Save, Sound, TextStyle, Texture, Timer, VAlign, Vec2, body, collider, config, emitter, hud_layer, repeating_timer, rgb, rgba, start, text_style, vec2 };
 import "std/math" as math;
 import "std/random" as random;
 
@@ -93,7 +93,7 @@ fn update(app: App, g: Game) {
     } else {
         play(app, g, app.dt());
     }
-    g.score_text.set_text("Score " + str(g.score) + "    Best " + str(g.best));
+    g.score_text.set_text("Score " + string(g.score) + "    Best " + string(g.best));
     draw_arena(app);
 }
 
@@ -177,7 +177,7 @@ fn reset(app: App, g: Game) {
 }
 
 fn spawn_coin(app: App, g: Game) {
-    let pos = vec2(random::random_range(80.0, 880.0), random::random_range(90.0, 460.0));
+    let pos = vec2(random::float_range(80.0, 880.0), random::float_range(90.0, 460.0));
     let coin = app.spawn_sprite(g.coin_tex, pos);
     let sensor = collider();
     sensor.sensor = true;
@@ -187,7 +187,7 @@ fn spawn_coin(app: App, g: Game) {
 }
 
 fn spawn_hazard(app: App, g: Game) {
-    let pos = vec2(random::random_range(80.0, 880.0), 90.0);
+    let pos = vec2(random::float_range(80.0, 880.0), 90.0);
     if g.player.position().distance(pos) < 160.0 {
         pos = vec2(960.0 - pos.x, 460.0);
     }
@@ -197,7 +197,7 @@ fn spawn_hazard(app: App, g: Game) {
     c.restitution = 1.0;
     c.friction = 0.0;
     ball.add_circle_collider(16.0, c);
-    let angle = random::random_range(0.0, 6.28);
+    let angle = random::float_range(0.0, 6.28);
     ball.set_velocity(vec2(math::cos(angle), math::sin(angle)).mul(220.0));
     g.hazards.push(ball);
 }

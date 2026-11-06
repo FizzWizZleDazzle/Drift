@@ -647,11 +647,11 @@ impl Binding {
     /// The engine's text form ("key:#44", "button:#0", "axis:+#1").
     fn text(self) -> string {
         match self {
-            Key(k) => { return "key:#" + str(k.code()); }
-            Mouse(b) => { return "mouse:#" + str(b.code()); }
-            Button(b) => { return "button:#" + str(b.code()); }
-            AxisPositive(a) => { return "axis:+#" + str(a.code()); }
-            AxisNegative(a) => { return "axis:-#" + str(a.code()); }
+            Key(k) => { return "key:#" + string(k.code()); }
+            Mouse(b) => { return "mouse:#" + string(b.code()); }
+            Button(b) => { return "button:#" + string(b.code()); }
+            AxisPositive(a) => { return "axis:+#" + string(a.code()); }
+            AxisNegative(a) => { return "axis:-#" + string(a.code()); }
             Unbound => { return ""; }
         }
         return "";
@@ -801,7 +801,7 @@ fn start(cfg: Config) -> App {
         drift_flag(cfg.fullscreen), drift_flag(cfg.vsync), drift_flag(cfg.resizable),
         cfg.scale_mode.code(), drift_flag(cfg.lighting), cfg.renderer);
     if ok == 0 {
-        throw("drift_start_failed");
+        throw "drift_start_failed";
     }
     return App { id: 1 };
 }
@@ -894,7 +894,7 @@ impl App {
     /// Adds a binding to an action. Raises "drift_bad_binding" for Unbound.
     fn bind_action(self, name: string, b: Binding) {
         if libdrift_candela::dc_action_bind(name, b.text()) == 0 {
-            throw("drift_bad_binding");
+            throw "drift_bad_binding";
         }
     }
     /// A 1D axis: `negative` reads -1, `positive` +1.
@@ -951,7 +951,7 @@ impl App {
     fn load_texture(self, path: string) -> Texture {
         let id = libdrift_candela::dc_texture_load(path);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Texture { id: id };
     }
@@ -967,7 +967,7 @@ impl App {
         }
         let id = libdrift_candela::dc_texture_create(width, height, data, data.len());
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Texture { id: id };
     }
@@ -975,7 +975,7 @@ impl App {
     fn create_render_target(self, width: int, height: int) -> Texture {
         let id = libdrift_candela::dc_texture_render_target(width, height);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Texture { id: id };
     }
@@ -985,14 +985,14 @@ impl App {
     fn spritesheet(self, tex: Texture, frame_w: int, frame_h: int) -> Spritesheet {
         let id = libdrift_candela::dc_sheet_create(tex.id, frame_w, frame_h);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Spritesheet { id: id };
     }
     fn load_aseprite(self, path: string) -> Spritesheet {
         let id = libdrift_candela::dc_sheet_load_aseprite(path);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Spritesheet { id: id };
     }
@@ -1000,7 +1000,7 @@ impl App {
     fn load_font(self, path: string, size: float) -> Font {
         let id = libdrift_candela::dc_font_load(path, size);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Font { id: id };
     }
@@ -1112,7 +1112,7 @@ impl App {
     fn query(self, components: string) -> Entity[] {
         let n = libdrift_candela::dc_query(components);
         if n < 0 {
-            throw("drift_bad_query");
+            throw "drift_bad_query";
         }
         let out = [Entity { id: 0 }];
         out.remove(0);
@@ -1152,7 +1152,7 @@ impl App {
     /// "drift_lighting_off" when the app started without lighting.
     fn set_ambient(self, c: Color) {
         if libdrift_candela::dc_set_ambient(c) == 0 {
-            throw("drift_lighting_off");
+            throw "drift_lighting_off";
         }
     }
 
@@ -1185,7 +1185,7 @@ impl App {
     fn load_sound(self, path: string) -> Sound {
         let id = libdrift_candela::dc_sound_load(path, 0);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Sound { id: id };
     }
@@ -1193,7 +1193,7 @@ impl App {
     fn load_music(self, path: string) -> Sound {
         let id = libdrift_candela::dc_sound_load(path, 1);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Sound { id: id };
     }
@@ -1201,7 +1201,7 @@ impl App {
     fn create_sound(self, samples: float[], sample_rate: int) -> Sound {
         let id = libdrift_candela::dc_sound_create(samples, samples.len(), 1, sample_rate);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Sound { id: id };
     }
@@ -1228,7 +1228,7 @@ impl App {
     fn open_save(self, org: string, app_name: string, slot: string) -> Save {
         let id = libdrift_candela::dc_save_open(org, app_name, slot);
         if id == 0 {
-            throw("drift_save_failed");
+            throw "drift_save_failed";
         }
         return Save { id: id };
     }
@@ -1236,7 +1236,7 @@ impl App {
     fn open_save_file(self, path: string) -> Save {
         let id = libdrift_candela::dc_save_open_file(path);
         if id == 0 {
-            throw("drift_save_failed");
+            throw "drift_save_failed";
         }
         return Save { id: id };
     }
@@ -1248,7 +1248,7 @@ impl App {
     fn load_tilemap(self, path: string) -> Tilemap {
         let id = libdrift_candela::dc_tilemap_load(path, "");
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Tilemap { id: id };
     }
@@ -1256,7 +1256,7 @@ impl App {
     fn load_level(self, path: string, level: string) -> Tilemap {
         let id = libdrift_candela::dc_tilemap_load(path, level);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Tilemap { id: id };
     }
@@ -1274,7 +1274,7 @@ impl App {
     fn load_scene(self, path: string) -> Scene {
         let id = libdrift_candela::dc_scene_load(path);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return Scene { id: id };
     }
@@ -1727,7 +1727,7 @@ impl Save {
     /// Writes to disk. Raises "drift_save_failed".
     fn flush(self) {
         if libdrift_candela::dc_save_flush(self.id) == 0 {
-            throw("drift_save_failed");
+            throw "drift_save_failed";
         }
     }
     /// Re-reads the file, dropping unsaved changes.
@@ -1796,7 +1796,7 @@ impl Tilemap {
     fn layer(self, name: string) -> int {
         let l = libdrift_candela::dc_tilemap_find_layer(self.id, name);
         if l < 0 {
-            throw("drift_no_such_layer");
+            throw "drift_no_such_layer";
         }
         return l;
     }
@@ -1855,7 +1855,7 @@ impl Scene {
     fn spawn_with(self, offset: Vec2, parent: Entity, overrides: string) -> SceneInstance {
         let id = libdrift_candela::dc_scene_spawn(self.id, offset, parent.id, overrides);
         if id == 0 {
-            throw("drift_load_failed");
+            throw "drift_load_failed";
         }
         return SceneInstance { id: id };
     }
@@ -1908,7 +1908,7 @@ impl Entity {
     /// Sets or merges a reflected component from JSON. Raises "drift_bad_component".
     fn set_component_json(self, component: string, json: string) {
         if libdrift_candela::dc_set_component_json(self.id, component, json) == 0 {
-            throw("drift_bad_component");
+            throw "drift_bad_component";
         }
     }
     /// Makes this entity a child of `parent`: its transform becomes relative.

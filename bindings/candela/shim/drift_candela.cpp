@@ -71,20 +71,24 @@ using namespace drift;
 
 // ---- Structs that cross the boundary (doubles, int32_t, nested) ----------
 
+// candela 0.1.6 passes its int as int64_t, in arguments, returns and
+// struct fields alike.
+using cint = int64_t;
+
 struct DV2 { double x, y; };
 struct DRect { double x, y, w, h; };
 struct DColor { double r, g, b, a; };
-struct DCell { int32_t x, y; };
+struct DCell { cint x, y; };
 
 struct DCollider {
     DV2 offset;
     double density, friction, restitution;
-    int32_t sensor, category, mask;
+    cint sensor, category, mask;
 };
 
 struct DBody {
-    int32_t kind;            // BodyType
-    int32_t fixedRotation;
+    cint kind;            // BodyType
+    cint fixedRotation;
     double gravityScale, linearDamping, angularDamping;
 };
 
@@ -97,28 +101,28 @@ struct DEmitter {
     DColor colorStart, colorEnd;
     DV2 gravity;
     double drag;
-    int32_t maxParticles;
-    int32_t blend;           // BlendMode
-    int32_t texture;         // 0 = white square
-    int32_t shape;           // EmissionShape
+    cint maxParticles;
+    cint blend;           // BlendMode
+    cint texture;         // 0 = white square
+    cint shape;           // EmissionShape
     double shapeRadius;
     DV2 shapeExtents;
     double duration;         // -1 = forever
-    int32_t looping;
+    cint looping;
     double z;
-    int32_t layer;
+    cint layer;
 };
 
 struct DTextStyle {
     double size;
     DColor color;
-    int32_t align, valign;
+    cint align, valign;
     double wrap, lineSpacing;
     double outline;
     DColor outlineColor;
     DV2 shadow;
     DColor shadowColor;
-    int32_t rich;
+    cint rich;
 };
 
 struct DSprite {
@@ -127,20 +131,20 @@ struct DSprite {
     double rotation;
     DV2 origin;
     DColor tint;
-    int32_t flip;
-    int32_t blend;
+    cint flip;
+    cint blend;
 };
 
 struct DPlay {
     double volume, pan, pitch;
-    int32_t loop;
-    int32_t bus;
+    cint loop;
+    cint bus;
     double fadeIn;
-    int32_t priority;
+    cint priority;
 };
 
 struct DHit {
-    int32_t hit;
+    cint hit;
     DV2 point, normal;
     double fraction;
 };
@@ -164,10 +168,11 @@ ColorF colorf(DColor c) { return {float(c.r), float(c.g), float(c.b), float(c.a)
 DColor dcolor(Color c) { return {c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0}; }
 DColor dcolorf(ColorF c) { return {c.r, c.g, c.b, c.a}; }
 
-int32_t bits(uint32_t v) { int32_t out; std::memcpy(&out, &v, 4); return out; }
-uint32_t ubits(int32_t v) { uint32_t out; std::memcpy(&out, &v, 4); return out; }
+// Engine handles are 32-bit ids; a candela int holds them unchanged.
+cint bits(uint32_t v) { return cint(v); }
+uint32_t ubits(cint v) { return uint32_t(v); }
 
-template <typename H> H handle(int32_t v) { return H{ubits(v)}; }
+template <typename H> H handle(cint v) { return H{uint32_t(v)}; }
 
 // ---- State ---------------------------------------------------------------
 
@@ -395,9 +400,9 @@ void closeApp() {
 
 EXPORT const char* dc_error() { return g.error.c_str(); }
 
-EXPORT int32_t dc_start(const char* title, int32_t width, int32_t height,
-                        int32_t fullscreen, int32_t vsync, int32_t resizable,
-                        int32_t scaleMode, int32_t lighting, const char* renderer) {
+EXPORT cint dc_start(const char* title, cint width, cint height,
+                        cint fullscreen, cint vsync, cint resizable,
+                        cint scaleMode, cint lighting, const char* renderer) {
     if (g.app) return fail("drift is already running");
     Config cfg;
     cfg.title = title ? title : "Drift";
@@ -423,7 +428,7 @@ EXPORT int32_t dc_start(const char* title, int32_t width, int32_t height,
 
 // Ends the frame opened by the previous call, then opens the next one.
 // Returns 0 when the app has quit; the window is closed by then.
-EXPORT int32_t dc_frame() {
+EXPORT cint dc_frame() {
     if (!g.app) return 0;
     if (g.frameOpen) {
         g.app->endFrame();
@@ -439,34 +444,34 @@ EXPORT int32_t dc_frame() {
     return 1;
 }
 
-EXPORT int32_t dc_quit() { if (g.app) g.app->quit(); return 0; }
-EXPORT int32_t dc_close() { closeApp(); return 0; }
-EXPORT int32_t dc_running() { return g.app && g.app->running() ? 1 : 0; }
+EXPORT cint dc_quit() { if (g.app) g.app->quit(); return 0; }
+EXPORT cint dc_close() { closeApp(); return 0; }
+EXPORT cint dc_running() { return g.app && g.app->running() ? 1 : 0; }
 
 EXPORT double dc_dt() { auto* t = res<Time>(); return t ? t->delta : 0.0; }
 EXPORT double dc_time() { auto* t = res<Time>(); return t ? t->elapsed : 0.0; }
-EXPORT int32_t dc_frame_count() { auto* t = res<Time>(); return t ? int32_t(t->frame) : 0; }
+EXPORT cint dc_frame_count() { auto* t = res<Time>(); return t ? int32_t(t->frame) : 0; }
 
-EXPORT int32_t dc_set_title(const char* title) {
+EXPORT cint dc_set_title(const char* title) {
     if (!g.app) return 0;
     if (auto* w = static_cast<SDL_Window*>(g.app->sdlWindow())) SDL_SetWindowTitle(w, title);
     return 0;
 }
 
-EXPORT int32_t dc_set_clear_color(DColor c) {
+EXPORT cint dc_set_clear_color(DColor c) {
     if (auto* r = res<RendererResource>()) r->setClearColor(colorf(c));
     return 0;
 }
 
-EXPORT int32_t dc_set_scale_mode(int32_t mode) {
+EXPORT cint dc_set_scale_mode(cint mode) {
     if (auto* r = res<RendererResource>()) r->setScaleMode(static_cast<ScaleMode>(mode));
     return 0;
 }
-EXPORT int32_t dc_scale_mode() {
+EXPORT cint dc_scale_mode() {
     auto* r = res<RendererResource>();
     return r ? int32_t(r->scaleMode()) : 0;
 }
-EXPORT int32_t dc_set_logical_size(int32_t w, int32_t h) {
+EXPORT cint dc_set_logical_size(cint w, cint h) {
     if (auto* r = res<RendererResource>()) r->setLogicalSize(w, h);
     return 0;
 }
@@ -475,7 +480,7 @@ EXPORT DV2 dc_logical_size() {
     return r ? DV2{r->logicalWidth(), r->logicalHeight()} : DV2{0, 0};
 }
 
-EXPORT int32_t dc_screenshot(const char* path) {
+EXPORT cint dc_screenshot(const char* path) {
     if (auto* r = res<RendererResource>()) r->captureScreenshot(path);
     return 0;
 }
@@ -483,21 +488,21 @@ EXPORT const char* dc_backend() {
     auto* r = res<RendererResource>();
     return keep(r ? r->backendName() : "");
 }
-EXPORT int32_t dc_draw_calls() { auto* r = res<RendererResource>(); return r ? r->drawCalls() : 0; }
+EXPORT cint dc_draw_calls() { auto* r = res<RendererResource>(); return r ? r->drawCalls() : 0; }
 
 // =========================================================================
 // Input
 // =========================================================================
 
-EXPORT int32_t dc_key_down(int32_t key) {
+EXPORT cint dc_key_down(cint key) {
     auto* in = res<InputResource>();
     return in && in->keyHeld(static_cast<Key>(key)) ? 1 : 0;
 }
-EXPORT int32_t dc_key_pressed(int32_t key) {
+EXPORT cint dc_key_pressed(cint key) {
     auto* in = res<InputResource>();
     return in && in->keyPressed(static_cast<Key>(key)) ? 1 : 0;
 }
-EXPORT int32_t dc_key_released(int32_t key) {
+EXPORT cint dc_key_released(cint key) {
     auto* in = res<InputResource>();
     return in && in->keyReleased(static_cast<Key>(key)) ? 1 : 0;
 }
@@ -513,35 +518,35 @@ EXPORT double dc_mouse_wheel() {
     auto* in = res<InputResource>();
     return in ? in->mouseWheelDelta() : 0.0;
 }
-EXPORT int32_t dc_mouse_down(int32_t b) {
+EXPORT cint dc_mouse_down(cint b) {
     auto* in = res<InputResource>();
     return in && in->mouseButtonHeld(static_cast<MouseButton>(b)) ? 1 : 0;
 }
-EXPORT int32_t dc_mouse_pressed(int32_t b) {
+EXPORT cint dc_mouse_pressed(cint b) {
     auto* in = res<InputResource>();
     return in && in->mouseButtonPressed(static_cast<MouseButton>(b)) ? 1 : 0;
 }
-EXPORT int32_t dc_mouse_released(int32_t b) {
+EXPORT cint dc_mouse_released(cint b) {
     auto* in = res<InputResource>();
     return in && in->mouseButtonReleased(static_cast<MouseButton>(b)) ? 1 : 0;
 }
-EXPORT int32_t dc_gamepad_connected(int32_t i) {
+EXPORT cint dc_gamepad_connected(cint i) {
     auto* in = res<InputResource>();
     return in && in->gamepadConnected(i) ? 1 : 0;
 }
-EXPORT double dc_gamepad_axis(int32_t i, int32_t axis) {
+EXPORT double dc_gamepad_axis(cint i, cint axis) {
     auto* in = res<InputResource>();
     return in ? in->gamepadAxis(i, axis) : 0.0;
 }
-EXPORT int32_t dc_gamepad_down(int32_t i, int32_t b) {
+EXPORT cint dc_gamepad_down(cint i, cint b) {
     auto* in = res<InputResource>();
     return in && in->gamepadButtonHeld(i, b) ? 1 : 0;
 }
-EXPORT int32_t dc_gamepad_pressed(int32_t i, int32_t b) {
+EXPORT cint dc_gamepad_pressed(cint i, cint b) {
     auto* in = res<InputResource>();
     return in && in->gamepadButtonPressed(i, b) ? 1 : 0;
 }
-EXPORT int32_t dc_gamepad_released(int32_t i, int32_t b) {
+EXPORT cint dc_gamepad_released(cint i, cint b) {
     auto* in = res<InputResource>();
     return in && in->gamepadButtonReleased(i, b) ? 1 : 0;
 }
@@ -549,7 +554,7 @@ EXPORT int32_t dc_gamepad_released(int32_t i, int32_t b) {
 // ---- Synthetic input, for automated tests and demo playback ----
 // Queued as SDL events, so they arrive with the next dc_frame like real input.
 
-EXPORT int32_t dc_send_key(int32_t key, int32_t down) {
+EXPORT cint dc_send_key(cint key, cint down) {
     if (!g.app) return 0;
     SDL_Event ev{};
     ev.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
@@ -559,7 +564,7 @@ EXPORT int32_t dc_send_key(int32_t key, int32_t down) {
     return SDL_PushEvent(&ev) ? 1 : 0;
 }
 // Moves the mouse to a window pixel position; button 0 = move only.
-EXPORT int32_t dc_send_mouse(DV2 windowPos, int32_t button, int32_t down) {
+EXPORT cint dc_send_mouse(DV2 windowPos, cint button, cint down) {
     if (!g.app) return 0;
     SDL_WindowID win = SDL_GetWindowID(static_cast<SDL_Window*>(g.app->sdlWindow()));
     SDL_Event ev{};
@@ -585,56 +590,56 @@ namespace {
 InputBinding binding(const char* text) { return InputBinding::parse(text ? text : ""); }
 }
 
-EXPORT int32_t dc_action_bind(const char* name, const char* b) {
+EXPORT cint dc_action_bind(const char* name, const char* b) {
     auto* a = res<InputActions>();
     InputBinding ib = binding(b);
     if (!a || !ib.valid()) return fail(std::string("not a binding: ") + (b ? b : ""));
     a->bindAction(name, ib);
     return 1;
 }
-EXPORT int32_t dc_action_bind_axis(const char* name, const char* neg, const char* pos) {
+EXPORT cint dc_action_bind_axis(const char* name, const char* neg, const char* pos) {
     auto* a = res<InputActions>();
     if (!a) return 0;
     a->bindAxis(name, binding(neg), binding(pos));
     return 1;
 }
-EXPORT int32_t dc_action_bind_axis2d(const char* name, const char* l, const char* r,
+EXPORT cint dc_action_bind_axis2d(const char* name, const char* l, const char* r,
                                      const char* u, const char* d) {
     auto* a = res<InputActions>();
     if (!a) return 0;
     a->bindAxis2D(name, binding(l), binding(r), binding(u), binding(d));
     return 1;
 }
-EXPORT int32_t dc_action_bind_stick(const char* name, int32_t x, int32_t y) {
+EXPORT cint dc_action_bind_stick(const char* name, cint x, cint y) {
     auto* a = res<InputActions>();
     if (!a) return 0;
     a->bindStick(name, static_cast<GamepadAxis>(x), static_cast<GamepadAxis>(y));
     return 1;
 }
-EXPORT int32_t dc_action_pressed(const char* n) { auto* a = res<InputActions>(); return a && a->pressed(n) ? 1 : 0; }
-EXPORT int32_t dc_action_held(const char* n) { auto* a = res<InputActions>(); return a && a->held(n) ? 1 : 0; }
-EXPORT int32_t dc_action_released(const char* n) { auto* a = res<InputActions>(); return a && a->released(n) ? 1 : 0; }
+EXPORT cint dc_action_pressed(const char* n) { auto* a = res<InputActions>(); return a && a->pressed(n) ? 1 : 0; }
+EXPORT cint dc_action_held(const char* n) { auto* a = res<InputActions>(); return a && a->held(n) ? 1 : 0; }
+EXPORT cint dc_action_released(const char* n) { auto* a = res<InputActions>(); return a && a->released(n) ? 1 : 0; }
 EXPORT double dc_action_value(const char* n) { auto* a = res<InputActions>(); return a ? a->value(n) : 0.0; }
 EXPORT double dc_action_axis(const char* n) { auto* a = res<InputActions>(); return a ? a->axis(n) : 0.0; }
 EXPORT DV2 dc_action_axis2d(const char* n) {
     auto* a = res<InputActions>();
     return a ? dv(a->axis2D(n)) : DV2{0, 0};
 }
-EXPORT int32_t dc_action_has(const char* n) { auto* a = res<InputActions>(); return a && a->has(n) ? 1 : 0; }
-EXPORT int32_t dc_action_remove(const char* n) { if (auto* a = res<InputActions>()) a->remove(n); return 0; }
-EXPORT int32_t dc_action_rebind(const char* n, int32_t slot, int32_t index, const char* b) {
+EXPORT cint dc_action_has(const char* n) { auto* a = res<InputActions>(); return a && a->has(n) ? 1 : 0; }
+EXPORT cint dc_action_remove(const char* n) { if (auto* a = res<InputActions>()) a->remove(n); return 0; }
+EXPORT cint dc_action_rebind(const char* n, cint slot, cint index, const char* b) {
     auto* a = res<InputActions>();
     InputBinding ib = binding(b);
     if (!a || !ib.valid() || !a->has(n)) return 0;
-    a->rebind(n, slot, size_t(std::max(index, 0)), ib);
+    a->rebind(n, slot, size_t(std::max<cint>(index, 0)), ib);
     return 1;
 }
-EXPORT int32_t dc_action_binding_count(const char* n, int32_t slot) {
+EXPORT cint dc_action_binding_count(const char* n, cint slot) {
     auto* a = res<InputActions>();
     if (!a || !a->has(n)) return 0;
     return int32_t(a->bindings(n, slot).size());
 }
-EXPORT const char* dc_action_binding(const char* n, int32_t slot, int32_t index) {
+EXPORT const char* dc_action_binding(const char* n, cint slot, cint index) {
     auto* a = res<InputActions>();
     if (!a || !a->has(n)) return keep("");
     const auto& list = a->bindings(n, slot);
@@ -652,14 +657,14 @@ EXPORT const char* dc_action_save() {
     auto* a = res<InputActions>();
     return keep(a ? a->toJson().dump() : "{}");
 }
-EXPORT int32_t dc_action_load(const char* text) {
+EXPORT cint dc_action_load(const char* text) {
     auto* a = res<InputActions>();
     if (!a) return 0;
     auto j = nlohmann::json::parse(text ? text : "", nullptr, false);
     if (j.is_discarded()) return -1;
     return a->fromJson(j);
 }
-EXPORT int32_t dc_action_settings(double deadZone, double pressThreshold, int32_t gamepad) {
+EXPORT cint dc_action_settings(double deadZone, double pressThreshold, cint gamepad) {
     auto* a = res<InputActions>();
     if (!a) return 0;
     a->deadZone = float(deadZone);
@@ -672,7 +677,7 @@ EXPORT int32_t dc_action_settings(double deadZone, double pressThreshold, int32_
 // Textures and spritesheets
 // =========================================================================
 
-EXPORT int32_t dc_texture_load(const char* path) {
+EXPORT cint dc_texture_load(const char* path) {
     auto* assets = res<AssetServer>();
     if (!assets) return fail("drift is not running");
     TextureHandle t = assets->loadTexture(path);
@@ -681,7 +686,7 @@ EXPORT int32_t dc_texture_load(const char* path) {
 }
 
 // rgba: 4 floats (0..1) per pixel, row by row from the top.
-EXPORT int32_t dc_texture_create(int32_t w, int32_t h, const double* rgba, int32_t count) {
+EXPORT cint dc_texture_create(cint w, cint h, const double* rgba, cint count) {
     auto* r = res<RendererResource>();
     if (!r) return fail("drift is not running");
     if (w <= 0 || h <= 0 || count < w * h * 4) return fail("pixel list is shorter than width * height * 4");
@@ -691,22 +696,22 @@ EXPORT int32_t dc_texture_create(int32_t w, int32_t h, const double* rgba, int32
     if (!t.valid()) return fail("cannot create texture");
     return bits(t.id);
 }
-EXPORT int32_t dc_texture_render_target(int32_t w, int32_t h) {
+EXPORT cint dc_texture_render_target(cint w, cint h) {
     auto* r = res<RendererResource>();
     if (!r) return fail("drift is not running");
     TextureHandle t = r->createRenderTarget(w, h);
     if (!t.valid()) return fail("cannot create render target");
     return bits(t.id);
 }
-EXPORT int32_t dc_texture_white() {
+EXPORT cint dc_texture_white() {
     auto* r = res<RendererResource>();
     return r ? bits(r->whiteTexture().id) : 0;
 }
-EXPORT DV2 dc_texture_size(int32_t t) {
+EXPORT DV2 dc_texture_size(cint t) {
     auto* r = res<RendererResource>();
     return r ? dv(r->textureSize(handle<TextureHandle>(t))) : DV2{0, 0};
 }
-EXPORT int32_t dc_texture_options(int32_t t, int32_t filter, int32_t wrap) {
+EXPORT cint dc_texture_options(cint t, cint filter, cint wrap) {
     auto* r = res<RendererResource>();
     if (!r) return 0;
     TextureOptions o;
@@ -715,31 +720,31 @@ EXPORT int32_t dc_texture_options(int32_t t, int32_t filter, int32_t wrap) {
     r->setTextureOptions(handle<TextureHandle>(t), o);
     return 0;
 }
-EXPORT int32_t dc_texture_destroy(int32_t t) {
+EXPORT cint dc_texture_destroy(cint t) {
     if (auto* r = res<RendererResource>()) r->destroyTexture(handle<TextureHandle>(t));
     return 0;
 }
 
-EXPORT int32_t dc_sheet_create(int32_t tex, int32_t fw, int32_t fh) {
+EXPORT cint dc_sheet_create(cint tex, cint fw, cint fh) {
     auto* s = res<SpriteResource>();
     if (!s) return fail("drift is not running");
     SpritesheetHandle h = s->createSpritesheet(handle<TextureHandle>(tex), fw, fh);
     if (!h.valid()) return fail("cannot create spritesheet");
     return bits(h.id);
 }
-EXPORT int32_t dc_sheet_load_aseprite(const char* path) {
+EXPORT cint dc_sheet_load_aseprite(const char* path) {
     auto* s = res<SpriteResource>();
     if (!s) return fail("drift is not running");
     SpritesheetHandle h = s->loadAseprite(path);
     if (!h.valid()) return fail(std::string("cannot load ") + path);
     return bits(h.id);
 }
-EXPORT DRect dc_sheet_frame(int32_t sheet, int32_t col, int32_t row) {
+EXPORT DRect dc_sheet_frame(cint sheet, cint col, cint row) {
     auto* s = res<SpriteResource>();
     return s ? drect(s->getFrame(handle<SpritesheetHandle>(sheet), col, row)) : DRect{0, 0, 0, 0};
 }
 // Frame by index, counting left to right, then top to bottom.
-EXPORT DRect dc_sheet_frame_at(int32_t sheet, int32_t index) {
+EXPORT DRect dc_sheet_frame_at(cint sheet, cint index) {
     auto* s = res<SpriteResource>();
     auto* r = res<RendererResource>();
     if (!s || !r) return {0, 0, 0, 0};
@@ -749,11 +754,11 @@ EXPORT DRect dc_sheet_frame_at(int32_t sheet, int32_t index) {
     int cols = first.w > 0 ? std::max(1, int(size.x / first.w)) : 1;
     return drect(s->getFrame(h, index % cols, index / cols));
 }
-EXPORT int32_t dc_sheet_frame_count(int32_t sheet) {
+EXPORT cint dc_sheet_frame_count(cint sheet) {
     auto* s = res<SpriteResource>();
     return s ? s->frameCount(handle<SpritesheetHandle>(sheet)) : 0;
 }
-EXPORT int32_t dc_sheet_texture(int32_t sheet) {
+EXPORT cint dc_sheet_texture(cint sheet) {
     auto* s = res<SpriteResource>();
     return s ? bits(s->getTexture(handle<SpritesheetHandle>(sheet)).id) : 0;
 }
@@ -762,44 +767,44 @@ EXPORT int32_t dc_sheet_texture(int32_t sheet) {
 // Immediate drawing (queued for this frame, drawn by the next dc_frame)
 // =========================================================================
 
-EXPORT int32_t dc_set_layer(int32_t layer) {
-    if (auto* r = res<RendererResource>()) r->setLayer(uint8_t(std::clamp(layer, 0, 31)));
+EXPORT cint dc_set_layer(cint layer) {
+    if (auto* r = res<RendererResource>()) r->setLayer(uint8_t(std::clamp<cint>(layer, 0, 31)));
     return 0;
 }
-EXPORT int32_t dc_layer() { auto* r = res<RendererResource>(); return r ? r->layer() : 0; }
-EXPORT int32_t dc_set_z(double z) { g.drawZ = float(z); return 0; }
+EXPORT cint dc_layer() { auto* r = res<RendererResource>(); return r ? r->layer() : 0; }
+EXPORT cint dc_set_z(double z) { g.drawZ = float(z); return 0; }
 
-EXPORT int32_t dc_draw_rect(DRect r, DColor c) {
+EXPORT cint dc_draw_rect(DRect r, DColor c) {
     if (auto* rr = res<RendererResource>()) rr->drawRectFilled(rect(r), color(c), g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_rect_lines(DRect r, DColor c, double thickness) {
+EXPORT cint dc_draw_rect_lines(DRect r, DColor c, double thickness) {
     if (auto* rr = res<RendererResource>()) rr->drawRect(rect(r), color(c), float(thickness), g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_rounded_rect(DRect r, double radius, DColor c) {
+EXPORT cint dc_draw_rounded_rect(DRect r, double radius, DColor c) {
     if (auto* rr = res<RendererResource>()) rr->drawRoundedRectFilled(rect(r), float(radius), color(c), g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_circle(DV2 center, double radius, DColor c) {
+EXPORT cint dc_draw_circle(DV2 center, double radius, DColor c) {
     if (auto* rr = res<RendererResource>()) rr->drawCircleFilled(v2(center), float(radius), color(c), 0, g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_circle_lines(DV2 center, double radius, DColor c, double thickness) {
+EXPORT cint dc_draw_circle_lines(DV2 center, double radius, DColor c, double thickness) {
     if (auto* rr = res<RendererResource>())
         rr->drawCircle(v2(center), float(radius), color(c), float(thickness), 0, g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_arc(DV2 center, double radius, double from, double to, DColor c, double thickness) {
+EXPORT cint dc_draw_arc(DV2 center, double radius, double from, double to, DColor c, double thickness) {
     if (auto* rr = res<RendererResource>())
         rr->drawArc(v2(center), float(radius), float(from), float(to), color(c), float(thickness), g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_line(DV2 a, DV2 b, DColor c, double thickness) {
+EXPORT cint dc_draw_line(DV2 a, DV2 b, DColor c, double thickness) {
     if (auto* rr = res<RendererResource>()) rr->drawLine(v2(a), v2(b), color(c), float(thickness), g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_triangle(DV2 a, DV2 b, DV2 c, DColor col) {
+EXPORT cint dc_draw_triangle(DV2 a, DV2 b, DV2 c, DColor col) {
     if (auto* rr = res<RendererResource>()) rr->drawTriangleFilled(v2(a), v2(b), v2(c), color(col), g.drawZ);
     return 0;
 }
@@ -813,20 +818,20 @@ std::vector<Vec2> points(const double* xy, int32_t count) {
 }
 
 // xy: x0, y0, x1, y1, ...; count is the number of floats.
-EXPORT int32_t dc_draw_polygon(const double* xy, int32_t count, DColor c) {
+EXPORT cint dc_draw_polygon(const double* xy, cint count, DColor c) {
     auto pts = points(xy, count);
     if (auto* rr = res<RendererResource>())
         rr->drawPolygonFilled(pts.data(), int32_t(pts.size()), color(c), g.drawZ);
     return 0;
 }
-EXPORT int32_t dc_draw_polyline(const double* xy, int32_t count, DColor c, double thickness, int32_t closed) {
+EXPORT cint dc_draw_polyline(const double* xy, cint count, DColor c, double thickness, cint closed) {
     auto pts = points(xy, count);
     if (auto* rr = res<RendererResource>())
         rr->drawPolyline(pts.data(), int32_t(pts.size()), color(c), float(thickness), closed != 0, g.drawZ);
     return 0;
 }
 
-EXPORT int32_t dc_draw_texture(int32_t tex, DV2 pos, DSprite s) {
+EXPORT cint dc_draw_texture(cint tex, DV2 pos, DSprite s) {
     auto* rr = res<RendererResource>();
     if (!rr) return 0;
     SpriteDraw d;
@@ -845,19 +850,19 @@ EXPORT int32_t dc_draw_texture(int32_t tex, DV2 pos, DSprite s) {
     return 0;
 }
 
-EXPORT int32_t dc_draw_text(int32_t font, const char* text, DV2 pos, DTextStyle style) {
+EXPORT cint dc_draw_text(cint font, const char* text, DV2 pos, DTextStyle style) {
     if (auto* f = res<FontResource>()) f->drawText(handle<FontHandle>(font), text ? text : "", v2(pos), textStyle(style));
     return 0;
 }
-EXPORT DV2 dc_measure_text(int32_t font, const char* text, DTextStyle style) {
+EXPORT DV2 dc_measure_text(cint font, const char* text, DTextStyle style) {
     auto* f = res<FontResource>();
     return f ? dv(f->measureText(handle<FontHandle>(font), text ? text : "", textStyle(style))) : DV2{0, 0};
 }
-EXPORT double dc_line_height(int32_t font, double size) {
+EXPORT double dc_line_height(cint font, double size) {
     auto* f = res<FontResource>();
     return f ? f->lineHeight(handle<FontHandle>(font), float(size)) : 0.0;
 }
-EXPORT int32_t dc_font_load(const char* path, double size) {
+EXPORT cint dc_font_load(const char* path, double size) {
     auto* f = res<FontResource>();
     if (!f) return fail("drift is not running");
     FontHandle h = f->loadFont(path, float(size));
@@ -865,8 +870,8 @@ EXPORT int32_t dc_font_load(const char* path, double size) {
     return bits(h.id);
 }
 
-EXPORT int32_t dc_push_clip(DRect r) { if (auto* rr = res<RendererResource>()) rr->pushClipRect(rect(r)); return 0; }
-EXPORT int32_t dc_pop_clip() { if (auto* rr = res<RendererResource>()) rr->popClipRect(); return 0; }
+EXPORT cint dc_push_clip(DRect r) { if (auto* rr = res<RendererResource>()) rr->pushClipRect(rect(r)); return 0; }
+EXPORT cint dc_pop_clip() { if (auto* rr = res<RendererResource>()) rr->popClipRect(); return 0; }
 
 EXPORT DV2 dc_screen_to_world(DV2 p) {
     auto* rr = res<RendererResource>();
@@ -881,14 +886,14 @@ EXPORT DV2 dc_world_to_screen(DV2 p) {
 // Entities
 // =========================================================================
 
-EXPORT int32_t dc_spawn() {
+EXPORT cint dc_spawn() {
     World* w = world();
     if (!w) return 0;
     EntityId e = w->createEntity();
     w->set<Transform2D>(e, cid<Transform2D>(), Transform2D{});
     return handleOf(e);
 }
-EXPORT int32_t dc_despawn(int32_t h) {
+EXPORT cint dc_despawn(cint h) {
     EntityId e = idOf(h);
     if (e != InvalidEntityId) {
         // Children go with their parent.
@@ -905,19 +910,19 @@ EXPORT int32_t dc_despawn(int32_t h) {
     forget(h);
     return 0;
 }
-EXPORT int32_t dc_alive(int32_t h) { return idOf(h) != InvalidEntityId ? 1 : 0; }
+EXPORT cint dc_alive(cint h) { return idOf(h) != InvalidEntityId ? 1 : 0; }
 
-EXPORT int32_t dc_set_name(int32_t h, const char* name) {
+EXPORT cint dc_set_name(cint h, const char* name) {
     EntityId e = idOf(h);
     if (e != InvalidEntityId) put<Name>(e, Name(name));
     return 0;
 }
-EXPORT const char* dc_name(int32_t h) {
+EXPORT const char* dc_name(cint h) {
     EntityId e = idOf(h);
     const Name* n = e != InvalidEntityId ? get<Name>(e) : nullptr;
     return keep(n ? n->value : "");
 }
-EXPORT int32_t dc_find(const char* name) {
+EXPORT cint dc_find(const char* name) {
     World* w = world();
     if (!w || !name) return 0;
     for (EntityId e : w->entitiesWith(cid<Name>())) {
@@ -929,7 +934,7 @@ EXPORT int32_t dc_find(const char* name) {
 
 // Entities matching a flecs query expression over component names, such as
 // "Sprite" or "RigidBody2D, Velocity2D". Returns the count; dc_query_at reads them.
-EXPORT int32_t dc_query(const char* expr) {
+EXPORT cint dc_query(const char* expr) {
     g.query.clear();
     World* w = world();
     if (!w || !expr || !*expr) return 0;
@@ -942,18 +947,18 @@ EXPORT int32_t dc_query(const char* expr) {
     w->queryFini(&it);
     return int32_t(g.query.size());
 }
-EXPORT int32_t dc_query_at(int32_t i) {
+EXPORT cint dc_query_at(cint i) {
     return i >= 0 && i < int32_t(g.query.size()) ? g.query[size_t(i)] : 0;
 }
 
-EXPORT int32_t dc_has(int32_t h, const char* component) {
+EXPORT cint dc_has(cint h, const char* component) {
     EntityId e = idOf(h);
     World* w = world();
     if (e == InvalidEntityId || !w) return 0;
     ComponentId c = w->componentRegistry().getByName(component);
     return c && w->hasComponent(e, c) ? 1 : 0;
 }
-EXPORT int32_t dc_remove(int32_t h, const char* component) {
+EXPORT cint dc_remove(cint h, const char* component) {
     EntityId e = idOf(h);
     World* w = world();
     if (e == InvalidEntityId || !w) return 0;
@@ -963,7 +968,7 @@ EXPORT int32_t dc_remove(int32_t h, const char* component) {
 }
 
 // Any reflected component as JSON (the scene file form).
-EXPORT const char* dc_component_json(int32_t h, const char* component) {
+EXPORT const char* dc_component_json(cint h, const char* component) {
     EntityId e = idOf(h);
     World* w = world();
     const auto* info = component ? reflect::findComponent(component) : nullptr;
@@ -974,7 +979,7 @@ EXPORT const char* dc_component_json(int32_t h, const char* component) {
     ctx.assets = res<AssetServer>();
     return keep(reflect::toJson(*info->info, w->getComponent(e, c), ctx).dump());
 }
-EXPORT int32_t dc_set_component_json(int32_t h, const char* component, const char* text) {
+EXPORT cint dc_set_component_json(cint h, const char* component, const char* text) {
     EntityId e = idOf(h);
     World* w = world();
     const auto* info = component ? reflect::findComponent(component) : nullptr;
@@ -992,7 +997,7 @@ EXPORT int32_t dc_set_component_json(int32_t h, const char* component, const cha
     return 1;
 }
 
-EXPORT int32_t dc_set_parent(int32_t child, int32_t parent) {
+EXPORT cint dc_set_parent(cint child, cint parent) {
     EntityId c = idOf(child);
     EntityId p = idOf(parent);
     if (c == InvalidEntityId) return 0;
@@ -1015,7 +1020,7 @@ EXPORT int32_t dc_set_parent(int32_t child, int32_t parent) {
     put<Children>(p, ch);
     return 0;
 }
-EXPORT int32_t dc_parent(int32_t h) {
+EXPORT cint dc_parent(cint h) {
     EntityId e = idOf(h);
     const Parent* p = e != InvalidEntityId ? get<Parent>(e) : nullptr;
     return p ? handleOf(p->entity) : 0;
@@ -1023,41 +1028,41 @@ EXPORT int32_t dc_parent(int32_t h) {
 
 // ---- Transform ----
 
-EXPORT int32_t dc_set_position(int32_t h, DV2 p) {
+EXPORT cint dc_set_position(cint h, DV2 p) {
     edit<Transform2D>(h, [&](Transform2D& t) { t.position = v2(p); });
     EntityId e = idOf(h);
     if (e != InvalidEntityId) teleportBody(e, v2(p));
     return 0;
 }
-EXPORT DV2 dc_position(int32_t h) {
+EXPORT DV2 dc_position(cint h) {
     EntityId e = idOf(h);
     const Transform2D* t = e != InvalidEntityId ? get<Transform2D>(e) : nullptr;
     return t ? dv(t->position) : DV2{0, 0};
 }
-EXPORT DV2 dc_world_position(int32_t h) {
+EXPORT DV2 dc_world_position(cint h) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return {0, 0};
     if (const auto* gt = get<GlobalTransform2D>(e)) return dv(gt->position);
     const Transform2D* t = get<Transform2D>(e);
     return t ? dv(t->position) : DV2{0, 0};
 }
-EXPORT int32_t dc_set_rotation(int32_t h, double r) {
+EXPORT cint dc_set_rotation(cint h, double r) {
     edit<Transform2D>(h, [&](Transform2D& t) { t.rotation = float(r); });
     EntityId e = idOf(h);
     if (const PhysicsBody* b = e != InvalidEntityId ? bodyOf(e) : nullptr)
         res<PhysicsResource>()->setBodyRotation(*b, float(r));
     return 0;
 }
-EXPORT double dc_rotation(int32_t h) {
+EXPORT double dc_rotation(cint h) {
     EntityId e = idOf(h);
     const Transform2D* t = e != InvalidEntityId ? get<Transform2D>(e) : nullptr;
     return t ? t->rotation : 0.0;
 }
-EXPORT int32_t dc_set_scale(int32_t h, DV2 s) {
+EXPORT cint dc_set_scale(cint h, DV2 s) {
     edit<Transform2D>(h, [&](Transform2D& t) { t.scale = v2(s); });
     return 0;
 }
-EXPORT DV2 dc_scale(int32_t h) {
+EXPORT DV2 dc_scale(cint h) {
     EntityId e = idOf(h);
     const Transform2D* t = e != InvalidEntityId ? get<Transform2D>(e) : nullptr;
     return t ? dv(t->scale) : DV2{1, 1};
@@ -1065,39 +1070,39 @@ EXPORT DV2 dc_scale(int32_t h) {
 
 // ---- Sprite ----
 
-EXPORT int32_t dc_set_sprite(int32_t h, int32_t tex) {
+EXPORT cint dc_set_sprite(cint h, cint tex) {
     edit<Sprite>(h, [&](Sprite& s) { s.texture = handle<TextureHandle>(tex); });
     return 0;
 }
-EXPORT int32_t dc_sprite_texture(int32_t h) {
+EXPORT cint dc_sprite_texture(cint h) {
     EntityId e = idOf(h);
     const Sprite* s = e != InvalidEntityId ? get<Sprite>(e) : nullptr;
     return s ? bits(s->texture.id) : 0;
 }
-EXPORT int32_t dc_sprite_set_rect(int32_t h, DRect r) { edit<Sprite>(h, [&](Sprite& s) { s.srcRect = rect(r); }); return 0; }
-EXPORT DRect dc_sprite_rect(int32_t h) {
+EXPORT cint dc_sprite_set_rect(cint h, DRect r) { edit<Sprite>(h, [&](Sprite& s) { s.srcRect = rect(r); }); return 0; }
+EXPORT DRect dc_sprite_rect(cint h) {
     EntityId e = idOf(h);
     const Sprite* s = e != InvalidEntityId ? get<Sprite>(e) : nullptr;
     return s ? drect(s->srcRect) : DRect{0, 0, 0, 0};
 }
-EXPORT int32_t dc_sprite_set_origin(int32_t h, DV2 o) { edit<Sprite>(h, [&](Sprite& s) { s.origin = v2(o); }); return 0; }
-EXPORT int32_t dc_sprite_set_tint(int32_t h, DColor c) { edit<Sprite>(h, [&](Sprite& s) { s.tint = color(c); }); return 0; }
-EXPORT DColor dc_sprite_tint(int32_t h) {
+EXPORT cint dc_sprite_set_origin(cint h, DV2 o) { edit<Sprite>(h, [&](Sprite& s) { s.origin = v2(o); }); return 0; }
+EXPORT cint dc_sprite_set_tint(cint h, DColor c) { edit<Sprite>(h, [&](Sprite& s) { s.tint = color(c); }); return 0; }
+EXPORT DColor dc_sprite_tint(cint h) {
     EntityId e = idOf(h);
     const Sprite* s = e != InvalidEntityId ? get<Sprite>(e) : nullptr;
     return s ? dcolor(s->tint) : DColor{1, 1, 1, 1};
 }
-EXPORT int32_t dc_sprite_set_flip(int32_t h, int32_t flip) { edit<Sprite>(h, [&](Sprite& s) { s.flip = static_cast<Flip>(flip); }); return 0; }
-EXPORT int32_t dc_sprite_set_z(int32_t h, double z) { edit<Sprite>(h, [&](Sprite& s) { s.zOrder = float(z); }); return 0; }
-EXPORT int32_t dc_sprite_set_layer(int32_t h, int32_t l) { edit<Sprite>(h, [&](Sprite& s) { s.layer = uint8_t(std::clamp(l, 0, 31)); }); return 0; }
-EXPORT int32_t dc_sprite_set_visible(int32_t h, int32_t v) { edit<Sprite>(h, [&](Sprite& s) { s.visible = v != 0; }); return 0; }
-EXPORT int32_t dc_sprite_set_blend(int32_t h, int32_t b) { edit<Sprite>(h, [&](Sprite& s) { s.blend = static_cast<BlendMode>(b); }); return 0; }
-EXPORT int32_t dc_remove_sprite(int32_t h) { removeComponent<Sprite>(h); return 0; }
+EXPORT cint dc_sprite_set_flip(cint h, cint flip) { edit<Sprite>(h, [&](Sprite& s) { s.flip = static_cast<Flip>(flip); }); return 0; }
+EXPORT cint dc_sprite_set_z(cint h, double z) { edit<Sprite>(h, [&](Sprite& s) { s.zOrder = float(z); }); return 0; }
+EXPORT cint dc_sprite_set_layer(cint h, cint l) { edit<Sprite>(h, [&](Sprite& s) { s.layer = uint8_t(std::clamp<cint>(l, 0, 31)); }); return 0; }
+EXPORT cint dc_sprite_set_visible(cint h, cint v) { edit<Sprite>(h, [&](Sprite& s) { s.visible = v != 0; }); return 0; }
+EXPORT cint dc_sprite_set_blend(cint h, cint b) { edit<Sprite>(h, [&](Sprite& s) { s.blend = static_cast<BlendMode>(b); }); return 0; }
+EXPORT cint dc_remove_sprite(cint h) { removeComponent<Sprite>(h); return 0; }
 
 // ---- Sprite animation (SpriteAnimator clips of source rects) ----
 
 // rects: x, y, w, h per frame; count is the number of floats.
-EXPORT int32_t dc_anim_add_clip(int32_t h, const double* rects, int32_t count, double frameDuration, int32_t looping) {
+EXPORT cint dc_anim_add_clip(cint h, const double* rects, cint count, double frameDuration, cint looping) {
     int32_t index = -1;
     edit<SpriteAnimator>(h, [&](SpriteAnimator& a) {
         AnimationClip clip;
@@ -1113,19 +1118,19 @@ EXPORT int32_t dc_anim_add_clip(int32_t h, const double* rects, int32_t count, d
     if (e != InvalidEntityId && !get<Sprite>(e)) put<Sprite>(e, Sprite{});
     return index;
 }
-EXPORT int32_t dc_anim_play(int32_t h, int32_t clip) { edit<SpriteAnimator>(h, [&](SpriteAnimator& a) { a.play(clip); }); return 0; }
-EXPORT int32_t dc_anim_stop(int32_t h) { edit<SpriteAnimator>(h, [&](SpriteAnimator& a) { a.stop(); }); return 0; }
-EXPORT int32_t dc_anim_clip(int32_t h) {
+EXPORT cint dc_anim_play(cint h, cint clip) { edit<SpriteAnimator>(h, [&](SpriteAnimator& a) { a.play(clip); }); return 0; }
+EXPORT cint dc_anim_stop(cint h) { edit<SpriteAnimator>(h, [&](SpriteAnimator& a) { a.stop(); }); return 0; }
+EXPORT cint dc_anim_clip(cint h) {
     EntityId e = idOf(h);
     const SpriteAnimator* a = e != InvalidEntityId ? get<SpriteAnimator>(e) : nullptr;
     return a ? a->currentClip : -1;
 }
-EXPORT int32_t dc_anim_frame(int32_t h) {
+EXPORT cint dc_anim_frame(cint h) {
     EntityId e = idOf(h);
     const SpriteAnimator* a = e != InvalidEntityId ? get<SpriteAnimator>(e) : nullptr;
     return a ? a->currentFrame : 0;
 }
-EXPORT int32_t dc_anim_finished(int32_t h) {
+EXPORT cint dc_anim_finished(cint h) {
     EntityId e = idOf(h);
     const SpriteAnimator* a = e != InvalidEntityId ? get<SpriteAnimator>(e) : nullptr;
     return !a || a->isFinished() ? 1 : 0;
@@ -1133,13 +1138,13 @@ EXPORT int32_t dc_anim_finished(int32_t h) {
 
 // ---- Text ----
 
-EXPORT int32_t dc_set_text(int32_t h, const char* text) { edit<Text>(h, [&](Text& t) { t.set(text ? text : ""); }); return 0; }
-EXPORT const char* dc_text(int32_t h) {
+EXPORT cint dc_set_text(cint h, const char* text) { edit<Text>(h, [&](Text& t) { t.set(text ? text : ""); }); return 0; }
+EXPORT const char* dc_text(cint h) {
     EntityId e = idOf(h);
     const Text* t = e != InvalidEntityId ? get<Text>(e) : nullptr;
     return keep(t ? std::string(t->str()) : "");
 }
-EXPORT int32_t dc_text_style(int32_t h, int32_t font, DTextStyle s) {
+EXPORT cint dc_text_style(cint h, cint font, DTextStyle s) {
     edit<Text>(h, [&](Text& t) {
         t.font = handle<FontHandle>(font);
         t.size = float(s.size);
@@ -1156,31 +1161,31 @@ EXPORT int32_t dc_text_style(int32_t h, int32_t font, DTextStyle s) {
     });
     return 0;
 }
-EXPORT int32_t dc_text_set_color(int32_t h, DColor c) { edit<Text>(h, [&](Text& t) { t.color = color(c); }); return 0; }
-EXPORT int32_t dc_text_set_size(int32_t h, double size) { edit<Text>(h, [&](Text& t) { t.size = float(size); }); return 0; }
-EXPORT int32_t dc_text_set_z(int32_t h, double z) { edit<Text>(h, [&](Text& t) { t.zOrder = float(z); }); return 0; }
-EXPORT int32_t dc_text_set_layer(int32_t h, int32_t l) { edit<Text>(h, [&](Text& t) { t.layer = uint8_t(std::clamp(l, 0, 31)); }); return 0; }
-EXPORT int32_t dc_text_set_visible(int32_t h, int32_t v) { edit<Text>(h, [&](Text& t) { t.visible = v != 0; }); return 0; }
+EXPORT cint dc_text_set_color(cint h, DColor c) { edit<Text>(h, [&](Text& t) { t.color = color(c); }); return 0; }
+EXPORT cint dc_text_set_size(cint h, double size) { edit<Text>(h, [&](Text& t) { t.size = float(size); }); return 0; }
+EXPORT cint dc_text_set_z(cint h, double z) { edit<Text>(h, [&](Text& t) { t.zOrder = float(z); }); return 0; }
+EXPORT cint dc_text_set_layer(cint h, cint l) { edit<Text>(h, [&](Text& t) { t.layer = uint8_t(std::clamp<cint>(l, 0, 31)); }); return 0; }
+EXPORT cint dc_text_set_visible(cint h, cint v) { edit<Text>(h, [&](Text& t) { t.visible = v != 0; }); return 0; }
 
 // ---- Camera ----
 
-EXPORT int32_t dc_add_camera(int32_t h) { edit<Camera>(h, [&](Camera& c) { c.active = true; }); return 0; }
-EXPORT int32_t dc_camera_set_zoom(int32_t h, double z) { edit<Camera>(h, [&](Camera& c) { c.zoom = float(z); }); return 0; }
-EXPORT double dc_camera_zoom(int32_t h) {
+EXPORT cint dc_add_camera(cint h) { edit<Camera>(h, [&](Camera& c) { c.active = true; }); return 0; }
+EXPORT cint dc_camera_set_zoom(cint h, double z) { edit<Camera>(h, [&](Camera& c) { c.zoom = float(z); }); return 0; }
+EXPORT double dc_camera_zoom(cint h) {
     EntityId e = idOf(h);
     const Camera* c = e != InvalidEntityId ? get<Camera>(e) : nullptr;
     return c ? c->zoom : 1.0;
 }
-EXPORT int32_t dc_camera_set_active(int32_t h, int32_t a) { edit<Camera>(h, [&](Camera& c) { c.active = a != 0; }); return 0; }
-EXPORT int32_t dc_camera_set_viewport(int32_t h, DRect r) { edit<Camera>(h, [&](Camera& c) { c.viewport = rect(r); }); return 0; }
-EXPORT int32_t dc_camera_set_order(int32_t h, int32_t o) { edit<Camera>(h, [&](Camera& c) { c.order = o; }); return 0; }
-EXPORT int32_t dc_camera_set_layers(int32_t h, int32_t mask) { edit<Camera>(h, [&](Camera& c) { c.layerMask = ubits(mask); }); return 0; }
-EXPORT int32_t dc_camera_set_target(int32_t h, int32_t tex) { edit<Camera>(h, [&](Camera& c) { c.target = handle<TextureHandle>(tex); }); return 0; }
-EXPORT int32_t dc_camera_set_clear(int32_t h, int32_t clear, DColor col) {
+EXPORT cint dc_camera_set_active(cint h, cint a) { edit<Camera>(h, [&](Camera& c) { c.active = a != 0; }); return 0; }
+EXPORT cint dc_camera_set_viewport(cint h, DRect r) { edit<Camera>(h, [&](Camera& c) { c.viewport = rect(r); }); return 0; }
+EXPORT cint dc_camera_set_order(cint h, cint o) { edit<Camera>(h, [&](Camera& c) { c.order = o; }); return 0; }
+EXPORT cint dc_camera_set_layers(cint h, cint mask) { edit<Camera>(h, [&](Camera& c) { c.layerMask = ubits(mask); }); return 0; }
+EXPORT cint dc_camera_set_target(cint h, cint tex) { edit<Camera>(h, [&](Camera& c) { c.target = handle<TextureHandle>(tex); }); return 0; }
+EXPORT cint dc_camera_set_clear(cint h, cint clear, DColor col) {
     edit<Camera>(h, [&](Camera& c) { c.clear = clear != 0; c.clearColor = colorf(col); });
     return 0;
 }
-EXPORT int32_t dc_camera_follow(int32_t h, int32_t target, double smoothing, DV2 offset, DV2 deadZone) {
+EXPORT cint dc_camera_follow(cint h, cint target, double smoothing, DV2 offset, DV2 deadZone) {
     EntityId t = idOf(target);
     edit<CameraFollow>(h, [&](CameraFollow& f) {
         f.target = t;
@@ -1190,7 +1195,7 @@ EXPORT int32_t dc_camera_follow(int32_t h, int32_t target, double smoothing, DV2
     });
     return 0;
 }
-EXPORT int32_t dc_camera_shake(int32_t h, double intensity, double decay, double frequency) {
+EXPORT cint dc_camera_shake(cint h, double intensity, double decay, double frequency) {
     edit<CameraShake>(h, [&](CameraShake& s) {
         s.decay = float(decay);
         s.frequency = float(frequency);
@@ -1201,7 +1206,7 @@ EXPORT int32_t dc_camera_shake(int32_t h, double intensity, double decay, double
 
 // ---- Physics ----
 
-EXPORT int32_t dc_add_body(int32_t h, DBody b) {
+EXPORT cint dc_add_body(cint h, DBody b) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     RigidBody2D rb;
@@ -1229,7 +1234,7 @@ template <typename T> void fillCollider(T& c, const DCollider& d) {
 }
 }
 
-EXPORT int32_t dc_add_box_collider(int32_t h, DV2 half, DCollider d) {
+EXPORT cint dc_add_box_collider(cint h, DV2 half, DCollider d) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     BoxCollider2D c;
@@ -1238,7 +1243,7 @@ EXPORT int32_t dc_add_box_collider(int32_t h, DV2 half, DCollider d) {
     put<BoxCollider2D>(e, c);
     return 0;
 }
-EXPORT int32_t dc_add_circle_collider(int32_t h, double radius, DCollider d) {
+EXPORT cint dc_add_circle_collider(cint h, double radius, DCollider d) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     CircleCollider2D c;
@@ -1247,23 +1252,23 @@ EXPORT int32_t dc_add_circle_collider(int32_t h, double radius, DCollider d) {
     put<CircleCollider2D>(e, c);
     return 0;
 }
-EXPORT int32_t dc_remove_body(int32_t h) {
+EXPORT cint dc_remove_body(cint h) {
     removeComponent<BoxCollider2D>(h);
     removeComponent<CircleCollider2D>(h);
     removeComponent<RigidBody2D>(h);
     removeComponent<Velocity2D>(h);
     return 0;
 }
-EXPORT int32_t dc_set_velocity(int32_t h, DV2 v) {
+EXPORT cint dc_set_velocity(cint h, DV2 v) {
     edit<Velocity2D>(h, [&](Velocity2D& vel) { vel.linear = v2(v); });
     return 0;
 }
-EXPORT DV2 dc_velocity(int32_t h) {
+EXPORT DV2 dc_velocity(cint h) {
     EntityId e = idOf(h);
     const Velocity2D* v = e != InvalidEntityId ? get<Velocity2D>(e) : nullptr;
     return v ? dv(v->linear) : DV2{0, 0};
 }
-EXPORT int32_t dc_apply_impulse(int32_t h, DV2 impulse) {
+EXPORT cint dc_apply_impulse(cint h, DV2 impulse) {
     PhysicsBody* b = bodyFor(h);
     auto* physics = res<PhysicsResource>();
     if (!b || !physics) return 0;
@@ -1274,17 +1279,17 @@ EXPORT int32_t dc_apply_impulse(int32_t h, DV2 impulse) {
     if (get<Velocity2D>(e)) edit<Velocity2D>(h, [&](Velocity2D& v) { v.linear = vel; });
     return 0;
 }
-EXPORT int32_t dc_apply_force(int32_t h, DV2 force) {
+EXPORT cint dc_apply_force(cint h, DV2 force) {
     PhysicsBody* b = bodyFor(h);
     auto* physics = res<PhysicsResource>();
     if (b && physics) physics->applyForce(*b, v2(force));
     return 0;
 }
-EXPORT int32_t dc_set_gravity(DV2 g2) { if (auto* p = res<PhysicsResource>()) p->setGravity(v2(g2)); return 0; }
+EXPORT cint dc_set_gravity(DV2 g2) { if (auto* p = res<PhysicsResource>()) p->setGravity(v2(g2)); return 0; }
 EXPORT DV2 dc_gravity() { auto* p = res<PhysicsResource>(); return p ? dv(p->gravity()) : DV2{0, 0}; }
 
 // kind: 0 collision start, 1 collision end, 2 sensor start, 3 sensor end.
-EXPORT int32_t dc_contact_count(int32_t kind) {
+EXPORT cint dc_contact_count(cint kind) {
     auto* cb = res<CollisionBridge>();
     if (!cb) return 0;
     switch (kind) {
@@ -1295,7 +1300,7 @@ EXPORT int32_t dc_contact_count(int32_t kind) {
     }
     return 0;
 }
-EXPORT int32_t dc_contact_entity(int32_t kind, int32_t i, int32_t which) {
+EXPORT cint dc_contact_entity(cint kind, cint i, cint which) {
     auto* cb = res<CollisionBridge>();
     if (!cb) return 0;
     EntityId e = InvalidEntityId;
@@ -1307,7 +1312,7 @@ EXPORT int32_t dc_contact_entity(int32_t kind, int32_t i, int32_t which) {
     }
     return handleOf(e);
 }
-EXPORT DHit dc_raycast(DV2 origin, DV2 direction, double distance, int32_t mask) {
+EXPORT DHit dc_raycast(DV2 origin, DV2 direction, double distance, cint mask) {
     DHit out{0, {0, 0}, {0, 0}, 0};
     auto* p = res<PhysicsResource>();
     if (!p) return out;
@@ -1323,7 +1328,7 @@ EXPORT DHit dc_raycast(DV2 origin, DV2 direction, double distance, int32_t mask)
 
 // ---- Particles ----
 
-EXPORT int32_t dc_add_emitter(int32_t h, DEmitter d) {
+EXPORT cint dc_add_emitter(cint h, DEmitter d) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     ParticleEmitter pe;
@@ -1331,16 +1336,16 @@ EXPORT int32_t dc_add_emitter(int32_t h, DEmitter d) {
     put<ParticleEmitter>(e, pe);
     return 0;
 }
-EXPORT int32_t dc_emitter_set_playing(int32_t h, int32_t playing) {
+EXPORT cint dc_emitter_set_playing(cint h, cint playing) {
     edit<ParticleEmitter>(h, [&](ParticleEmitter& p) { p.playing = playing != 0; });
     return 0;
 }
-EXPORT int32_t dc_emitter_set_rate(int32_t h, double rate) {
+EXPORT cint dc_emitter_set_rate(cint h, double rate) {
     edit<ParticleEmitter>(h, [&](ParticleEmitter& p) { p.config.spawnRate = float(rate); });
     return 0;
 }
 // A one-off burst of `count` particles at `pos`, cleaned up when it fades.
-EXPORT int32_t dc_burst(DV2 pos, DEmitter d, int32_t count) {
+EXPORT cint dc_burst(DV2 pos, DEmitter d, cint count) {
     World* w = world();
     if (!w) return 0;
     EntityId e = w->createEntity();
@@ -1352,8 +1357,8 @@ EXPORT int32_t dc_burst(DV2 pos, DEmitter d, int32_t count) {
     pe.config.spawnRate = 0.f;
     pe.config.looping = false;
     pe.config.duration = 0.05f;
-    pe.config.maxParticles = std::max(pe.config.maxParticles, count);
-    pe.config.bursts.push_back(BurstEntry{0.f, count, 1, 0.f});
+    pe.config.maxParticles = std::max<uint32_t>(pe.config.maxParticles, uint32_t(count));
+    pe.config.bursts.push_back(BurstEntry{0.f, int32_t(count), 1, 0.f});
     pe.oneShot = true;
     put<ParticleEmitter>(e, pe);
     auto* time = res<Time>();
@@ -1364,7 +1369,7 @@ EXPORT int32_t dc_burst(DV2 pos, DEmitter d, int32_t count) {
 
 // ---- Lights (need Config.lighting) ----
 
-EXPORT int32_t dc_add_point_light(int32_t h, DColor c, double intensity, double radius, double falloff, int32_t shadows) {
+EXPORT cint dc_add_point_light(cint h, DColor c, double intensity, double radius, double falloff, cint shadows) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     PointLight2D l;
@@ -1376,8 +1381,8 @@ EXPORT int32_t dc_add_point_light(int32_t h, DColor c, double intensity, double 
     put<PointLight2D>(e, l);
     return 0;
 }
-EXPORT int32_t dc_add_spot_light(int32_t h, DColor c, double intensity, double radius, double falloff,
-                              double direction, double angle, double softness, int32_t shadows) {
+EXPORT cint dc_add_spot_light(cint h, DColor c, double intensity, double radius, double falloff,
+                              double direction, double angle, double softness, cint shadows) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     SpotLight2D l;
@@ -1392,7 +1397,7 @@ EXPORT int32_t dc_add_spot_light(int32_t h, DColor c, double intensity, double r
     put<SpotLight2D>(e, l);
     return 0;
 }
-EXPORT int32_t dc_light_set_color(int32_t h, DColor c, double intensity) {
+EXPORT cint dc_light_set_color(cint h, DColor c, double intensity) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     if (get<PointLight2D>(e)) edit<PointLight2D>(h, [&](PointLight2D& l) { l.color = colorf(c); l.intensity = float(intensity); });
@@ -1400,7 +1405,7 @@ EXPORT int32_t dc_light_set_color(int32_t h, DColor c, double intensity) {
     return 0;
 }
 // shape: 0 box (half size), 1 circle (radius = size.x), 3 the entity's collider.
-EXPORT int32_t dc_add_occluder(int32_t h, int32_t shape, DV2 size) {
+EXPORT cint dc_add_occluder(cint h, cint shape, DV2 size) {
     EntityId e = idOf(h);
     if (e == InvalidEntityId) return 0;
     LightOccluder2D o;
@@ -1410,7 +1415,7 @@ EXPORT int32_t dc_add_occluder(int32_t h, int32_t shape, DV2 size) {
     put<LightOccluder2D>(e, o);
     return 0;
 }
-EXPORT int32_t dc_set_ambient(DColor c) {
+EXPORT cint dc_set_ambient(DColor c) {
     auto* s = res<LightingSettings>();
     if (!s) return 0;
     s->ambient = colorf(c);
@@ -1423,7 +1428,7 @@ EXPORT int32_t dc_set_ambient(DColor c) {
 
 // kind: 0 bloom, 1 vignette, 2 crt, 3 grayscale, 4 sepia, 5 pixelate, 6 blur.
 // a and b are the effect's two main parameters (see the binding docs).
-EXPORT int32_t dc_effect_add(int32_t kind, double a, double b) {
+EXPORT cint dc_effect_add(cint kind, double a, double b) {
     auto* fx = res<PostEffects>();
     if (!fx) return 0;
     EffectId id;
@@ -1439,8 +1444,8 @@ EXPORT int32_t dc_effect_add(int32_t kind, double a, double b) {
     }
     return id.id;
 }
-EXPORT int32_t dc_effect_set_enabled(int32_t id, int32_t on) { if (auto* fx = res<PostEffects>()) fx->setEnabled(EffectId{id}, on != 0); return 0; }
-EXPORT int32_t dc_effect_remove(int32_t id) { if (auto* fx = res<PostEffects>()) fx->remove(EffectId{id}); return 0; }
+EXPORT cint dc_effect_set_enabled(cint id, cint on) { if (auto* fx = res<PostEffects>()) fx->setEnabled(EffectId{int32_t(id)}, on != 0); return 0; }
+EXPORT cint dc_effect_remove(cint id) { if (auto* fx = res<PostEffects>()) fx->remove(EffectId{int32_t(id)}); return 0; }
 
 namespace {
 EffectId fadeEffect() {
@@ -1450,7 +1455,7 @@ EffectId fadeEffect() {
     return g.fade;
 }
 }
-EXPORT int32_t dc_fade_to(DColor c, double amount, double seconds) {
+EXPORT cint dc_fade_to(DColor c, double amount, double seconds) {
     auto* fx = res<PostEffects>();
     EffectId id = fadeEffect();
     if (!fx || !id.valid()) return 0;
@@ -1458,7 +1463,7 @@ EXPORT int32_t dc_fade_to(DColor c, double amount, double seconds) {
     fx->fadeTo(id, float(amount), float(seconds));
     return 0;
 }
-EXPORT int32_t dc_flash(DColor c, double seconds) {
+EXPORT cint dc_flash(DColor c, double seconds) {
     auto* fx = res<PostEffects>();
     EffectId id = fadeEffect();
     if (fx && id.valid()) fx->flash(id, colorf(c), float(seconds));
@@ -1469,7 +1474,7 @@ EXPORT int32_t dc_flash(DColor c, double seconds) {
 // Tweens
 // =========================================================================
 
-EXPORT int32_t dc_tween_begin(int32_t h) {
+EXPORT cint dc_tween_begin(cint h) {
     auto* t = res<Tweens>();
     if (!t) return 0;
     EntityId e = h ? idOf(h) : InvalidEntityId;
@@ -1488,7 +1493,7 @@ Ease ease(int32_t e) { return static_cast<Ease>(std::clamp(e, 0, int32_t(Ease::C
 
 // step: 0 moveTo, 1 moveBy, 2 scaleTo, 3 rotateTo (v.x), 4 rotateBy (v.x),
 // 5 fadeTo (v.x), 6 zoomTo (v.x), 7 delay (duration).
-EXPORT int32_t dc_tween_step(int32_t b, int32_t step, DV2 v, double duration, int32_t e) {
+EXPORT cint dc_tween_step(cint b, cint step, DV2 v, double duration, cint e) {
     TweenBuilder* tb = builder(b);
     if (!tb) return 0;
     float d = float(duration);
@@ -1504,39 +1509,39 @@ EXPORT int32_t dc_tween_step(int32_t b, int32_t step, DV2 v, double duration, in
     }
     return 0;
 }
-EXPORT int32_t dc_tween_tint(int32_t b, DColor c, double duration, int32_t e) {
+EXPORT cint dc_tween_tint(cint b, DColor c, double duration, cint e) {
     if (TweenBuilder* tb = builder(b)) tb->tintTo(color(c), float(duration), ease(e));
     return 0;
 }
-EXPORT int32_t dc_tween_loop(int32_t b, int32_t times, int32_t yoyo) {
+EXPORT cint dc_tween_loop(cint b, cint times, cint yoyo) {
     if (TweenBuilder* tb = builder(b)) tb->loop(times, yoyo ? TweenLoop::Yoyo : TweenLoop::Restart);
     return 0;
 }
-EXPORT int32_t dc_tween_start(int32_t b) {
+EXPORT cint dc_tween_start(cint b) {
     auto it = g.tweenBuilders.find(b);
     if (it == g.tweenBuilders.end()) return 0;
     TweenId id = it->second->start();
     g.tweenBuilders.erase(it);
     return bits(id);
 }
-EXPORT int32_t dc_tween_stop(int32_t id, int32_t complete) { if (auto* t = res<Tweens>()) t->stop(ubits(id), complete != 0); return 0; }
-EXPORT int32_t dc_tween_pause(int32_t id) { if (auto* t = res<Tweens>()) t->pause(ubits(id)); return 0; }
-EXPORT int32_t dc_tween_resume(int32_t id) { if (auto* t = res<Tweens>()) t->resume(ubits(id)); return 0; }
-EXPORT int32_t dc_tween_active(int32_t id) { auto* t = res<Tweens>(); return t && t->isActive(ubits(id)) ? 1 : 0; }
-EXPORT int32_t dc_tween_stop_all(int32_t h) {
+EXPORT cint dc_tween_stop(cint id, cint complete) { if (auto* t = res<Tweens>()) t->stop(ubits(id), complete != 0); return 0; }
+EXPORT cint dc_tween_pause(cint id) { if (auto* t = res<Tweens>()) t->pause(ubits(id)); return 0; }
+EXPORT cint dc_tween_resume(cint id) { if (auto* t = res<Tweens>()) t->resume(ubits(id)); return 0; }
+EXPORT cint dc_tween_active(cint id) { auto* t = res<Tweens>(); return t && t->isActive(ubits(id)) ? 1 : 0; }
+EXPORT cint dc_tween_stop_all(cint h) {
     auto* t = res<Tweens>();
     EntityId e = idOf(h);
     if (t && e != InvalidEntityId) t->stopAll(e);
     return 0;
 }
-EXPORT int32_t dc_tween_time_scale(double s) { if (auto* t = res<Tweens>()) t->timeScale = float(s); return 0; }
-EXPORT double dc_ease(int32_t e, double t) { return easing::apply(ease(e), float(t)); }
+EXPORT cint dc_tween_time_scale(double s) { if (auto* t = res<Tweens>()) t->timeScale = float(s); return 0; }
+EXPORT double dc_ease(cint e, double t) { return easing::apply(ease(e), float(t)); }
 
 // =========================================================================
 // Audio
 // =========================================================================
 
-EXPORT int32_t dc_sound_load(const char* path, int32_t stream) {
+EXPORT cint dc_sound_load(const char* path, cint stream) {
     auto* a = res<AudioResource>();
     if (!a) return fail("drift is not running");
     SoundHandle s;
@@ -1546,7 +1551,7 @@ EXPORT int32_t dc_sound_load(const char* path, int32_t stream) {
     return bits(s.id);
 }
 // samples: interleaved when channels == 2; count is the number of floats.
-EXPORT int32_t dc_sound_create(const double* samples, int32_t count, int32_t channels, int32_t rate) {
+EXPORT cint dc_sound_create(const double* samples, cint count, cint channels, cint rate) {
     auto* a = res<AudioResource>();
     if (!a) return fail("drift is not running");
     if (channels < 1 || channels > 2 || count < channels) return fail("a sound needs 1 or 2 channels and at least one frame");
@@ -1555,10 +1560,10 @@ EXPORT int32_t dc_sound_create(const double* samples, int32_t count, int32_t cha
     if (!s.valid()) return fail("cannot create sound");
     return bits(s.id);
 }
-EXPORT double dc_sound_duration(int32_t s) { auto* a = res<AudioResource>(); return a ? a->soundDuration(handle<SoundHandle>(s)) : 0.0; }
-EXPORT int32_t dc_sound_destroy(int32_t s) { if (auto* a = res<AudioResource>()) a->destroySound(handle<SoundHandle>(s)); return 0; }
-EXPORT int32_t dc_sound_max_instances(int32_t s, int32_t n) { if (auto* a = res<AudioResource>()) a->setSoundMaxInstances(handle<SoundHandle>(s), n); return 0; }
-EXPORT int32_t dc_sound_play(int32_t s, DPlay p) {
+EXPORT double dc_sound_duration(cint s) { auto* a = res<AudioResource>(); return a ? a->soundDuration(handle<SoundHandle>(s)) : 0.0; }
+EXPORT cint dc_sound_destroy(cint s) { if (auto* a = res<AudioResource>()) a->destroySound(handle<SoundHandle>(s)); return 0; }
+EXPORT cint dc_sound_max_instances(cint s, cint n) { if (auto* a = res<AudioResource>()) a->setSoundMaxInstances(handle<SoundHandle>(s), n); return 0; }
+EXPORT cint dc_sound_play(cint s, DPlay p) {
     auto* a = res<AudioResource>();
     if (!a) return 0;
     PlayParams pp;
@@ -1571,15 +1576,15 @@ EXPORT int32_t dc_sound_play(int32_t s, DPlay p) {
     pp.priority = p.priority;
     return bits(a->playSound(handle<SoundHandle>(s), pp).id);
 }
-EXPORT int32_t dc_voice_stop(int32_t v, double fade) { if (auto* a = res<AudioResource>()) a->stopSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
-EXPORT int32_t dc_voice_pause(int32_t v, double fade) { if (auto* a = res<AudioResource>()) a->pauseSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
-EXPORT int32_t dc_voice_resume(int32_t v, double fade) { if (auto* a = res<AudioResource>()) a->resumeSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
-EXPORT int32_t dc_voice_set_volume(int32_t v, double vol, double fade) { if (auto* a = res<AudioResource>()) a->setSoundVolume(handle<PlayingSoundHandle>(v), float(vol), float(fade)); return 0; }
-EXPORT int32_t dc_voice_set_pan(int32_t v, double pan) { if (auto* a = res<AudioResource>()) a->setSoundPan(handle<PlayingSoundHandle>(v), float(pan)); return 0; }
-EXPORT int32_t dc_voice_set_pitch(int32_t v, double p) { if (auto* a = res<AudioResource>()) a->setSoundPitch(handle<PlayingSoundHandle>(v), float(p)); return 0; }
-EXPORT int32_t dc_voice_playing(int32_t v) { auto* a = res<AudioResource>(); return a && a->isSoundPlaying(handle<PlayingSoundHandle>(v)) ? 1 : 0; }
+EXPORT cint dc_voice_stop(cint v, double fade) { if (auto* a = res<AudioResource>()) a->stopSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
+EXPORT cint dc_voice_pause(cint v, double fade) { if (auto* a = res<AudioResource>()) a->pauseSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
+EXPORT cint dc_voice_resume(cint v, double fade) { if (auto* a = res<AudioResource>()) a->resumeSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
+EXPORT cint dc_voice_set_volume(cint v, double vol, double fade) { if (auto* a = res<AudioResource>()) a->setSoundVolume(handle<PlayingSoundHandle>(v), float(vol), float(fade)); return 0; }
+EXPORT cint dc_voice_set_pan(cint v, double pan) { if (auto* a = res<AudioResource>()) a->setSoundPan(handle<PlayingSoundHandle>(v), float(pan)); return 0; }
+EXPORT cint dc_voice_set_pitch(cint v, double p) { if (auto* a = res<AudioResource>()) a->setSoundPitch(handle<PlayingSoundHandle>(v), float(p)); return 0; }
+EXPORT cint dc_voice_playing(cint v) { auto* a = res<AudioResource>(); return a && a->isSoundPlaying(handle<PlayingSoundHandle>(v)) ? 1 : 0; }
 
-EXPORT int32_t dc_bus(int32_t which) {
+EXPORT cint dc_bus(cint which) {
     auto* a = res<AudioResource>();
     if (!a) return 0;
     switch (which) {
@@ -1588,17 +1593,17 @@ EXPORT int32_t dc_bus(int32_t which) {
         default: return bits(a->sfxBus().id);
     }
 }
-EXPORT int32_t dc_bus_create(const char* name, int32_t parent) {
+EXPORT cint dc_bus_create(const char* name, cint parent) {
     auto* a = res<AudioResource>();
     return a ? bits(a->createBus(name, handle<BusHandle>(parent)).id) : 0;
 }
-EXPORT int32_t dc_bus_set_volume(int32_t b, double v, double fade) { if (auto* a = res<AudioResource>()) a->setBusVolume(handle<BusHandle>(b), float(v), float(fade)); return 0; }
-EXPORT double dc_bus_volume(int32_t b) { auto* a = res<AudioResource>(); return a ? a->busVolume(handle<BusHandle>(b)) : 0.0; }
-EXPORT int32_t dc_bus_set_muted(int32_t b, int32_t m) { if (auto* a = res<AudioResource>()) a->setBusMuted(handle<BusHandle>(b), m != 0); return 0; }
-EXPORT int32_t dc_bus_set_paused(int32_t b, int32_t p) { if (auto* a = res<AudioResource>()) a->setBusPaused(handle<BusHandle>(b), p != 0); return 0; }
-EXPORT int32_t dc_bus_stop(int32_t b, double fade) { if (auto* a = res<AudioResource>()) a->stopBus(handle<BusHandle>(b), float(fade)); return 0; }
+EXPORT cint dc_bus_set_volume(cint b, double v, double fade) { if (auto* a = res<AudioResource>()) a->setBusVolume(handle<BusHandle>(b), float(v), float(fade)); return 0; }
+EXPORT double dc_bus_volume(cint b) { auto* a = res<AudioResource>(); return a ? a->busVolume(handle<BusHandle>(b)) : 0.0; }
+EXPORT cint dc_bus_set_muted(cint b, cint m) { if (auto* a = res<AudioResource>()) a->setBusMuted(handle<BusHandle>(b), m != 0); return 0; }
+EXPORT cint dc_bus_set_paused(cint b, cint p) { if (auto* a = res<AudioResource>()) a->setBusPaused(handle<BusHandle>(b), p != 0); return 0; }
+EXPORT cint dc_bus_stop(cint b, double fade) { if (auto* a = res<AudioResource>()) a->stopBus(handle<BusHandle>(b), float(fade)); return 0; }
 
-EXPORT int32_t dc_music_play(int32_t s, double crossfade, double volume, int32_t loop) {
+EXPORT cint dc_music_play(cint s, double crossfade, double volume, cint loop) {
     auto* a = res<AudioResource>();
     if (!a) return 0;
     MusicParams p;
@@ -1607,11 +1612,11 @@ EXPORT int32_t dc_music_play(int32_t s, double crossfade, double volume, int32_t
     p.loop = loop != 0;
     return a->playMusic(handle<SoundHandle>(s), p) ? 1 : 0;
 }
-EXPORT int32_t dc_music_stop(double fade) { if (auto* a = res<AudioResource>()) a->stopMusic(float(fade)); return 0; }
-EXPORT int32_t dc_music_pause(double fade) { if (auto* a = res<AudioResource>()) a->pauseMusic(float(fade)); return 0; }
-EXPORT int32_t dc_music_resume(double fade) { if (auto* a = res<AudioResource>()) a->resumeMusic(float(fade)); return 0; }
-EXPORT int32_t dc_music_playing() { auto* a = res<AudioResource>(); return a && a->isMusicPlaying() ? 1 : 0; }
-EXPORT int32_t dc_audio_has_device() { auto* a = res<AudioResource>(); return a && a->hasDevice() ? 1 : 0; }
+EXPORT cint dc_music_stop(double fade) { if (auto* a = res<AudioResource>()) a->stopMusic(float(fade)); return 0; }
+EXPORT cint dc_music_pause(double fade) { if (auto* a = res<AudioResource>()) a->pauseMusic(float(fade)); return 0; }
+EXPORT cint dc_music_resume(double fade) { if (auto* a = res<AudioResource>()) a->resumeMusic(float(fade)); return 0; }
+EXPORT cint dc_music_playing() { auto* a = res<AudioResource>(); return a && a->isMusicPlaying() ? 1 : 0; }
+EXPORT cint dc_audio_has_device() { auto* a = res<AudioResource>(); return a && a->hasDevice() ? 1 : 0; }
 
 // =========================================================================
 // Save data
@@ -1628,108 +1633,108 @@ int32_t addSave(std::unique_ptr<SaveData> s) {
 }
 }
 
-EXPORT int32_t dc_save_open(const char* org, const char* app, const char* slot) {
+EXPORT cint dc_save_open(const char* org, const char* app, const char* slot) {
     auto s = std::make_unique<SaveData>();
     if (!s->open(org, app, slot)) return fail(std::string("cannot open save slot ") + slot);
     return addSave(std::move(s));
 }
-EXPORT int32_t dc_save_open_file(const char* path) {
+EXPORT cint dc_save_open_file(const char* path) {
     auto s = std::make_unique<SaveData>();
     if (!s->openFile(path)) return fail(std::string("cannot open save file ") + path);
     return addSave(std::move(s));
 }
-EXPORT int32_t dc_save_set_int(int32_t h, const char* k, int32_t v) { if (auto* s = save(h)) s->set(k, v); return 0; }
-EXPORT int32_t dc_save_set_float(int32_t h, const char* k, double v) { if (auto* s = save(h)) s->set(k, v); return 0; }
-EXPORT int32_t dc_save_set_string(int32_t h, const char* k, const char* v) { if (auto* s = save(h)) s->set(k, std::string(v)); return 0; }
-EXPORT int32_t dc_save_get_int(int32_t h, const char* k, int32_t fallback) {
+EXPORT cint dc_save_set_int(cint h, const char* k, cint v) { if (auto* s = save(h)) s->set(k, v); return 0; }
+EXPORT cint dc_save_set_float(cint h, const char* k, double v) { if (auto* s = save(h)) s->set(k, v); return 0; }
+EXPORT cint dc_save_set_string(cint h, const char* k, const char* v) { if (auto* s = save(h)) s->set(k, std::string(v)); return 0; }
+EXPORT cint dc_save_get_int(cint h, const char* k, cint fallback) {
     auto* s = save(h);
     return s ? s->get<int32_t>(k, fallback) : fallback;
 }
-EXPORT double dc_save_get_float(int32_t h, const char* k, double fallback) {
+EXPORT double dc_save_get_float(cint h, const char* k, double fallback) {
     auto* s = save(h);
     return s ? s->get<double>(k, fallback) : fallback;
 }
-EXPORT const char* dc_save_get_string(int32_t h, const char* k, const char* fallback) {
+EXPORT const char* dc_save_get_string(cint h, const char* k, const char* fallback) {
     auto* s = save(h);
     return keep(s ? s->get<std::string>(k, fallback) : std::string(fallback));
 }
-EXPORT int32_t dc_save_has(int32_t h, const char* k) { auto* s = save(h); return s && s->has(k) ? 1 : 0; }
-EXPORT int32_t dc_save_erase(int32_t h, const char* k) { if (auto* s = save(h)) s->erase(k); return 0; }
-EXPORT int32_t dc_save_clear(int32_t h) { if (auto* s = save(h)) s->clear(); return 0; }
-EXPORT int32_t dc_save_flush(int32_t h) { auto* s = save(h); return s && s->flush() ? 1 : 0; }
-EXPORT int32_t dc_save_load(int32_t h) { auto* s = save(h); return s && s->load() ? 1 : 0; }
-EXPORT const char* dc_save_path(int32_t h) { auto* s = save(h); return keep(s ? s->path().string() : ""); }
-EXPORT const char* dc_save_json(int32_t h) { auto* s = save(h); return keep(s ? s->json().dump() : "{}"); }
+EXPORT cint dc_save_has(cint h, const char* k) { auto* s = save(h); return s && s->has(k) ? 1 : 0; }
+EXPORT cint dc_save_erase(cint h, const char* k) { if (auto* s = save(h)) s->erase(k); return 0; }
+EXPORT cint dc_save_clear(cint h) { if (auto* s = save(h)) s->clear(); return 0; }
+EXPORT cint dc_save_flush(cint h) { auto* s = save(h); return s && s->flush() ? 1 : 0; }
+EXPORT cint dc_save_load(cint h) { auto* s = save(h); return s && s->load() ? 1 : 0; }
+EXPORT const char* dc_save_path(cint h) { auto* s = save(h); return keep(s ? s->path().string() : ""); }
+EXPORT const char* dc_save_json(cint h) { auto* s = save(h); return keep(s ? s->json().dump() : "{}"); }
 
 // =========================================================================
 // Tilemaps
 // =========================================================================
 
-EXPORT int32_t dc_tilemap_load(const char* path, const char* level) {
+EXPORT cint dc_tilemap_load(const char* path, const char* level) {
     auto* t = res<TilemapResource>();
     if (!t) return fail("drift is not running");
     TilemapHandle m = t->loadTilemap(path, level && *level ? level : nullptr);
     if (!m.valid()) return fail(std::string("cannot load tilemap ") + path);
     return bits(m.id);
 }
-EXPORT int32_t dc_set_tilemap(int32_t h, int32_t map, double z, int32_t layer, int32_t colliders) {
+EXPORT cint dc_set_tilemap(cint h, cint map, double z, cint layer, cint colliders) {
     edit<Tilemap>(h, [&](Tilemap& t) {
         t.map = handle<TilemapHandle>(map);
         t.zOrder = float(z);
-        t.renderLayer = uint8_t(std::clamp(layer, 0, 31));
+        t.renderLayer = uint8_t(std::clamp<cint>(layer, 0, 31));
         t.colliders = colliders != 0;
     });
     return 0;
 }
 namespace { TilemapResource* maps() { return res<TilemapResource>(); } }
-EXPORT DCell dc_tilemap_size(int32_t m) {
+EXPORT DCell dc_tilemap_size(cint m) {
     auto* t = maps();
     auto h = handle<TilemapHandle>(m);
     return t ? DCell{t->mapWidth(h), t->mapHeight(h)} : DCell{0, 0};
 }
-EXPORT DCell dc_tilemap_tile_size(int32_t m) {
+EXPORT DCell dc_tilemap_tile_size(cint m) {
     auto* t = maps();
     auto h = handle<TilemapHandle>(m);
     return t ? DCell{t->tileWidth(h), t->tileHeight(h)} : DCell{0, 0};
 }
-EXPORT DRect dc_tilemap_bounds(int32_t m) { auto* t = maps(); return t ? drect(t->bounds(handle<TilemapHandle>(m))) : DRect{0, 0, 0, 0}; }
-EXPORT int32_t dc_tilemap_layer_count(int32_t m) { auto* t = maps(); return t ? t->layerCount(handle<TilemapHandle>(m)) : 0; }
-EXPORT int32_t dc_tilemap_find_layer(int32_t m, const char* name) { auto* t = maps(); return t ? t->findLayer(handle<TilemapHandle>(m), name) : -1; }
-EXPORT const char* dc_tilemap_layer_name(int32_t m, int32_t l) {
+EXPORT DRect dc_tilemap_bounds(cint m) { auto* t = maps(); return t ? drect(t->bounds(handle<TilemapHandle>(m))) : DRect{0, 0, 0, 0}; }
+EXPORT cint dc_tilemap_layer_count(cint m) { auto* t = maps(); return t ? t->layerCount(handle<TilemapHandle>(m)) : 0; }
+EXPORT cint dc_tilemap_find_layer(cint m, const char* name) { auto* t = maps(); return t ? t->findLayer(handle<TilemapHandle>(m), name) : -1; }
+EXPORT const char* dc_tilemap_layer_name(cint m, cint l) {
     auto* t = maps();
     const char* n = t ? t->layerName(handle<TilemapHandle>(m), l) : nullptr;
     return keep(n ? n : "");
 }
-EXPORT int32_t dc_tilemap_layer_visible(int32_t m, int32_t l, int32_t v) { if (auto* t = maps()) t->setLayerVisible(handle<TilemapHandle>(m), l, v != 0); return 0; }
-EXPORT int32_t dc_tilemap_layer_collision(int32_t m, int32_t l, int32_t solid, const int32_t* values, int32_t count) {
+EXPORT cint dc_tilemap_layer_visible(cint m, cint l, cint v) { if (auto* t = maps()) t->setLayerVisible(handle<TilemapHandle>(m), l, v != 0); return 0; }
+EXPORT cint dc_tilemap_layer_collision(cint m, cint l, cint solid, const cint* values, cint count) {
     auto* t = maps();
     if (!t) return 0;
-    std::vector<int32_t> v(values, values + std::max(count, 0));
+    std::vector<int32_t> v(values, values + std::max<cint>(count, 0));
     t->setLayerCollision(handle<TilemapHandle>(m), l, solid != 0, v);
     return 0;
 }
-EXPORT int32_t dc_tilemap_tile(int32_t m, int32_t l, int32_t x, int32_t y) { auto* t = maps(); return t ? bits(t->getTile(handle<TilemapHandle>(m), l, x, y)) : 0; }
-EXPORT int32_t dc_tilemap_set_tile(int32_t m, int32_t l, int32_t x, int32_t y, int32_t tile) { if (auto* t = maps()) t->setTile(handle<TilemapHandle>(m), l, x, y, ubits(tile)); return 0; }
-EXPORT int32_t dc_tilemap_int_grid(int32_t m, int32_t l, int32_t x, int32_t y) { auto* t = maps(); return t ? t->getIntGrid(handle<TilemapHandle>(m), l, x, y) : 0; }
-EXPORT int32_t dc_tilemap_set_int_grid(int32_t m, int32_t l, int32_t x, int32_t y, int32_t v) { if (auto* t = maps()) t->setIntGrid(handle<TilemapHandle>(m), l, x, y, v); return 0; }
-EXPORT DCell dc_tilemap_world_to_tile(int32_t m, DV2 p, int32_t layer) {
+EXPORT cint dc_tilemap_tile(cint m, cint l, cint x, cint y) { auto* t = maps(); return t ? bits(t->getTile(handle<TilemapHandle>(m), l, x, y)) : 0; }
+EXPORT cint dc_tilemap_set_tile(cint m, cint l, cint x, cint y, cint tile) { if (auto* t = maps()) t->setTile(handle<TilemapHandle>(m), l, x, y, ubits(tile)); return 0; }
+EXPORT cint dc_tilemap_int_grid(cint m, cint l, cint x, cint y) { auto* t = maps(); return t ? t->getIntGrid(handle<TilemapHandle>(m), l, x, y) : 0; }
+EXPORT cint dc_tilemap_set_int_grid(cint m, cint l, cint x, cint y, cint v) { if (auto* t = maps()) t->setIntGrid(handle<TilemapHandle>(m), l, x, y, v); return 0; }
+EXPORT DCell dc_tilemap_world_to_tile(cint m, DV2 p, cint layer) {
     auto* t = maps();
     if (!t) return {0, 0};
     TileCoord c = t->worldToTile(handle<TilemapHandle>(m), v2(p), layer);
     return {c.x, c.y};
 }
-EXPORT DV2 dc_tilemap_tile_to_world(int32_t m, DCell c, int32_t layer) {
+EXPORT DV2 dc_tilemap_tile_to_world(cint m, DCell c, cint layer) {
     auto* t = maps();
-    return t ? dv(t->tileToWorld(handle<TilemapHandle>(m), TileCoord{c.x, c.y}, layer)) : DV2{0, 0};
+    return t ? dv(t->tileToWorld(handle<TilemapHandle>(m), TileCoord{int32_t(c.x), int32_t(c.y)}, layer)) : DV2{0, 0};
 }
-EXPORT int32_t dc_tilemap_tile_at(int32_t m, int32_t l, DV2 p) { auto* t = maps(); return t ? bits(t->tileAt(handle<TilemapHandle>(m), l, v2(p))) : 0; }
-EXPORT const char* dc_tilemap_property(int32_t m, const char* name) {
+EXPORT cint dc_tilemap_tile_at(cint m, cint l, DV2 p) { auto* t = maps(); return t ? bits(t->tileAt(handle<TilemapHandle>(m), l, v2(p))) : 0; }
+EXPORT const char* dc_tilemap_property(cint m, const char* name) {
     auto* t = maps();
     return keep(t ? t->properties(handle<TilemapHandle>(m)).getString(name) : "");
 }
 
 // Objects of a type ("" = all), cached for the dc_tilemap_object_* readers.
-EXPORT int32_t dc_tilemap_objects(int32_t m, const char* type) {
+EXPORT cint dc_tilemap_objects(cint m, const char* type) {
     auto* t = maps();
     g.objects.clear();
     if (!t) return 0;
@@ -1746,14 +1751,14 @@ EXPORT int32_t dc_tilemap_objects(int32_t m, const char* type) {
 namespace {
 const MapObject* object(int32_t i) { return i >= 0 && i < int32_t(g.objects.size()) ? g.objects[size_t(i)] : nullptr; }
 }
-EXPORT const char* dc_tilemap_object_name(int32_t i) { auto* o = object(i); return keep(o ? o->name : ""); }
-EXPORT const char* dc_tilemap_object_type(int32_t i) { auto* o = object(i); return keep(o ? o->type : ""); }
-EXPORT DRect dc_tilemap_object_rect(int32_t i) {
+EXPORT const char* dc_tilemap_object_name(cint i) { auto* o = object(i); return keep(o ? o->name : ""); }
+EXPORT const char* dc_tilemap_object_type(cint i) { auto* o = object(i); return keep(o ? o->type : ""); }
+EXPORT DRect dc_tilemap_object_rect(cint i) {
     auto* o = object(i);
     return o ? DRect{o->position.x, o->position.y, o->size.x, o->size.y} : DRect{0, 0, 0, 0};
 }
-EXPORT DV2 dc_tilemap_object_anchor(int32_t i) { auto* o = object(i); return o ? dv(o->anchor()) : DV2{0, 0}; }
-EXPORT const char* dc_tilemap_object_property(int32_t i, const char* name) {
+EXPORT DV2 dc_tilemap_object_anchor(cint i) { auto* o = object(i); return o ? dv(o->anchor()) : DV2{0, 0}; }
+EXPORT const char* dc_tilemap_object_property(cint i, const char* name) {
     auto* o = object(i);
     return keep(o ? o->properties.getString(name) : "");
 }
@@ -1762,14 +1767,14 @@ EXPORT const char* dc_tilemap_object_property(int32_t i, const char* name) {
 // Scenes and prefabs
 // =========================================================================
 
-EXPORT int32_t dc_scene_load(const char* path) {
+EXPORT cint dc_scene_load(const char* path) {
     auto* s = res<SceneResource>();
     if (!s) return fail("drift is not running");
     SceneHandle h = s->load(path);
     if (!h.valid()) return fail(std::string("cannot load scene ") + path);
     return bits(h.id);
 }
-EXPORT int32_t dc_scene_spawn(int32_t scene, DV2 offset, int32_t parent, const char* overrides) {
+EXPORT cint dc_scene_spawn(cint scene, DV2 offset, cint parent, const char* overrides) {
     auto* s = res<SceneResource>();
     if (!s) return fail("drift is not running");
     SceneSpawnOptions o;
@@ -1786,21 +1791,21 @@ EXPORT int32_t dc_scene_spawn(int32_t scene, DV2 offset, int32_t parent, const c
 namespace {
 const SceneInstance* instance(int32_t i) { return i > 0 && i <= int32_t(g.scenes.size()) ? &g.scenes[size_t(i - 1)] : nullptr; }
 }
-EXPORT int32_t dc_scene_count(int32_t inst, int32_t roots) {
+EXPORT cint dc_scene_count(cint inst, cint roots) {
     auto* in = instance(inst);
     return in ? int32_t(roots ? in->roots.size() : in->entities.size()) : 0;
 }
-EXPORT int32_t dc_scene_entity(int32_t inst, int32_t roots, int32_t i) {
+EXPORT cint dc_scene_entity(cint inst, cint roots, cint i) {
     auto* in = instance(inst);
     if (!in) return 0;
     const auto& list = roots ? in->roots : in->entities;
     return i >= 0 && i < int32_t(list.size()) ? handleOf(list[size_t(i)]) : 0;
 }
-EXPORT int32_t dc_scene_find(int32_t inst, const char* name) {
+EXPORT cint dc_scene_find(cint inst, const char* name) {
     auto* in = instance(inst);
     return in ? handleOf(in->find(name)) : 0;
 }
-EXPORT int32_t dc_scene_save(const char* path) {
+EXPORT cint dc_scene_save(const char* path) {
     auto* s = res<SceneResource>();
     return s && s->save(path) ? 1 : 0;
 }

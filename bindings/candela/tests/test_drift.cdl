@@ -11,13 +11,14 @@
 // headless run draws as fast as it can.
 
 import "std/assert" as assert;
-import "../src/main.cdl";
+import "std/fs";
+import "../src/main.cdl" { Align, App, Binding, Blend, BodyKind, Cell, Ease, EmitShape, Entity, Filter, GamepadAxis, GamepadButton, Key, MouseButton, ScaleMode, Texture, body, collider, config, cooldown, ease, emitter, hud_layer, last_error, play_options, rect, repeating_timer, rgb, rgba, sprite_options, start, text_style, timer, vec2 };
 
 fn wait(app: App, seconds: float) {
     let until = app.time() + seconds;
     while app.time() < until {
         if !app.frame() {
-            throw("app closed during a test");
+            throw "app closed during a test";
         }
     }
 }
@@ -57,99 +58,99 @@ fn main() {
     test_tilemap(app);
     test_scenes(app);
     app.quit();
-    assert::assert_false(app.frame());
+    assert::is_false(app.frame());
     print("drift bindings: ok");
 }
 
 // Plain values: no engine needed.
 fn test_values() {
     let v = vec2(3.0, 4.0);
-    assert::assert_eq(v.length(), 5.0);
-    assert::assert_eq(v.add(vec2(1.0, 1.0)).x, 4.0);
-    assert::assert_true(near(v.normalized().y, 0.8, 0.000001));
-    assert::assert_true(rect(0.0, 0.0, 10.0, 10.0).contains(vec2(5.0, 5.0)));
-    assert::assert_false(rect(0.0, 0.0, 10.0, 10.0).overlaps(rect(20.0, 0.0, 5.0, 5.0)));
-    assert::assert_eq(rgb(255, 0, 0).r, 1.0);
-    assert::assert_eq(rgba(0, 0, 0, 0).a, 0.0);
-    assert::assert_eq(Key::Space.code(), 44);
-    assert::assert_eq(Key::Code(100).code(), 100);
-    assert::assert_eq(Binding::Key(Key::A).text(), "key:#4");
-    assert::assert_eq(Binding::AxisNegative(GamepadAxis::LeftY).text(), "axis:-#1");
-    assert::assert_eq(ease(Ease::Linear, 0.25), 0.25);
-    assert::assert_eq(ease(Ease::OutQuad, 1.0), 1.0);
+    assert::eq(v.length(), 5.0);
+    assert::eq(v.add(vec2(1.0, 1.0)).x, 4.0);
+    assert::is_true(near(v.normalized().y, 0.8, 0.000001));
+    assert::is_true(rect(0.0, 0.0, 10.0, 10.0).contains(vec2(5.0, 5.0)));
+    assert::is_false(rect(0.0, 0.0, 10.0, 10.0).overlaps(rect(20.0, 0.0, 5.0, 5.0)));
+    assert::eq(rgb(255, 0, 0).r, 1.0);
+    assert::eq(rgba(0, 0, 0, 0).a, 0.0);
+    assert::eq(Key::Space.code(), 44);
+    assert::eq(Key::Code(100).code(), 100);
+    assert::eq(Binding::Key(Key::A).text(), "key:#4");
+    assert::eq(Binding::AxisNegative(GamepadAxis::LeftY).text(), "axis:-#1");
+    assert::eq(ease(Ease::Linear, 0.25), 0.25);
+    assert::eq(ease(Ease::OutQuad, 1.0), 1.0);
 
     let t = timer(1.0);
-    assert::assert_eq(t.tick(0.5), 0);
-    assert::assert_eq(t.tick(0.6), 1);
-    assert::assert_true(t.finished());
-    assert::assert_eq(t.tick(1.0), 0);
+    assert::eq(t.tick(0.5), 0);
+    assert::eq(t.tick(0.6), 1);
+    assert::is_true(t.finished());
+    assert::eq(t.tick(1.0), 0);
     let r = repeating_timer(0.25);
-    assert::assert_eq(r.tick(0.6), 2);
-    assert::assert_true(near(r.elapsed, 0.1, 0.000001));
+    assert::eq(r.tick(0.6), 2);
+    assert::is_true(near(r.elapsed, 0.1, 0.000001));
     let c = cooldown(0.5);
-    assert::assert_true(c.try_use());
-    assert::assert_false(c.try_use());
+    assert::is_true(c.try_use());
+    assert::is_false(c.try_use());
     c.tick(0.5);
-    assert::assert_true(c.ready());
+    assert::is_true(c.ready());
     print("values: ok");
 }
 
 fn test_app(app: App) {
-    assert::assert_true(app.dt() > 0.0);
-    assert::assert_true(app.frame_count() >= 0);
-    assert::assert_eq(app.size().x, 640.0);
-    assert::assert_eq(app.size().y, 360.0);
-    assert::assert_true(app.backend() == "gl" || app.backend() == "webgpu");
+    assert::is_true(app.dt() > 0.0);
+    assert::is_true(app.frame_count() >= 0);
+    assert::eq(app.size().x, 640.0);
+    assert::eq(app.size().y, 360.0);
+    assert::is_true(app.backend() == "gl" || app.backend() == "webgpu");
     app.set_title("drift tests (running)");
     app.set_scale_mode(ScaleMode::Integer);
     app.set_scale_mode(ScaleMode::Letterbox);
     app.set_clear_color(rgb(10, 20, 30));
     let before = app.time();
     wait(app, 0.05);
-    assert::assert_true(app.time() >= before + 0.05);
+    assert::is_true(app.time() >= before + 0.05);
     print("app: ok");
 }
 
 fn test_entities(app: App) {
     let e = app.spawn_at(vec2(10.0, 20.0));
-    assert::assert_true(e.alive());
-    assert::assert_eq(e.position().x, 10.0);
+    assert::is_true(e.alive());
+    assert::eq(e.position().x, 10.0);
     e.move_by(vec2(5.0, 0.0));
-    assert::assert_eq(e.position().x, 15.0);
+    assert::eq(e.position().x, 15.0);
     e.set_rotation(1.5);
-    assert::assert_eq(e.rotation(), 1.5);
+    assert::eq(e.rotation(), 1.5);
     e.set_scale(vec2(2.0, 3.0));
-    assert::assert_eq(e.scale().y, 3.0);
+    assert::eq(e.scale().y, 3.0);
 
     e.set_name("hero");
-    assert::assert_eq(e.name(), "hero");
-    assert::assert_true(app.find("hero").equals(e));
-    assert::assert_false(app.find("nobody").alive());
-    assert::assert_true(e.has("Transform2D"));
-    assert::assert_false(e.has("Sprite"));
+    assert::eq(e.name(), "hero");
+    assert::is_true(app.find("hero").equals(e));
+    assert::is_false(app.find("nobody").alive());
+    assert::is_true(e.has("Transform2D"));
+    assert::is_false(e.has("Sprite"));
 
     let a = app.spawn_rect(vec2(0.0, 0.0), vec2(4.0, 4.0), rgb(255, 0, 0));
     let found = app.query("Sprite, Name");
-    assert::assert_eq(found.len(), 0);
+    assert::eq(found.len(), 0);
     a.set_name("block");
     found = app.query("Sprite, Name");
-    assert::assert_eq(found.len(), 1);
-    assert::assert_true(found[0].equals(a));
+    assert::eq(found.len(), 1);
+    assert::is_true(found[0].equals(a));
     try {
         app.query("Sprite,, ((");
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_bad_query" {
         print("bad query raised");
     }
 
     // Reflected components as JSON.
     let json = a.component_json("Sprite");
-    assert::assert_true(json.contains("tint"));
+    assert::is_true(json.contains("tint"));
     a.set_component_json("Sprite", "{\"zOrder\": 7.5}");
-    assert::assert_true(a.component_json("Sprite").contains("7.5"));
+    assert::is_true(a.component_json("Sprite").contains("7.5"));
     try {
         a.set_component_json("NoSuchThing", "{}");
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_bad_component" {
         print("bad component raised");
     }
@@ -157,21 +158,21 @@ fn test_entities(app: App) {
     // Hierarchy: children follow and despawn with the parent.
     let child = app.spawn_at(vec2(1.0, 0.0));
     child.set_parent(e);
-    assert::assert_true(child.parent().equals(e));
+    assert::is_true(child.parent().equals(e));
     frames(app, 2);
     // Parent at (15, 20), rotated 1.5 rad, scaled 2x3: the child's (1, 0)
     // turns to (cos 1.5, sin 1.5), then scales by (2, 3).
-    assert::assert_true(near(child.world_position().x, 15.1415, 0.01));
-    assert::assert_true(near(child.world_position().y, 22.9925, 0.01));
+    assert::is_true(near(child.world_position().x, 15.1415, 0.01));
+    assert::is_true(near(child.world_position().y, 22.9925, 0.01));
 
     e.despawn();
-    assert::assert_false(e.alive());
-    assert::assert_false(child.alive());
+    assert::is_false(e.alive());
+    assert::is_false(child.alive());
     // Calls on a dead entity do nothing.
     e.set_position(vec2(1.0, 1.0));
-    assert::assert_eq(e.position().x, 0.0);
+    assert::eq(e.position().x, 0.0);
     a.remove("Sprite");
-    assert::assert_false(a.has("Sprite"));
+    assert::is_false(a.has("Sprite"));
     a.despawn();
     print("entities: ok");
 }
@@ -193,37 +194,37 @@ fn checker(app: App) -> Texture {
 
 fn test_sprites(app: App) {
     let tex = checker(app);
-    assert::assert_eq(tex.size().x, 16.0);
-    assert::assert_eq(tex.size().y, 8.0);
+    assert::eq(tex.size().x, 16.0);
+    assert::eq(tex.size().y, 8.0);
     tex.set_filter(Filter::Linear);
     try {
         app.load_texture("no/such/file.png");
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_load_failed" {
-        assert::assert_true(last_error().contains("no/such/file.png"));
+        assert::is_true(last_error().contains("no/such/file.png"));
     }
     try {
         app.create_texture(4, 4, [rgb(0, 0, 0)]);
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_load_failed" {
         print("short pixel list raised");
     }
 
     let sheet = app.spritesheet(tex, 4, 4);
-    assert::assert_eq(sheet.frame_count(), 8);
+    assert::eq(sheet.frame_count(), 8);
     let f = sheet.frame_at(5);
-    assert::assert_eq(f.x, 4.0);
-    assert::assert_eq(f.y, 4.0);
-    assert::assert_eq(sheet.frame(3, 1).x, 12.0);
-    assert::assert_eq(sheet.frames(2, 3).len(), 3);
-    assert::assert_eq(sheet.texture().id, tex.id);
+    assert::eq(f.x, 4.0);
+    assert::eq(f.y, 4.0);
+    assert::eq(sheet.frame(3, 1).x, 12.0);
+    assert::eq(sheet.frames(2, 3).len(), 3);
+    assert::eq(sheet.texture().id, tex.id);
 
     let s = app.spawn_sprite(tex, vec2(100.0, 100.0));
-    assert::assert_eq(s.texture().id, tex.id);
+    assert::eq(s.texture().id, tex.id);
     s.set_frame(f);
-    assert::assert_eq(s.frame().w, 4.0);
+    assert::eq(s.frame().w, 4.0);
     s.set_tint(rgba(255, 128, 0, 255));
-    assert::assert_true(near(s.tint().g, 128.0 / 255.0, 0.001));
+    assert::is_true(near(s.tint().g, 128.0 / 255.0, 0.001));
     s.set_flip(true, false);
     s.set_z(3.0);
     s.set_layer(2);
@@ -231,20 +232,20 @@ fn test_sprites(app: App) {
     s.set_visible(false);
     s.set_visible(true);
     s.remove_sprite();
-    assert::assert_false(s.has("Sprite"));
+    assert::is_false(s.has("Sprite"));
     s.despawn();
 
     let target = app.create_render_target(64, 64);
-    assert::assert_eq(target.size().x, 64.0);
+    assert::eq(target.size().x, 64.0);
     target.destroy();
     print("sprites: ok");
 }
 
 fn test_text_and_drawing(app: App) {
     let label = app.spawn_text("Score 0", vec2(10.0, 10.0), 20.0, rgb(255, 255, 255));
-    assert::assert_eq(label.text(), "Score 0");
+    assert::eq(label.text(), "Score 0");
     label.set_text("Score 12");
-    assert::assert_eq(label.text(), "Score 12");
+    assert::eq(label.text(), "Score 12");
     let style = text_style(24.0, rgb(255, 255, 0));
     style.align = Align::Center;
     style.outline = 2.0;
@@ -254,26 +255,26 @@ fn test_text_and_drawing(app: App) {
     label.set_text_visible(true);
 
     let size = app.measure_text("Hello", 20.0);
-    assert::assert_true(size.x > 20.0);
-    assert::assert_true(size.y > 10.0);
-    assert::assert_true(app.measure_text("Hello Hello", 20.0).x > size.x);
-    assert::assert_true(app.line_height(app.default_font(), 20.0) > 0.0);
+    assert::is_true(size.x > 20.0);
+    assert::is_true(size.y > 10.0);
+    assert::is_true(app.measure_text("Hello Hello", 20.0).x > size.x);
+    assert::is_true(app.line_height(app.default_font(), 20.0) > 0.0);
     try {
         app.load_font("missing.ttf", 16.0);
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_load_failed" {
         print("missing font raised");
     }
 
     let cam = app.spawn_camera(vec2(320.0, 180.0));
     cam.set_zoom(2.0);
-    assert::assert_eq(cam.zoom(), 2.0);
+    assert::eq(cam.zoom(), 2.0);
     cam.set_viewport(rect(0.0, 0.0, 1.0, 1.0));
     cam.set_camera_order(0);
     frames(app, 2);
     let w = app.screen_to_world(vec2(320.0, 180.0));
-    assert::assert_true(near(w.x, 320.0, 1.0));
-    assert::assert_true(near(app.world_to_screen(w).x, 320.0, 1.0));
+    assert::is_true(near(w.x, 320.0, 1.0));
+    assert::is_true(near(app.world_to_screen(w).x, 320.0, 1.0));
 
     let tex = checker(app);
     app.draw_rect(rect(10.0, 10.0, 50.0, 30.0), rgb(255, 0, 0));
@@ -300,8 +301,8 @@ fn test_text_and_drawing(app: App) {
     let shot = scratch("test_drift_shot.png");
     app.screenshot(shot);
     frames(app, 3);
-    assert::assert_true(app.draw_calls() > 0);
-    assert::assert_true(fs::exists(shot));
+    assert::is_true(app.draw_calls() > 0);
+    assert::is_true(fs::exists(shot));
     fs::delete(shot);
     label.despawn();
     cam.despawn();
@@ -311,39 +312,39 @@ fn test_text_and_drawing(app: App) {
 fn test_input(app: App) {
     app.send_key(Key::Space, true);
     app.frame();
-    assert::assert_true(app.key_pressed(Key::Space));
-    assert::assert_true(app.key_down(Key::Space));
+    assert::is_true(app.key_pressed(Key::Space));
+    assert::is_true(app.key_down(Key::Space));
     app.frame();
-    assert::assert_false(app.key_pressed(Key::Space));
-    assert::assert_true(app.key_down(Key::Space));
+    assert::is_false(app.key_pressed(Key::Space));
+    assert::is_true(app.key_down(Key::Space));
     app.send_key(Key::Space, false);
     app.frame();
-    assert::assert_true(app.key_released(Key::Space));
-    assert::assert_false(app.key_down(Key::Space));
+    assert::is_true(app.key_released(Key::Space));
+    assert::is_false(app.key_down(Key::Space));
 
     app.send_mouse_move(vec2(100.0, 50.0));
     app.send_mouse_button(vec2(100.0, 50.0), MouseButton::Left, true);
     app.frame();
-    assert::assert_true(app.mouse_pressed(MouseButton::Left));
-    assert::assert_true(app.mouse_down(MouseButton::Left));
+    assert::is_true(app.mouse_pressed(MouseButton::Left));
+    assert::is_true(app.mouse_down(MouseButton::Left));
     let m = app.mouse_position();
-    assert::assert_true(m.x > 0.0);
+    assert::is_true(m.x > 0.0);
     app.send_mouse_button(vec2(100.0, 50.0), MouseButton::Left, false);
     app.frame();
-    assert::assert_true(app.mouse_released(MouseButton::Left));
-    assert::assert_false(app.gamepad_connected(0));
-    assert::assert_eq(app.gamepad_axis(0, GamepadAxis::LeftX), 0.0);
+    assert::is_true(app.mouse_released(MouseButton::Left));
+    assert::is_false(app.gamepad_connected(0));
+    assert::eq(app.gamepad_axis(0, GamepadAxis::LeftX), 0.0);
 
     app.bind_action("jump", Binding::Key(Key::Space));
     app.bind_action("jump", Binding::Button(GamepadButton::South));
     app.bind_axis2d("move", Binding::Key(Key::A), Binding::Key(Key::D), Binding::Key(Key::W), Binding::Key(Key::S));
     app.bind_axis("turn", Binding::Key(Key::Q), Binding::Key(Key::E));
     app.bind_stick("look", GamepadAxis::RightX, GamepadAxis::RightY);
-    assert::assert_true(app.has_action("jump"));
-    assert::assert_eq(app.bindings("jump", 0), ["key:Space", "button:South"]);
+    assert::is_true(app.has_action("jump"));
+    assert::eq(app.bindings("jump", 0), ["key:Space", "button:South"]);
     try {
         app.bind_action("jump", Binding::Unbound);
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_bad_binding" {
         print("unbound binding raised");
     }
@@ -352,35 +353,35 @@ fn test_input(app: App) {
     app.send_key(Key::D, true);
     app.send_key(Key::E, true);
     app.frame();
-    assert::assert_true(app.action_pressed("jump"));
-    assert::assert_true(app.action_held("jump"));
-    assert::assert_eq(app.action_value("jump"), 1.0);
-    assert::assert_eq(app.axis2d("move").x, 1.0);
-    assert::assert_eq(app.axis("turn"), 1.0);
-    assert::assert_true(["key:Space", "key:D", "key:E"].contains(app.capture_binding()));
+    assert::is_true(app.action_pressed("jump"));
+    assert::is_true(app.action_held("jump"));
+    assert::eq(app.action_value("jump"), 1.0);
+    assert::eq(app.axis2d("move").x, 1.0);
+    assert::eq(app.axis("turn"), 1.0);
+    assert::is_true(["key:Space", "key:D", "key:E"].contains(app.capture_binding()));
     app.send_key(Key::Space, false);
     app.send_key(Key::D, false);
     app.send_key(Key::E, false);
     app.frame();
-    assert::assert_true(app.action_released("jump"));
+    assert::is_true(app.action_released("jump"));
 
     // Rebind jump to J, save, rebind again, restore from the saved JSON.
-    assert::assert_true(app.rebind("jump", 0, 0, Binding::Key(Key::J)));
-    assert::assert_eq(app.bindings("jump", 0)[0], "key:J");
+    assert::is_true(app.rebind("jump", 0, 0, Binding::Key(Key::J)));
+    assert::eq(app.bindings("jump", 0)[0], "key:J");
     let saved = app.bindings_json();
-    assert::assert_true(app.rebind_text("jump", 0, 0, "key:K"));
-    assert::assert_eq(app.bindings("jump", 0)[0], "key:K");
-    assert::assert_true(app.load_bindings_json(saved) > 0);
-    assert::assert_eq(app.bindings("jump", 0)[0], "key:J");
+    assert::is_true(app.rebind_text("jump", 0, 0, "key:K"));
+    assert::eq(app.bindings("jump", 0)[0], "key:K");
+    assert::is_true(app.load_bindings_json(saved) > 0);
+    assert::eq(app.bindings("jump", 0)[0], "key:J");
     app.set_action_tuning(0.25, 0.5, -1);
     app.remove_action("turn");
-    assert::assert_false(app.has_action("turn"));
+    assert::is_false(app.has_action("turn"));
     print("input: ok");
 }
 
 fn test_physics(app: App) {
     app.set_gravity(vec2(0.0, 500.0));
-    assert::assert_eq(app.gravity().y, 500.0);
+    assert::eq(app.gravity().y, 500.0);
 
     let ground = app.spawn_rect(vec2(320.0, 340.0), vec2(600.0, 20.0), rgb(80, 80, 80));
     ground.add_box_collider(vec2(300.0, 10.0), collider());
@@ -412,29 +413,29 @@ fn test_physics(app: App) {
         }
     }
 
-    assert::assert_true(entered);
-    assert::assert_true(touched);
-    assert::assert_true(ball.position().y > 300.0);
+    assert::is_true(entered);
+    assert::is_true(touched);
+    assert::is_true(ball.position().y > 300.0);
 
     // Rays hit sensors too; take the zone away first.
     zone.despawn();
     app.frame();
     let hit = app.raycast(vec2(320.0, 100.0), vec2(0.0, 1.0), 400.0);
-    assert::assert_true(hit.hit);
-    assert::assert_true(hit.point.y > 300.0);
+    assert::is_true(hit.hit);
+    assert::is_true(hit.point.y > 300.0);
     let miss = app.raycast(vec2(10.0, 10.0), vec2(-1.0, 0.0), 5.0);
-    assert::assert_false(miss.hit);
+    assert::is_false(miss.hit);
 
     // Velocity, impulses and teleporting a body.
     ball.set_position(vec2(100.0, 100.0));
     ball.set_velocity(vec2(0.0, 0.0));
     app.set_gravity(vec2(0.0, 0.0));
     app.frame();
-    assert::assert_true(near(ball.position().x, 100.0, 1.0));
+    assert::is_true(near(ball.position().x, 100.0, 1.0));
     ball.apply_impulse(vec2(1000.0, 0.0));
-    assert::assert_true(ball.velocity().x > 0.0);
+    assert::is_true(ball.velocity().x > 0.0);
     wait(app, 0.1);
-    assert::assert_true(ball.position().x > 100.0);
+    assert::is_true(ball.position().x > 100.0);
     ball.apply_force(vec2(0.0, 10.0));
 
     let kin = app.spawn_at(vec2(500.0, 100.0));
@@ -442,7 +443,7 @@ fn test_physics(app: App) {
     kin.add_box_collider(vec2(5.0, 5.0), collider());
     app.frame();
     kin.remove_body();
-    assert::assert_false(kin.has("RigidBody2D"));
+    assert::is_false(kin.has("RigidBody2D"));
 
     ball.despawn();
     ground.despawn();
@@ -456,48 +457,48 @@ fn test_animation_and_tweens(app: App) {
     let e = app.spawn_sprite(tex, vec2(50.0, 50.0));
     let walk = e.add_animation(sheet.frames(0, 4), 0.02, true);
     let once = e.add_animation(sheet.frames(4, 2), 0.02, false);
-    assert::assert_eq(walk, 0);
-    assert::assert_eq(once, 1);
-    assert::assert_eq(e.animation(), 0);
+    assert::eq(walk, 0);
+    assert::eq(once, 1);
+    assert::eq(e.animation(), 0);
     wait(app, 0.05);
     // The walk clip has moved the sprite off frame 0 of the sheet.
-    assert::assert_eq(e.frame().w, 4.0);
-    assert::assert_true(e.frame().x > 0.0 || e.animation_frame() == 0);
+    assert::eq(e.frame().w, 4.0);
+    assert::is_true(e.frame().x > 0.0 || e.animation_frame() == 0);
     e.play_animation(once);
-    assert::assert_eq(e.animation(), 1);
+    assert::eq(e.animation(), 1);
     wait(app, 0.1);
-    assert::assert_true(e.animation_finished());
-    assert::assert_eq(e.animation_frame(), 1);
+    assert::is_true(e.animation_finished());
+    assert::eq(e.animation_frame(), 1);
     // The last frame of the clip: sheet frame 5.
-    assert::assert_eq(e.frame().x, sheet.frame_at(5).x);
-    assert::assert_eq(e.frame().y, sheet.frame_at(5).y);
+    assert::eq(e.frame().x, sheet.frame_at(5).x);
+    assert::eq(e.frame().y, sheet.frame_at(5).y);
     e.stop_animation();
 
     let tw = app.tween(e).move_to(vec2(150.0, 50.0), 0.1, Ease::OutQuad).delay(0.02).fade_to(0.0, 0.05, Ease::Linear).start();
     wait(app, 0.3);
-    assert::assert_false(tw.active());
-    assert::assert_true(near(e.position().x, 150.0, 0.5));
-    assert::assert_true(near(e.tint().a, 0.0, 0.01));
+    assert::is_false(tw.active());
+    assert::is_true(near(e.position().x, 150.0, 0.5));
+    assert::is_true(near(e.tint().a, 0.0, 0.01));
 
     let spin = app.tween(e).rotate_by(1.0, 0.05, Ease::Linear).repeat(-1).start();
     wait(app, 0.1);
-    assert::assert_true(spin.active());
+    assert::is_true(spin.active());
     spin.pause();
     spin.resume();
     spin.stop(false);
     app.frame();
-    assert::assert_false(spin.active());
+    assert::is_false(spin.active());
 
     let grow = app.tween(e).scale_to(vec2(2.0, 2.0), 10.0, Ease::Linear).tint_to(rgb(255, 0, 0), 1.0, Ease::Linear).start();
     grow.stop(true);
     app.frame();
-    assert::assert_true(near(e.scale().x, 2.0, 0.01));
+    assert::is_true(near(e.scale().x, 2.0, 0.01));
     app.tween(e).move_by(vec2(10.0, 0.0), 5.0, Ease::Linear).yoyo(2).start();
     e.stop_tweens();
     app.set_tween_speed(1.0);
     let seq = app.sequence().delay(0.01).start();
     wait(app, 0.05);
-    assert::assert_false(seq.active());
+    assert::is_false(seq.active());
     e.despawn();
     print("animation and tweens: ok");
 }
@@ -518,10 +519,10 @@ fn test_particles_and_effects(app: App) {
     spark.lifetime_max = 0.1;
     app.burst(vec2(100.0, 100.0), spark, 30);
     let before = app.query("ParticleEmitter").len();
-    assert::assert_eq(before, 2);
+    assert::eq(before, 2);
     wait(app, 0.5);
     // The burst cleans itself up once its particles are gone.
-    assert::assert_eq(app.query("ParticleEmitter").len(), 1);
+    assert::eq(app.query("ParticleEmitter").len(), 1);
     e.despawn();
 
     let bloom = app.add_bloom(0.7, 1.0);
@@ -531,8 +532,8 @@ fn test_particles_and_effects(app: App) {
     let sepia = app.add_sepia(0.5);
     let pix = app.add_pixelate(4.0);
     let blur = app.add_blur(1.0, 2);
-    assert::assert_true(bloom.id != 0 && vig.id != 0 && crt.id != 0 && gray.id != 0);
-    assert::assert_true(sepia.id != 0 && pix.id != 0 && blur.id != 0);
+    assert::is_true(bloom.id != 0 && vig.id != 0 && crt.id != 0 && gray.id != 0);
+    assert::is_true(sepia.id != 0 && pix.id != 0 && blur.id != 0);
     app.flash(rgb(255, 255, 255), 0.1);
     app.fade_to(rgb(0, 0, 0), 0.5, 0.1);
     frames(app, 3);
@@ -544,7 +545,7 @@ fn test_particles_and_effects(app: App) {
     frames(app, 2);
     try {
         app.set_ambient(rgb(10, 10, 10));
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_lighting_off" {
         print("lighting off raised");
     }
@@ -558,10 +559,10 @@ fn test_audio(app: App) {
         samples.push(0.0);
     }
     let beep = app.create_sound(samples, 22050);
-    assert::assert_true(near(beep.duration(), 0.2, 0.01));
+    assert::is_true(near(beep.duration(), 0.2, 0.01));
     beep.set_max_instances(4);
     let v = beep.play();
-    assert::assert_true(v.playing());
+    assert::is_true(v.playing());
     v.set_volume(0.5, 0.0);
     v.set_pan(-0.5);
     v.set_pitch(1.5);
@@ -569,7 +570,7 @@ fn test_audio(app: App) {
     v.resume(0.0);
     v.stop(0.0);
     app.frame();
-    assert::assert_false(v.playing());
+    assert::is_false(v.playing());
 
     let o = play_options();
     o.looping = true;
@@ -578,39 +579,39 @@ fn test_audio(app: App) {
     o.bus = sfx;
     let loop_voice = beep.play_with(o);
     wait(app, 0.3);
-    assert::assert_true(loop_voice.playing());
+    assert::is_true(loop_voice.playing());
     sfx.set_volume(0.25, 0.0);
-    assert::assert_eq(sfx.volume(), 0.25);
+    assert::eq(sfx.volume(), 0.25);
     sfx.set_muted(true);
     sfx.set_paused(true);
     sfx.set_paused(false);
     sfx.stop(0.0);
     app.frame();
-    assert::assert_false(loop_voice.playing());
+    assert::is_false(loop_voice.playing());
     app.master_bus().set_volume(1.0, 0.0);
-    assert::assert_true(app.music_bus().id != app.sfx_bus().id);
+    assert::is_true(app.music_bus().id != app.sfx_bus().id);
 
     app.play_music(beep, 0.0, true);
     app.frame();
-    assert::assert_true(app.music_playing());
+    assert::is_true(app.music_playing());
     app.pause_music(0.0);
     app.resume_music(0.0);
     app.stop_music(0.0);
     wait(app, 0.05);
-    assert::assert_false(app.music_playing());
+    assert::is_false(app.music_playing());
 
     let tone = app.load_sound("../../tests/data/tone440.ogg");
-    assert::assert_true(tone.duration() > 0.0);
+    assert::is_true(tone.duration() > 0.0);
     let track = app.load_music("../../tests/data/tone440.mp3");
-    assert::assert_true(track.duration() > 0.0);
+    assert::is_true(track.duration() > 0.0);
     try {
         app.load_sound("missing.wav");
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_load_failed" {
         print("missing sound raised");
     }
     beep.destroy();
-    print("audio: ok (device: " + str(app.audio_device()) + ")");
+    print("audio: ok (device: " + string(app.audio_device()) + ")");
 }
 
 fn test_save(app: App) {
@@ -619,38 +620,38 @@ fn test_save(app: App) {
         fs::delete(path);
     }
     let s = app.open_save_file(path);
-    assert::assert_false(s.has("score"));
-    assert::assert_eq(s.get_int("score", 7), 7);
+    assert::is_false(s.has("score"));
+    assert::eq(s.get_int("score", 7), 7);
     s.set_int("score", 1200);
     s.set_float("volume", 0.75);
     s.set_string("name", "Ada");
     s.flush();
-    assert::assert_true(fs::exists(path));
+    assert::is_true(fs::exists(path));
     s.set_int("score", 1);
-    assert::assert_true(s.reload());
-    assert::assert_eq(s.get_int("score", 0), 1200);
-    assert::assert_eq(s.get_float("volume", 0.0), 0.75);
-    assert::assert_eq(s.get_string("name", ""), "Ada");
-    assert::assert_true(s.json().contains("Ada"));
-    assert::assert_true(s.path().ends_with(path));
+    assert::is_true(s.reload());
+    assert::eq(s.get_int("score", 0), 1200);
+    assert::eq(s.get_float("volume", 0.0), 0.75);
+    assert::eq(s.get_string("name", ""), "Ada");
+    assert::is_true(s.json().contains("Ada"));
+    assert::is_true(s.path().ends_with(path));
     s.erase("name");
-    assert::assert_false(s.has("name"));
+    assert::is_false(s.has("name"));
     s.clear();
-    assert::assert_false(s.has("score"));
+    assert::is_false(s.has("score"));
     fs::delete(path);
     print("save data: ok");
 }
 
 fn test_tilemap(app: App) {
     let map = app.load_tilemap("../../examples/tilemap/assets/meadow.tmj");
-    assert::assert_true(map.size().x > 0);
-    assert::assert_eq(map.tile_size().x, 16);
-    assert::assert_true(map.layer_count() > 3);
+    assert::is_true(map.size().x > 0);
+    assert::eq(map.tile_size().x, 16);
+    assert::is_true(map.layer_count() > 3);
     let ground = map.layer("Ground");
-    assert::assert_eq(map.layer_name(ground), "Ground");
+    assert::eq(map.layer_name(ground), "Ground");
     try {
         map.layer("Lava");
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_no_such_layer" {
         print("missing layer raised");
     }
@@ -667,10 +668,10 @@ fn test_tilemap(app: App) {
             }
         }
     }
-    assert::assert_true(fx != -1000);
+    assert::is_true(fx != -1000);
     let id = map.tile(ground, fx, fy);
     map.set_tile(ground, fx, fy, 0);
-    assert::assert_eq(map.tile(ground, fx, fy), 0);
+    assert::eq(map.tile(ground, fx, fy), 0);
     map.set_tile(ground, fx, fy, id);
 
     let e = app.spawn_tilemap(map, vec2(0.0, 0.0));
@@ -679,18 +680,18 @@ fn test_tilemap(app: App) {
     let corner = map.tile_to_world(Cell { x: fx, y: fy }, ground);
     let inside = corner.add(vec2(8.0, 8.0));
     let cell = map.world_to_tile(inside, ground);
-    assert::assert_eq(cell.x, fx);
-    assert::assert_eq(cell.y, fy);
-    assert::assert_eq(map.tile_at(ground, inside), id);
+    assert::eq(cell.x, fx);
+    assert::eq(cell.y, fy);
+    assert::eq(map.tile_at(ground, inside), id);
 
     let coins = map.objects("Coin");
-    assert::assert_true(coins.len() >= 4);
-    assert::assert_eq(coins[0].kind, "Coin");
+    assert::is_true(coins.len() >= 4);
+    assert::eq(coins[0].kind, "Coin");
     let all = map.objects("");
-    assert::assert_true(all.len() > coins.len());
+    assert::is_true(all.len() > coins.len());
     map.set_layer_visible(ground, false);
     map.set_layer_visible(ground, true);
-    assert::assert_true(map.bounds().w > 0.0);
+    assert::is_true(map.bounds().w > 0.0);
     e.despawn();
     print("tilemap: ok");
 }
@@ -699,20 +700,20 @@ fn test_scenes(app: App) {
     let path = scratch("test_drift_scene.json");
     let a = app.spawn_rect(vec2(10.0, 10.0), vec2(8.0, 8.0), rgb(255, 0, 0));
     a.set_name("crate");
-    assert::assert_true(app.save_scene(path));
+    assert::is_true(app.save_scene(path));
     a.despawn();
     let scene = app.load_scene(path);
     let inst = scene.spawn(vec2(100.0, 0.0));
     let crate = inst.find("crate");
-    assert::assert_true(crate.alive());
-    assert::assert_true(near(crate.position().x, 110.0, 0.01));
-    assert::assert_true(inst.entities().len() >= 1);
-    assert::assert_true(inst.roots().len() >= 1);
+    assert::is_true(crate.alive());
+    assert::is_true(near(crate.position().x, 110.0, 0.01));
+    assert::is_true(inst.entities().len() >= 1);
+    assert::is_true(inst.roots().len() >= 1);
     let tinted = scene.spawn_with(vec2(0.0, 0.0), Entity { id: 0 }, "{\"crate\": {\"Sprite\": {\"tint\": [0, 255, 0, 255]}}}");
-    assert::assert_true(near(tinted.find("crate").tint().g, 1.0, 0.01));
+    assert::is_true(near(tinted.find("crate").tint().g, 1.0, 0.01));
     try {
         app.load_scene("missing_scene.json");
-        assert::assert_true(false);
+        assert::is_true(false);
     } catch "drift_load_failed" {
         print("missing scene raised");
     }

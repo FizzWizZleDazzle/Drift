@@ -4,7 +4,7 @@
 //     SDL_VIDEO_DRIVER=offscreen candela run tests/test_lighting.cdl [dir]
 
 import "std/assert" as assert;
-import "../src/main.cdl";
+import "../src/main.cdl" { collider, config, rgb, start, vec2 };
 
 fn main() {
     let dir = ".";
@@ -32,9 +32,9 @@ fn main() {
     crate.add_box_collider(vec2(12.0, 12.0), collider());
     crate.add_occluder_from_collider();
 
-    assert::assert_true(lamp.has("PointLight2D"));
-    assert::assert_true(spot.has("SpotLight2D"));
-    assert::assert_true(wall.has("LightOccluder2D"));
+    assert::is_true(lamp.has("PointLight2D"));
+    assert::is_true(spot.has("SpotLight2D"));
+    assert::is_true(wall.has("LightOccluder2D"));
 
     let n = 0;
     while app.frame() {
