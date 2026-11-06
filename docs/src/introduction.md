@@ -13,7 +13,7 @@
 - **Particle system** — Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Text**: UTF-8 text with kerning, alignment, wrapping, outlines and shadows; a built-in font, TrueType/OpenType and BMFont pixel fonts, and a `Text` component
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support
-- **Tilemap rendering** — Tiled JSON map loading and rendering
+- **Tilemaps**: Tiled and LDtk levels with chunked rendering, parallax, animated tiles, autotiling, merged Box2D colliders, and object spawning
 - **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
 - **Gameplay toolkit**: tweens and easing, timers, rebindable input actions, save data, grid A* pathfinding, spatial hash queries, Y-sorting, seeded random numbers and noise
 - **ImGui integration** — Built-in debug UI via Dear ImGui
@@ -63,4 +63,4 @@ int main() {
 | Images | stb_image |
 | Audio decoding | stb_vorbis, dr_wav, dr_mp3 |
 | Spritesheets | cute_aseprite |
-| Tilemaps | nlohmann/json (Tiled format) |
+| Tilemaps | nlohmann/json (Tiled and LDtk formats) |

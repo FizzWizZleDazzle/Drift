@@ -77,6 +77,7 @@
 - [Text](examples/text.md)
 - [Gameplay Toolkit](examples/toolkit.md)
 - [Scene Editor](examples/scene-editor.md)
+- [Tilemap](examples/tilemap.md)
 
 # Reference
 

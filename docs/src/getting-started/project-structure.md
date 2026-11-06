@@ -104,6 +104,10 @@ Components are plain structs attached to entities. They carry data but no behavi
 #### `include/drift/plugins/` -- Plugins
 
 Each plugin registers resources and systems in its `build()` method. Most are header-only.
+| `Tilemap.hpp` | `Tilemap` | Places a loaded Tiled or LDtk map in the world: draw order, render layer, culling camera, colliders, object spawning. |
+
+
+Each plugin registers resources and systems in its `build()` method. Most are header-only; `TilemapPlugin` builds in `src/tilemap/`.
 
 | Header | Plugin | What it registers |
 |--------|--------|-------------------|
@@ -115,7 +119,7 @@ Each plugin registers resources and systems in its `build()` method. Most are he
 | `SpritePlugin.hpp` | `SpritePlugin` | `SpriteResource`, sprite rendering extraction. |
 | `FontPlugin.hpp` | `FontPlugin` | `FontResource`, the `Text` component, and the system that draws `Text` entities. |
 | `ParticlePlugin.hpp` | `ParticlePlugin` | `ParticleSystemResource`, ECS-based particle update and rendering. |
-| `TilemapPlugin.hpp` | `TilemapPlugin` | `TilemapResource` for Tiled JSON map loading and rendering. |
+| `TilemapPlugin.hpp` | `TilemapPlugin` | `TilemapResource`, the `Tilemap` component, map drawing, colliders and object spawning. |
 | `UIPlugin.hpp` | `UIPlugin` | `UIResource` for ImGui-based UI. |
 | `HierarchyPlugin.hpp` | `HierarchyPlugin` | Registers `GlobalTransform2D`, propagates transforms through Parent/Children hierarchy in PostUpdate. Despawn cascades to children. |
 | `SpriteAnimationPlugin.hpp` | `SpriteAnimationPlugin` | Updates `Sprite::srcRect` from `SpriteAnimator` each frame. |
@@ -147,7 +151,7 @@ Resources are singleton objects stored in `App`. Systems access them through `Re
 | `FontResource.hpp` | `FontResource` | Font loading (TrueType, OpenType, BMFont, built-in font), text drawing and measuring. |
 | `ParticleResource.hpp` | `ParticleResource` | Legacy handle-based particle API. |
 | `ParticleSystemResource.hpp` | `ParticleSystemResource` | ECS-based particle system manager. |
-| `TilemapResource.hpp` | `TilemapResource` | Tiled map loader and renderer. |
+| `TilemapResource.hpp` | `TilemapResource` | Tiled and LDtk loading, chunked map rendering, tile queries, merged colliders, autotiling. |
 | `UIResource.hpp` | `UIResource` | ImGui integration and UI state. |
 
 #### `include/drift/particles/` -- Particle system internals
@@ -193,7 +197,7 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 - `src/sprite/` -- `SpriteResource.cpp`
 - `src/font/` -- `FontResource.cpp`, `GlyphAtlas.cpp` (glyph texture pages), `BMFont.cpp` (`.fnt` parser), `default/` (the built-in font and its license)
 - `src/particles/` -- `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
-- `src/tilemap/` -- `TilemapResource.cpp`
+- `src/tilemap/` -- `TilemapResource.cpp`, `TiledLoader.cpp`, `LdtkLoader.cpp`, `TilemapPlugin.cpp`
 - `src/ui/` -- `UIResource.cpp`
 - `src/lighting/` -- `Lighting.cpp` and the light shader
 - `src/effects/` -- `PostEffects.cpp` and the effect shaders
@@ -229,6 +233,8 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `audio` | Spatial audio sources, mixer buses, music crossfades and playlists |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* on a noise-generated grid, spatial queries, Y-sort, save data |
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
+| `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
+| `tilemap` | Tiled and LDtk levels, parallax, animated tiles, autotiling, merged colliders, object spawners |
 
 ## Typical user project structure
 

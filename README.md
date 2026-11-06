@@ -14,7 +14,7 @@ A 2D game engine written in C++20, built on a Bevy-inspired Entity Component Sys
 - **Particle system** -- Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Text**: UTF-8 text with kerning, alignment, wrapping, outlines and shadows; a built-in font, TrueType/OpenType and BMFont pixel fonts, and a `Text` component
 - **Sprite animation** -- Spritesheet-based animation clips with Aseprite import support
-- **Tilemap rendering** -- Tiled JSON map loading and rendering
+- **Tilemaps**: Tiled and LDtk levels with chunked rendering, parallax, animated tiles, autotiling, merged Box2D colliders, and object spawning
 - **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
 - **Gameplay toolkit**: tweens and easing, timers, rebindable input actions, save data, grid A* pathfinding, spatial hash queries, Y-sorting, seeded random numbers and noise
 - **Parallel scheduler** -- Automatic multi-threaded system dispatch based on dependency analysis
@@ -111,6 +111,7 @@ target_link_libraries(my_game PRIVATE drift)
 | `text` | Built-in font, alignment, wrapping, UTF-8, outline and shadow, bitmap fonts, Text entities |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, Y-sort, save data |
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
+| `tilemap` | Tiled and LDtk levels side by side: parallax, animated tiles, autotiling, merged colliders, object spawners |
 
 Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`. Run the unit tests with `ctest --test-dir build`.
 
@@ -127,7 +128,7 @@ Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build b
 | Images | stb_image |
 | Audio decoding | stb_vorbis, dr_wav, dr_mp3 |
 | Spritesheets | cute_aseprite |
-| Tilemaps | nlohmann/json (Tiled format) |
+| Tilemaps | nlohmann/json (Tiled and LDtk formats) |
 
 ## Documentation
 

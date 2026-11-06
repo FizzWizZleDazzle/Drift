@@ -1,17 +1,17 @@
 #pragma once
 
 #include <drift/Plugin.hpp>
-#include <drift/App.hpp>
+#include <drift/components/Tilemap.hpp>
 #include <drift/resources/TilemapResource.hpp>
-#include <drift/resources/RendererResource.hpp>
 
 namespace drift {
 
+// Adds TilemapResource and the Tilemap component. Tilemap entities are
+// drawn every frame; on spawn they get static colliders (when a
+// PhysicsResource exists) and run the object spawners.
 class TilemapPlugin : public Plugin {
 public:
-    void build(App& app) override {
-        app.addResource<TilemapResource>(*app.getResource<RendererResource>());
-    }
+    void build(App& app) override;
     DRIFT_PLUGIN(TilemapPlugin)
 };
 

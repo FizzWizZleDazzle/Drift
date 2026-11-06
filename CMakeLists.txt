@@ -164,6 +164,10 @@ set(DRIFT_SOURCES
     src/particles/ParticleResource.cpp
     src/particles/ParticleSystem.cpp
     src/tilemap/TilemapResource.cpp
+    src/tilemap/TilemapCommon.cpp
+    src/tilemap/TiledLoader.cpp
+    src/tilemap/LdtkLoader.cpp
+    src/tilemap/TilemapPlugin.cpp
     src/ui/UIResource.cpp
     src/ui/DevInspector.cpp
     src/ui/DevPerformance.cpp
@@ -392,6 +396,10 @@ if(DRIFT_BUILD_EXAMPLES)
     add_executable(scene_editor examples/scene_editor/main.cpp)
     target_link_libraries(scene_editor PRIVATE drift)
     drift_web_app(scene_editor ASSETS examples/scene_editor/assets)
+
+    add_executable(tilemap examples/tilemap/main.cpp)
+    target_link_libraries(tilemap PRIVATE drift)
+    drift_web_app(tilemap ASSETS examples/tilemap/assets)
 endif()
 
 # ---------- Tests ----------
