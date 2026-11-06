@@ -63,6 +63,7 @@ To use Drift from your own project, pull it in with `FetchContent` and link `dri
 - **Audio**: WAV, OGG and MP3, mixer buses, music crossfades and playlists, positional sound.
 - **Sprites and particles**: spritesheet and Aseprite animation, configurable particle emitters, trails.
 - **Gameplay toolkit**: tweens, timers, rebindable input actions for keyboard, mouse and gamepad, save data, A* pathfinding, spatial queries, Y-sorting, random numbers and noise.
+- **Candela scripting**: write a game as a [candela](https://candela.lumenfx.dev) program instead of C++, with the same engine underneath (desktop only).
 - **Scenes and dev tools**: JSON scenes and prefabs through component reflection, hot reload, and an in-game inspector, performance panel and physics debug view.
 
 ## Examples
@@ -83,6 +84,7 @@ Each example runs from its own folder (`cd examples/<name> && ../../build/<name>
 | `audio` | Positional sound sources, bus volume controls, music crossfades and playlists |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, save data |
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
+| `coin_dash` (candela) | A complete game in candela: input actions, physics, sensors, text, sound, save data. Run with `candela run examples/coin_dash/main.cdl` from `bindings/candela` |
 
 Run the engine tests with `ctest --test-dir build`.
 

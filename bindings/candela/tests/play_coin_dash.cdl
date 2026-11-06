@@ -1,0 +1,92 @@
+// Plays the Coin Dash example with synthetic input and checks the game
+// reacts: the player moves, a coin is collected, a hazard ends the round and
+// R restarts it. Screenshots go to the directory given as the first argument
+// (default: the working directory).
+//
+//     SDL_VIDEO_DRIVER=offscreen candela run tests/play_coin_dash.cdl /tmp
+//
+// Steps are timed in seconds, not frames, because a headless run can draw
+// thousands of frames a second.
+
+import "std/assert" as assert;
+import "../examples/coin_dash/main.cdl";
+
+fn main() {
+    let dir = ".";
+    let args = argv();
+    if args.len() > 0 {
+        dir = args[0];
+    }
+    let app = start(config("Coin Dash test", 960, 540));
+    let save_path = dir + "/coin_dash_test_save.json";
+    if fs::exists(save_path) {
+        fs::delete(save_path);
+    }
+    let g = setup(app, app.open_save_file(save_path));
+    let start_pos = g.player.position();
+    let step = 0;
+    let at = 0.0;
+    let moved = false;
+    let collected = false;
+    let hit = false;
+    let restarted = false;
+
+    while app.frame() {
+        let t = app.time() - at;
+        if step == 0 {
+            // Calm the hazards so the scripted steps are not cut short.
+            for h in g.hazards {
+                h.set_position(vec2(100.0, 100.0));
+                h.set_velocity(vec2(0.0, 0.0));
+            }
+            app.send_key(Key::Right, true);
+            step = 1;
+            at = app.time();
+        } else if step == 1 && t > 0.4 {
+            app.send_key(Key::Right, false);
+            moved = g.player.position().x > start_pos.x + 40.0;
+            app.screenshot(dir + "/coin_dash_moved.png");
+            // Drop a coin on the player; the sensor reports it next frame.
+            g.coins[0].set_position(g.player.position());
+            step = 2;
+            at = app.time();
+        } else if step == 2 && t > 0.2 {
+            collected = g.score == 1;
+            // Throw a hazard at the player.
+            let p = g.player.position();
+            g.hazards[0].set_position(vec2(p.x - 100.0, p.y));
+            g.hazards[0].set_velocity(vec2(500.0, 0.0));
+            step = 3;
+            at = app.time();
+        } else if step == 3 && (g.over || t > 2.0) {
+            hit = g.over;
+            step = 4;
+            at = app.time();
+        } else if step == 4 && t > 0.3 {
+            app.screenshot(dir + "/coin_dash_hit.png");
+            app.send_key(Key::R, true);
+            step = 5;
+            at = app.time();
+        } else if step == 5 && t > 0.1 {
+            app.send_key(Key::R, false);
+            restarted = !g.over && g.score == 0;
+            step = 6;
+            at = app.time();
+        } else if step == 6 && t > 0.5 {
+            app.screenshot(dir + "/coin_dash_restarted.png");
+            step = 7;
+            at = app.time();
+        } else if step == 7 && t > 0.1 {
+            app.quit();
+        }
+        update(app, g);
+    }
+    print("moved", moved, "collected", collected, "hit", hit, "restarted", restarted);
+    assert::assert_true(moved);
+    assert::assert_true(collected);
+    assert::assert_true(hit);
+    assert::assert_true(restarted);
+    assert::assert_eq(g.save.get_int("best", 0), 1);
+    fs::delete(save_path);
+    print("coin dash: ok");
+}

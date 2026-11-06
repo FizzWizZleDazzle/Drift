@@ -1,0 +1,4 @@
+{
+  global: dc_*;
+  local: *;
+};

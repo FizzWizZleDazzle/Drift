@@ -58,6 +58,11 @@
 - [Save Data](gameplay/save-data.md)
 - [Spatial Queries, Pathfinding and Y-Sort](gameplay/spatial-and-pathfinding.md)
 
+# Candela
+
+- [Candela](candela/overview.md)
+- [API Reference](candela/api.md)
+
 # Math
 
 - [Types](math/types.md)
@@ -78,6 +83,7 @@
 - [Gameplay Toolkit](examples/toolkit.md)
 - [Scene Editor](examples/scene-editor.md)
 - [Tilemap](examples/tilemap.md)
+- [Coin Dash (candela)](examples/coin-dash.md)
 
 # Reference
 

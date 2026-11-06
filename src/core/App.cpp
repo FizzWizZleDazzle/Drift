@@ -198,6 +198,11 @@ struct App::Impl {
 
     bool running = false;
     bool initialised = false;
+    bool started = false;
+    bool frameOpen = false;   // beginFrame() ran, endFrame() not yet
+
+    // Phase durations of the current frame, in microseconds
+    uint64_t preUpdateUs = 0, updateUs = 0, postUpdateUs = 0;
 
     // ECS World + Commands (owned by App)
     World world;
@@ -673,17 +678,45 @@ Commands& App::commands() {
 }
 
 int App::run() {
+    if (!start()) return 1;
+#ifdef __EMSCRIPTEN__
+    // The browser drives frames; this call does not return.
+    emscripten_set_main_loop_arg([](void* arg) {
+        auto* app = static_cast<App*>(arg);
+        if (!app->beginFrame()) {
+            emscripten_cancel_main_loop();
+            return;
+        }
+        app->endFrame();
+    }, this, 0, true);
+#else
+    while (beginFrame()) {
+        endFrame();
+    }
+#endif
+
+    DRIFT_LOG_INFO("Drift engine shut down");
+    return 0;
+}
+
+bool App::running() const {
+    return impl_->running;
+}
+
+bool App::start() {
     auto& s = *impl_;
+    if (s.started) return s.running;
+    s.started = true;
 
     // ---- SDL init ----
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         DRIFT_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
-        return 1;
+        return false;
     }
     s.initialised = true;
 
     if (!createWindowAndDevice()) {
-        return 1;
+        return false;
     }
     int w = s.config.width > 0 ? s.config.width : 1280;
     int h = s.config.height > 0 ? s.config.height : 720;
@@ -785,26 +818,14 @@ int App::run() {
     s.commands.flush(s.world);
     s.initialStateEnters.clear();
 
-    // ---- Main loop ----
     s.running = true;
-#ifdef __EMSCRIPTEN__
-    // The browser drives frames; this call does not return.
-    emscripten_set_main_loop_arg([](void* arg) {
-        auto* app = static_cast<App*>(arg);
-        if (!app->frame()) emscripten_cancel_main_loop();
-    }, this, 0, true);
-#else
-    while (frame()) {
-    }
-#endif
-
-    DRIFT_LOG_INFO("Drift engine shut down");
-    return 0;
+    return true;
 }
 
-bool App::frame() {
+bool App::beginFrame() {
     auto& s = *impl_;
     if (!s.running) return false;
+    if (s.frameOpen) endFrame();
     // Delta time
     uint64_t now = SDL_GetPerformanceCounter();
     uint64_t elapsed = now - s.lastCounter;
@@ -839,7 +860,7 @@ bool App::frame() {
     uint64_t phaseT0 = SDL_GetPerformanceCounter();
     s.runSystemsParallel(s.preUpdateSystems, *this);
     s.commands.flush(s.world);
-    uint64_t preUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+    s.preUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
     // Poll events (updates current state for this frame)
     SDL_Event event;
@@ -862,16 +883,25 @@ bool App::frame() {
     phaseT0 = SDL_GetPerformanceCounter();
     s.runSystemsParallel(s.updateSystems, *this);
     s.commands.flush(s.world);
-    uint64_t updateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+    s.updateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
     // PostUpdate phase
     phaseT0 = SDL_GetPerformanceCounter();
     s.runSystemsParallel(s.postUpdateSystems, *this);
     s.commands.flush(s.world);
-    uint64_t postUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+    s.postUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+    s.frameOpen = true;
+    return true;
+}
+
+void App::endFrame() {
+    auto& s = *impl_;
+    if (!s.frameOpen) return;
+    s.frameOpen = false;
 
     // Extract phase: fill render snapshot (sequential - GPU ops)
-    phaseT0 = SDL_GetPerformanceCounter();
+    uint64_t phaseT0 = SDL_GetPerformanceCounter();
     s.runSystems(s.extractSystems, *this);
     uint64_t extractUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
 
@@ -890,8 +920,8 @@ bool App::frame() {
         DRIFT_LOG_INFO("=== Frame %llu profile (%.1f FPS, dt=%.2fms) ===",
                        (unsigned long long)s.frame, s.fps, s.dt * 1000.f);
         DRIFT_LOG_INFO("  Phases: PreUpdate=%lluus  Update=%lluus  PostUpdate=%lluus  Extract=%lluus  Render=%lluus  RenderFlush=%lluus",
-                       (unsigned long long)preUpdateUs, (unsigned long long)updateUs,
-                       (unsigned long long)postUpdateUs, (unsigned long long)extractUs,
+                       (unsigned long long)s.preUpdateUs, (unsigned long long)s.updateUs,
+                       (unsigned long long)s.postUpdateUs, (unsigned long long)extractUs,
                        (unsigned long long)renderUs, (unsigned long long)renderFlushUs);
 
         auto printSystems = [](const char* label, std::vector<SystemEntry>& systems) {
@@ -912,7 +942,6 @@ bool App::frame() {
 #endif
 
     s.frame++;
-    return s.running;
 }
 
 bool App::createWindowAndDevice() {

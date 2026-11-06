@@ -1,0 +1,50 @@
+// Lights need Config.lighting, which is fixed when the app starts, so they
+// get their own program. The screenshot shows a lit circle with a shadow.
+//
+//     SDL_VIDEO_DRIVER=offscreen candela run tests/test_lighting.cdl [dir]
+
+import "std/assert" as assert;
+import "../src/main.cdl";
+
+fn main() {
+    let dir = ".";
+    let args = argv();
+    if args.len() > 0 {
+        dir = args[0];
+    }
+    let cfg = config("lighting test", 480, 270);
+    cfg.lighting = true;
+    let app = start(cfg);
+    app.set_clear_color(rgb(160, 160, 170));
+    app.set_ambient(rgb(20, 20, 30));
+
+    let lamp = app.spawn_at(vec2(160.0, 135.0));
+    lamp.add_point_light(rgb(255, 220, 160), 1.5, 220.0);
+    let spot = app.spawn_at(vec2(400.0, 40.0));
+    spot.add_spot_light(rgb(120, 160, 255), 1.2, 260.0, 2.2, 0.7);
+    spot.set_light_color(rgb(140, 180, 255), 1.4);
+
+    let wall = app.spawn_rect(vec2(240.0, 135.0), vec2(20.0, 120.0), rgb(90, 90, 90));
+    wall.add_occluder_box(vec2(10.0, 60.0));
+    let post = app.spawn_at(vec2(100.0, 220.0));
+    post.add_occluder_circle(12.0);
+    let crate = app.spawn_rect(vec2(320.0, 200.0), vec2(24.0, 24.0), rgb(120, 80, 40));
+    crate.add_box_collider(vec2(12.0, 12.0), collider());
+    crate.add_occluder_from_collider();
+
+    assert::assert_true(lamp.has("PointLight2D"));
+    assert::assert_true(spot.has("SpotLight2D"));
+    assert::assert_true(wall.has("LightOccluder2D"));
+
+    let n = 0;
+    while app.frame() {
+        n += 1;
+        if n == 3 {
+            app.screenshot(dir + "/lighting_test.png");
+        }
+        if n == 6 {
+            app.quit();
+        }
+    }
+    print("lighting: ok");
+}
