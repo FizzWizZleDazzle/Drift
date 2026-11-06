@@ -1,32 +1,31 @@
 // drift: write 2D games for the Drift engine in candela.
 //
+// A game is a set of systems over entities and components, Bevy style:
+//
+//     app(config("My Game", 1280, 720)).startup(setup).update(update).run();
+//
+// setup(world) spawns entities with components; update(world, dt) queries
+// and changes them every frame. Components are plain structs. The engine's
+// own (Transform, Sprite, Text, RigidBody, ...) are mirrored to the native
+// engine, which draws and simulates them; yours live here. The frame loop
+// is App.run().
+//
 // The native half is libdrift_candela in dist/ beside this package: a C shim
 // with the whole engine linked in. Only ints, floats, strings, packed int and
-// float lists and structs of those cross into it, and it cannot call back, so
-// the game owns the loop:
-//
-//     let app = start(config("My Game", 1280, 720));
-//     while app.frame() { ...read input, change entities, draw... }
-//
-// Engine objects come back as small integer handles; this file wraps them in
-// typed structs (Entity, Texture, Sound, ...) with methods, turns enums and
-// bools into the integers the shim takes, and raises an error kind when a
-// call fails.
+// float lists and structs of those cross into it.
 
 dylib "../dist/libdrift_candela" {
     string dc_error();
-    int dc_start(string, int, int, int, int, int, int, int, string);
-    int dc_frame();
+    int dc_start(string, int, int, int, int, int, int, int, string, int, int);
+    int dc_sync_begin();
+    int dc_sync_end();
+    float dc_stat(int);
     int dc_quit();
-    int dc_close();
-    int dc_running();
     float dc_dt();
     float dc_time();
-    int dc_frame_count();
     int dc_set_title(string);
     int dc_set_clear_color(Color);
     int dc_set_scale_mode(int);
-    int dc_scale_mode();
     int dc_set_logical_size(int, int);
     Vec2 dc_logical_size();
     int dc_screenshot(string);
@@ -107,94 +106,33 @@ dylib "../dist/libdrift_candela" {
     Vec2 dc_screen_to_world(Vec2);
     Vec2 dc_world_to_screen(Vec2);
 
-    int dc_spawn();
+    int dc_reserve();
+    int dc_create(int[], int);
     int dc_despawn(int);
-    int dc_alive(int);
-    int dc_set_name(int, string);
-    string dc_name(int);
-    int dc_find(string);
-    int dc_query(string);
-    int dc_query_at(int);
-    int dc_has(int, string);
-    int dc_remove(int, string);
+    int dc_dead_count();
+    int dc_dead(int[], int);
+    int dc_set_parent(int, int);
+    Vec2 dc_world_position(int);
     string dc_component_json(int, string);
     int dc_set_component_json(int, string, string);
-    int dc_set_parent(int, int);
-    int dc_parent(int);
+    int dc_set(int, int, float[], int, string);
+    int dc_set_many(int, int[], int, float[], int);
+    int dc_move_many(int[], int, float[]);
+    int dc_remove(int, int);
+    int dc_pull(int, int[], int, float[]);
+    int dc_event_count(int);
+    int dc_events(int, int[], int);
+    int dc_kinds(int);
+    int dc_get(int, int, float[], int);
+    string dc_get_string(int, int);
 
-    int dc_set_position(int, Vec2);
-    Vec2 dc_position(int);
-    Vec2 dc_world_position(int);
-    int dc_set_rotation(int, float);
-    float dc_rotation(int);
-    int dc_set_scale(int, Vec2);
-    Vec2 dc_scale(int);
-
-    int dc_set_sprite(int, int);
-    int dc_sprite_texture(int);
-    int dc_sprite_set_rect(int, Rect);
-    Rect dc_sprite_rect(int);
-    int dc_sprite_set_origin(int, Vec2);
-    int dc_sprite_set_tint(int, Color);
-    Color dc_sprite_tint(int);
-    int dc_sprite_set_flip(int, int);
-    int dc_sprite_set_z(int, float);
-    int dc_sprite_set_layer(int, int);
-    int dc_sprite_set_visible(int, int);
-    int dc_sprite_set_blend(int, int);
-    int dc_remove_sprite(int);
-
-    int dc_anim_add_clip(int, float[], int, float, int);
-    int dc_anim_play(int, int);
-    int dc_anim_stop(int);
-    int dc_anim_clip(int);
-    int dc_anim_frame(int);
-    int dc_anim_finished(int);
-
-    int dc_set_text(int, string);
-    string dc_text(int);
-    int dc_text_style(int, int, NativeTextStyle);
-    int dc_text_set_color(int, Color);
-    int dc_text_set_size(int, float);
-    int dc_text_set_z(int, float);
-    int dc_text_set_layer(int, int);
-    int dc_text_set_visible(int, int);
-
-    int dc_add_camera(int);
-    int dc_camera_set_zoom(int, float);
-    float dc_camera_zoom(int);
-    int dc_camera_set_active(int, int);
-    int dc_camera_set_viewport(int, Rect);
-    int dc_camera_set_order(int, int);
-    int dc_camera_set_layers(int, int);
-    int dc_camera_set_target(int, int);
-    int dc_camera_set_clear(int, int, Color);
-    int dc_camera_follow(int, int, float, Vec2, Vec2);
-    int dc_camera_shake(int, float, float, float);
-
-    int dc_add_body(int, NativeBody);
-    int dc_add_box_collider(int, Vec2, NativeCollider);
-    int dc_add_circle_collider(int, float, NativeCollider);
-    int dc_remove_body(int);
-    int dc_set_velocity(int, Vec2);
-    Vec2 dc_velocity(int);
     int dc_apply_impulse(int, Vec2);
     int dc_apply_force(int, Vec2);
     int dc_set_gravity(Vec2);
     Vec2 dc_gravity();
-    int dc_contact_count(int);
-    int dc_contact_entity(int, int, int);
     NativeHit dc_raycast(Vec2, Vec2, float, int);
-
-    int dc_add_emitter(int, NativeEmitter);
-    int dc_emitter_set_playing(int, int);
-    int dc_emitter_set_rate(int, float);
-    int dc_burst(Vec2, NativeEmitter, int);
-
-    int dc_add_point_light(int, Color, float, float, float, int);
-    int dc_add_spot_light(int, Color, float, float, float, float, float, float, int);
-    int dc_light_set_color(int, Color, float);
-    int dc_add_occluder(int, int, Vec2);
+    int dc_camera_shake(int, float, float, float);
+    int dc_burst(Vec2, float[], int, int);
     int dc_set_ambient(Color);
 
     int dc_effect_add(int, float, float);
@@ -202,17 +140,6 @@ dylib "../dist/libdrift_candela" {
     int dc_effect_remove(int);
     int dc_fade_to(Color, float, float);
     int dc_flash(Color, float);
-
-    int dc_tween_begin(int);
-    int dc_tween_step(int, int, Vec2, float, int);
-    int dc_tween_tint(int, Color, float, int);
-    int dc_tween_loop(int, int, int);
-    int dc_tween_start(int);
-    int dc_tween_stop(int, int);
-    int dc_tween_pause(int);
-    int dc_tween_resume(int);
-    int dc_tween_active(int);
-    int dc_tween_stop_all(int);
     int dc_tween_time_scale(float);
     float dc_ease(int, float);
 
@@ -260,7 +187,6 @@ dylib "../dist/libdrift_candela" {
     string dc_save_json(int);
 
     int dc_tilemap_load(string, string);
-    int dc_set_tilemap(int, int, float, int, int);
     Cell dc_tilemap_size(int);
     Cell dc_tilemap_tile_size(int);
     Rect dc_tilemap_bounds(int);
@@ -288,7 +214,6 @@ dylib "../dist/libdrift_candela" {
     int dc_scene_spawn(int, Vec2, int, string);
     int dc_scene_count(int, int);
     int dc_scene_entity(int, int, int);
-    int dc_scene_find(int, string);
     int dc_scene_save(string);
 }
 
@@ -759,95 +684,518 @@ fn hud_layer() -> int {
     return 31;
 }
 
+
 // =========================================================================
 // Config and the app
 // =========================================================================
 
+/// Window and engine settings, fixed when the app starts.
 struct Config {
-    title: string,
-    width: int,
-    height: int,
+    title: string = "Drift",
+    width: int = 1280,
+    height: int = 720,
     fullscreen: bool,
-    vsync: bool,
-    resizable: bool,
-    scale_mode: ScaleMode,
+    vsync: bool = true,
+    resizable: bool = true,
+    scale_mode: ScaleMode = ScaleMode::Letterbox,
     lighting: bool,
-    renderer: string,
+    renderer: string,           // "" = the default backend, "gl" or "webgpu"
+    pipelined: bool = true,     // simulate the next frame while systems run
+    threads: int,               // engine threads; 0 = one per core, 1 = none
 }
 
 /// A windowed, resizable, vsynced, letterboxed config at a logical size.
 fn config(title: string, width: int, height: int) -> Config {
-    return Config {
-        title: title,
-        width: width,
-        height: height,
-        fullscreen: false,
-        vsync: true,
-        resizable: true,
-        scale_mode: ScaleMode::Letterbox,
-        lighting: false,
-        renderer: "",
-    };
+    return Config { title: title, width: width, height: height, .. };
 }
 
-/// The running engine. One runs at a time.
+struct StartupSystem {
+    run: fn(World),
+}
+
+struct UpdateSystem {
+    run: fn(World, float),
+}
+
+struct CollisionHandler {
+    a: string,
+    b: string,
+    sensor: bool,
+    run: fn(World, Entity, Entity),
+}
+
+/// A game: its config, systems and collision handlers. Build it with
+/// app(config(...)), add systems, then run() it.
 struct App {
-    id: int,
+    cfg: Config,
+    startups: StartupSystem[],
+    updates: UpdateSystem[],
+    handlers: CollisionHandler[],
 }
 
-/// Opens the window and starts the engine. Raises "drift_start_failed".
-fn start(cfg: Config) -> App {
-    let ok = libdrift_candela::dc_start(cfg.title, cfg.width, cfg.height,
-        drift_flag(cfg.fullscreen), drift_flag(cfg.vsync), drift_flag(cfg.resizable),
-        cfg.scale_mode.code(), drift_flag(cfg.lighting), cfg.renderer);
-    if ok == 0 {
-        throw "drift_start_failed";
-    }
-    return App { id: 1 };
-}
-
-struct Collision {
-    a: Entity,
-    b: Entity,
-}
-
-struct SensorEvent {
-    sensor: Entity,
-    visitor: Entity,
-}
-
-struct RayHit {
-    hit: bool,
-    point: Vec2,
-    normal: Vec2,
-    fraction: float,
-}
-
-struct NativeHit {
-    hit: int,
-    point: Vec2,
-    normal: Vec2,
-    fraction: float,
+/// A new app with this config and no systems.
+fn app(cfg: Config) -> App {
+    return App { cfg: cfg, startups: [], updates: [], handlers: [] };
 }
 
 impl App {
-    // ---- Frame loop ----
-
-    /// Presents the previous frame and runs the next one: events, input,
-    /// physics and engine systems. Returns false once the window closed or
-    /// quit() was called; the engine has shut down by then.
-    fn frame(self) -> bool {
-        return libdrift_candela::dc_frame() != 0;
+    /// Runs once, after the window opens and before the first frame.
+    fn startup(self, f: fn(World)) -> App {
+        self.startups.push(StartupSystem { run: f });
+        return self;
     }
-    fn quit(self) { libdrift_candela::dc_quit(); }
-    /// Shuts the engine down now. frame() does this on its own when the
-    /// app quits.
-    fn close(self) { libdrift_candela::dc_close(); }
-    /// Seconds the last frame took.
-    fn dt(self) -> float { return libdrift_candela::dc_dt(); }
-    /// Seconds since start().
+    /// Runs every frame with the frame time in seconds. Systems run in the
+    /// order they were added.
+    fn update(self, f: fn(World, float)) -> App {
+        self.updates.push(UpdateSystem { run: f });
+        return self;
+    }
+    /// Calls `f(world, a, b)` when an entity with an A component starts
+    /// touching one with a B component; `a` is the one with A.
+    fn on_collision<A, B>(self, f: fn(World, Entity, Entity)) -> App {
+        self.handlers.push(CollisionHandler { a: drift_key<A>(), b: drift_key<B>(), sensor: false, run: f });
+        return self;
+    }
+    /// Calls `f(world, a, b)` when an entity with A enters a sensor collider
+    /// of an entity with B, or the other way round; `a` is the one with A.
+    fn on_sensor<A, B>(self, f: fn(World, Entity, Entity)) -> App {
+        self.handlers.push(CollisionHandler { a: drift_key<A>(), b: drift_key<B>(), sensor: true, run: f });
+        return self;
+    }
+    /// Opens the window and runs the game until it quits. Raises
+    /// "drift_start_failed" when no window or graphics device opens.
+    fn run(self) {
+        let c = self.cfg;
+        let ok = libdrift_candela::dc_start(c.title, c.width, c.height,
+            drift_flag(c.fullscreen), drift_flag(c.vsync), drift_flag(c.resizable),
+            c.scale_mode.code(), drift_flag(c.lighting), c.renderer,
+            drift_flag(c.pipelined), c.threads);
+        if ok == 0 {
+            throw "drift_start_failed";
+        }
+        let w = drift_world();
+        for s in self.startups {
+            s.run(w);
+        }
+        while w.sync() {
+            w.dispatch(self.handlers);
+            for u in self.updates {
+                u.run(w, w.dt);
+            }
+        }
+    }
+}
+
+// =========================================================================
+// Entities
+// =========================================================================
+
+/// An entity: a handle components hang off. Compare with `==`.
+struct Entity {
+    id: int,
+}
+
+impl Entity {
+    fn equals(self, o: Entity) -> bool { return self.id == o.id; }
+}
+
+/// An entity being built: insert components, then take its id().
+struct EntityMut {
+    world: World,
+    entity: Entity,
+}
+
+impl EntityMut {
+    /// Adds or replaces a component.
+    fn insert<T>(self, c: T) -> EntityMut {
+        self.world.insert(self.entity, c);
+        return self;
+    }
+    fn id(self) -> Entity { return self.entity; }
+}
+
+/// A query result row. `entity` is the entity; `a`, `b`, `c` are its
+/// components in the order the query names them. They are the stored
+/// values, so changing a field changes the component.
+struct Row<A> {
+    entity: Entity,
+    a: A,
+}
+
+struct Row2<A, B> {
+    entity: Entity,
+    a: A,
+    b: B,
+}
+
+struct Row3<A, B, C> {
+    entity: Entity,
+    a: A,
+    b: B,
+    c: C,
+}
+
+/// How the last frame's time went, in milliseconds; see World.stats().
+struct FrameStats {
+    script: float,      // the update systems and collision handlers
+    simulation: float,  // engine systems: physics, behaviors, animation, ...
+    overlap: float,     // the two running at the same time
+    wait: float,        // waiting for the simulation after the systems ended
+    render: float,      // drawing and presenting
+    serial: float,      // the rest of the frame: writing changes, polling, render
+    background: bool,   // the simulation ran on a background thread
+}
+
+struct EngineKey {
+    key: string,
+    kind: int,
+}
+
+struct Removal {
+    kind: int,
+    id: int,
+}
+
+struct Deferred {
+    run: fn(),
+}
+
+/// Everything a system works with: entities and their components,
+/// resources, input, time, assets and the engine services.
+struct World {
+    dt: float,
+    frame: int,
+    stores: {string: {int: any}},
+    alive: {int: bool},
+    spawned: int[],
+    despawns: int[],
+    removals: Removal[],
+    later: Deferred[],
+    resources: {string: any},
+    // Mirrors of engine components: which ones the systems touched this
+    // frame, and what the engine holds (to send only what changed).
+    engine: EngineKey[],
+    kinds: {string: int},
+    touched: {string: int[]},
+    seen: {string: {int: int}},
+    shadow: {string: {int: float[]}},
+    shadow_str: {string: {int: string}},
+}
+
+fn drift_world() -> World {
+    let w = World {
+        dt: 0.0, frame: 0, stores: {}, alive: {}, spawned: [], despawns: [], removals: [],
+        later: [], resources: {}, engine: [], kinds: {}, touched: {}, seen: {}, shadow: {},
+        shadow_str: {},
+    };
+    w.engine_kind(drift_key<Transform>(), 0);
+    w.engine_kind(drift_key<Velocity>(), 1);
+    w.engine_kind(drift_key<Sprite>(), 2);
+    w.engine_kind(drift_key<Rectangle>(), 3);
+    w.engine_kind(drift_key<Circle>(), 3);
+    w.engine_kind(drift_key<Text>(), 4);
+    w.engine_kind(drift_key<Camera>(), 5);
+    w.engine_kind(drift_key<CameraFollow>(), 6);
+    w.engine_kind(drift_key<RigidBody>(), 7);
+    w.engine_kind(drift_key<BoxCollider>(), 8);
+    w.engine_kind(drift_key<CircleCollider>(), 9);
+    w.engine_kind(drift_key<ParticleEmitter>(), 10);
+    w.engine_kind(drift_key<PointLight>(), 11);
+    w.engine_kind(drift_key<SpotLight>(), 12);
+    w.engine_kind(drift_key<LightOccluder>(), 13);
+    w.engine_kind(drift_key<AudioSource>(), 14);
+    w.engine_kind(drift_key<Tilemap>(), 15);
+    w.engine_kind(drift_key<Animator>(), 16);
+    w.engine_kind(drift_key<Lifetime>(), 17);
+    w.engine_kind(drift_key<Oscillate>(), 18);
+    w.engine_kind(drift_key<Follow>(), 19);
+    w.engine_kind(drift_key<Name>(), 20);
+    w.engine_kind(drift_key<Tween>(), 21);
+    return w;
+}
+
+/// The storage key of a component type: its type name.
+fn drift_key<T>() -> string {
+    let probe: T[] = [];
+    let s = type(probe);
+    return s[..s.len() - 2];
+}
+
+// Doubles per entity the engine sends back for the kinds it changes.
+fn drift_pull_stride(kind: int) -> int {
+    if kind == 0 { return 5; }
+    if kind == 1 { return 3; }
+    if kind == 2 { return 8; }
+    if kind == 5 { return 1; }
+    if kind == 16 { return 4; }
+    if kind == 17 { return 1; }
+    return 0;
+}
+
+impl World {
+    fn engine_kind(self, key: string, kind: int) {
+        self.engine.push(EngineKey { key: key, kind: kind });
+        self.kinds[key] = kind;
+        let t: int[] = [];
+        self.touched[key] = t;
+        let s: {int: int} = {};
+        self.seen[key] = s;
+        let sh: {int: float[]} = {};
+        self.shadow[key] = sh;
+        let ss: {int: string} = {};
+        self.shadow_str[key] = ss;
+        let m: {int: any} = {};
+        self.stores[key] = m;
+    }
+
+    fn store(self, key: string) -> {int: any} {
+        if !self.stores.contains(key) {
+            let m: {int: any} = {};
+            self.stores[key] = m;
+        }
+        return self.stores[key];
+    }
+
+    // ---- Entities and components ----
+
+    /// A new entity. Add components with insert(); the engine gets it at
+    /// the end of the frame.
+    fn spawn(self) -> EntityMut {
+        let id = libdrift_candela::dc_reserve();
+        self.alive[id] = true;
+        self.spawned.push(id);
+        return EntityMut { world: self, entity: Entity { id: id } };
+    }
+    /// The entity, to insert more components.
+    fn entity(self, e: Entity) -> EntityMut {
+        return EntityMut { world: self, entity: e };
+    }
+    /// Adds or replaces a component of `e`.
+    fn insert<T>(self, e: Entity, c: T) {
+        if !self.alive.contains(e.id) {
+            return;
+        }
+        let key = type(c);
+        let m = self.store(key);
+        m[e.id] = c;
+        if self.kinds.contains(key) {
+            // A new value goes to the engine whole.
+            self.shadow[key].remove(e.id);
+            self.shadow_str[key].remove(e.id);
+            self.mark(key, e.id);
+        }
+    }
+    /// The component of `e`. Raises "drift_missing_component" when it has
+    /// none; check with has() first.
+    fn get<T>(self, e: Entity) -> T {
+        let key = drift_key<T>();
+        let m = self.store(key);
+        if !m.contains(e.id) {
+            throw "drift_missing_component";
+        }
+        if self.kinds.contains(key) {
+            self.touch(key, [e.id]);
+        }
+        return m[e.id] as T;
+    }
+    fn has<T>(self, e: Entity) -> bool {
+        let key = drift_key<T>();
+        return self.stores.contains(key) && self.stores[key].contains(e.id);
+    }
+    fn remove<T>(self, e: Entity) {
+        let key = drift_key<T>();
+        if !self.stores.contains(key) || !self.stores[key].contains(e.id) {
+            return;
+        }
+        self.stores[key].remove(e.id);
+        if self.kinds.contains(key) {
+            self.shadow[key].remove(e.id);
+            self.shadow_str[key].remove(e.id);
+            self.removals.push(Removal { kind: self.kinds[key], id: e.id });
+        }
+    }
+    /// Removes the entity and its children at the end of the frame. It is
+    /// gone from queries at once; rows already returned keep their values.
+    fn despawn(self, e: Entity) {
+        if !self.alive.contains(e.id) {
+            return;
+        }
+        self.forget(e.id);
+        self.despawns.push(e.id);
+    }
+    fn alive(self, e: Entity) -> bool { return self.alive.contains(e.id); }
+
+    fn forget(self, id: int) {
+        self.alive.remove(id);
+        for key in self.stores {
+            self.stores[key].remove(id);
+        }
+        for k in self.engine {
+            self.seen[k.key].remove(id);
+            self.shadow[k.key].remove(id);
+            self.shadow_str[k.key].remove(id);
+        }
+    }
+
+    /// Makes `child` follow `parent`: its Transform becomes relative to the
+    /// parent's, and it is despawned with it.
+    fn set_parent(self, child: Entity, parent: Entity) {
+        let c = child.id;
+        let p = parent.id;
+        self.defer(fn() { libdrift_candela::dc_set_parent(c, p); });
+    }
+    /// The first entity with this Name, or an entity that is not alive.
+    fn find(self, name: string) -> Entity {
+        let m = self.store(drift_key<Name>());
+        for id in m {
+            if (m[id] as Name).value == name {
+                return Entity { id: id };
+            }
+        }
+        return Entity { id: 0 };
+    }
+    /// Position after parents are applied, from the engine.
+    fn world_position(self, e: Entity) -> Vec2 { return libdrift_candela::dc_world_position(e.id); }
+    /// Any reflected engine component as JSON, as a scene file stores it
+    /// ("" if missing). For components the package does not mirror.
+    fn component_json(self, e: Entity, component: string) -> string {
+        return libdrift_candela::dc_component_json(e.id, component);
+    }
+    /// Sets or merges a reflected engine component from JSON. Raises
+    /// "drift_bad_component".
+    fn set_component_json(self, e: Entity, component: string, json: string) {
+        if libdrift_candela::dc_set_component_json(e.id, component, json) == 0 {
+            throw "drift_bad_component";
+        }
+    }
+    /// Runs `f` at the end of the frame, after spawned entities exist in
+    /// the engine.
+    fn defer(self, f: fn()) {
+        self.later.push(Deferred { run: f });
+    }
+
+    // ---- Queries ----
+
+    /// Every entity with an A, with its A.
+    fn query<A>(self) -> Row<A>[] {
+        let ka = drift_key<A>();
+        let out: Row<A>[] = [];
+        if !self.stores.contains(ka) {
+            return out;
+        }
+        let ma = self.stores[ka];
+        let ids: int[] = [];
+        for id in ma {
+            ids.push(id);
+            out.push(Row<A> { entity: Entity { id: id }, a: ma[id] as A });
+        }
+        self.touch_any(ka, ids);
+        return out;
+    }
+    /// Every entity with both an A and a B.
+    fn query2<A, B>(self) -> Row2<A, B>[] {
+        let ka = drift_key<A>();
+        let kb = drift_key<B>();
+        let out: Row2<A, B>[] = [];
+        if !self.stores.contains(ka) || !self.stores.contains(kb) {
+            return out;
+        }
+        let ma = self.stores[ka];
+        let mb = self.stores[kb];
+        let ids: int[] = [];
+        for id in ma {
+            if mb.contains(id) {
+                ids.push(id);
+                out.push(Row2<A, B> { entity: Entity { id: id }, a: ma[id] as A, b: mb[id] as B });
+            }
+        }
+        self.touch_any(ka, ids);
+        self.touch_any(kb, ids);
+        return out;
+    }
+    /// Every entity with an A, a B and a C.
+    fn query3<A, B, C>(self) -> Row3<A, B, C>[] {
+        let ka = drift_key<A>();
+        let kb = drift_key<B>();
+        let kc = drift_key<C>();
+        let out: Row3<A, B, C>[] = [];
+        if !self.stores.contains(ka) || !self.stores.contains(kb) || !self.stores.contains(kc) {
+            return out;
+        }
+        let ma = self.stores[ka];
+        let mb = self.stores[kb];
+        let mc = self.stores[kc];
+        let ids: int[] = [];
+        for id in ma {
+            if mb.contains(id) && mc.contains(id) {
+                ids.push(id);
+                out.push(Row3<A, B, C> { entity: Entity { id: id }, a: ma[id] as A, b: mb[id] as B, c: mc[id] as C });
+            }
+        }
+        self.touch_any(ka, ids);
+        self.touch_any(kb, ids);
+        self.touch_any(kc, ids);
+        return out;
+    }
+    /// Every entity with an A, as a list of entities.
+    fn entities<A>(self) -> Entity[] {
+        let out: Entity[] = [];
+        let ka = drift_key<A>();
+        if !self.stores.contains(ka) {
+            return out;
+        }
+        for id in self.stores[ka] {
+            out.push(Entity { id: id });
+        }
+        return out;
+    }
+    /// How many entities have an A.
+    fn count<A>(self) -> int {
+        let ka = drift_key<A>();
+        if !self.stores.contains(ka) {
+            return 0;
+        }
+        return self.stores[ka].len();
+    }
+    /// Calls `f` for every entity with a T. candela runs one script thread,
+    /// so this runs one entity after another, the same as a loop over
+    /// query<T>(); it exists so systems written this way can run in
+    /// parallel once candela can.
+    fn par_each<T>(self, f: fn(World, Entity, T)) {
+        for r in self.query<T>() {
+            f(self, r.entity, r.a);
+        }
+    }
+    /// par_each over entities with both an A and a B.
+    fn par_each2<A, B>(self, f: fn(World, Entity, A, B)) {
+        for r in self.query2<A, B>() {
+            f(self, r.entity, r.a, r.b);
+        }
+    }
+
+    // ---- Resources ----
+
+    /// Stores a value of a type of your own, one per type.
+    fn insert_resource<R>(self, r: R) {
+        self.resources[type(r)] = r;
+    }
+    /// The resource of type R. Raises "drift_missing_resource".
+    fn resource<R>(self) -> R {
+        let key = drift_key<R>();
+        if !self.resources.contains(key) {
+            throw "drift_missing_resource";
+        }
+        return self.resources[key] as R;
+    }
+    fn has_resource<R>(self) -> bool { return self.resources.contains(drift_key<R>()); }
+    fn remove_resource<R>(self) { self.resources.remove(drift_key<R>()); }
+
+    // ---- Time, window, frame ----
+
+    /// Seconds since the app started.
     fn time(self) -> float { return libdrift_candela::dc_time(); }
-    fn frame_count(self) -> int { return libdrift_candela::dc_frame_count(); }
+    fn input(self) -> Input { return Input { id: 1 }; }
+    fn quit(self) { libdrift_candela::dc_quit(); }
     fn set_title(self, title: string) { libdrift_candela::dc_set_title(title); }
     fn set_clear_color(self, c: Color) { libdrift_candela::dc_set_clear_color(c); }
     fn set_scale_mode(self, mode: ScaleMode) { libdrift_candela::dc_set_scale_mode(mode.code()); }
@@ -859,93 +1207,22 @@ impl App {
     /// The graphics backend in use ("gl" or "webgpu").
     fn backend(self) -> string { return libdrift_candela::dc_backend(); }
     fn draw_calls(self) -> int { return libdrift_candela::dc_draw_calls(); }
+    /// Timing of the last complete frame.
+    fn stats(self) -> FrameStats {
+        return FrameStats {
+            script: libdrift_candela::dc_stat(0),
+            simulation: libdrift_candela::dc_stat(1),
+            overlap: libdrift_candela::dc_stat(2),
+            wait: libdrift_candela::dc_stat(3),
+            render: libdrift_candela::dc_stat(4),
+            serial: libdrift_candela::dc_stat(6),
+            background: libdrift_candela::dc_stat(7) > 0.5,
+        };
+    }
+    fn screen_to_world(self, p: Vec2) -> Vec2 { return libdrift_candela::dc_screen_to_world(p); }
+    fn world_to_screen(self, p: Vec2) -> Vec2 { return libdrift_candela::dc_world_to_screen(p); }
 
-    // ---- Keyboard, mouse, gamepad ----
-
-    fn key_down(self, k: Key) -> bool { return libdrift_candela::dc_key_down(k.code()) != 0; }
-    fn key_pressed(self, k: Key) -> bool { return libdrift_candela::dc_key_pressed(k.code()) != 0; }
-    fn key_released(self, k: Key) -> bool { return libdrift_candela::dc_key_released(k.code()) != 0; }
-    /// Mouse position in logical screen coordinates.
-    fn mouse_position(self) -> Vec2 { return libdrift_candela::dc_mouse_position(); }
-    /// Mouse position in the world, through the main camera.
-    fn mouse_world(self) -> Vec2 { return libdrift_candela::dc_screen_to_world(libdrift_candela::dc_mouse_position()); }
-    fn mouse_delta(self) -> Vec2 { return libdrift_candela::dc_mouse_delta(); }
-    fn mouse_wheel(self) -> float { return libdrift_candela::dc_mouse_wheel(); }
-    fn mouse_down(self, b: MouseButton) -> bool { return libdrift_candela::dc_mouse_down(b.code()) != 0; }
-    fn mouse_pressed(self, b: MouseButton) -> bool { return libdrift_candela::dc_mouse_pressed(b.code()) != 0; }
-    fn mouse_released(self, b: MouseButton) -> bool { return libdrift_candela::dc_mouse_released(b.code()) != 0; }
-    fn gamepad_connected(self, pad: int) -> bool { return libdrift_candela::dc_gamepad_connected(pad) != 0; }
-    fn gamepad_axis(self, pad: int, axis: GamepadAxis) -> float { return libdrift_candela::dc_gamepad_axis(pad, axis.code()); }
-    fn gamepad_down(self, pad: int, b: GamepadButton) -> bool { return libdrift_candela::dc_gamepad_down(pad, b.code()) != 0; }
-    fn gamepad_pressed(self, pad: int, b: GamepadButton) -> bool { return libdrift_candela::dc_gamepad_pressed(pad, b.code()) != 0; }
-    fn gamepad_released(self, pad: int, b: GamepadButton) -> bool { return libdrift_candela::dc_gamepad_released(pad, b.code()) != 0; }
-
-    /// Queues a key press or release as if it came from the keyboard; it
-    /// arrives with the next frame(). For automated tests and demo playback.
-    fn send_key(self, k: Key, down: bool) { libdrift_candela::dc_send_key(k.code(), drift_flag(down)); }
-    /// Queues a mouse move to a window pixel position.
-    fn send_mouse_move(self, window_pos: Vec2) { libdrift_candela::dc_send_mouse(window_pos, 0, 0); }
-    fn send_mouse_button(self, window_pos: Vec2, b: MouseButton, down: bool) {
-        libdrift_candela::dc_send_mouse(window_pos, b.code(), drift_flag(down));
-    }
-
-    // ---- Input actions ----
-
-    /// Adds a binding to an action. Raises "drift_bad_binding" for Unbound.
-    fn bind_action(self, name: string, b: Binding) {
-        if libdrift_candela::dc_action_bind(name, b.text()) == 0 {
-            throw "drift_bad_binding";
-        }
-    }
-    /// A 1D axis: `negative` reads -1, `positive` +1.
-    fn bind_axis(self, name: string, negative: Binding, positive: Binding) {
-        libdrift_candela::dc_action_bind_axis(name, negative.text(), positive.text());
-    }
-    /// A 2D axis in screen orientation: up is -Y.
-    fn bind_axis2d(self, name: string, left: Binding, right: Binding, up: Binding, down: Binding) {
-        libdrift_candela::dc_action_bind_axis2d(name, left.text(), right.text(), up.text(), down.text());
-    }
-    fn bind_stick(self, name: string, x: GamepadAxis, y: GamepadAxis) {
-        libdrift_candela::dc_action_bind_stick(name, x.code(), y.code());
-    }
-    fn action_pressed(self, name: string) -> bool { return libdrift_candela::dc_action_pressed(name) != 0; }
-    fn action_held(self, name: string) -> bool { return libdrift_candela::dc_action_held(name) != 0; }
-    fn action_released(self, name: string) -> bool { return libdrift_candela::dc_action_released(name) != 0; }
-    fn action_value(self, name: string) -> float { return libdrift_candela::dc_action_value(name); }
-    fn axis(self, name: string) -> float { return libdrift_candela::dc_action_axis(name); }
-    fn axis2d(self, name: string) -> Vec2 { return libdrift_candela::dc_action_axis2d(name); }
-    fn has_action(self, name: string) -> bool { return libdrift_candela::dc_action_has(name) != 0; }
-    fn remove_action(self, name: string) { libdrift_candela::dc_action_remove(name); }
-    /// Replaces binding `index` in a slot (0 for actions; for axes 0/1 are
-    /// negative/positive, for 2D axes 0..3 are left, right, up, down).
-    fn rebind(self, name: string, slot: int, index: int, b: Binding) -> bool {
-        return libdrift_candela::dc_action_rebind(name, slot, index, b.text()) != 0;
-    }
-    /// The bindings in one slot, as text ("key:Space", "button:South").
-    fn bindings(self, name: string, slot: int) -> string[] {
-        let out = [""];
-        out.remove(0);
-        let n = libdrift_candela::dc_action_binding_count(name, slot);
-        for i in range(n) {
-            out.push(libdrift_candela::dc_action_binding(name, slot, i));
-        }
-        return out;
-    }
-    /// The first input that went down this frame as binding text, or "".
-    fn capture_binding(self) -> string { return libdrift_candela::dc_action_capture(); }
-    /// Rebinds slot/index to an input captured by capture_binding().
-    fn rebind_text(self, name: string, slot: int, index: int, text: string) -> bool {
-        return libdrift_candela::dc_action_rebind(name, slot, index, text) != 0;
-    }
-    /// Every binding as JSON, to keep in save data.
-    fn bindings_json(self) -> string { return libdrift_candela::dc_action_save(); }
-    /// Applies bindings saved by bindings_json(); returns how many controls changed.
-    fn load_bindings_json(self, text: string) -> int { return libdrift_candela::dc_action_load(text); }
-    fn set_action_tuning(self, dead_zone: float, press_threshold: float, gamepad: int) {
-        libdrift_candela::dc_action_settings(dead_zone, press_threshold, gamepad);
-    }
-
-    // ---- Textures and spritesheets ----
+    // ---- Assets ----
 
     /// Loads a PNG (or any format stb_image reads). Raises "drift_load_failed".
     fn load_texture(self, path: string) -> Texture {
@@ -957,8 +1234,7 @@ impl App {
     }
     /// A texture from colors, row by row from the top-left.
     fn create_texture(self, width: int, height: int, pixels: Color[]) -> Texture {
-        let data = [0.0];
-        data.remove(0);
+        let data: float[] = [];
         for c in pixels {
             data.push(c.r);
             data.push(c.g);
@@ -979,7 +1255,6 @@ impl App {
         }
         return Texture { id: id };
     }
-    /// A white texture, for solid-colored sprites: tint and scale it.
     fn white_texture(self) -> Texture { return Texture { id: libdrift_candela::dc_texture_white() }; }
     /// Cuts a texture into a grid of frame_w x frame_h frames.
     fn spritesheet(self, tex: Texture, frame_w: int, frame_h: int) -> Spritesheet {
@@ -1004,50 +1279,6 @@ impl App {
         }
         return Font { id: id };
     }
-    /// The built-in font.
-    fn default_font(self) -> Font { return Font { id: 0 }; }
-
-    // ---- Immediate drawing ----
-    // Draws queue for the current frame and show when frame() is next called.
-    // They go on the current layer (0 = the world, hud_layer() = the screen)
-    // at the current z, both reset every frame.
-
-    fn set_layer(self, layer: int) { libdrift_candela::dc_set_layer(layer); }
-    fn set_z(self, z: float) { libdrift_candela::dc_set_z(z); }
-    fn draw_rect(self, r: Rect, c: Color) { libdrift_candela::dc_draw_rect(r, c); }
-    fn draw_rect_lines(self, r: Rect, c: Color, thickness: float) { libdrift_candela::dc_draw_rect_lines(r, c, thickness); }
-    fn draw_rounded_rect(self, r: Rect, radius: float, c: Color) { libdrift_candela::dc_draw_rounded_rect(r, radius, c); }
-    fn draw_circle(self, center: Vec2, radius: float, c: Color) { libdrift_candela::dc_draw_circle(center, radius, c); }
-    fn draw_circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
-        libdrift_candela::dc_draw_circle_lines(center, radius, c, thickness);
-    }
-    fn draw_arc(self, center: Vec2, radius: float, from: float, to: float, c: Color, thickness: float) {
-        libdrift_candela::dc_draw_arc(center, radius, from, to, c, thickness);
-    }
-    fn draw_line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { libdrift_candela::dc_draw_line(a, b, c, thickness); }
-    fn draw_triangle(self, a: Vec2, b: Vec2, c: Vec2, col: Color) { libdrift_candela::dc_draw_triangle(a, b, c, col); }
-    fn draw_polygon(self, points: Vec2[], c: Color) {
-        let xy = drift_points(points);
-        libdrift_candela::dc_draw_polygon(xy, xy.len(), c);
-    }
-    fn draw_polyline(self, points: Vec2[], c: Color, thickness: float, closed: bool) {
-        let xy = drift_points(points);
-        libdrift_candela::dc_draw_polyline(xy, xy.len(), c, thickness, drift_flag(closed));
-    }
-    /// Draws a texture with its top-left at `pos`.
-    fn draw_texture(self, tex: Texture, pos: Vec2) {
-        libdrift_candela::dc_draw_texture(tex.id, pos, sprite_options().native());
-    }
-    fn draw_texture_with(self, tex: Texture, pos: Vec2, o: SpriteOptions) {
-        libdrift_candela::dc_draw_texture(tex.id, pos, o.native());
-    }
-    /// Draws text with the built-in font, top-left at `pos`.
-    fn draw_text(self, text: string, pos: Vec2, size: float, c: Color) {
-        libdrift_candela::dc_draw_text(0, text, pos, text_style(size, c).native());
-    }
-    fn draw_text_with(self, font: Font, text: string, pos: Vec2, style: TextStyle) {
-        libdrift_candela::dc_draw_text(font.id, text, pos, style.native());
-    }
     /// Width and height `text` covers at `size` with the built-in font.
     fn measure_text(self, text: string, size: float) -> Vec2 {
         return libdrift_candela::dc_measure_text(0, text, text_style(size, rgb(255, 255, 255)).native());
@@ -1056,128 +1287,6 @@ impl App {
         return libdrift_candela::dc_measure_text(font.id, text, style.native());
     }
     fn line_height(self, font: Font, size: float) -> float { return libdrift_candela::dc_line_height(font.id, size); }
-    /// Clips later draws to a rect in screen pixels until pop_clip().
-    fn push_clip(self, r: Rect) { libdrift_candela::dc_push_clip(r); }
-    fn pop_clip(self) { libdrift_candela::dc_pop_clip(); }
-    fn screen_to_world(self, p: Vec2) -> Vec2 { return libdrift_candela::dc_screen_to_world(p); }
-    fn world_to_screen(self, p: Vec2) -> Vec2 { return libdrift_candela::dc_world_to_screen(p); }
-
-    // ---- Entities ----
-
-    /// A new entity with a Transform2D at the origin.
-    fn spawn(self) -> Entity { return Entity { id: libdrift_candela::dc_spawn() }; }
-    /// A new entity at `pos`.
-    fn spawn_at(self, pos: Vec2) -> Entity {
-        let e = Entity { id: libdrift_candela::dc_spawn() };
-        e.set_position(pos);
-        return e;
-    }
-    /// A new entity at `pos` drawing `tex` centered on it.
-    fn spawn_sprite(self, tex: Texture, pos: Vec2) -> Entity {
-        let e = self.spawn_at(pos);
-        e.set_sprite(tex);
-        e.center_origin();
-        return e;
-    }
-    /// A new entity at `pos` drawing a solid rectangle centered on it.
-    fn spawn_rect(self, pos: Vec2, size: Vec2, c: Color) -> Entity {
-        let e = self.spawn_at(pos);
-        // Sized through the source rect, not the scale, so colliders and
-        // occluders added to the entity keep world-unit sizes.
-        e.set_sprite(self.white_texture());
-        e.set_frame(rect(0.0, 0.0, size.x, size.y));
-        e.set_origin(vec2(size.x * 0.5, size.y * 0.5));
-        e.set_tint(c);
-        return e;
-    }
-    /// A new entity at `pos` showing text with the built-in font.
-    fn spawn_text(self, text: string, pos: Vec2, size: float, c: Color) -> Entity {
-        let e = self.spawn_at(pos);
-        e.set_text(text);
-        e.set_text_size(size);
-        e.set_text_color(c);
-        return e;
-    }
-    /// A new active camera looking at `pos`.
-    fn spawn_camera(self, pos: Vec2) -> Entity {
-        let e = self.spawn_at(pos);
-        e.add_camera();
-        return e;
-    }
-    /// The first entity with this name, or an entity that is not alive.
-    fn find(self, name: string) -> Entity { return Entity { id: libdrift_candela::dc_find(name) }; }
-    /// Every entity that has all the named components, as a flecs query
-    /// expression: "Sprite", "RigidBody2D, Velocity2D", "Text, !Sprite".
-    /// Raises "drift_bad_query" when the expression does not parse.
-    fn query(self, components: string) -> Entity[] {
-        let n = libdrift_candela::dc_query(components);
-        if n < 0 {
-            throw "drift_bad_query";
-        }
-        let out = [Entity { id: 0 }];
-        out.remove(0);
-        for i in range(n) {
-            out.push(Entity { id: libdrift_candela::dc_query_at(i) });
-        }
-        return out;
-    }
-
-    // ---- Physics ----
-
-    fn set_gravity(self, g: Vec2) { libdrift_candela::dc_set_gravity(g); }
-    fn gravity(self) -> Vec2 { return libdrift_candela::dc_gravity(); }
-    /// Pairs that started touching during this frame's physics step.
-    fn collisions(self) -> Collision[] { return drift_contacts(0); }
-    /// Pairs that stopped touching this frame.
-    fn collisions_ended(self) -> Collision[] { return drift_contacts(1); }
-    /// Bodies that entered a sensor collider this frame.
-    fn sensor_entered(self) -> SensorEvent[] { return drift_sensors(2); }
-    fn sensor_exited(self) -> SensorEvent[] { return drift_sensors(3); }
-    /// The first collider hit along a ray of `distance` from `origin`.
-    fn raycast(self, origin: Vec2, direction: Vec2, distance: float) -> RayHit {
-        let h = libdrift_candela::dc_raycast(origin, direction, distance, 65535);
-        return RayHit { hit: h.hit != 0, point: h.point, normal: h.normal, fraction: h.fraction };
-    }
-
-    // ---- Particles ----
-
-    /// A one-off burst of `count` particles at `pos`; cleaned up when done.
-    fn burst(self, pos: Vec2, e: Emitter, count: int) {
-        libdrift_candela::dc_burst(pos, e.native(), count);
-    }
-
-    // ---- Lighting (needs Config.lighting = true) ----
-
-    /// Light everywhere before any light adds to it. Raises
-    /// "drift_lighting_off" when the app started without lighting.
-    fn set_ambient(self, c: Color) {
-        if libdrift_candela::dc_set_ambient(c) == 0 {
-            throw "drift_lighting_off";
-        }
-    }
-
-    // ---- Post effects ----
-
-    fn add_bloom(self, threshold: float, intensity: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(0, threshold, intensity) }; }
-    fn add_vignette(self, intensity: float, radius: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(1, intensity, radius) }; }
-    fn add_crt(self, curvature: float, scanlines: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(2, curvature, scanlines) }; }
-    fn add_grayscale(self, amount: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(3, amount, 0.0) }; }
-    fn add_sepia(self, amount: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(4, amount, 0.0) }; }
-    fn add_pixelate(self, pixel_size: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(5, pixel_size, 0.0) }; }
-    fn add_blur(self, radius: float, iterations: int) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(6, radius, float(iterations)) }; }
-    /// Fades the screen toward `c`; amount 1.0 is solid color.
-    fn fade_to(self, c: Color, amount: float, seconds: float) { libdrift_candela::dc_fade_to(c, amount, seconds); }
-    /// Jumps to solid `c` and fades back over `seconds`.
-    fn flash(self, c: Color, seconds: float) { libdrift_candela::dc_flash(c, seconds); }
-
-    // ---- Tweens ----
-
-    /// Starts building a tween of `e`'s transform, tint or camera zoom.
-    fn tween(self, e: Entity) -> TweenBuilder { return TweenBuilder { id: libdrift_candela::dc_tween_begin(e.id) }; }
-    /// A tween with no entity, for delays.
-    fn sequence(self) -> TweenBuilder { return TweenBuilder { id: libdrift_candela::dc_tween_begin(0) }; }
-    /// Multiplies time for every tween; 0.0 freezes them.
-    fn set_tween_speed(self, s: float) { libdrift_candela::dc_tween_time_scale(s); }
 
     // ---- Audio ----
 
@@ -1221,6 +1330,52 @@ impl App {
     /// False when no audio device opened; sounds then play silently.
     fn audio_device(self) -> bool { return libdrift_candela::dc_audio_has_device() != 0; }
 
+    // ---- Physics ----
+
+    fn set_gravity(self, g: Vec2) { libdrift_candela::dc_set_gravity(g); }
+    fn gravity(self) -> Vec2 { return libdrift_candela::dc_gravity(); }
+    /// The first collider hit along a ray of `distance` from `origin`.
+    fn raycast(self, origin: Vec2, direction: Vec2, distance: float) -> RayHit {
+        let h = libdrift_candela::dc_raycast(origin, direction, distance, 65535);
+        return RayHit { hit: h.hit != 0, point: h.point, normal: h.normal, fraction: h.fraction };
+    }
+    /// A change of velocity, now, for an entity with a dynamic RigidBody.
+    fn apply_impulse(self, e: Entity, impulse: Vec2) { libdrift_candela::dc_apply_impulse(e.id, impulse); }
+    fn apply_force(self, e: Entity, force: Vec2) { libdrift_candela::dc_apply_force(e.id, force); }
+
+    // ---- Effects ----
+
+    /// A one-off burst of `count` particles at `pos`; cleaned up when done.
+    fn burst(self, pos: Vec2, e: ParticleEmitter, count: int) {
+        let d = drift_enc_emitter(e);
+        libdrift_candela::dc_burst(pos, d, d.len(), count);
+    }
+    /// Shakes a camera entity by `intensity` pixels, dying away.
+    fn shake(self, camera: Entity, intensity: float) {
+        let id = camera.id;
+        self.defer(fn() { libdrift_candela::dc_camera_shake(id, intensity, 5.0, 20.0); });
+    }
+    /// Light everywhere before any light adds to it. Raises
+    /// "drift_lighting_off" when the app started without lighting.
+    fn set_ambient(self, c: Color) {
+        if libdrift_candela::dc_set_ambient(c) == 0 {
+            throw "drift_lighting_off";
+        }
+    }
+    fn add_bloom(self, threshold: float, intensity: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(0, threshold, intensity) }; }
+    fn add_vignette(self, intensity: float, radius: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(1, intensity, radius) }; }
+    fn add_crt(self, curvature: float, scanlines: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(2, curvature, scanlines) }; }
+    fn add_grayscale(self, amount: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(3, amount, 0.0) }; }
+    fn add_sepia(self, amount: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(4, amount, 0.0) }; }
+    fn add_pixelate(self, pixel_size: float) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(5, pixel_size, 0.0) }; }
+    fn add_blur(self, radius: float, iterations: int) -> Effect { return Effect { id: libdrift_candela::dc_effect_add(6, radius, float(iterations)) }; }
+    /// Fades the screen toward `c`; amount 1.0 is solid color.
+    fn fade_to(self, c: Color, amount: float, seconds: float) { libdrift_candela::dc_fade_to(c, amount, seconds); }
+    /// Jumps to solid `c` and fades back over `seconds`.
+    fn flash(self, c: Color, seconds: float) { libdrift_candela::dc_flash(c, seconds); }
+    /// Multiplies time for every tween; 0.0 freezes them.
+    fn set_tween_speed(self, s: float) { libdrift_candela::dc_tween_time_scale(s); }
+
     // ---- Save data ----
 
     /// Opens a save slot in the per-user directory for org/app_name,
@@ -1241,35 +1396,25 @@ impl App {
         return Save { id: id };
     }
 
-    // ---- Tilemaps ----
+    // ---- Tilemaps and scenes ----
 
     /// Loads a Tiled map (.tmj/.json) or the first level of an LDtk
-    /// project. Raises "drift_load_failed".
-    fn load_tilemap(self, path: string) -> Tilemap {
+    /// project. Raises "drift_load_failed". Show it with a Tilemap component.
+    fn load_tilemap(self, path: string) -> TilemapAsset {
         let id = libdrift_candela::dc_tilemap_load(path, "");
         if id == 0 {
             throw "drift_load_failed";
         }
-        return Tilemap { id: id };
+        return TilemapAsset { id: id };
     }
     /// One LDtk level by its identifier.
-    fn load_level(self, path: string, level: string) -> Tilemap {
+    fn load_level(self, path: string, level: string) -> TilemapAsset {
         let id = libdrift_candela::dc_tilemap_load(path, level);
         if id == 0 {
             throw "drift_load_failed";
         }
-        return Tilemap { id: id };
+        return TilemapAsset { id: id };
     }
-    /// A new entity drawing `map` with its top-left at `pos`, with static
-    /// colliders from the map's collision layers.
-    fn spawn_tilemap(self, map: Tilemap, pos: Vec2) -> Entity {
-        let e = self.spawn_at(pos);
-        e.set_tilemap(map, 0.0, 0, true);
-        return e;
-    }
-
-    // ---- Scenes and prefabs ----
-
     /// Loads a JSON scene or prefab file. Raises "drift_load_failed".
     fn load_scene(self, path: string) -> Scene {
         let id = libdrift_candela::dc_scene_load(path);
@@ -1278,50 +1423,1104 @@ impl App {
         }
         return Scene { id: id };
     }
-    /// Saves every entity with a reflected component to a JSON scene.
-    fn save_scene(self, path: string) -> bool { return libdrift_candela::dc_scene_save(path) != 0; }
-}
-
-fn drift_contacts(kind: int) -> Collision[] {
-    let out = [Collision { a: Entity { id: 0 }, b: Entity { id: 0 } }];
-    out.remove(0);
-    let n = libdrift_candela::dc_contact_count(kind);
-    for i in range(n) {
-        out.push(Collision {
-            a: Entity { id: libdrift_candela::dc_contact_entity(kind, i, 0) },
-            b: Entity { id: libdrift_candela::dc_contact_entity(kind, i, 1) },
-        });
+    /// Spawns a scene's entities now, offset by `offset`, and returns them.
+    /// Their Transform, Velocity, Sprite, Rectangle or Circle, Text, Camera,
+    /// RigidBody, colliders, lights, Lifetime and Name show up as
+    /// components.
+    fn spawn_scene(self, scene: Scene, offset: Vec2) -> Entity[] {
+        return self.spawn_scene_with(scene, offset, Entity { id: 0 }, "");
     }
-    return out;
-}
-
-fn drift_sensors(kind: int) -> SensorEvent[] {
-    let out = [SensorEvent { sensor: Entity { id: 0 }, visitor: Entity { id: 0 } }];
-    out.remove(0);
-    let n = libdrift_candela::dc_contact_count(kind);
-    for i in range(n) {
-        out.push(SensorEvent {
-            sensor: Entity { id: libdrift_candela::dc_contact_entity(kind, i, 0) },
-            visitor: Entity { id: libdrift_candela::dc_contact_entity(kind, i, 1) },
-        });
-    }
-    return out;
-}
-
-impl Collision {
-    /// True when `e` is one of the pair.
-    fn involves(self, e: Entity) -> bool { return self.a.id == e.id || self.b.id == e.id; }
-    /// The entity of the pair that is not `e`.
-    fn other(self, e: Entity) -> Entity {
-        if self.a.id == e.id {
-            return self.b;
+    /// Spawns under `parent` (id 0 for none) with per-entity JSON overrides:
+    /// {"door": {"Sprite": {"tint": [255, 0, 0, 255]}}}.
+    fn spawn_scene_with(self, scene: Scene, offset: Vec2, parent: Entity, overrides: string) -> Entity[] {
+        self.push();
+        let inst = libdrift_candela::dc_scene_spawn(scene.id, offset, parent.id, overrides);
+        if inst == 0 {
+            throw "drift_load_failed";
         }
-        return self.a;
+        let out: Entity[] = [];
+        let n = libdrift_candela::dc_scene_count(inst, 0);
+        for i in range(n) {
+            let id = libdrift_candela::dc_scene_entity(inst, 0, i);
+            self.adopt(id);
+            out.push(Entity { id: id });
+        }
+        return out;
+    }
+    /// Saves every engine entity with a reflected component to a JSON
+    /// scene, with this frame's changes.
+    fn save_scene(self, path: string) -> bool {
+        self.push();
+        return libdrift_candela::dc_scene_save(path) != 0;
+    }
+
+    // ---- Debug drawing ----
+    // Immediate shapes and text for this frame only, on the current layer
+    // (0 = the world, hud_layer() = the screen) at the current z. Games
+    // draw with components; these are for debugging from a system.
+
+    fn set_draw_layer(self, layer: int) { libdrift_candela::dc_set_layer(layer); }
+    fn set_draw_z(self, z: float) { libdrift_candela::dc_set_z(z); }
+    fn draw_rect(self, r: Rect, c: Color) { libdrift_candela::dc_draw_rect(r, c); }
+    fn draw_rect_lines(self, r: Rect, c: Color, thickness: float) { libdrift_candela::dc_draw_rect_lines(r, c, thickness); }
+    fn draw_circle(self, center: Vec2, radius: float, c: Color) { libdrift_candela::dc_draw_circle(center, radius, c); }
+    fn draw_circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
+        libdrift_candela::dc_draw_circle_lines(center, radius, c, thickness);
+    }
+    fn draw_line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { libdrift_candela::dc_draw_line(a, b, c, thickness); }
+    fn draw_polyline(self, points: Vec2[], c: Color, thickness: float, closed: bool) {
+        let xy = drift_points(points);
+        libdrift_candela::dc_draw_polyline(xy, xy.len(), c, thickness, drift_flag(closed));
+    }
+    fn draw_texture(self, tex: Texture, pos: Vec2, o: SpriteOptions) {
+        libdrift_candela::dc_draw_texture(tex.id, pos, o.native());
+    }
+    fn draw_text(self, text: string, pos: Vec2, size: float, c: Color) {
+        libdrift_candela::dc_draw_text(0, text, pos, text_style(size, c).native());
+    }
+
+    // ---- The frame, run by App.run() ----
+
+    // Marks components handed to a system this frame and brings the
+    // engine-driven ones up to date.
+    fn touch_any(self, key: string, ids: int[]) {
+        if self.kinds.contains(key) {
+            self.touch(key, ids);
+        }
+    }
+
+    fn mark(self, key: string, id: int) {
+        let seen = self.seen[key];
+        if !seen.contains(id) || seen[id] != self.frame {
+            seen[id] = self.frame;
+            self.touched[key].push(id);
+        }
+    }
+
+    fn touch(self, key: string, ids: int[]) {
+        let kind = self.kinds[key];
+        let stride = drift_pull_stride(kind);
+        let seen = self.seen[key];
+        let shadow = self.shadow[key];
+        let stale: int[] = [];
+        for id in ids {
+            if !seen.contains(id) || seen[id] != self.frame {
+                seen[id] = self.frame;
+                self.touched[key].push(id);
+                if stride > 0 && shadow.contains(id) {
+                    stale.push(id);
+                }
+            }
+        }
+        if stale.len() == 0 {
+            return;
+        }
+        let buf = [0.0].repeat(stale.len() * stride);
+        libdrift_candela::dc_pull(kind, stale, stale.len(), buf);
+        let m = self.stores[key];
+        for i in range(stale.len()) {
+            let o = i * stride;
+            if buf[o] > -1.0e299 {
+                let id = stale[i];
+                let v = m[id];
+                drift_apply_pull(kind, v, buf, o);
+                shadow[id] = drift_encode(kind, v);
+            }
+        }
+    }
+
+    // Sends this frame's changes to the engine.
+    fn push(self) {
+        let create: int[] = [];
+        for id in self.spawned {
+            if self.alive.contains(id) {
+                create.push(id);
+            }
+        }
+        if create.len() > 0 {
+            libdrift_candela::dc_create(create, create.len());
+        }
+        self.spawned = [];
+        for r in self.removals {
+            if self.alive.contains(r.id) {
+                libdrift_candela::dc_remove(r.kind, r.id);
+            }
+        }
+        self.removals = [];
+        for k in self.engine {
+            self.push_key(k.key, k.kind);
+        }
+        for d in self.later {
+            d.run();
+        }
+        self.later = [];
+        for id in self.despawns {
+            libdrift_candela::dc_despawn(id);
+        }
+        self.despawns = [];
+    }
+
+    fn push_key(self, key: string, kind: int) {
+        let ids = self.touched[key];
+        if ids.len() == 0 {
+            return;
+        }
+        let empty: int[] = [];
+        self.touched[key] = empty;
+        let m = self.stores[key];
+        let shadow = self.shadow[key];
+        let shadow_str = self.shadow_str[key];
+        let set_ids: int[] = [];
+        let set_data: float[] = [];
+        let move_ids: int[] = [];
+        let move_data: float[] = [];
+        for id in ids {
+            if !m.contains(id) {
+                continue;
+            }
+            let v = m[id];
+            let enc = drift_encode(kind, v);
+            let s = drift_string(kind, v);
+            let had = shadow.contains(id);
+            let same = had && shadow[id] == enc && shadow_str[id] == s;
+            if same {
+                continue;
+            }
+            if kind == 0 || kind == 1 {
+                if kind == 0 && had {
+                    let old = shadow[id];
+                    move_ids.push(id);
+                    for j in range(5) {
+                        move_data.push(enc[j] - old[j]);
+                    }
+                } else {
+                    set_ids.push(id);
+                    for x in enc {
+                        set_data.push(x);
+                    }
+                }
+            } else {
+                let send = enc;
+                if kind == 2 && had {
+                    // Send which parts changed, so a frame the animator
+                    // or a tween set is not undone by an unrelated change.
+                    let old = shadow[id];
+                    let mask = 0;
+                    for j in range(16) {
+                        if enc[j] != old[j] {
+                            if j >= 1 && j <= 4 {
+                                mask = mask | 1;
+                            } else if j >= 7 && j <= 10 {
+                                mask = mask | 2;
+                            } else {
+                                mask = mask | 4;
+                            }
+                        }
+                    }
+                    if shadow_str[id] != s {
+                        mask = mask | 4;
+                    }
+                    send = enc[..16];
+                    send.push(float(mask));
+                }
+                libdrift_candela::dc_set(kind, id, send, send.len(), s);
+            }
+            shadow[id] = enc;
+            shadow_str[id] = s;
+        }
+        if set_ids.len() > 0 {
+            libdrift_candela::dc_set_many(kind, set_ids, set_ids.len(), set_data, drift_pull_stride(kind));
+        }
+        if move_ids.len() > 0 {
+            libdrift_candela::dc_move_many(move_ids, move_ids.len(), move_data);
+        }
+    }
+
+    // Ends the frame: sends changes, draws, polls, starts the next frame.
+    // Returns false once the app has quit.
+    fn sync(self) -> bool {
+        libdrift_candela::dc_sync_begin();
+        self.push();
+        if libdrift_candela::dc_sync_end() == 0 {
+            return false;
+        }
+        self.frame += 1;
+        self.dt = libdrift_candela::dc_dt();
+        let n = libdrift_candela::dc_dead_count();
+        if n > 0 {
+            let dead = [0].repeat(n);
+            libdrift_candela::dc_dead(dead, n);
+            for id in dead {
+                self.forget(id);
+            }
+        }
+        return true;
+    }
+
+    fn dispatch(self, handlers: CollisionHandler[]) {
+        if handlers.len() == 0 {
+            return;
+        }
+        let started = drift_events(0);
+        let entered = drift_events(2);
+        for h in handlers {
+            let ev = started;
+            if h.sensor {
+                ev = entered;
+            }
+            let i = 0;
+            while i + 1 < ev.len() {
+                let x = ev[i];
+                let y = ev[i + 1];
+                i += 2;
+                if !self.alive.contains(x) || !self.alive.contains(y) {
+                    continue;
+                }
+                if self.has_key(h.a, x) && self.has_key(h.b, y) {
+                    h.run(self, Entity { id: x }, Entity { id: y });
+                } else if self.has_key(h.a, y) && self.has_key(h.b, x) {
+                    h.run(self, Entity { id: y }, Entity { id: x });
+                }
+            }
+        }
+    }
+
+    fn has_key(self, key: string, id: int) -> bool {
+        return self.stores.contains(key) && self.stores[key].contains(id);
+    }
+
+    // Takes an entity the engine made (a scene) into the world.
+    fn adopt(self, id: int) {
+        self.alive[id] = true;
+        let mask = libdrift_candela::dc_kinds(id);
+        let buf = [0.0].repeat(32);
+        for k in self.engine {
+            if (mask >> k.kind) & 1 == 0 {
+                continue;
+            }
+            let n = libdrift_candela::dc_get(k.kind, id, buf, buf.len());
+            if n == 0 {
+                continue;
+            }
+            let s = libdrift_candela::dc_get_string(k.kind, id);
+            let key = k.key;
+            if k.kind == 3 {
+                // Shapes come back as the component of their kind.
+                if buf[0] > 0.5 {
+                    key = drift_key<Circle>();
+                } else {
+                    key = drift_key<Rectangle>();
+                }
+            }
+            let v = drift_decode(key, k.kind, buf, s);
+            if v == null {
+                continue;
+            }
+            let m = self.store(key);
+            m[id] = v;
+            self.shadow[key][id] = drift_encode(k.kind, v);
+            self.shadow_str[key][id] = s;
+        }
+    }
+}
+
+fn drift_events(kind: int) -> int[] {
+    let n = libdrift_candela::dc_event_count(kind);
+    let out: int[] = [];
+    if n == 0 {
+        return out;
+    }
+    out = [0].repeat(n * 2);
+    libdrift_candela::dc_events(kind, out, n * 2);
+    return out;
+}
+
+struct RayHit {
+    hit: bool,
+    point: Vec2,
+    normal: Vec2,
+    fraction: float,
+}
+
+struct NativeHit {
+    hit: int,
+    point: Vec2,
+    normal: Vec2,
+    fraction: float,
+}
+
+// =========================================================================
+// Input
+// =========================================================================
+
+/// Keyboard, mouse, gamepads and input actions for this frame.
+struct Input {
+    id: int,
+}
+
+impl Input {
+    fn key_down(self, k: Key) -> bool { return libdrift_candela::dc_key_down(k.code()) != 0; }
+    fn key_pressed(self, k: Key) -> bool { return libdrift_candela::dc_key_pressed(k.code()) != 0; }
+    fn key_released(self, k: Key) -> bool { return libdrift_candela::dc_key_released(k.code()) != 0; }
+    /// Mouse position in logical screen coordinates.
+    fn mouse_position(self) -> Vec2 { return libdrift_candela::dc_mouse_position(); }
+    /// Mouse position in the world, through the main camera.
+    fn mouse_world(self) -> Vec2 { return libdrift_candela::dc_screen_to_world(libdrift_candela::dc_mouse_position()); }
+    fn mouse_delta(self) -> Vec2 { return libdrift_candela::dc_mouse_delta(); }
+    fn mouse_wheel(self) -> float { return libdrift_candela::dc_mouse_wheel(); }
+    fn mouse_down(self, b: MouseButton) -> bool { return libdrift_candela::dc_mouse_down(b.code()) != 0; }
+    fn mouse_pressed(self, b: MouseButton) -> bool { return libdrift_candela::dc_mouse_pressed(b.code()) != 0; }
+    fn mouse_released(self, b: MouseButton) -> bool { return libdrift_candela::dc_mouse_released(b.code()) != 0; }
+    fn gamepad_connected(self, pad: int) -> bool { return libdrift_candela::dc_gamepad_connected(pad) != 0; }
+    fn gamepad_axis(self, pad: int, axis: GamepadAxis) -> float { return libdrift_candela::dc_gamepad_axis(pad, axis.code()); }
+    fn gamepad_down(self, pad: int, b: GamepadButton) -> bool { return libdrift_candela::dc_gamepad_down(pad, b.code()) != 0; }
+    fn gamepad_pressed(self, pad: int, b: GamepadButton) -> bool { return libdrift_candela::dc_gamepad_pressed(pad, b.code()) != 0; }
+    fn gamepad_released(self, pad: int, b: GamepadButton) -> bool { return libdrift_candela::dc_gamepad_released(pad, b.code()) != 0; }
+
+    /// Queues a key press or release as if it came from the keyboard; it
+    /// arrives with the next frame. For automated tests and demo playback.
+    fn send_key(self, k: Key, down: bool) { libdrift_candela::dc_send_key(k.code(), drift_flag(down)); }
+    /// Queues a mouse move to a window pixel position.
+    fn send_mouse_move(self, window_pos: Vec2) { libdrift_candela::dc_send_mouse(window_pos, 0, 0); }
+    fn send_mouse_button(self, window_pos: Vec2, b: MouseButton, down: bool) {
+        libdrift_candela::dc_send_mouse(window_pos, b.code(), drift_flag(down));
+    }
+
+    // ---- Input actions ----
+
+    /// Adds a binding to an action. Raises "drift_bad_binding" for Unbound.
+    fn bind_action(self, name: string, b: Binding) {
+        if libdrift_candela::dc_action_bind(name, b.text()) == 0 {
+            throw "drift_bad_binding";
+        }
+    }
+    /// A 1D axis: `negative` reads -1, `positive` +1.
+    fn bind_axis(self, name: string, negative: Binding, positive: Binding) {
+        libdrift_candela::dc_action_bind_axis(name, negative.text(), positive.text());
+    }
+    /// A 2D axis in screen orientation: up is -Y.
+    fn bind_axis2d(self, name: string, left: Binding, right: Binding, up: Binding, down: Binding) {
+        libdrift_candela::dc_action_bind_axis2d(name, left.text(), right.text(), up.text(), down.text());
+    }
+    fn bind_stick(self, name: string, x: GamepadAxis, y: GamepadAxis) {
+        libdrift_candela::dc_action_bind_stick(name, x.code(), y.code());
+    }
+    fn action_pressed(self, name: string) -> bool { return libdrift_candela::dc_action_pressed(name) != 0; }
+    fn action_held(self, name: string) -> bool { return libdrift_candela::dc_action_held(name) != 0; }
+    fn action_released(self, name: string) -> bool { return libdrift_candela::dc_action_released(name) != 0; }
+    fn action_value(self, name: string) -> float { return libdrift_candela::dc_action_value(name); }
+    fn axis(self, name: string) -> float { return libdrift_candela::dc_action_axis(name); }
+    fn axis2d(self, name: string) -> Vec2 { return libdrift_candela::dc_action_axis2d(name); }
+    fn has_action(self, name: string) -> bool { return libdrift_candela::dc_action_has(name) != 0; }
+    fn remove_action(self, name: string) { libdrift_candela::dc_action_remove(name); }
+    /// Replaces binding `index` in a slot (0 for actions; for axes 0/1 are
+    /// negative/positive, for 2D axes 0..3 are left, right, up, down).
+    fn rebind(self, name: string, slot: int, index: int, b: Binding) -> bool {
+        return libdrift_candela::dc_action_rebind(name, slot, index, b.text()) != 0;
+    }
+    /// The bindings in one slot, as text ("key:Space", "button:South").
+    fn bindings(self, name: string, slot: int) -> string[] {
+        let out: string[] = [];
+        let n = libdrift_candela::dc_action_binding_count(name, slot);
+        for i in range(n) {
+            out.push(libdrift_candela::dc_action_binding(name, slot, i));
+        }
+        return out;
+    }
+    /// The first input that went down this frame as binding text, or "".
+    fn capture_binding(self) -> string { return libdrift_candela::dc_action_capture(); }
+    /// Rebinds slot/index to an input captured by capture_binding().
+    fn rebind_text(self, name: string, slot: int, index: int, text: string) -> bool {
+        return libdrift_candela::dc_action_rebind(name, slot, index, text) != 0;
+    }
+    /// Every binding as JSON, to keep in save data.
+    fn bindings_json(self) -> string { return libdrift_candela::dc_action_save(); }
+    /// Applies bindings saved by bindings_json(); returns how many controls changed.
+    fn load_bindings_json(self, text: string) -> int { return libdrift_candela::dc_action_load(text); }
+    fn set_action_tuning(self, dead_zone: float, press_threshold: float, gamepad: int) {
+        libdrift_candela::dc_action_settings(dead_zone, press_threshold, gamepad);
     }
 }
 
 // =========================================================================
-// Option structs (build with the function of the same name, then edit)
+// Engine components
+// =========================================================================
+//
+// Plain structs, inserted like your own components. The engine draws,
+// simulates and plays them; the values the engine changes (positions after
+// physics, animation frames, tweened colors) are read back when a system
+// queries them. Build one with its defaults and the fields you need:
+// Transform { position: vec2(10.0, 20.0), .. }.
+
+/// Position, rotation (radians) and scale. Children are relative to their
+/// parent.
+struct Transform {
+    position: Vec2,
+    rotation: float,
+    scale: Vec2 = Vec2 { x: 1.0, y: 1.0 },
+}
+
+/// A Transform at a position.
+fn at(x: float, y: float) -> Transform {
+    return Transform { position: Vec2 { x: x, y: y }, .. };
+}
+
+/// Moves the entity every frame in the engine: `linear` pixels per second
+/// and `angular` radians per second. On an entity with a dynamic RigidBody
+/// it is the body's velocity, which physics changes on contact.
+struct Velocity {
+    linear: Vec2,
+    angular: float,
+}
+
+/// An image drawn at the entity. `image` is a file path, loaded and cached
+/// on first use; a `texture` handle wins over it. With neither the sprite
+/// is a white square of one pixel: use Rectangle for solid shapes.
+struct Sprite {
+    image: string,
+    texture: Texture,
+    frame: Rect,                     // part of the image; w 0 = all of it
+    anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },   // the point on the position, 0..1
+    color: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+    flip_x: bool,
+    flip_y: bool,
+    z: float,                        // draw order in the layer; higher on top
+    layer: int,                      // render layer 0..30, or hud_layer()
+    visible: bool = true,
+    blend: Blend = Blend::Alpha,
+}
+
+/// A solid (or, with outline > 0, outlined) rectangle.
+struct Rectangle {
+    size: Vec2 = Vec2 { x: 32.0, y: 32.0 },
+    color: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+    outline: float,
+    corner_radius: float,            // filled, unrotated rectangles only
+    anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },
+    z: float,
+    layer: int,
+    visible: bool = true,
+}
+
+/// A solid (or outlined) circle centered on the position.
+struct Circle {
+    radius: float = 16.0,
+    color: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+    outline: float,
+    z: float,
+    layer: int,
+    visible: bool = true,
+}
+
+/// Text drawn at the entity with the built-in font or a loaded one.
+struct Text {
+    value: string,
+    size: float = 24.0,
+    color: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+    align: Align = Align::Left,      // where the position sits on each line
+    valign: VAlign = VAlign::Top,    // where the position sits on the block
+    wrap: float,                     // wrap width; 0 = none
+    line_spacing: float = 1.0,
+    outline: float,
+    outline_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+    font: Font,                      // id 0 = the built-in font
+    z: float,
+    layer: int,
+    visible: bool = true,
+}
+
+/// Makes the entity a camera looking at its position. Without one the
+/// world's (0, 0) is the screen's top-left.
+struct Camera {
+    zoom: float = 1.0,
+    rotation: float,
+    active: bool = true,
+    order: int,                      // cameras draw in ascending order
+    viewport: Rect = Rect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 },
+}
+
+/// Moves a camera smoothly toward another entity.
+struct CameraFollow {
+    target: Entity,
+    smoothing: float = 5.0,          // higher is snappier
+    offset: Vec2,
+    dead_zone: Vec2,
+}
+
+/// Makes the entity a physics body. Add a collider too.
+struct RigidBody {
+    kind: BodyKind = BodyKind::Dynamic,
+    fixed_rotation: bool,
+    gravity_scale: float = 1.0,
+    linear_damping: float,
+    angular_damping: float,
+}
+
+/// A box collider centered on the position. Without a RigidBody it is
+/// static.
+struct BoxCollider {
+    half_size: Vec2 = Vec2 { x: 16.0, y: 16.0 },
+    offset: Vec2,
+    sensor: bool,                    // reports overlaps, does not collide
+    density: float = 1.0,
+    friction: float = 0.3,
+    restitution: float,              // bounciness, 0.0..1.0
+    category: int = 1,               // collision filter bits this collider is in
+    mask: int = 65535,               // bits it collides with
+}
+
+struct CircleCollider {
+    radius: float = 16.0,
+    offset: Vec2,
+    sensor: bool,
+    density: float = 1.0,
+    friction: float = 0.3,
+    restitution: float,
+    category: int = 1,
+    mask: int = 65535,
+}
+
+/// Emits particles from the entity.
+struct ParticleEmitter {
+    rate: float = 20.0,              // particles per second
+    lifetime_min: float = 0.5,
+    lifetime_max: float = 1.5,
+    speed_min: float = 20.0,
+    speed_max: float = 60.0,
+    angle_min: float,                // radians
+    angle_max: float = 6.2831853,
+    size_start: float = 6.0,
+    size_end: float = 1.0,
+    color_start: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+    color_end: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.0 },
+    gravity: Vec2,
+    drag: float,
+    max_particles: int = 256,
+    blend: Blend = Blend::Alpha,
+    texture: Texture,                // id 0 = white squares
+    shape: EmitShape = EmitShape::Point,
+    shape_radius: float,             // Circle and Ring
+    shape_extents: Vec2,             // Box half size, Line direction
+    duration: float = -1.0,          // seconds; -1.0 = forever
+    looping: bool = true,
+    z: float = 10.0,
+    playing: bool = true,
+}
+
+/// A light (needs Config.lighting).
+struct PointLight {
+    color: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+    intensity: float = 1.0,
+    radius: float = 200.0,
+    falloff: float = 2.0,
+    shadows: bool = true,
+}
+
+/// A cone of light pointing `direction` radians (plus the entity's
+/// rotation), `angle` wide.
+struct SpotLight {
+    color: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+    intensity: float = 1.0,
+    radius: float = 300.0,
+    falloff: float = 2.0,
+    direction: float,
+    angle: float = 0.8,
+    softness: float = 0.2,
+    shadows: bool = true,
+}
+
+enum OccluderShape {
+    Box,
+    Circle,
+    FromCollider,                    // the entity's box or circle collider
+}
+
+impl OccluderShape {
+    fn code(self) -> int {
+        match self {
+            Box => { return 0; }
+            Circle => { return 1; }
+            FromCollider => { return 3; }
+        }
+        return 0;
+    }
+}
+
+/// Blocks light and casts shadows.
+struct LightOccluder {
+    shape: OccluderShape = OccluderShape::Box,
+    half_size: Vec2 = Vec2 { x: 16.0, y: 16.0 },
+    radius: float = 16.0,
+}
+
+/// Plays a sound from the entity; with `spatial`, volume and pan follow
+/// its position relative to the camera.
+struct AudioSource {
+    sound: Sound,
+    bus: Bus,                        // id 0 = the sfx bus
+    volume: float = 1.0,
+    pitch: float = 1.0,
+    looping: bool,
+    autoplay: bool = true,
+    spatial: bool,
+    min_distance: float = 64.0,
+    max_distance: float = 1024.0,
+}
+
+/// Draws a loaded map with its top-left at the entity, with static
+/// colliders from its collision layers.
+struct Tilemap {
+    map: TilemapAsset,
+    z: float,
+    layer: int,
+    colliders: bool = true,
+}
+
+/// One animation: frames of a spritesheet, shown `frame_seconds` each.
+struct AnimationClip {
+    frames: Rect[],
+    frame_seconds: float = 0.1,
+    looping: bool = true,
+}
+
+/// Plays clips on the entity's Sprite in the engine. Set `clip` to switch;
+/// `frame` and `finished` are read back from the engine.
+struct Animator {
+    clips: AnimationClip[],
+    clip: int,
+    playing: bool = true,
+    frame: int,
+    finished: bool,
+}
+
+/// Despawns the entity after `seconds`. Read back, it holds the time left.
+struct Lifetime {
+    seconds: float = 1.0,
+}
+
+/// Swings the entity back and forth around where it is, on top of any
+/// other motion: amplitude * sin(2 pi frequency t + phase).
+struct Oscillate {
+    amplitude: Vec2 = Vec2 { x: 0.0, y: 8.0 },
+    frequency: float = 1.0,
+    phase: float,
+}
+
+/// Moves toward another entity at `speed` pixels per second, stopping
+/// `distance` short of it.
+struct Follow {
+    target: Entity,
+    speed: float = 100.0,
+    distance: float,
+    offset: Vec2,
+}
+
+/// A name, for World.find() and scene files.
+struct Name {
+    value: string,
+}
+
+/// One step of a Tween.
+struct TweenStep {
+    kind: int,
+    a: float,
+    b: float,
+    c: float,
+    d: float,
+    seconds: float,
+    ease: Ease = Ease::Linear,
+}
+
+/// Animates the entity in the engine: a sequence of steps, repeated
+/// `loops` times (-1 forever), forward and back when `mirror` is set.
+/// Build one with tween() and its methods. Inserting a changed Tween
+/// restarts it.
+struct Tween {
+    steps: TweenStep[],
+    loops: int,
+    mirror: bool,
+}
+
+/// An empty tween to add steps to.
+fn tween() -> Tween {
+    return Tween { steps: [], loops: 0, mirror: false };
+}
+
+impl Tween {
+    fn step(self, kind: int, a: float, b: float, seconds: float, e: Ease) -> Tween {
+        self.steps.push(TweenStep { kind: kind, a: a, b: b, c: 0.0, d: 0.0, seconds: seconds, ease: e });
+        return self;
+    }
+    fn move_to(self, to: Vec2, seconds: float, e: Ease) -> Tween { return self.step(0, to.x, to.y, seconds, e); }
+    fn move_by(self, by: Vec2, seconds: float, e: Ease) -> Tween { return self.step(1, by.x, by.y, seconds, e); }
+    fn scale_to(self, to: Vec2, seconds: float, e: Ease) -> Tween { return self.step(2, to.x, to.y, seconds, e); }
+    fn rotate_to(self, radians: float, seconds: float, e: Ease) -> Tween { return self.step(3, radians, 0.0, seconds, e); }
+    fn rotate_by(self, radians: float, seconds: float, e: Ease) -> Tween { return self.step(4, radians, 0.0, seconds, e); }
+    /// Sprite alpha, 0.0..1.0.
+    fn fade_to(self, alpha: float, seconds: float, e: Ease) -> Tween { return self.step(5, alpha, 0.0, seconds, e); }
+    /// Camera zoom.
+    fn zoom_to(self, zoom: float, seconds: float, e: Ease) -> Tween { return self.step(6, zoom, 0.0, seconds, e); }
+    /// Sprite color.
+    fn tint_to(self, c: Color, seconds: float, e: Ease) -> Tween {
+        self.steps.push(TweenStep { kind: 7, a: c.r, b: c.g, c: c.b, d: c.a, seconds: seconds, ease: e });
+        return self;
+    }
+    fn delay(self, seconds: float) -> Tween { return self.step(8, 0.0, 0.0, seconds, Ease::Linear); }
+    /// Plays the whole sequence `times` more times; -1 repeats forever.
+    fn repeat(self, times: int) -> Tween {
+        self.loops = times;
+        self.mirror = false;
+        return self;
+    }
+    /// Plays forward then backward, `times` times; -1 forever.
+    fn yoyo(self, times: int) -> Tween {
+        self.loops = times;
+        self.mirror = true;
+        return self;
+    }
+}
+
+// ---- Codecs: the double layouts the native library reads and writes ----
+// (see the Components section of shim/drift_candela.cpp)
+
+fn drift_f(b: bool) -> float {
+    if b {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+fn drift_rgba(out: float[], c: Color) {
+    out.push(c.r);
+    out.push(c.g);
+    out.push(c.b);
+    out.push(c.a);
+}
+
+fn drift_enc_emitter(e: ParticleEmitter) -> float[] {
+    let d = [e.rate, e.lifetime_min, e.lifetime_max, e.speed_min, e.speed_max,
+             e.angle_min, e.angle_max, e.size_start, e.size_end];
+    drift_rgba(d, e.color_start);
+    drift_rgba(d, e.color_end);
+    d.push(e.gravity.x);
+    d.push(e.gravity.y);
+    d.push(e.drag);
+    d.push(float(e.max_particles));
+    d.push(float(e.blend.code()));
+    d.push(float(e.texture.id));
+    d.push(float(e.shape.code()));
+    d.push(e.shape_radius);
+    d.push(e.shape_extents.x);
+    d.push(e.shape_extents.y);
+    d.push(e.duration);
+    d.push(drift_f(e.looping));
+    d.push(e.z);
+    d.push(drift_f(e.playing));
+    return d;
+}
+
+fn drift_encode(kind: int, v: any) -> float[] {
+    if kind == 0 {
+        let t = v as Transform;
+        return [t.position.x, t.position.y, t.rotation, t.scale.x, t.scale.y];
+    }
+    if kind == 1 {
+        let t = v as Velocity;
+        return [t.linear.x, t.linear.y, t.angular];
+    }
+    if kind == 2 {
+        let s = v as Sprite;
+        let flip = drift_flag(s.flip_x) + 2 * drift_flag(s.flip_y);
+        let d = [float(s.texture.id), s.frame.x, s.frame.y, s.frame.w, s.frame.h, s.anchor.x, s.anchor.y];
+        drift_rgba(d, s.color);
+        d.push(float(flip));
+        d.push(s.z);
+        d.push(float(s.layer));
+        d.push(drift_f(s.visible));
+        d.push(float(s.blend.code()));
+        d.push(0.0);
+        return d;
+    }
+    if kind == 3 {
+        if v is Circle {
+            let c = v as Circle;
+            let d = [1.0, 0.0, 0.0, c.radius];
+            drift_rgba(d, c.color);
+            for x in [c.outline, 0.0, 0.5, 0.5, c.z, float(c.layer), drift_f(c.visible)] {
+                d.push(x);
+            }
+            return d;
+        }
+        let r = v as Rectangle;
+        let d = [0.0, r.size.x, r.size.y, 0.0];
+        drift_rgba(d, r.color);
+        for x in [r.outline, r.corner_radius, r.anchor.x, r.anchor.y, r.z, float(r.layer), drift_f(r.visible)] {
+            d.push(x);
+        }
+        return d;
+    }
+    if kind == 4 {
+        let t = v as Text;
+        let d = [t.size];
+        drift_rgba(d, t.color);
+        for x in [float(t.align.code()), float(t.valign.code()), t.wrap, t.line_spacing, t.outline] {
+            d.push(x);
+        }
+        drift_rgba(d, t.outline_color);
+        for x in [t.z, float(t.layer), drift_f(t.visible), float(t.font.id), 0.0] {
+            d.push(x);
+        }
+        return d;
+    }
+    if kind == 5 {
+        let c = v as Camera;
+        return [c.zoom, c.rotation, drift_f(c.active), float(c.order), c.viewport.x, c.viewport.y, c.viewport.w, c.viewport.h];
+    }
+    if kind == 6 {
+        let f = v as CameraFollow;
+        return [float(f.target.id), f.smoothing, f.offset.x, f.offset.y, f.dead_zone.x, f.dead_zone.y];
+    }
+    if kind == 7 {
+        let b = v as RigidBody;
+        return [float(b.kind.code()), drift_f(b.fixed_rotation), b.gravity_scale, b.linear_damping, b.angular_damping];
+    }
+    if kind == 8 {
+        let c = v as BoxCollider;
+        return [c.half_size.x, c.half_size.y, c.offset.x, c.offset.y, drift_f(c.sensor), c.density,
+                c.friction, c.restitution, float(c.category), float(c.mask)];
+    }
+    if kind == 9 {
+        let c = v as CircleCollider;
+        return [c.radius, c.offset.x, c.offset.y, drift_f(c.sensor), c.density,
+                c.friction, c.restitution, float(c.category), float(c.mask)];
+    }
+    if kind == 10 {
+        return drift_enc_emitter(v as ParticleEmitter);
+    }
+    if kind == 11 {
+        let l = v as PointLight;
+        return [l.color.r, l.color.g, l.color.b, l.intensity, l.radius, l.falloff, drift_f(l.shadows)];
+    }
+    if kind == 12 {
+        let l = v as SpotLight;
+        return [l.color.r, l.color.g, l.color.b, l.intensity, l.radius, l.falloff,
+                l.direction, l.angle, l.softness, drift_f(l.shadows)];
+    }
+    if kind == 13 {
+        let o = v as LightOccluder;
+        return [float(o.shape.code()), o.half_size.x, o.half_size.y, o.radius];
+    }
+    if kind == 14 {
+        let a = v as AudioSource;
+        return [float(a.sound.id), float(a.bus.id), a.volume, a.pitch, drift_f(a.looping),
+                drift_f(a.autoplay), drift_f(a.spatial), a.min_distance, a.max_distance];
+    }
+    if kind == 15 {
+        let t = v as Tilemap;
+        return [float(t.map.id), t.z, float(t.layer), drift_f(t.colliders)];
+    }
+    if kind == 16 {
+        let a = v as Animator;
+        let d = [float(a.clip), drift_f(a.playing), float(a.clips.len())];
+        for c in a.clips {
+            d.push(float(c.frames.len()));
+            d.push(c.frame_seconds);
+            d.push(drift_f(c.looping));
+            for r in c.frames {
+                d.push(r.x);
+                d.push(r.y);
+                d.push(r.w);
+                d.push(r.h);
+            }
+        }
+        return d;
+    }
+    if kind == 17 {
+        return [(v as Lifetime).seconds];
+    }
+    if kind == 18 {
+        let o = v as Oscillate;
+        return [o.amplitude.x, o.amplitude.y, o.frequency, o.phase];
+    }
+    if kind == 19 {
+        let f = v as Follow;
+        return [float(f.target.id), f.speed, f.distance, f.offset.x, f.offset.y];
+    }
+    if kind == 21 {
+        let t = v as Tween;
+        let d = [float(t.loops), drift_f(t.mirror), float(t.steps.len())];
+        for s in t.steps {
+            for x in [float(s.kind), s.a, s.b, s.c, s.d, s.seconds, float(s.ease.code())] {
+                d.push(x);
+            }
+        }
+        return d;
+    }
+    let none: float[] = [];
+    return none;
+}
+
+// The string field of a kind ("" for kinds without one).
+fn drift_string(kind: int, v: any) -> string {
+    if kind == 2 {
+        return (v as Sprite).image;
+    }
+    if kind == 4 {
+        return (v as Text).value;
+    }
+    if kind == 20 {
+        return (v as Name).value;
+    }
+    return "";
+}
+
+// Writes the engine-driven fields read back by dc_pull into a component.
+fn drift_apply_pull(kind: int, v: any, b: float[], o: int) {
+    if kind == 0 {
+        let t = v as Transform;
+        t.position.x = b[o];
+        t.position.y = b[o + 1];
+        t.rotation = b[o + 2];
+        t.scale.x = b[o + 3];
+        t.scale.y = b[o + 4];
+    } else if kind == 1 {
+        let t = v as Velocity;
+        t.linear.x = b[o];
+        t.linear.y = b[o + 1];
+        t.angular = b[o + 2];
+    } else if kind == 2 {
+        let s = v as Sprite;
+        s.frame.x = b[o];
+        s.frame.y = b[o + 1];
+        s.frame.w = b[o + 2];
+        s.frame.h = b[o + 3];
+        s.color.r = b[o + 4];
+        s.color.g = b[o + 5];
+        s.color.b = b[o + 6];
+        s.color.a = b[o + 7];
+    } else if kind == 5 {
+        (v as Camera).zoom = b[o];
+    } else if kind == 16 {
+        let a = v as Animator;
+        a.clip = int(b[o]);
+        a.frame = int(b[o + 1]);
+        a.finished = b[o + 2] > 0.5;
+        a.playing = b[o + 3] > 0.5;
+    } else if kind == 17 {
+        (v as Lifetime).seconds = b[o];
+    }
+}
+
+fn drift_v2(b: float[], i: int) -> Vec2 { return Vec2 { x: b[i], y: b[i + 1] }; }
+fn drift_c4(b: float[], i: int) -> Color { return Color { r: b[i], g: b[i + 1], b: b[i + 2], a: b[i + 3] }; }
+
+fn drift_blend(code: int) -> Blend {
+    if code == 1 { return Blend::Additive; }
+    if code == 2 { return Blend::Multiply; }
+    if code == 3 { return Blend::Premultiplied; }
+    if code == 4 { return Blend::Screen; }
+    if code == 5 { return Blend::Opaque; }
+    return Blend::Alpha;
+}
+
+fn drift_align(code: int) -> Align {
+    if code == 1 { return Align::Center; }
+    if code == 2 { return Align::Right; }
+    return Align::Left;
+}
+
+fn drift_valign(code: int) -> VAlign {
+    if code == 1 { return VAlign::Middle; }
+    if code == 2 { return VAlign::Bottom; }
+    return VAlign::Top;
+}
+
+fn drift_body_kind(code: int) -> BodyKind {
+    if code == 0 { return BodyKind::Static; }
+    if code == 2 { return BodyKind::Kinematic; }
+    return BodyKind::Dynamic;
+}
+
+// A whole component from the layout dc_get writes, for entities the engine
+// made. `key` picks Rectangle or Circle for shapes.
+fn drift_decode(key: string, kind: int, b: float[], s: string) -> any {
+    if kind == 0 {
+        return Transform { position: drift_v2(b, 0), rotation: b[2], scale: drift_v2(b, 3) };
+    }
+    if kind == 1 {
+        return Velocity { linear: drift_v2(b, 0), angular: b[2] };
+    }
+    if kind == 2 {
+        let flip = int(b[11]);
+        return Sprite {
+            image: s, texture: Texture { id: 0 }, frame: Rect { x: b[1], y: b[2], w: b[3], h: b[4] },
+            anchor: drift_v2(b, 5), color: drift_c4(b, 7), flip_x: flip % 2 == 1, flip_y: flip >= 2,
+            z: b[12], layer: int(b[13]), visible: b[14] > 0.5, blend: drift_blend(int(b[15])),
+        };
+    }
+    if kind == 3 {
+        if b[0] > 0.5 {
+            return Circle { radius: b[3], color: drift_c4(b, 4), outline: b[8], z: b[12], layer: int(b[13]), visible: b[14] > 0.5 };
+        }
+        return Rectangle {
+            size: drift_v2(b, 1), color: drift_c4(b, 4), outline: b[8], corner_radius: b[9],
+            anchor: drift_v2(b, 10), z: b[12], layer: int(b[13]), visible: b[14] > 0.5,
+        };
+    }
+    if kind == 4 {
+        return Text {
+            value: s, size: b[0], color: drift_c4(b, 1), align: drift_align(int(b[5])), valign: drift_valign(int(b[6])),
+            wrap: b[7], line_spacing: b[8], outline: b[9], outline_color: drift_c4(b, 10),
+            font: Font { id: int(b[17]) }, z: b[14], layer: int(b[15]), visible: b[16] > 0.5,
+        };
+    }
+    if kind == 5 {
+        return Camera { zoom: b[0], rotation: b[1], active: b[2] > 0.5, order: int(b[3]), viewport: Rect { x: b[4], y: b[5], w: b[6], h: b[7] } };
+    }
+    if kind == 7 {
+        return RigidBody { kind: drift_body_kind(int(b[0])), fixed_rotation: b[1] > 0.5, gravity_scale: b[2], linear_damping: b[3], angular_damping: b[4] };
+    }
+    if kind == 8 {
+        return BoxCollider {
+            half_size: drift_v2(b, 0), offset: drift_v2(b, 2), sensor: b[4] > 0.5, density: b[5],
+            friction: b[6], restitution: b[7], category: int(b[8]), mask: int(b[9]),
+        };
+    }
+    if kind == 9 {
+        return CircleCollider {
+            radius: b[0], offset: drift_v2(b, 1), sensor: b[3] > 0.5, density: b[4],
+            friction: b[5], restitution: b[6], category: int(b[7]), mask: int(b[8]),
+        };
+    }
+    if kind == 11 {
+        return PointLight { color: Color { r: b[0], g: b[1], b: b[2], a: 1.0 }, intensity: b[3], radius: b[4], falloff: b[5], shadows: b[6] > 0.5 };
+    }
+    if kind == 12 {
+        return SpotLight {
+            color: Color { r: b[0], g: b[1], b: b[2], a: 1.0 }, intensity: b[3], radius: b[4], falloff: b[5],
+            direction: b[6], angle: b[7], softness: b[8], shadows: b[9] > 0.5,
+        };
+    }
+    if kind == 13 {
+        let shape = OccluderShape::Box;
+        if int(b[0]) == 1 {
+            shape = OccluderShape::Circle;
+        } else if int(b[0]) == 3 {
+            shape = OccluderShape::FromCollider;
+        }
+        return LightOccluder { shape: shape, half_size: drift_v2(b, 1), radius: b[3] };
+    }
+    if kind == 17 {
+        return Lifetime { seconds: b[0] };
+    }
+    if kind == 20 {
+        return Name { value: s };
+    }
+    return null;
+}
+
+// =========================================================================
+// Option structs for debug drawing and playback
 // =========================================================================
 
 struct SpriteOptions {
@@ -1423,63 +2622,6 @@ impl TextStyle {
     }
 }
 
-struct Body {
-    kind: BodyKind,
-    fixed_rotation: bool,
-    gravity_scale: float,
-    linear_damping: float,
-    angular_damping: float,
-}
-
-fn body(kind: BodyKind) -> Body {
-    return Body { kind: kind, fixed_rotation: false, gravity_scale: 1.0, linear_damping: 0.0, angular_damping: 0.0 };
-}
-
-struct NativeBody {
-    kind: int,
-    fixed_rotation: int,
-    gravity_scale: float,
-    linear_damping: float,
-    angular_damping: float,
-}
-
-struct Collider {
-    offset: Vec2,
-    density: float,
-    friction: float,
-    restitution: float,   // bounciness, 0.0..1.0
-    sensor: bool,         // reports overlaps, does not collide
-    category: int,        // collision filter bits this collider is in
-    mask: int,            // bits it collides with
-}
-
-fn collider() -> Collider {
-    return Collider {
-        offset: Vec2 { x: 0.0, y: 0.0 }, density: 1.0, friction: 0.3, restitution: 0.0,
-        sensor: false, category: 1, mask: 65535,
-    };
-}
-
-struct NativeCollider {
-    offset: Vec2,
-    density: float,
-    friction: float,
-    restitution: float,
-    sensor: int,
-    category: int,
-    mask: int,
-}
-
-impl Collider {
-    fn native(self) -> NativeCollider {
-        return NativeCollider {
-            offset: self.offset, density: self.density, friction: self.friction,
-            restitution: self.restitution, sensor: drift_flag(self.sensor),
-            category: self.category, mask: self.mask,
-        };
-    }
-}
-
 enum EmitShape {
     Point,
     Circle,
@@ -1498,85 +2640,6 @@ impl EmitShape {
             Line => { return 4; }
         }
         return 0;
-    }
-}
-
-struct Emitter {
-    rate: float,            // particles per second
-    lifetime_min: float,
-    lifetime_max: float,
-    speed_min: float,
-    speed_max: float,
-    angle_min: float,       // radians
-    angle_max: float,
-    size_start: float,
-    size_end: float,
-    color_start: Color,
-    color_end: Color,
-    gravity: Vec2,
-    drag: float,
-    max_particles: int,
-    blend: Blend,
-    texture: Texture,       // the white texture draws squares
-    shape: EmitShape,
-    shape_radius: float,    // Circle and Ring
-    shape_extents: Vec2,    // Box half size, Line direction
-    duration: float,        // seconds; -1.0 = forever
-    looping: bool,
-    z: float,
-}
-
-fn emitter() -> Emitter {
-    return Emitter {
-        rate: 20.0, lifetime_min: 0.5, lifetime_max: 1.5, speed_min: 20.0, speed_max: 60.0,
-        angle_min: 0.0, angle_max: 6.2831853, size_start: 6.0, size_end: 1.0,
-        color_start: Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
-        color_end: Color { r: 1.0, g: 1.0, b: 1.0, a: 0.0 },
-        gravity: Vec2 { x: 0.0, y: 0.0 }, drag: 0.0, max_particles: 256, blend: Blend::Alpha,
-        texture: Texture { id: 0 }, shape: EmitShape::Point, shape_radius: 0.0,
-        shape_extents: Vec2 { x: 0.0, y: 0.0 }, duration: -1.0, looping: true, z: 10.0,
-    };
-}
-
-struct NativeEmitter {
-    rate: float,
-    lifetime_min: float,
-    lifetime_max: float,
-    speed_min: float,
-    speed_max: float,
-    angle_min: float,
-    angle_max: float,
-    size_start: float,
-    size_end: float,
-    color_start: Color,
-    color_end: Color,
-    gravity: Vec2,
-    drag: float,
-    max_particles: int,
-    blend: int,
-    texture: int,
-    shape: int,
-    shape_radius: float,
-    shape_extents: Vec2,
-    duration: float,
-    looping: int,
-    z: float,
-    layer: int,
-}
-
-impl Emitter {
-    fn native(self) -> NativeEmitter {
-        return NativeEmitter {
-            rate: self.rate, lifetime_min: self.lifetime_min, lifetime_max: self.lifetime_max,
-            speed_min: self.speed_min, speed_max: self.speed_max,
-            angle_min: self.angle_min, angle_max: self.angle_max,
-            size_start: self.size_start, size_end: self.size_end,
-            color_start: self.color_start, color_end: self.color_end,
-            gravity: self.gravity, drag: self.drag, max_particles: self.max_particles,
-            blend: self.blend.code(), texture: self.texture.id, shape: self.shape.code(),
-            shape_radius: self.shape_radius, shape_extents: self.shape_extents,
-            duration: self.duration, looping: drift_flag(self.looping), z: self.z, layer: 0,
-        };
     }
 }
 
@@ -1737,41 +2800,6 @@ impl Save {
     fn json(self) -> string { return libdrift_candela::dc_save_json(self.id); }
 }
 
-struct TweenBuilder {
-    id: int,
-}
-
-impl TweenBuilder {
-    fn move_to(self, to: Vec2, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 0, to, seconds, e.code()); return self; }
-    fn move_by(self, by: Vec2, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 1, by, seconds, e.code()); return self; }
-    fn scale_to(self, to: Vec2, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 2, to, seconds, e.code()); return self; }
-    fn rotate_to(self, radians: float, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 3, vec2(radians, 0.0), seconds, e.code()); return self; }
-    fn rotate_by(self, radians: float, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 4, vec2(radians, 0.0), seconds, e.code()); return self; }
-    /// Sprite alpha, 0.0..1.0.
-    fn fade_to(self, alpha: float, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 5, vec2(alpha, 0.0), seconds, e.code()); return self; }
-    fn zoom_to(self, zoom: float, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 6, vec2(zoom, 0.0), seconds, e.code()); return self; }
-    fn tint_to(self, c: Color, seconds: float, e: Ease) -> TweenBuilder { libdrift_candela::dc_tween_tint(self.id, c, seconds, e.code()); return self; }
-    fn delay(self, seconds: float) -> TweenBuilder { libdrift_candela::dc_tween_step(self.id, 7, vec2(0.0, 0.0), seconds, 0); return self; }
-    /// Plays the whole sequence `times` times; -1 repeats forever.
-    fn repeat(self, times: int) -> TweenBuilder { libdrift_candela::dc_tween_loop(self.id, times, 0); return self; }
-    /// Plays forward then backward, `times` times; -1 forever.
-    fn yoyo(self, times: int) -> TweenBuilder { libdrift_candela::dc_tween_loop(self.id, times, 1); return self; }
-    fn start(self) -> Tween { return Tween { id: libdrift_candela::dc_tween_start(self.id) }; }
-}
-
-struct Tween {
-    id: int,
-}
-
-impl Tween {
-    /// With complete = true the remaining steps jump to their end values.
-    fn stop(self, complete: bool) { libdrift_candela::dc_tween_stop(self.id, drift_flag(complete)); }
-    fn pause(self) { libdrift_candela::dc_tween_pause(self.id); }
-    fn resume(self) { libdrift_candela::dc_tween_resume(self.id); }
-    /// False once every step and loop has played.
-    fn active(self) -> bool { return libdrift_candela::dc_tween_active(self.id) != 0; }
-}
-
 /// A map object (Tiled object, LDtk entity).
 struct MapObject {
     index: int,
@@ -1781,11 +2809,12 @@ struct MapObject {
     anchor: Vec2,         // the pivot point, map pixels
 }
 
-struct Tilemap {
+/// A loaded map. Show it with a Tilemap component.
+struct TilemapAsset {
     id: int,
 }
 
-impl Tilemap {
+impl TilemapAsset {
     /// Width and height in cells.
     fn size(self) -> Cell { return libdrift_candela::dc_tilemap_size(self.id); }
     /// Pixels per cell.
@@ -1841,231 +2870,13 @@ impl Tilemap {
     }
 }
 
+/// A loaded scene or prefab file; spawn it with World.spawn_scene().
 struct Scene {
     id: int,
 }
 
-impl Scene {
-    /// Spawns the scene's entities, offset by `offset`.
-    fn spawn(self, offset: Vec2) -> SceneInstance {
-        return self.spawn_with(offset, Entity { id: 0 }, "");
-    }
-    /// Spawns under `parent` (id 0 for none) with per-entity JSON overrides:
-    /// {"door": {"Sprite": {"tint": [255, 0, 0, 255]}}}.
-    fn spawn_with(self, offset: Vec2, parent: Entity, overrides: string) -> SceneInstance {
-        let id = libdrift_candela::dc_scene_spawn(self.id, offset, parent.id, overrides);
-        if id == 0 {
-            throw "drift_load_failed";
-        }
-        return SceneInstance { id: id };
-    }
-}
-
-/// The entities one spawn created.
-struct SceneInstance {
-    id: int,
-}
-
-impl SceneInstance {
-    fn entities(self) -> Entity[] { return drift_scene_list(self.id, 0); }
-    /// Entities without a parent inside the scene.
-    fn roots(self) -> Entity[] { return drift_scene_list(self.id, 1); }
-    /// The first entity with this Name, or one that is not alive.
-    fn find(self, name: string) -> Entity { return Entity { id: libdrift_candela::dc_scene_find(self.id, name) }; }
-}
-
-fn drift_scene_list(id: int, roots: int) -> Entity[] {
-    let out = [Entity { id: 0 }];
-    out.remove(0);
-    let n = libdrift_candela::dc_scene_count(id, roots);
-    for i in range(n) {
-        out.push(Entity { id: libdrift_candela::dc_scene_entity(id, roots, i) });
-    }
-    return out;
-}
-
 // =========================================================================
-// Entities
-// =========================================================================
-
-/// An entity. Calls on one that was despawned do nothing; alive() tells.
-struct Entity {
-    id: int,
-}
-
-impl Entity {
-    fn alive(self) -> bool { return libdrift_candela::dc_alive(self.id) != 0; }
-    /// Removes the entity and its children.
-    fn despawn(self) { libdrift_candela::dc_despawn(self.id); }
-    fn equals(self, o: Entity) -> bool { return self.id == o.id; }
-    fn set_name(self, name: string) { libdrift_candela::dc_set_name(self.id, name); }
-    fn name(self) -> string { return libdrift_candela::dc_name(self.id); }
-    /// True when the entity has the named component ("Sprite", "Text").
-    fn has(self, component: string) -> bool { return libdrift_candela::dc_has(self.id, component) != 0; }
-    fn remove(self, component: string) { libdrift_candela::dc_remove(self.id, component); }
-    /// Any reflected component as JSON, as a scene file stores it ("" if missing).
-    fn component_json(self, component: string) -> string { return libdrift_candela::dc_component_json(self.id, component); }
-    /// Sets or merges a reflected component from JSON. Raises "drift_bad_component".
-    fn set_component_json(self, component: string, json: string) {
-        if libdrift_candela::dc_set_component_json(self.id, component, json) == 0 {
-            throw "drift_bad_component";
-        }
-    }
-    /// Makes this entity a child of `parent`: its transform becomes relative.
-    fn set_parent(self, parent: Entity) { libdrift_candela::dc_set_parent(self.id, parent.id); }
-    fn parent(self) -> Entity { return Entity { id: libdrift_candela::dc_parent(self.id) }; }
-
-    // ---- Transform ----
-
-    fn set_position(self, p: Vec2) { libdrift_candela::dc_set_position(self.id, p); }
-    fn position(self) -> Vec2 { return libdrift_candela::dc_position(self.id); }
-    /// Position after parents are applied.
-    fn world_position(self) -> Vec2 { return libdrift_candela::dc_world_position(self.id); }
-    fn move_by(self, d: Vec2) { libdrift_candela::dc_set_position(self.id, self.position().add(d)); }
-    fn set_rotation(self, radians: float) { libdrift_candela::dc_set_rotation(self.id, radians); }
-    fn rotation(self) -> float { return libdrift_candela::dc_rotation(self.id); }
-    fn set_scale(self, s: Vec2) { libdrift_candela::dc_set_scale(self.id, s); }
-    fn scale(self) -> Vec2 { return libdrift_candela::dc_scale(self.id); }
-
-    // ---- Sprite ----
-
-    fn set_sprite(self, tex: Texture) { libdrift_candela::dc_set_sprite(self.id, tex.id); }
-    fn texture(self) -> Texture { return Texture { id: libdrift_candela::dc_sprite_texture(self.id) }; }
-    /// Draws part of the texture (a spritesheet frame).
-    fn set_frame(self, src: Rect) { libdrift_candela::dc_sprite_set_rect(self.id, src); }
-    fn frame(self) -> Rect { return libdrift_candela::dc_sprite_rect(self.id); }
-    /// The source pixel that sits on the position; also the rotation pivot.
-    fn set_origin(self, o: Vec2) { libdrift_candela::dc_sprite_set_origin(self.id, o); }
-    /// Puts the middle of the sprite's frame (or texture) on the position.
-    fn center_origin(self) {
-        let r = self.frame();
-        if r.w > 0.0 {
-            self.set_origin(vec2(r.w * 0.5, r.h * 0.5));
-            return;
-        }
-        let s = self.texture().size();
-        self.set_origin(vec2(s.x * 0.5, s.y * 0.5));
-    }
-    fn set_tint(self, c: Color) { libdrift_candela::dc_sprite_set_tint(self.id, c); }
-    fn tint(self) -> Color { return libdrift_candela::dc_sprite_tint(self.id); }
-    fn set_flip(self, x: bool, y: bool) { libdrift_candela::dc_sprite_set_flip(self.id, drift_flag(x) + 2 * drift_flag(y)); }
-    /// Draw order inside a layer; higher draws on top.
-    fn set_z(self, z: float) { libdrift_candela::dc_sprite_set_z(self.id, z); }
-    /// Render layer 0..30, or hud_layer() for screen-space sprites.
-    fn set_layer(self, layer: int) { libdrift_candela::dc_sprite_set_layer(self.id, layer); }
-    fn set_visible(self, v: bool) { libdrift_candela::dc_sprite_set_visible(self.id, drift_flag(v)); }
-    fn set_blend(self, b: Blend) { libdrift_candela::dc_sprite_set_blend(self.id, b.code()); }
-    fn remove_sprite(self) { libdrift_candela::dc_remove_sprite(self.id); }
-
-    // ---- Sprite animation ----
-
-    /// Adds an animation clip of source rects; returns its index. The first
-    /// clip starts playing.
-    fn add_animation(self, frames: Rect[], frame_seconds: float, looping: bool) -> int {
-        let data = drift_floats(frames);
-        return libdrift_candela::dc_anim_add_clip(self.id, data, data.len(), frame_seconds, drift_flag(looping));
-    }
-    fn play_animation(self, clip: int) { libdrift_candela::dc_anim_play(self.id, clip); }
-    fn stop_animation(self) { libdrift_candela::dc_anim_stop(self.id); }
-    fn animation(self) -> int { return libdrift_candela::dc_anim_clip(self.id); }
-    fn animation_frame(self) -> int { return libdrift_candela::dc_anim_frame(self.id); }
-    /// True when a non-looping clip has played its last frame.
-    fn animation_finished(self) -> bool { return libdrift_candela::dc_anim_finished(self.id) != 0; }
-
-    // ---- Text ----
-
-    fn set_text(self, text: string) { libdrift_candela::dc_set_text(self.id, text); }
-    fn text(self) -> string { return libdrift_candela::dc_text(self.id); }
-    fn set_text_style(self, font: Font, style: TextStyle) { libdrift_candela::dc_text_style(self.id, font.id, style.native()); }
-    fn set_text_color(self, c: Color) { libdrift_candela::dc_text_set_color(self.id, c); }
-    fn set_text_size(self, size: float) { libdrift_candela::dc_text_set_size(self.id, size); }
-    fn set_text_z(self, z: float) { libdrift_candela::dc_text_set_z(self.id, z); }
-    fn set_text_layer(self, layer: int) { libdrift_candela::dc_text_set_layer(self.id, layer); }
-    fn set_text_visible(self, v: bool) { libdrift_candela::dc_text_set_visible(self.id, drift_flag(v)); }
-
-    // ---- Camera ----
-
-    /// Makes this entity an active camera looking at its position.
-    fn add_camera(self) { libdrift_candela::dc_add_camera(self.id); }
-    fn set_zoom(self, z: float) { libdrift_candela::dc_camera_set_zoom(self.id, z); }
-    fn zoom(self) -> float { return libdrift_candela::dc_camera_zoom(self.id); }
-    fn set_camera_active(self, a: bool) { libdrift_candela::dc_camera_set_active(self.id, drift_flag(a)); }
-    /// The part of the screen this camera draws into, 0..1 from the top-left.
-    fn set_viewport(self, r: Rect) { libdrift_candela::dc_camera_set_viewport(self.id, r); }
-    /// Cameras draw in ascending order.
-    fn set_camera_order(self, order: int) { libdrift_candela::dc_camera_set_order(self.id, order); }
-    /// Bit N set = this camera draws render layer N.
-    fn set_camera_layers(self, mask: int) { libdrift_candela::dc_camera_set_layers(self.id, mask); }
-    fn set_camera_target(self, tex: Texture) { libdrift_candela::dc_camera_set_target(self.id, tex.id); }
-    fn set_camera_clear(self, clear: bool, c: Color) { libdrift_candela::dc_camera_set_clear(self.id, drift_flag(clear), c); }
-    /// Follows `target` smoothly; higher smoothing is snappier.
-    fn follow(self, target: Entity, smoothing: float) {
-        libdrift_candela::dc_camera_follow(self.id, target.id, smoothing, vec2(0.0, 0.0), vec2(0.0, 0.0));
-    }
-    fn follow_with(self, target: Entity, smoothing: float, offset: Vec2, dead_zone: Vec2) {
-        libdrift_candela::dc_camera_follow(self.id, target.id, smoothing, offset, dead_zone);
-    }
-    /// Shakes the camera by `intensity` pixels, dying away.
-    fn shake(self, intensity: float) { libdrift_candela::dc_camera_shake(self.id, intensity, 5.0, 20.0); }
-
-    // ---- Physics ----
-
-    /// Makes the entity a physics body. Add a collider too.
-    fn add_body(self, b: Body) {
-        libdrift_candela::dc_add_body(self.id, NativeBody {
-            kind: b.kind.code(), fixed_rotation: drift_flag(b.fixed_rotation),
-            gravity_scale: b.gravity_scale, linear_damping: b.linear_damping,
-            angular_damping: b.angular_damping,
-        });
-    }
-    /// A box collider of `half_size`, centered on the position. Without a
-    /// body it is static.
-    fn add_box_collider(self, half_size: Vec2, c: Collider) { libdrift_candela::dc_add_box_collider(self.id, half_size, c.native()); }
-    fn add_circle_collider(self, radius: float, c: Collider) { libdrift_candela::dc_add_circle_collider(self.id, radius, c.native()); }
-    fn remove_body(self) { libdrift_candela::dc_remove_body(self.id); }
-    fn set_velocity(self, v: Vec2) { libdrift_candela::dc_set_velocity(self.id, v); }
-    fn velocity(self) -> Vec2 { return libdrift_candela::dc_velocity(self.id); }
-    fn apply_impulse(self, i: Vec2) { libdrift_candela::dc_apply_impulse(self.id, i); }
-    fn apply_force(self, f: Vec2) { libdrift_candela::dc_apply_force(self.id, f); }
-
-    // ---- Particles ----
-
-    fn add_emitter(self, e: Emitter) { libdrift_candela::dc_add_emitter(self.id, e.native()); }
-    fn set_emitting(self, on: bool) { libdrift_candela::dc_emitter_set_playing(self.id, drift_flag(on)); }
-    fn set_emit_rate(self, rate: float) { libdrift_candela::dc_emitter_set_rate(self.id, rate); }
-
-    // ---- Lights (need Config.lighting = true) ----
-
-    fn add_point_light(self, c: Color, intensity: float, radius: float) {
-        libdrift_candela::dc_add_point_light(self.id, c, intensity, radius, 2.0, 1);
-    }
-    /// A cone pointing `direction` radians (plus the entity's rotation),
-    /// `angle` wide.
-    fn add_spot_light(self, c: Color, intensity: float, radius: float, direction: float, angle: float) {
-        libdrift_candela::dc_add_spot_light(self.id, c, intensity, radius, 2.0, direction, angle, 0.2, 1);
-    }
-    fn set_light_color(self, c: Color, intensity: float) { libdrift_candela::dc_light_set_color(self.id, c, intensity); }
-    /// Blocks light with a box of `half_size`.
-    fn add_occluder_box(self, half_size: Vec2) { libdrift_candela::dc_add_occluder(self.id, 0, half_size); }
-    fn add_occluder_circle(self, radius: float) { libdrift_candela::dc_add_occluder(self.id, 1, vec2(radius, 0.0)); }
-    /// Blocks light with the entity's box or circle collider.
-    fn add_occluder_from_collider(self) { libdrift_candela::dc_add_occluder(self.id, 3, vec2(0.0, 0.0)); }
-
-    // ---- Tweens ----
-
-    /// Stops every tween on this entity.
-    fn stop_tweens(self) { libdrift_candela::dc_tween_stop_all(self.id); }
-
-    // ---- Tilemap ----
-
-    /// Draws `map` at this entity, layers from `z` upward on render `layer`.
-    fn set_tilemap(self, map: Tilemap, z: float, layer: int, colliders: bool) {
-        libdrift_candela::dc_set_tilemap(self.id, map.id, z, layer, drift_flag(colliders));
-    }
-}
-
-// =========================================================================
-// Timers (plain values; tick them with app.dt())
+// Timers (plain values; tick them with the frame time)
 // =========================================================================
 
 /// Counts down `duration` seconds, once or repeating.
@@ -2156,3 +2967,4 @@ impl Cooldown {
     }
     fn reset(self) { self.remaining = 0.0; }
 }
+

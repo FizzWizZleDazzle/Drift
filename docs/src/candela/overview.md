@@ -4,20 +4,79 @@ Drift games can be written in [candela](https://candela.lumenfx.dev), a small st
 
 Use it when you want a quick edit-and-run cycle with no C++ build, or when a game's logic reads more naturally as a short script. The engine is the same one C++ games use, so features and rendering match.
 
-## How it fits together
+## How a game looks
 
-The package lives in `bindings/candela/`:
+A game is entities with components, and systems that work on them, in the style of Bevy. You write a `setup` system that spawns entities, `update` systems that run every frame, and handlers for collisions. The package owns the frame loop.
 
-| Path | What it is |
-|------|-----------|
-| `shim/drift_candela.cpp` | A C interface over the engine, built with Drift linked in as `libdrift_candela.so` (`.dylib`, `.dll`) |
-| `src/main.cdl` | The candela API: typed structs and methods over that library |
-| `examples/coin_dash/` | A small complete game |
-| `tests/` | Headless tests that drive a real engine |
+```rust
+import "../src/main.cdl" { Key, Rectangle, Text, Transform, World, app, at, config, hud_layer, rgb, vec2 };
 
-candela calls native code through its foreign interface, which carries ints, floats, strings, int and float lists, and structs of those. Engine objects (entities, textures, sounds) cross as small integer handles, and the candela side wraps each one in its own type (`Entity`, `Texture`, `Sound`) with methods.
+struct Player {
+    speed: float = 200.0,
+}
 
-The candela program owns the main loop. Each call to `app.frame()` presents the previous frame, then polls events and runs the engine's systems (input, physics, animation, tweens) for the next one. Between two calls the game reads input, changes entities and queues draws, and those changes show in that frame. In C++ the same split is `App::start()`, `beginFrame()` and `endFrame()`; see [App and Plugins](../concepts/app-and-plugins.md#driving-the-loop-yourself).
+fn main() {
+    app(config("Hello", 640, 360)).startup(setup).update(steer).run();
+}
+
+fn setup(world: World) {
+    world.spawn()
+        .insert(at(320.0, 180.0))
+        .insert(Rectangle { size: vec2(32.0, 32.0), color: rgb(90, 170, 255), .. })
+        .insert(Player { .. });
+    world.spawn()
+        .insert(at(10.0, 10.0))
+        .insert(Text { value: "Arrow keys move", size: 20.0, layer: hud_layer(), .. });
+}
+
+fn steer(world: World, dt: float) {
+    let input = world.input();
+    for row in world.query2<Player, Transform>() {
+        if input.key_down(Key::Left) { row.b.position.x -= row.a.speed * dt; }
+        if input.key_down(Key::Right) { row.b.position.x += row.a.speed * dt; }
+    }
+}
+```
+
+There is no draw call: the rectangle and the text are components, and the engine draws them every frame. Immediate drawing (`world.draw_line`, ...) exists for debugging.
+
+- **Components** are plain candela structs. Your own (`Player` above) live on the candela side. The engine's (`Transform`, `Sprite`, `Rectangle`, `Circle`, `Text`, `Camera`, `RigidBody`, colliders, `Velocity`, `ParticleEmitter`, lights, `Tilemap`, `Animator`, `Tween`, `Lifetime`, `Oscillate`, `Follow`, ...) are mirrored to the native engine, which draws and simulates them.
+- **Systems** are functions: `startup(fn(World))` runs once, `update(fn(World, float))` every frame with the frame time. Several update systems run in the order they were added.
+- **Queries** return rows: `world.query<A>()`, `world.query2<A, B>()`, `world.query3<A, B, C>()`. A row holds the `entity` and its components as `a`, `b`, `c`; they are the stored values, so assigning a field changes the component.
+- **Collisions** call a handler: `on_collision<Player, Hazard>(f)` runs `f(world, player, hazard)` when an entity with `Player` starts touching one with `Hazard`, with the two in the declared order. `on_sensor<A, B>` does the same for sensor colliders.
+- **Resources** hold game-wide state: `world.insert_resource(Game { .. })`, `world.resource<Game>()`.
+
+## Declarative behavior
+
+Engine components that move or change things run natively, so a game declares them instead of writing a system:
+
+- `Velocity` moves an entity every frame (or drives a physics body).
+- `Lifetime` despawns it after a time.
+- `Oscillate` swings it back and forth on top of other motion.
+- `Follow` moves it toward another entity.
+- `Tween` animates position, scale, rotation, color or camera zoom with easing.
+- `Animator` plays spritesheet clips on its `Sprite`.
+
+Sprites moved by `Velocity` cost the script nothing per frame; the same sprites moved by a candela system cost a query and a write per sprite every frame. Prefer the components for anything that only needs to move, fade or expire.
+
+## The frame
+
+Each frame the package:
+
+1. waits for the engine simulation it started last frame,
+2. sends the components your systems changed to the engine and creates and despawns entities,
+3. renders and presents the frame and polls input,
+4. copies the collision events and the values the engine changes (positions after physics, animation frames, tweened colors), then starts the next simulation step (physics, behaviors, animation, particles, tweens, transform propagation) on a background thread,
+5. calls the collision handlers and your update systems.
+
+Steps 4 and 5 overlap: your systems run while the engine simulates. Two things follow, both by one frame:
+
+- Systems see the world as it was when the simulation step started. What they write lands after that step, so a velocity set from input moves a physics body from the next step on.
+- A system's change to a `Transform` is added to what the simulation did to the same entity meanwhile, so a script nudge and a `Velocity` both apply. Setting a position on something the engine also moves gives that position plus one step of the engine's motion.
+
+Set `Config.pipelined = false` to run the simulation before your systems instead; systems then see the result of the current step, at the cost of the overlap. `world.stats()` reports how long the systems and the simulation took and how much of that ran at the same time.
+
+Calls that need the live engine world (physics queries such as `raycast` and `apply_impulse`, audio, particle bursts, spawning a scene) wait for the simulation step to finish first, so they are always correct but end the overlap for that frame. Textures, fonts, input, effects and save data need no wait.
 
 ## Building the package
 
@@ -32,59 +91,46 @@ Configuring the whole repository with `-DDRIFT_BUILD_CANDELA=ON` does the same a
 
 ## Quick start
 
-Put a game in a folder inside the package, for example `bindings/candela/mygame/game.cdl`:
-
-```rust
-import "../src/main.cdl" { start, config, vec2, rgb, Key };
-
-fn main() {
-    let app = start(config("Hello", 640, 360));
-    let player = app.spawn_rect(vec2(320.0, 180.0), vec2(32.0, 32.0), rgb(90, 170, 255));
-    while app.frame() {
-        let speed = 200.0 * app.dt();
-        if app.key_down(Key::Left) { player.move_by(vec2(-speed, 0.0)); }
-        if app.key_down(Key::Right) { player.move_by(vec2(speed, 0.0)); }
-        app.draw_text("Arrow keys move", vec2(10.0, 10.0), 20.0, rgb(255, 255, 255));
-    }
-}
-```
+Put a game in a folder inside the package, for example `bindings/candela/mygame/game.cdl`, starting from the example above, then run it from that folder:
 
 ```sh
 cd bindings/candela/mygame
 candela run game.cdl
 ```
 
-List the names you use in the import's braces; types bring their methods along, so `Key` makes `Key::Left` available and `start` returns an `App` whose methods need no import. `import "../src/main.cdl" as drift;` works too, with every name written `drift::start`, `drift::Key::Left`. Paths for assets are relative to the directory you run from.
+List the names you use in the import's braces; types bring their methods along, so `World` needs no other import for `world.spawn()`. `import "../src/main.cdl" as drift;` works too, with every name written `drift::app`, `drift::Key::Left`. Paths for assets (`Sprite { image: "player.png", .. }`) are relative to the directory you run from.
 
-`frame()` returns `false` when the window closes or the game calls `app.quit()`, and the engine shuts down at that point. A game that leaves its loop early calls `app.close()`.
+`world.quit()` ends the game after the current frame; closing the window does the same.
 
 ## Conventions
 
-- **Coordinates**: world units are pixels, +Y points down. With no camera entity, world position (0, 0) is the top-left of the screen.
+- **Coordinates**: world units are pixels, +Y points down. With no `Camera` entity, world position (0, 0) is the top-left of the screen. Text and sprites on `hud_layer()` are in screen coordinates.
+- **Building components**: write the fields you need and end with `..` to take the rest from the defaults: `RigidBody { kind: BodyKind::Static, .. }`. `at(x, y)` is a `Transform` at a position.
 - **Floats and ints**: candela never converts between them, so write `vec2(1.0, 2.0)`, not `vec2(1, 2)`. Colors take channels from 0.0 to 1.0, or use `rgb(255, 128, 0)` and `rgba(...)`.
-- **Options structs**: functions with many settings take a struct you build with a function of the same name and then edit, for example `let c = collider(); c.restitution = 0.8;`. The structs are `Config`/`config`, `Body`/`body`, `Collider`/`collider`, `Emitter`/`emitter`, `TextStyle`/`text_style`, `SpriteOptions`/`sprite_options` and `PlayOptions`/`play_options`.
-- **Errors**: a failing call raises an error kind you can catch, such as `drift_load_failed` for a file that will not load. `last_error()` returns the message that goes with it:
+- **Errors**: a failing call raises an error kind you can catch, such as `drift_load_failed` for a file that will not load or `drift_missing_component` for `world.get<T>(e)` on an entity without a `T`. `last_error()` returns the message that goes with a native failure:
 
 ```rust
 try {
-    let tex = app.load_texture("player.png");
+    let tex = world.load_texture("player.png");
 } catch "drift_load_failed" {
     print("could not load: " + last_error());
 }
 ```
 
-- **Dead entities**: calls on a despawned entity do nothing and getters return defaults. `e.alive()` tells you whether it still exists.
-- **Lists from the engine**: the foreign interface cannot return a list, so functions such as `app.collisions()`, `app.query(...)` and `map.objects(...)` build theirs on the candela side, one call per element. Call them once per frame and keep the result.
+- **Spawning and despawning**: `world.spawn()` and `world.despawn(e)` take effect for queries at once and in the engine at the end of the frame. Queries return lists, so spawning or despawning while looping over one is safe. An entity the engine despawns (a `Lifetime` ran out, its parent went) disappears from queries at the start of the next frame.
+- **One shape per entity**: an entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`.
 
 ## Limitations
 
 The package is desktop only: candela cannot load native libraries when it runs as WebAssembly, so a candela game does not build for the browser. Write the game in C++ to ship it on the web.
 
-The native side cannot call into candela, so there are no callbacks: collision, sensor and tween completion are polled each frame (`app.collisions()`, `tween.active()`), tweens animate properties but cannot run a function at a step, and Tiled object spawners are replaced by reading `map.objects(...)` and spawning entities yourself. Systems, custom components and the ImGui dev panels stay in C++.
+candela runs a script on one thread, so `world.par_each<T>(f)` and `par_each2` call `f` for one entity after another, the same as a loop over a query. They exist so systems written that way can run in parallel once candela can. The parallelism a candela game gets today is the engine's: the simulation beside the systems, and the native behavior components.
 
-One app runs at a time; `app.close()` it before starting another. Its `Config` (including `lighting`) is fixed at `start`.
+Components of yours stay on the candela side: the engine cannot see them, and scene files do not save them. Entities a scene spawns come back with their `Transform`, `Velocity`, `Sprite`, `Rectangle` or `Circle`, `Text`, `Camera`, `RigidBody`, colliders, lights, `Lifetime` and `Name`; other engine components on them stay engine-side. Tiled object spawners and C++ systems are not reachable from candela.
+
+One app runs at a time, and its `Config` (including `lighting` and `pipelined`) is fixed when it starts.
 
 ## Next
 
-- [API Reference](api.md) lists every function by area.
+- [API Reference](api.md) lists the API by area.
 - [Coin Dash](../examples/coin-dash.md) walks through the example game.

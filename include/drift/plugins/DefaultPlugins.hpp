@@ -21,6 +21,8 @@
 #include <drift/plugins/SpatialPlugin.hpp>
 #include <drift/plugins/YSortPlugin.hpp>
 #include <drift/plugins/ScenePlugin.hpp>
+#include <drift/plugins/BehaviorPlugin.hpp>
+#include <drift/plugins/ShapePlugin.hpp>
 #ifdef DRIFT_DEV
 #include <drift/plugins/HotReloadPlugin.hpp>
 #endif
@@ -50,6 +52,8 @@ public:
         app.addPlugin<TweenPlugin>();
         app.addPlugin<YSortPlugin>();
         app.addPlugin<ScenePlugin>();
+        app.addPlugin<BehaviorPlugin>();
+        app.addPlugin<ShapePlugin>();
 #ifdef DRIFT_DEV
         app.addPlugin<HotReloadPlugin>();
 #endif

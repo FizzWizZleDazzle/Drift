@@ -105,6 +105,30 @@ while (app.beginFrame()) {           // time, events, PreUpdate, Update, PostUpd
 
 Between `beginFrame()` and `endFrame()` no system is running, so the world and every resource are safe to read and change from the calling thread: input reflects this frame's events, physics has stepped and collision events are fresh, and draws queued on `RendererResource` show in this frame. `run()` is `start()` followed by this loop. In the browser `run()` hands the same two halves to the browser's frame callback.
 
+### Simulating while the host works
+
+`beginFrame()` is `pollFrame()` followed by `simulate()`. A host with work of its own each frame, such as a scripting language running game logic, can call them separately and let the simulation run on a background thread meanwhile:
+
+```cpp
+while (app.pollFrame()) {          // time, events, PreUpdate, state transitions
+    app.simulateAsync();           // Update and PostUpdate start on a background thread
+    hostWorkThatLeavesTheWorldAlone();
+    app.finishSimulation();        // wait, then run what needed the main thread
+    // The world is the host's again: read results, write changes.
+    app.endFrame();
+}
+```
+
+| Method | Does |
+|--------|------|
+| `pollFrame()` | Advances time, polls events and runs PreUpdate and state transitions. Returns `false` once the app has quit |
+| `simulate()` | Runs Update and PostUpdate on the calling thread, with the worker pool |
+| `simulateAsync()` | Starts Update and PostUpdate on a background thread and returns at once |
+| `finishSimulation()` | Waits for the background part, then runs the systems it left for the main thread. Does nothing when no simulation is in flight |
+| `lastSimulation()` | A `SimulationTiming`: when the simulation started and ended on the performance-counter clock, whether it ran in the background, and how long the main-thread remainder took |
+
+Between `simulateAsync()` and `finishSimulation()` the host must not touch the world, `Commands`, or a resource any system may use. Resources that are `mainThreadOnly()` (the renderer, fonts, the asset server, ...) are the exception: systems that use them do not run on the background thread. Instead they, and systems ordered after them by a conflicting access, wait for `finishSimulation()` and run on the calling thread in their usual order; exclusive systems registered after them run first, on the background thread, so an exclusive system must not use thread-bound state. Without threads (the web build, or `Config::threadCount = 1`) `simulateAsync()` is `simulate()`. `endFrame()` finishes a simulation still in flight. The candela package drives its frames this way.
+
 ## Plugin
 
 A `Plugin` registers resources, systems, and event handlers with the `App`. Implement the `Plugin` interface and use the `DRIFT_PLUGIN` macro for the name.
@@ -229,7 +253,7 @@ Three methods manage resources:
 // Always creates a new resource (overwrites if already present)
 auto* state = app.addResource<GameState>();
 
-// Creates only if not already present (idempotent) -- returns existing if found
+// Creates only if not already present (idempotent); returns existing if found
 auto* state = app.initResource<GameState>();
 
 // Retrieve a resource (returns nullptr if not found)

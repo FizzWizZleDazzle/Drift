@@ -88,6 +88,8 @@ These are described by the plugin that owns them:
 | `SpriteAnimator` (with `AnimationClip`) | `SpriteAnimationPlugin` |
 | `CameraFollow`, `CameraShake` | `CameraPlugin` |
 | `TrailRenderer` | `TrailPlugin` |
+| `Shape2D` | `ShapePlugin` |
+| `Lifetime`, `Oscillate`, `Follow` | `BehaviorPlugin` |
 
 `Children` is not described: it is derived from `Parent`, and scenes rebuild it when they spawn. `Sprite::material` and `Camera::target` are runtime handles and are not saved.
 

@@ -1,6 +1,6 @@
 # Candela API Reference
 
-Every function of the candela `drift` package, by area. `app` is the `App` returned by `start`, `e` an `Entity`. Types in signatures are candela types; `Vec2`, `Rect` and `Color` are structs passed by value. See [Candela](overview.md) for setup and conventions.
+The candela `drift` package by area. `world` is the `World` a system receives, `e` an `Entity`. `Vec2`, `Rect` and `Color` are structs. See [Candela](overview.md) for how a game fits together and how the frame runs.
 
 ## Values
 
@@ -12,211 +12,207 @@ Every function of the candela `drift` package, by area. `app` is the `App` retur
 | `Cell { x, y }` | A tile cell, ints |
 | `ease(Ease, t)` | Eased progress for `t` in 0..1 |
 | `hud_layer()` | `31`, the screen-space layer drawn last without a camera |
-| `last_error()` | The message of the most recent failed call |
+| `last_error()` | The message of the most recent failed native call |
 
-Enums: `ScaleMode` (Letterbox, Stretch, Integer, Expand), `Blend` (Alpha, Additive, Multiply, Premultiplied, Screen, Opaque), `Filter` (Nearest, Linear), `Align` (Left, Center, Right), `VAlign` (Top, Middle, Bottom), `BodyKind` (Static, Dynamic, Kinematic), `EmitShape` (Point, Circle, Ring, Box, Line), `Ease` (Linear, In/Out/InOut of Sine, Quad, Cubic, Quart, Quint, Expo, Circ, Back, Elastic, Bounce, and Spring), `Key`, `MouseButton`, `GamepadButton`, `GamepadAxis`, `Binding`.
+Enums: `ScaleMode` (Letterbox, Stretch, Integer, Expand), `Blend` (Alpha, Additive, Multiply, Premultiplied, Screen, Opaque), `Filter` (Nearest, Linear), `Align` (Left, Center, Right), `VAlign` (Top, Middle, Bottom), `BodyKind` (Static, Dynamic, Kinematic), `EmitShape` (Point, Circle, Ring, Box, Line), `OccluderShape` (Box, Circle, FromCollider), `Ease` (Linear, In/Out/InOut of Sine, Quad, Cubic, Quart, Quint, Expo, Circ, Back, Elastic, Bounce, and Spring), `Key`, `MouseButton`, `GamepadButton`, `GamepadAxis`, `Binding`.
 
 `Key` has the letters, `Num0`..`Num9`, `F1`..`F12`, `Return`, `Escape`, `Backspace`, `Tab`, `Space`, the arrows (`Left`, `Right`, `Up`, `Down`) and the modifiers (`LCtrl`, `LShift`, `LAlt`, `RCtrl`, `RShift`, `RAlt`). `Key::Code(n)` names any other key by its SDL scancode.
 
-## App and frame loop
+## App
 
 | Function | Does |
 |----------|------|
-| `config(title, width, height)` | A `Config`: windowed, resizable, vsync, letterboxed, no lighting. Fields: `title`, `width`, `height` (the logical resolution), `fullscreen`, `vsync`, `resizable`, `scale_mode`, `lighting`, `renderer` (`""`, `"gl"` or `"webgpu"`) |
-| `start(cfg)` | Opens the window and starts the engine. Raises `drift_start_failed` |
-| `app.frame()` | Presents the previous frame and runs the next; `false` once the app has quit |
-| `app.quit()` | Ends the loop: the next `frame()` returns `false` |
-| `app.close()` | Shuts the engine down now (only needed after leaving the loop early) |
-| `app.dt()`, `app.time()`, `app.frame_count()` | Seconds of the last frame, seconds since start, frames so far |
-| `app.size()` | The logical resolution as a `Vec2` |
-| `app.set_logical_size(w, h)`, `app.set_scale_mode(ScaleMode)` | Change how the game maps onto the window |
-| `app.set_clear_color(c)`, `app.set_title(s)` | Background color, window title |
-| `app.screenshot(path)` | Saves the next presented frame as a PNG |
-| `app.backend()`, `app.draw_calls()` | The graphics backend name; draw calls in the last frame |
+| `config(title, width, height)` | A `Config` with defaults for the rest. Fields: `title`, `width`, `height` (the logical resolution), `fullscreen`, `vsync`, `resizable`, `scale_mode`, `lighting`, `renderer` (`""`, `"gl"` or `"webgpu"`), `pipelined` (default `true`: simulate while systems run), `threads` (engine threads; 0 one per core, 1 none) |
+| `app(cfg)` | A new `App` |
+| `.startup(fn(World))` | A system that runs once before the first frame |
+| `.update(fn(World, float))` | A system that runs every frame with the frame time; several run in the order added |
+| `.on_collision<A, B>(fn(World, Entity, Entity))` | Called when an entity with `A` starts touching one with `B`; the arguments follow the declared order |
+| `.on_sensor<A, B>(fn(World, Entity, Entity))` | The same for an entity entering a sensor collider, either way round |
+| `.run()` | Opens the window and runs until the game quits. Raises `drift_start_failed` |
+
+## World
+
+### Entities and components
+
+| Function | Does |
+|----------|------|
+| `world.spawn()` | A new entity, as an `EntityMut`: chain `.insert(component)`, then `.id()` for the `Entity` |
+| `world.entity(e)` | An `EntityMut` for an existing entity |
+| `world.insert(e, c)` | Adds or replaces a component |
+| `world.get<T>(e)` | The component. Raises `drift_missing_component` |
+| `world.has<T>(e)`, `world.remove<T>(e)` | |
+| `world.despawn(e)` | Removes the entity and its children; gone from queries at once, from the engine at the end of the frame |
+| `world.alive(e)` | |
+| `world.query<A>()`, `world.query2<A, B>()`, `world.query3<A, B, C>()` | Rows (`Row`, `Row2`, `Row3`) with `entity` and the components as `a`, `b`, `c`. A list, so spawning and despawning while looping is safe |
+| `world.entities<A>()`, `world.count<A>()` | The entities with an `A`; how many |
+| `world.par_each<T>(fn(World, Entity, T))`, `world.par_each2<A, B>(...)` | Calls the function for each match. Sequential: candela runs one script thread |
+| `world.set_parent(child, parent)` | The child's transform becomes relative to the parent |
+| `world.find(name)` | The first entity with that `Name`, or one that is not alive |
+| `world.world_position(e)` | Position after parents, from the engine |
+| `world.component_json(e, name)`, `world.set_component_json(e, name, json)` | Any reflected engine component as scene JSON, for components the package does not mirror. Raises `drift_bad_component` |
+| `world.defer(fn())` | Runs a function at the end of the frame, after spawned entities exist in the engine |
+
+### Resources, time and the window
+
+| Function | Does |
+|----------|------|
+| `world.insert_resource(r)`, `world.resource<R>()`, `world.has_resource<R>()`, `world.remove_resource<R>()` | One value per type. `resource` raises `drift_missing_resource` |
+| `world.dt`, `world.frame`, `world.time()` | Frame time, frames so far, seconds since start |
+| `world.input()` | The `Input` (below) |
+| `world.quit()` | Ends the game after this frame |
+| `world.size()`, `world.set_logical_size(w, h)`, `world.set_scale_mode(ScaleMode)` | The logical resolution and how it maps onto the window |
+| `world.set_clear_color(c)`, `world.set_title(s)` | |
+| `world.screenshot(path)` | Saves the next presented frame as a PNG |
+| `world.backend()`, `world.draw_calls()` | The graphics backend name; draw calls in the last frame |
+| `world.stats()` | `FrameStats` of the last frame in milliseconds: `script`, `simulation`, `overlap` (the two at the same time), `wait`, `render`, `serial`, and `background` (the simulation ran on its own thread) |
+| `world.screen_to_world(p)`, `world.world_to_screen(p)` | Through the main camera |
+
+## Engine components
+
+Build each with the fields you need and `..` for the defaults. The engine changes some fields itself (marked *engine*); systems read the current value when they query the component.
+
+| Component | Fields |
+|-----------|--------|
+| `Transform` | `position`, `rotation` (radians), `scale` (1, 1). *Engine*: physics, `Velocity`, behaviors, tweens move it. `at(x, y)` builds one |
+| `Velocity` | `linear` (pixels per second), `angular` (radians per second). Moves the entity in the engine; on a dynamic `RigidBody` it is the body's velocity (*engine*) |
+| `Sprite` | `image` (a file path, loaded and cached), `texture` (wins over `image`), `frame` (part of the image; `w` 0 for all), `anchor` (0.5, 0.5: the point on the position), `color` (*engine* for tweens), `flip_x`, `flip_y`, `z`, `layer`, `visible`, `blend`. `frame` is *engine* under an `Animator` |
+| `Rectangle` | `size`, `color`, `outline` (0 filled), `corner_radius`, `anchor`, `z`, `layer`, `visible` |
+| `Circle` | `radius`, `color`, `outline`, `z`, `layer`, `visible` |
+| `Text` | `value`, `size`, `color`, `align`, `valign`, `wrap`, `line_spacing`, `outline`, `outline_color`, `font`, `z`, `layer`, `visible`. Up to 511 bytes |
+| `Camera` | `zoom` (*engine* for tweens), `rotation`, `active`, `order`, `viewport` (normalized, for split screen) |
+| `CameraFollow` | `target`, `smoothing`, `offset`, `dead_zone` |
+| `RigidBody` | `kind` (Dynamic), `fixed_rotation`, `gravity_scale`, `linear_damping`, `angular_damping`. Add a collider too |
+| `BoxCollider`, `CircleCollider` | `half_size` or `radius`, `offset`, `sensor`, `density`, `friction`, `restitution`, `category`, `mask`. Without a `RigidBody` the collider is static |
+| `ParticleEmitter` | `rate`, `lifetime_min`/`max`, `speed_min`/`max`, `angle_min`/`max`, `size_start`, `size_end`, `color_start`, `color_end`, `gravity`, `drag`, `max_particles`, `blend`, `texture`, `shape`, `shape_radius`, `shape_extents`, `duration`, `looping`, `z`, `playing` |
+| `PointLight` | `color`, `intensity`, `radius`, `falloff`, `shadows`. Needs `Config.lighting` |
+| `SpotLight` | as `PointLight`, plus `direction`, `angle`, `softness` |
+| `LightOccluder` | `shape`, `half_size`, `radius` |
+| `AudioSource` | `sound`, `bus`, `volume`, `pitch`, `looping`, `autoplay`, `spatial`, `min_distance`, `max_distance` |
+| `Tilemap` | `map` (from `world.load_tilemap`), `z`, `layer`, `colliders` |
+| `Animator` | `clips` (`AnimationClip { frames: Rect[], frame_seconds, looping }`), `clip` (set it to switch), `playing`; *engine*: `frame`, `finished` |
+| `Tween` | Built with `tween()` and `move_to`, `move_by`, `scale_to`, `rotate_to`, `rotate_by`, `fade_to`, `tint_to`, `zoom_to` (each `(target, seconds, Ease)`), `delay(seconds)`, `repeat(times)` or `yoyo(times)` (-1 forever). Inserting a changed tween restarts it |
+| `Lifetime` | `seconds`; the entity despawns when it runs out (*engine*: the time left) |
+| `Oscillate` | `amplitude`, `frequency`, `phase`; swings the entity on top of other motion |
+| `Follow` | `target`, `speed`, `distance`, `offset` |
+| `Name` | `value`, for `world.find` and scene files |
 
 ## Input
 
+`world.input()` returns an `Input`.
+
 | Function | Does |
 |----------|------|
-| `app.key_down(k)`, `app.key_pressed(k)`, `app.key_released(k)` | Held now, went down this frame, went up this frame |
-| `app.mouse_position()` | Logical screen position |
-| `app.mouse_world()` | World position under the mouse, through the main camera |
-| `app.mouse_delta()`, `app.mouse_wheel()` | Movement and wheel this frame |
-| `app.mouse_down(b)`, `app.mouse_pressed(b)`, `app.mouse_released(b)` | Mouse buttons |
-| `app.gamepad_connected(pad)`, `app.gamepad_axis(pad, axis)` | Pads 0..3; sticks read -1..1 (Y down), triggers 0..1 |
-| `app.gamepad_down(pad, b)`, `app.gamepad_pressed(pad, b)`, `app.gamepad_released(pad, b)` | Gamepad buttons (Xbox layout: `South` is A) |
-| `app.send_key(k, down)`, `app.send_mouse_move(pos)`, `app.send_mouse_button(pos, b, down)` | Queue input as if from the device; it arrives with the next `frame()`. For automated tests and demo playback |
+| `key_down(k)`, `key_pressed(k)`, `key_released(k)` | Held now, went down this frame, went up this frame |
+| `mouse_position()`, `mouse_world()` | Logical screen position; world position through the main camera |
+| `mouse_delta()`, `mouse_wheel()` | Movement and wheel this frame |
+| `mouse_down(b)`, `mouse_pressed(b)`, `mouse_released(b)` | Mouse buttons |
+| `gamepad_connected(pad)`, `gamepad_axis(pad, axis)` | Pads 0..3; sticks read -1..1 (Y down), triggers 0..1 |
+| `gamepad_down(pad, b)`, `gamepad_pressed(pad, b)`, `gamepad_released(pad, b)` | Gamepad buttons (Xbox layout: `South` is A) |
+| `send_key(k, down)`, `send_mouse_move(pos)`, `send_mouse_button(pos, b, down)` | Queue input as if from the device; it arrives next frame. For automated tests and demo playback |
 
 ### Input actions
 
-Actions name what the player does; any number of bindings feed each one. A `Binding` is `Binding::Key(Key)`, `Mouse(MouseButton)`, `Button(GamepadButton)`, `AxisPositive(GamepadAxis)`, `AxisNegative(GamepadAxis)` or `Unbound`.
+Actions name what the player does; any number of bindings feed each one. A `Binding` is `Binding::Key(Key)`, `Mouse(MouseButton)`, `Button(GamepadButton)`, `AxisPositive(GamepadAxis)`, `AxisNegative(GamepadAxis)` or `Unbound`. All are `Input` methods.
 
 | Function | Does |
 |----------|------|
-| `app.bind_action(name, b)` | Adds a binding to an action. Raises `drift_bad_binding` for `Unbound` |
-| `app.bind_axis(name, negative, positive)` | A 1D axis, -1..1 |
-| `app.bind_axis2d(name, left, right, up, down)` | A 2D axis; up is -Y. Calling it again adds another set |
-| `app.bind_stick(name, x_axis, y_axis)` | A whole stick as a 2D axis |
-| `app.action_pressed(name)`, `action_held`, `action_released`, `action_value` | Action state; axes count as held past the press threshold |
-| `app.axis(name)`, `app.axis2d(name)` | Axis values |
-| `app.bindings(name, slot)` | The bindings in a slot as text (`"key:Space"`). Slot 0 for actions; 0/1 negative/positive for axes; 0..3 left, right, up, down for 2D axes |
-| `app.rebind(name, slot, index, b)`, `app.rebind_text(name, slot, index, text)` | Replace one binding |
-| `app.capture_binding()` | The first input that went down this frame, as binding text, or `""`; for "press a key" menus |
-| `app.bindings_json()`, `app.load_bindings_json(text)` | Save and restore every binding |
-| `app.has_action(name)`, `app.remove_action(name)`, `app.set_action_tuning(dead_zone, press_threshold, gamepad)` | Housekeeping |
+| `bind_action(name, b)` | Adds a binding to an action. Raises `drift_bad_binding` for `Unbound` |
+| `bind_axis(name, negative, positive)` | A 1D axis, -1..1 |
+| `bind_axis2d(name, left, right, up, down)` | A 2D axis; up is -Y. Calling it again adds another set |
+| `bind_stick(name, x_axis, y_axis)` | A whole stick as a 2D axis |
+| `action_pressed(name)`, `action_held`, `action_released`, `action_value` | Action state; axes count as held past the press threshold |
+| `axis(name)`, `axis2d(name)` | Axis values |
+| `bindings(name, slot)` | The bindings in a slot as text (`"key:Space"`). Slot 0 for actions; 0/1 negative/positive for axes; 0..3 left, right, up, down for 2D axes |
+| `rebind(name, slot, index, b)`, `rebind_text(name, slot, index, text)` | Replace one binding |
+| `capture_binding()` | The first input that went down this frame, as binding text, or `""`; for "press a key" menus |
+| `bindings_json()`, `load_bindings_json(text)` | Save and restore every binding |
+| `has_action(name)`, `remove_action(name)`, `set_action_tuning(dead_zone, press_threshold, gamepad)` | Housekeeping |
 
-## Entities
-
-| Function | Does |
-|----------|------|
-| `app.spawn()`, `app.spawn_at(pos)` | A new entity with a transform |
-| `app.spawn_sprite(tex, pos)` | An entity drawing `tex` centered on `pos` |
-| `app.spawn_rect(pos, size, c)` | A solid rectangle centered on `pos` |
-| `app.spawn_text(text, pos, size, c)` | Text with the built-in font, top-left at `pos` |
-| `app.spawn_camera(pos)` | An active camera looking at `pos` |
-| `app.find(name)` | First entity with that name (not alive if none) |
-| `app.query(components)` | Every entity with the named components, as a flecs query expression: `"Sprite"`, `"RigidBody2D, Velocity2D"`, `"Text, !Sprite"`. Raises `drift_bad_query` |
-| `e.alive()`, `e.despawn()`, `e.equals(o)` | Despawning also removes children |
-| `e.set_name(s)`, `e.name()` | The `Name` component |
-| `e.has(component)`, `e.remove(component)` | By component name |
-| `e.component_json(component)`, `e.set_component_json(component, json)` | Any reflected component as scene JSON; setting merges into the current value. Raises `drift_bad_component` |
-| `e.set_parent(p)`, `e.parent()` | Parenting: the child's transform becomes relative to the parent |
-
-### Transform
-
-`e.set_position(p)`, `e.position()`, `e.world_position()` (after parents), `e.move_by(d)`, `e.set_rotation(radians)`, `e.rotation()`, `e.set_scale(s)`, `e.scale()`. Setting the position of a physics body teleports it.
-
-### Sprite
+## Physics
 
 | Function | Does |
 |----------|------|
-| `e.set_sprite(tex)`, `e.texture()` | Adds or changes the sprite |
-| `e.set_frame(src)`, `e.frame()` | Source rect within the texture (a spritesheet frame) |
-| `e.set_origin(o)`, `e.center_origin()` | The source pixel placed on the position; also the rotation pivot. Default is the top-left |
-| `e.set_tint(c)`, `e.tint()` | Color multiplier, alpha included |
-| `e.set_flip(x, y)`, `e.set_z(z)`, `e.set_layer(layer)`, `e.set_visible(v)`, `e.set_blend(Blend)` | Draw settings; higher z draws on top within a layer |
-| `e.remove_sprite()` | |
+| `world.set_gravity(g)`, `world.gravity()` | World gravity in pixels per second squared; default `(0, 9.8)` |
+| `world.raycast(origin, direction, distance)` | `RayHit { hit, point, normal, fraction }`; sensors count as hits |
+| `world.apply_impulse(e, i)`, `world.apply_force(e, f)` | Dynamic bodies |
 
-### Sprite animation
-
-| Function | Does |
-|----------|------|
-| `e.add_animation(frames: Rect[], frame_seconds, looping)` | Adds a clip and returns its index; the first clip starts playing |
-| `e.play_animation(i)`, `e.stop_animation()` | |
-| `e.animation()`, `e.animation_frame()`, `e.animation_finished()` | Current clip and frame; whether a non-looping clip has reached its end |
-
-### Text
-
-`e.set_text(s)`, `e.text()`, `e.set_text_size(px)`, `e.set_text_color(c)`, `e.set_text_z(z)`, `e.set_text_layer(layer)`, `e.set_text_visible(v)`, and `e.set_text_style(font, style)` with a `TextStyle` from `text_style(size, color)` (fields: `size`, `color`, `align`, `valign`, `wrap_width`, `line_spacing`, `outline`, `outline_color`, `shadow`, `shadow_color`, `rich`). Text entities hold up to 511 bytes; draw longer text with `app.draw_text`.
-
-### Camera
-
-| Function | Does |
-|----------|------|
-| `e.add_camera()` | Makes `e` an active camera looking at its position |
-| `e.set_zoom(z)`, `e.zoom()` | |
-| `e.set_viewport(r)` | Normalized screen rect (0..1, top-left) for split screen |
-| `e.set_camera_order(n)`, `e.set_camera_layers(mask)`, `e.set_camera_active(a)` | Draw order, the layers it draws (bit N = layer N) |
-| `e.set_camera_target(tex)`, `e.set_camera_clear(clear, c)` | Render into a texture from `app.create_render_target` |
-| `e.follow(target, smoothing)`, `e.follow_with(target, smoothing, offset, dead_zone)` | Smooth follow |
-| `e.shake(intensity)` | Screen shake that dies away |
-| `app.screen_to_world(p)`, `app.world_to_screen(p)` | Through the main camera |
-
-### Physics
-
-| Function | Does |
-|----------|------|
-| `e.add_body(body(BodyKind::Dynamic))` | A physics body. `Body` fields: `kind`, `fixed_rotation`, `gravity_scale`, `linear_damping`, `angular_damping`. An entity with a collider and no body is static |
-| `e.add_box_collider(half_size, collider())`, `e.add_circle_collider(radius, collider())` | `Collider` fields: `offset`, `density`, `friction`, `restitution`, `sensor`, `category`, `mask` |
-| `e.set_velocity(v)`, `e.velocity()`, `e.apply_impulse(i)`, `e.apply_force(f)` | Dynamic bodies |
-| `e.remove_body()` | Removes the body and colliders |
-| `app.set_gravity(g)`, `app.gravity()` | World gravity in pixels per second squared; default `(0, 9.8)` |
-| `app.collisions()`, `app.collisions_ended()` | `Collision { a, b }` pairs from this frame. Methods: `involves(e)`, `other(e)` |
-| `app.sensor_entered()`, `app.sensor_exited()` | `SensorEvent { sensor, visitor }` from this frame |
-| `app.raycast(origin, direction, distance)` | `RayHit { hit, point, normal, fraction }`; sensors count as hits |
-
-Add the body and collider in the same frame; their settings are read when the body is created at the end of that frame.
-
-## Drawing
-
-Immediate draws show in the current frame. They go on the current layer (0 by default; `hud_layer()` for screen space) at the current z; both reset every frame.
-
-| Function | Does |
-|----------|------|
-| `app.set_layer(n)`, `app.set_z(z)` | Layer and draw order for the draws that follow |
-| `app.draw_rect(r, c)`, `app.draw_rect_lines(r, c, thickness)`, `app.draw_rounded_rect(r, radius, c)` | Rectangles |
-| `app.draw_circle(center, radius, c)`, `app.draw_circle_lines(...)`, `app.draw_arc(center, radius, from, to, c, thickness)` | Circles and arcs (radians) |
-| `app.draw_line(a, b, c, thickness)`, `app.draw_triangle(a, b, c, col)` | |
-| `app.draw_polygon(points: Vec2[], c)`, `app.draw_polyline(points, c, thickness, closed)` | Simple polygons, convex or not |
-| `app.draw_texture(tex, pos)`, `app.draw_texture_with(tex, pos, sprite_options())` | `SpriteOptions` fields: `src`, `scale`, `rotation`, `origin`, `tint`, `flip_x`, `flip_y`, `blend` |
-| `app.draw_text(text, pos, size, c)`, `app.draw_text_with(font, text, pos, style)` | UTF-8 text, top-left at `pos` by default |
-| `app.measure_text(text, size)`, `app.measure_text_with(font, text, style)`, `app.line_height(font, size)` | Text metrics |
-| `app.push_clip(r)`, `app.pop_clip()` | Clip draws to a screen rect |
+Bodies and colliders are components; collisions and sensor overlaps reach the handlers given to `on_collision` and `on_sensor`. Add the body and its collider in the same frame: their settings are read when the body is created at the end of that frame. Physics queries wait for the frame's simulation step (see [the frame](overview.md#the-frame)).
 
 ## Textures, sheets and fonts
 
 | Function | Does |
 |----------|------|
-| `app.load_texture(path)` | PNG and other stb_image formats; the same path returns the same texture. Raises `drift_load_failed` |
-| `app.create_texture(w, h, pixels: Color[])` | From colors, row by row from the top-left |
-| `app.create_render_target(w, h)`, `app.white_texture()` | |
+| `world.load_texture(path)` | PNG and other stb_image formats; the same path returns the same texture. Raises `drift_load_failed` |
+| `world.create_texture(w, h, pixels: Color[])` | From colors, row by row from the top-left |
+| `world.create_render_target(w, h)`, `world.white_texture()` | |
 | `tex.size()`, `tex.set_filter(Filter::Linear)`, `tex.destroy()` | Textures default to `Nearest` (crisp pixels) |
-| `app.spritesheet(tex, frame_w, frame_h)`, `app.load_aseprite(path)` | A `Spritesheet` |
-| `sheet.frame(col, row)`, `sheet.frame_at(i)`, `sheet.frames(first, count)`, `sheet.frame_count()`, `sheet.texture()` | Source rects for sprites and clips |
-| `app.load_font(path, size)`, `app.default_font()` | TrueType, OpenType or BMFont |
+| `world.spritesheet(tex, frame_w, frame_h)`, `world.load_aseprite(path)` | A `Spritesheet` |
+| `sheet.frame(col, row)`, `sheet.frame_at(i)`, `sheet.frames(first, count)`, `sheet.frame_count()`, `sheet.texture()` | Source rects for sprites and animation clips |
+| `world.load_font(path, size)` | TrueType, OpenType or BMFont; `Font { id: 0 }` is the built-in font |
+| `world.measure_text(text, size)`, `world.measure_text_with(font, text, style)`, `world.line_height(font, size)` | Text metrics; `text_style(size, color)` builds a `TextStyle` |
 
 ## Audio
 
 | Function | Does |
 |----------|------|
-| `app.load_sound(path)`, `app.load_music(path)` | WAV, OGG, MP3; music decodes while it plays. Raises `drift_load_failed` |
-| `app.create_sound(samples: float[], rate)` | A mono sound from samples in -1..1 |
+| `world.load_sound(path)`, `world.load_music(path)` | WAV, OGG, MP3; music decodes while it plays. Raises `drift_load_failed` |
+| `world.create_sound(samples: float[], rate)` | A mono sound from samples in -1..1 |
 | `snd.play()`, `snd.play_with(play_options())` | Returns a `Voice`. `PlayOptions`: `volume`, `pan`, `pitch`, `looping`, `bus`, `fade_in`, `priority` |
 | `snd.duration()`, `snd.set_max_instances(n)`, `snd.destroy()` | |
 | `voice.stop(fade)`, `pause(fade)`, `resume(fade)`, `set_volume(v, fade)`, `set_pan(p)`, `set_pitch(p)`, `playing()` | One playback |
-| `app.master_bus()`, `app.music_bus()`, `app.sfx_bus()`, `app.create_bus(name, parent)` | Mixer buses |
+| `world.master_bus()`, `world.music_bus()`, `world.sfx_bus()`, `world.create_bus(name, parent)` | Mixer buses |
 | `bus.set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)`, `stop(fade)` | Apply to everything on the bus and below |
-| `app.play_music(snd, crossfade, looping)`, `stop_music(fade)`, `pause_music(fade)`, `resume_music(fade)`, `music_playing()` | One music track at a time |
-| `app.audio_device()` | `false` when no output device opened; sounds still advance silently |
+| `world.play_music(snd, crossfade, looping)`, `stop_music(fade)`, `pause_music(fade)`, `resume_music(fade)`, `music_playing()` | One music track at a time |
+| `world.audio_device()` | `false` when no output device opened; sounds still advance silently |
+
+An `AudioSource` component plays a sound from an entity instead.
 
 ## Particles, lights and effects
 
 | Function | Does |
 |----------|------|
-| `e.add_emitter(emitter())` | A particle emitter at the entity. `Emitter` fields: `rate`, `lifetime_min`/`max`, `speed_min`/`max`, `angle_min`/`max`, `size_start`, `size_end`, `color_start`, `color_end`, `gravity`, `drag`, `max_particles`, `blend`, `texture`, `shape`, `shape_radius`, `shape_extents`, `duration`, `looping`, `z` |
-| `e.set_emitting(on)`, `e.set_emit_rate(r)` | |
-| `app.burst(pos, emitter(), count)` | A one-off burst that cleans itself up |
-| `e.add_point_light(c, intensity, radius)`, `e.add_spot_light(c, intensity, radius, direction, angle)`, `e.set_light_color(c, intensity)` | Lights; need `Config.lighting = true` |
-| `e.add_occluder_box(half_size)`, `e.add_occluder_circle(r)`, `e.add_occluder_from_collider()` | Cast shadows |
-| `app.set_ambient(c)` | Light everywhere. Raises `drift_lighting_off` without lighting |
-| `app.add_bloom(threshold, intensity)`, `add_vignette(intensity, radius)`, `add_crt(curvature, scanlines)`, `add_grayscale(a)`, `add_sepia(a)`, `add_pixelate(size)`, `add_blur(radius, iterations)` | Post effects; each returns an `Effect` with `set_enabled(on)` and `remove()` |
-| `app.fade_to(c, amount, seconds)`, `app.flash(c, seconds)` | Screen fades and flashes |
+| `world.burst(pos, ParticleEmitter { .. }, count)` | A one-off burst that cleans itself up |
+| `world.shake(camera, intensity)` | Screen shake on a camera entity that dies away |
+| `world.set_ambient(c)` | Light everywhere. Raises `drift_lighting_off` without `Config.lighting` |
+| `world.add_bloom(threshold, intensity)`, `add_vignette(intensity, radius)`, `add_crt(curvature, scanlines)`, `add_grayscale(a)`, `add_sepia(a)`, `add_pixelate(size)`, `add_blur(radius, iterations)` | Post effects; each returns an `Effect` with `set_enabled(on)` and `remove()` |
+| `world.fade_to(c, amount, seconds)`, `world.flash(c, seconds)` | Screen fades and flashes |
+| `world.set_tween_speed(s)` | Multiplies time for every tween; 0 freezes them |
 
-## Tweens, timers and save data
+## Timers and save data
 
 | Function | Does |
 |----------|------|
-| `app.tween(e)` | A `TweenBuilder` for `e`; chain `move_to`, `move_by`, `scale_to`, `rotate_to`, `rotate_by`, `fade_to`, `tint_to`, `zoom_to` (each `(target, seconds, Ease)`), `delay(seconds)`, `repeat(times)` or `yoyo(times)` (-1 forever), then `start()` |
-| `app.sequence()` | A tween with no entity, for delays |
-| `tween.active()`, `stop(complete)`, `pause()`, `resume()`, `e.stop_tweens()`, `app.set_tween_speed(s)` | A finished tween is no longer active |
-| `timer(seconds)`, `repeating_timer(seconds)` | A `Timer`; `t.tick(dt)` returns how many times it finished. Also `finished()`, `remaining()`, `fraction()`, `reset()` |
+| `timer(seconds)`, `repeating_timer(seconds)` | A `Timer`: `tick(dt)` returns how many times it finished; `finished()`, `remaining()`, `fraction()`, `reset()`, `paused` |
 | `cooldown(seconds)` | A `Cooldown`: `tick(dt)`, `ready()`, `try_use()`, `reset()` |
-| `app.open_save(org, app_name, slot)`, `app.open_save_file(path)` | A `Save` in the per-user directory or at a path. Raises `drift_save_failed` |
-| `save.set_int/float/string(key, v)`, `get_int/float/string(key, fallback)`, `has`, `erase`, `clear`, `flush()`, `reload()`, `path()`, `json()` | `flush()` writes to disk |
+| `world.open_save(org, app, slot)`, `world.open_save_file(path)` | A `Save` in the per-user directory or at a path. Raises `drift_save_failed` |
+| `save.set_int/float/string(key, v)`, `get_int/float/string(key, fallback)`, `has`, `erase`, `clear` | Values |
+| `save.flush()`, `save.reload()`, `save.path()`, `save.json()` | `flush` writes to disk and raises `drift_save_failed` |
 
-Timers and cooldowns are plain candela values: keep them in your game state and tick them with `app.dt()`.
+Timers are plain values: keep them in a resource or a component and tick them from a system.
 
 ## Tilemaps and scenes
 
 | Function | Does |
 |----------|------|
-| `app.load_tilemap(path)`, `app.load_level(path, level)` | A Tiled map (`.tmj`/`.json`) or an LDtk level. Raises `drift_load_failed` |
-| `app.spawn_tilemap(map, pos)`, `e.set_tilemap(map, z, layer, colliders)` | Draw the map with its top-left at the entity, with static colliders from its collision layers |
-| `map.size()`, `map.tile_size()`, `map.bounds()`, `map.property(name)` | Map info |
-| `map.layer(name)`, `map.layer_count()`, `map.layer_name(i)`, `map.set_layer_visible(i, v)`, `map.set_layer_solid(i, solid, values)` | Layers. `layer` raises `drift_no_such_layer` |
-| `map.tile(layer, x, y)`, `map.set_tile(...)`, `map.int_grid(layer, x, y)`, `map.set_int_grid(...)` | Tile ids (0 = empty) and LDtk IntGrid values; infinite Tiled maps use negative cells too |
-| `map.world_to_tile(p, layer)`, `map.tile_to_world(cell, layer)`, `map.tile_at(layer, p)` | From where the map was last drawn |
-| `map.objects(kind)`, `map.object_property(o, name)` | `MapObject { name, kind, bounds, anchor }`, `""` for every object |
-| `app.load_scene(path)` | A JSON scene or prefab |
-| `scene.spawn(offset)`, `scene.spawn_with(offset, parent, overrides_json)` | A `SceneInstance`: `entities()`, `roots()`, `find(name)` |
-| `app.save_scene(path)` | Saves every entity with a reflected component |
+| `world.load_tilemap(path)`, `world.load_level(path, level)` | Tiled (`.tmj`/`.json`) or LDtk; a `TilemapAsset`. Show it with a `Tilemap` component. Raises `drift_load_failed` |
+| `map.size()`, `map.tile_size()`, `map.bounds()`, `map.layer_count()`, `map.layer(name)`, `map.layer_name(i)` | `layer` raises `drift_no_such_layer` |
+| `map.tile(layer, x, y)`, `map.set_tile(...)`, `map.int_grid(...)`, `map.set_int_grid(...)`, `map.tile_at(layer, world_pos)` | Tile and IntGrid values |
+| `map.world_to_tile(p, layer)`, `map.tile_to_world(cell, layer)` | Coordinates, after the map is drawn |
+| `map.set_layer_visible(layer, v)`, `map.set_layer_solid(layer, solid, values)` | Layer settings |
+| `map.objects(kind)`, `map.object_property(o, name)`, `map.property(name)` | `MapObject { name, kind, bounds, anchor }` from object layers; spawn entities for them yourself |
+| `world.load_scene(path)` | A `Scene` from a JSON scene or prefab. Raises `drift_load_failed` |
+| `world.spawn_scene(scene, offset)`, `world.spawn_scene_with(scene, offset, parent, overrides)` | Spawns now and returns the entities, with their mirrored components; `overrides` is per-entity JSON |
+| `world.save_scene(path)` | Every engine entity with a reflected component, as JSON |
+
+## Debug drawing
+
+Immediate shapes for this frame only, for debugging from a system; games draw with components. Draws go on the current layer (0 by default; `hud_layer()` for screen space) at the current z, both reset every frame.
+
+| Function | Does |
+|----------|------|
+| `world.set_draw_layer(n)`, `world.set_draw_z(z)` | Layer and draw order for the draws that follow |
+| `world.draw_rect(r, c)`, `world.draw_rect_lines(r, c, thickness)` | Rectangles |
+| `world.draw_circle(center, radius, c)`, `world.draw_circle_lines(center, radius, c, thickness)` | Circles |
+| `world.draw_line(a, b, c, thickness)`, `world.draw_polyline(points, c, thickness, closed)` | Lines |
+| `world.draw_texture(tex, pos, sprite_options())` | `SpriteOptions` fields: `src`, `scale`, `rotation`, `origin`, `tint`, `flip_x`, `flip_y`, `blend` |
+| `world.draw_text(text, pos, size, c)` | Built-in font, top-left at `pos` |

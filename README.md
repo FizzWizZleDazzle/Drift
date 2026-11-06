@@ -55,15 +55,15 @@ To use Drift from your own project, pull it in with `FetchContent` and link `dri
 
 ## What You Get
 
-- **Rendering**: batched sprites and shapes, render layers with a HUD layer, multiple cameras (split screen, minimaps), render targets, custom shaders written once in WGSL, pixel-perfect scaling. OpenGL 3.3 on desktop, WebGL2 in the browser, and an optional WebGPU backend for both.
+- **Rendering**: batched sprites and shapes (also as rectangle and circle components), render layers with a HUD layer, multiple cameras (split screen, minimaps), render targets, custom shaders written once in WGSL, pixel-perfect scaling. OpenGL 3.3 on desktop, WebGL2 in the browser, and an optional WebGPU backend for both.
 - **Lighting and effects**: point and spot lights with hard shadows, and one-line post effects such as bloom, CRT, color grading and screen fades.
 - **Physics**: Box2D rigid bodies, colliders, sensors and collision events as ECS components.
 - **Tilemaps**: Tiled and LDtk levels with parallax, animated tiles, autotiling and generated colliders.
 - **Text**: UTF-8 text with wrapping, alignment, outlines and shadows; a built-in font plus TrueType and bitmap fonts.
 - **Audio**: WAV, OGG and MP3, mixer buses, music crossfades and playlists, positional sound.
 - **Sprites and particles**: spritesheet and Aseprite animation, configurable particle emitters, trails.
-- **Gameplay toolkit**: tweens, timers, rebindable input actions for keyboard, mouse and gamepad, save data, A* pathfinding, spatial queries, Y-sorting, random numbers and noise.
-- **Candela scripting**: write a game as a [candela](https://candela.lumenfx.dev) program instead of C++, with the same engine underneath (desktop only).
+- **Gameplay toolkit**: tweens, timers, behavior components (lifetime, oscillation, follow), rebindable input actions for keyboard, mouse and gamepad, save data, A* pathfinding, spatial queries, Y-sorting, random numbers and noise.
+- **Candela scripting**: write a game as a [candela](https://candela.lumenfx.dev) program instead of C++: entities, components and systems in the style of Bevy, with the engine simulating each frame beside the script (desktop only).
 - **Scenes and dev tools**: JSON scenes and prefabs through component reflection, hot reload, and an in-game inspector, performance panel and physics debug view.
 
 ## Examples

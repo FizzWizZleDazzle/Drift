@@ -81,7 +81,7 @@ public:
         while (remaining_.load(std::memory_order_acquire) != 0) {
             auto status = doneCv_.wait_for(lock, std::chrono::seconds(5));
             if (status == std::cv_status::timeout && remaining_.load(std::memory_order_acquire) != 0) {
-                DRIFT_LOG_ERROR("ThreadPool: possible deadlock — remaining=%d, batchGen=%llu, tasks=%d",
+                DRIFT_LOG_ERROR("ThreadPool: possible deadlock: remaining=%d, batchGen=%llu, tasks=%d",
                                 remaining_.load(std::memory_order_acquire),
                                 (unsigned long long)batchGen_.load(std::memory_order_relaxed),
                                 batchTasks_ ? (int)batchTasks_->size() : 0);
@@ -315,18 +315,28 @@ struct App::Impl {
         return false;
     }
 
-    void runSystemsParallel(std::vector<SystemEntry>& systems, App& app) {
-        if (systems.empty()) return;
+    // Runs a phase. With `progress`, starts from and records which systems
+    // have run, so a later call can resume the phase. With `deferMain`,
+    // systems that need the main thread (and systems ordered after them by
+    // a conflict) are left for that later call. Returns true once every
+    // system of the phase has run.
+    bool runSystemsParallel(std::vector<SystemEntry>& systems, App& app,
+                            std::vector<char>* progress = nullptr, bool deferMain = false) {
+        if (systems.empty()) return true;
 
-        // If no thread pool or only 1 thread, fall back to sequential
-        if (!threadPool || threadPool->threadCount() <= 1) {
+        // No thread pool: the same order, one system at a time.
+        if ((!threadPool || threadPool->threadCount() <= 1) && !progress) {
             runSystems(systems, app);
-            return;
+            return true;
         }
+        const bool pooled = threadPool && threadPool->threadCount() > 1;
 
         int n = static_cast<int>(systems.size());
-        std::vector<bool> completed(n, false);
+        std::vector<char> local;
+        std::vector<char>& completed = progress ? *progress : local;
+        if (static_cast<int>(completed.size()) != n) completed.assign(n, 0);
         int completedCount = 0;
+        for (char c : completed) completedCount += c ? 1 : 0;
 
         for (auto& sys : systems) {
             if (sys.mainThread >= 0) continue;
@@ -357,6 +367,9 @@ struct App::Impl {
                     completedCount++;
                     continue;
                 }
+
+                // Left for the main thread.
+                if (deferMain && sys.mainThread == 1) continue;
 
                 bool exclusive = isExclusive(sys);
 
@@ -430,9 +443,11 @@ struct App::Impl {
                 if (blockedByOrder) continue;
 
                 batch.push_back(i);
+                // Without a pool, one system per batch, in order.
+                if (!pooled) break;
             }
 
-            if (batch.empty()) break;  // Safety: prevent infinite loop
+            if (batch.empty()) break;  // the rest is deferred (or nothing can run)
 
             // The main thread runs task 0.
             for (size_t j = 1; j < batch.size(); ++j) {
@@ -490,13 +505,79 @@ struct App::Impl {
                 completedCount++;
             }
         }
+        return completedCount >= n;
+    }
+
+    // ---- Simulation (Update + PostUpdate), resumable ----
+
+    // 0: nothing to run, 1: Update next, 2: PostUpdate next.
+    int simStage = 0;
+    std::vector<char> simProgress;
+    SimulationTiming simTiming;
+
+    // Runs the simulation phases from where they stopped. With deferMain,
+    // stops at the first phase that has to wait for the main thread, so a
+    // later phase never runs before an earlier one finished.
+    void advanceSimulation(App& app, bool deferMain) {
+        while (simStage == 1 || simStage == 2) {
+            auto& systems = simStage == 1 ? updateSystems : postUpdateSystems;
+            uint64_t t0 = SDL_GetPerformanceCounter();
+            bool done = runSystemsParallel(systems, app, &simProgress, deferMain);
+            commands.flush(world);
+            uint64_t us = (SDL_GetPerformanceCounter() - t0) * 1000000 / perfFrequency;
+            (simStage == 1 ? updateUs : postUpdateUs) += us;
+            if (!done) return;
+            simProgress.clear();
+            simStage = simStage == 1 ? 2 : 0;
+        }
+    }
+
+    // The background thread simulateAsync() hands the simulation to.
+    std::thread simThread;
+    std::mutex simMutex;
+    std::condition_variable simCv;
+    bool simRequested = false;   // a simulation is queued or running
+    bool simStop = false;
+    App* simApp = nullptr;
+
+    void simLoop() {
+        std::unique_lock<std::mutex> lock(simMutex);
+        while (true) {
+            simCv.wait(lock, [this] { return simStop || simRequested; });
+            if (simStop) return;
+            lock.unlock();
+            simTiming.start = SDL_GetPerformanceCounter();
+            advanceSimulation(*simApp, true);
+            simTiming.end = SDL_GetPerformanceCounter();
+            lock.lock();
+            simRequested = false;
+            simCv.notify_all();
+        }
+    }
+
+    void waitSimThread() {
+        std::unique_lock<std::mutex> lock(simMutex);
+        simCv.wait(lock, [this] { return !simRequested; });
+    }
+
+    void stopSimThread() {
+        if (!simThread.joinable()) return;
+        {
+            std::lock_guard<std::mutex> lock(simMutex);
+            simStop = true;
+        }
+        simCv.notify_all();
+        simThread.join();
     }
 };
 
 App::App() : impl_(std::make_unique<Impl>()) {}
 
 App::~App() {
-    // Destroy thread pool first (joins threads before any resources are freed)
+    // Stop the simulation thread and the pool first (joins threads before
+    // any resources are freed)
+    impl_->waitSimThread();
+    impl_->stopSimThread();
     impl_->threadPool.reset();
     impl_->threadCommands.clear();
     impl_->tsAllocator.reset();
@@ -823,6 +904,12 @@ bool App::start() {
 }
 
 bool App::beginFrame() {
+    if (!pollFrame()) return false;
+    simulate();
+    return true;
+}
+
+bool App::pollFrame() {
     auto& s = *impl_;
     if (!s.running) return false;
     if (s.frameOpen) endFrame();
@@ -879,25 +966,67 @@ bool App::beginFrame() {
     // State transitions (between event poll and Update phase)
     processStateTransitions();
 
-    // Update phase
-    phaseT0 = SDL_GetPerformanceCounter();
-    s.runSystemsParallel(s.updateSystems, *this);
-    s.commands.flush(s.world);
-    s.updateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
-    // PostUpdate phase
-    phaseT0 = SDL_GetPerformanceCounter();
-    s.runSystemsParallel(s.postUpdateSystems, *this);
-    s.commands.flush(s.world);
-    s.postUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
+    // Update and PostUpdate come next, from simulate() or simulateAsync().
+    s.updateUs = 0;
+    s.postUpdateUs = 0;
+    s.simStage = 1;
+    s.simProgress.clear();
+    s.simTiming = {};
     s.frameOpen = true;
     return true;
 }
 
+void App::simulate() {
+    auto& s = *impl_;
+    if (s.simTiming.async) {
+        finishSimulation();
+        return;
+    }
+    if (s.simStage == 0) return;
+    s.simTiming.start = SDL_GetPerformanceCounter();
+    s.advanceSimulation(*this, false);
+    s.simTiming.end = SDL_GetPerformanceCounter();
+}
+
+void App::simulateAsync() {
+    auto& s = *impl_;
+    if (s.simStage == 0) return;
+#ifdef __EMSCRIPTEN__
+    simulate();
+#else
+    if (s.config.threadCount == 1) {
+        simulate();
+        return;
+    }
+    s.waitSimThread();
+    if (!s.simThread.joinable()) {
+        s.simApp = this;
+        s.simThread = std::thread([&s] { s.simLoop(); });
+    }
+    {
+        std::lock_guard<std::mutex> lock(s.simMutex);
+        s.simTiming.async = true;
+        s.simRequested = true;
+    }
+    s.simCv.notify_all();
+#endif
+}
+
+void App::finishSimulation() {
+    auto& s = *impl_;
+    s.waitSimThread();
+    if (s.simStage == 0) return;
+    uint64_t t0 = SDL_GetPerformanceCounter();
+    s.advanceSimulation(*this, false);
+    s.simTiming.deferredUs += (SDL_GetPerformanceCounter() - t0) * 1000000 / s.perfFrequency;
+}
+
+SimulationTiming App::lastSimulation() const { return impl_->simTiming; }
+
 void App::endFrame() {
     auto& s = *impl_;
     if (!s.frameOpen) return;
+    finishSimulation();
     s.frameOpen = false;
 
     // Extract phase: fill render snapshot (sequential - GPU ops)

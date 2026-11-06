@@ -102,6 +102,8 @@ Components are plain structs attached to entities. They carry data but no behavi
 | `AudioSource.hpp` | `AudioSource`, `AudioListener` | A sound played from an entity, optionally positional, and the entity it is heard from. |
 | `Light2D.hpp` | `PointLight2D`, `SpotLight2D`, `LightOccluder2D` | 2D lights and shadow-casting occluders. Need `LightingPlugin`. |
 | `Text.hpp` | `Text` | A string drawn at the entity's transform: font, size, color, alignment, wrapping, outline, shadow, layer. |
+| `Shape.hpp` | `Shape2D` | A solid or outlined rectangle or circle drawn at the entity. |
+| `Behavior.hpp` | `Lifetime`, `Oscillate`, `Follow` | Despawn after a time, swing back and forth, move toward another entity. |
 
 #### `include/drift/plugins/`: Plugins
 
@@ -136,6 +138,8 @@ Each plugin registers resources and systems in its `build()` method. Most are he
 | `YSortPlugin.hpp` | `YSortPlugin` | Sets `Sprite::zOrder` from y for entities with `YSort`. |
 | `SavePlugin.hpp` | `SavePlugin` | `SaveData` opened on the per-user save directory. Not in `DefaultPlugins`; it needs your game's name. |
 | `ScenePlugin.hpp` | `ScenePlugin` | `SceneResource` for JSON scenes and prefabs. |
+| `BehaviorPlugin.hpp` | `BehaviorPlugin` | `Lifetime`, `Oscillate` and `Follow` systems in PostUpdate. |
+| `ShapePlugin.hpp` | `ShapePlugin` | Draws `Shape2D` entities. |
 | `HotReloadPlugin.hpp` | `HotReloadPlugin` | Reloads textures and scenes when their files change (desktop; in `DefaultPlugins` with `DRIFT_DEV`). |
 
 #### `include/drift/resources/`: Resource types

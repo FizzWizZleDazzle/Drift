@@ -416,6 +416,13 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp)
     target_link_libraries(drift_tests PRIVATE drift)
     add_test(NAME drift_tests COMMAND drift_tests)
+
+    # App-level tests open a window, through SDL's offscreen driver.
+    add_executable(drift_app_tests tests/main.cpp tests/test_app.cpp)
+    target_link_libraries(drift_app_tests PRIVATE drift)
+    add_test(NAME drift_app_tests COMMAND drift_app_tests)
+    set_tests_properties(drift_app_tests PROPERTIES
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy")
 endif()
 
 # ---------- Candela package ----------

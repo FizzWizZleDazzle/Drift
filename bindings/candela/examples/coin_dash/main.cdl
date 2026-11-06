@@ -5,247 +5,276 @@
 //
 //     candela run bindings/candela/examples/coin_dash/main.cdl
 
-import "../../src/main.cdl" { Align, App, Binding, Blend, BodyKind, Color, Ease, Entity, Filter, GamepadAxis, GamepadButton, Key, Save, Sound, TextStyle, Texture, Timer, VAlign, Vec2, body, collider, config, emitter, hud_layer, repeating_timer, rgb, rgba, start, text_style, vec2 };
+import "../../src/main.cdl" { App, Align, Binding, Blend, BodyKind, BoxCollider, CircleCollider, Color, Ease, Entity, Filter, GamepadAxis, GamepadButton, Key, Lifetime, ParticleEmitter, Rectangle, RigidBody, Save, Sound, Sprite, Text, Texture, Timer, Transform, VAlign, Vec2, Velocity, World, app, at, config, hud_layer, repeating_timer, rgb, rgba, tween, vec2 };
 import "std/math" as math;
 import "std/random" as random;
 
+// ---- Components of this game ----
+
+struct Player {
+    speed: float = 320.0,
+}
+
+struct Coin {
+    value: int = 1,
+}
+
+struct Hazard {
+    speed: float = 220.0,
+}
+
+struct ScoreLabel {
+    shown: int,
+}
+
+struct HintLabel {
+    shown: bool,
+}
+
+// ---- Game state, one per game ----
+
 struct Game {
-    player: Entity,
-    hazards: Entity[],
-    coins: Entity[],
     score: int,
     best: int,
     over: bool,
     spawn: Timer,
+    player: Entity,
     coin_tex: Texture,
     ball_tex: Texture,
     pickup: Sound,
     crash: Sound,
     save: Save,
-    score_text: Entity,
-    hint_text: Entity,
+}
+
+/// Where the best score is kept; the default is the per-user save slot.
+struct SaveFile {
+    path: string,
 }
 
 fn main() {
-    let app = start(config("Coin Dash", 960, 540));
-    let g = setup(app, app.open_save("Drift Examples", "Coin Dash", "save"));
-    while app.frame() {
-        update(app, g);
-    }
+    coin_dash(app(config("Coin Dash", 960, 540))).run();
 }
 
-fn setup(app: App, save: Save) -> Game {
-    app.set_clear_color(rgb(18, 20, 32));
-    app.set_gravity(vec2(0.0, 0.0));
+/// Adds the game's systems to an app.
+fn coin_dash(a: App) -> App {
+    return a.startup(setup)
+        .update(play)
+        .update(show_score)
+        .on_sensor<Player, Coin>(pick_up)
+        .on_collision<Player, Hazard>(hit);
+}
 
-    app.bind_axis2d("move",
+fn setup(world: World) {
+    world.set_clear_color(rgb(18, 20, 32));
+    world.set_gravity(vec2(0.0, 0.0));
+
+    let input = world.input();
+    input.bind_axis2d("move",
         Binding::Key(Key::Left), Binding::Key(Key::Right),
         Binding::Key(Key::Up), Binding::Key(Key::Down));
-    app.bind_axis2d("move",
+    input.bind_axis2d("move",
         Binding::Key(Key::A), Binding::Key(Key::D),
         Binding::Key(Key::W), Binding::Key(Key::S));
-    app.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
-    app.bind_action("restart", Binding::Key(Key::R));
-    app.bind_action("restart", Binding::Button(GamepadButton::South));
+    input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+    input.bind_action("restart", Binding::Key(Key::R));
+    input.bind_action("restart", Binding::Button(GamepadButton::South));
 
-    walls(app);
+    arena(world);
 
-    let g = Game {
-        player: app.spawn_rect(vec2(480.0, 270.0), vec2(28.0, 28.0), rgb(90, 170, 255)),
-        hazards: [Entity { id: 0 }],
-        coins: [Entity { id: 0 }],
+    let player = world.spawn()
+        .insert(at(480.0, 270.0))
+        .insert(Rectangle { size: vec2(28.0, 28.0), color: rgb(90, 170, 255), .. })
+        .insert(RigidBody { kind: BodyKind::Dynamic, fixed_rotation: true, .. })
+        .insert(BoxCollider { half_size: vec2(14.0, 14.0), .. })
+        .insert(Velocity { .. })
+        .insert(Player { .. })
+        .id();
+
+    world.spawn()
+        .insert(at(20.0, 14.0))
+        .insert(Text { value: "", size: 28.0, layer: hud_layer(), .. })
+        .insert(ScoreLabel { shown: -1 });
+    world.spawn()
+        .insert(at(480.0, 270.0))
+        .insert(Text { value: "Hit!  Press R to play again", size: 32.0, align: Align::Center,
+                       valign: VAlign::Middle, outline: 2.0, layer: hud_layer(), visible: false, .. })
+        .insert(HintLabel { shown: false });
+
+    let save = Save { id: 0 };
+    if world.has_resource<SaveFile>() {
+        save = world.open_save_file(world.resource<SaveFile>().path);
+    } else {
+        save = world.open_save("Drift Examples", "Coin Dash", "save");
+    }
+    let game = Game {
         score: 0,
-        best: 0,
+        best: save.get_int("best", 0),
         over: false,
         spawn: repeating_timer(4.0),
-        coin_tex: disc(app, 24, rgb(255, 210, 60)),
-        ball_tex: disc(app, 32, rgb(240, 80, 90)),
-        pickup: tone(app, 880.0, 0.12),
-        crash: tone(app, 110.0, 0.35),
+        player: player,
+        coin_tex: disc(world, 24, rgb(255, 210, 60)),
+        ball_tex: disc(world, 32, rgb(240, 80, 90)),
+        pickup: tone(world, 880.0, 0.12),
+        crash: tone(world, 110.0, 0.35),
         save: save,
-        score_text: app.spawn_text("", vec2(20.0, 14.0), 28.0, rgb(255, 255, 255)),
-        hint_text: app.spawn_text("", vec2(480.0, 270.0), 32.0, rgb(255, 255, 255)),
     };
-    g.hazards.remove(0);
-    g.coins.remove(0);
-    g.best = g.save.get_int("best", 0);
-    g.score_text.set_text_layer(hud_layer());
-    g.hint_text.set_text_layer(hud_layer());
-    g.hint_text.set_text_style(app.default_font(), centered(32.0));
-
-    g.player.add_body(body(BodyKind::Dynamic));
-    g.player.add_box_collider(vec2(14.0, 14.0), collider());
-    g.player.set_name("player");
-
-    reset(app, g);
-    return g;
+    world.insert_resource(game);
+    reset(world, game);
 }
 
-// Everything a frame does after the engine has run its systems.
-fn update(app: App, g: Game) {
-    if app.key_pressed(Key::Escape) {
-        app.quit();
+// Moves the player, spawns hazards, restarts after a hit.
+fn play(world: World, dt: float) {
+    let input = world.input();
+    if input.key_pressed(Key::Escape) {
+        world.quit();
     }
-    if g.over {
-        if app.action_pressed("restart") {
-            reset(app, g);
+    let game = world.resource<Game>();
+    if game.over {
+        if input.action_pressed("restart") {
+            reset(world, game);
         }
-    } else {
-        play(app, g, app.dt());
-    }
-    g.score_text.set_text("Score " + string(g.score) + "    Best " + string(g.best));
-    draw_arena(app);
-}
-
-// One frame of play: move, collect, collide, spawn.
-fn play(app: App, g: Game, dt: float) {
-    let dir = app.axis2d("move");
-    g.player.set_velocity(dir.mul(320.0));
-
-    for ev in app.sensor_entered() {
-        if ev.visitor.equals(g.player) {
-            collect(app, g, ev.sensor);
-        }
-    }
-    for c in app.collisions() {
-        if c.involves(g.player) && c.other(g.player).has("CircleCollider2D") {
-            game_over(app, g);
-            return;
-        }
-    }
-    if g.spawn.tick(dt) > 0 {
-        spawn_hazard(app, g);
-    }
-}
-
-fn collect(app: App, g: Game, coin: Entity) {
-    if !coin.alive() {
         return;
     }
-    g.score += 1;
-    let pos = coin.position();
-    let spark = emitter();
-    spark.color_start = rgb(255, 230, 120);
-    spark.color_end = rgba(255, 120, 40, 0);
-    spark.speed_min = 60.0;
-    spark.speed_max = 180.0;
-    spark.lifetime_min = 0.2;
-    spark.lifetime_max = 0.5;
-    spark.size_start = 5.0;
-    spark.blend = Blend::Additive;
-    app.burst(pos, spark, 24);
-    g.pickup.play();
-    coin.despawn();
-    spawn_coin(app, g);
+    let dir = input.axis2d("move");
+    for r in world.query2<Player, Velocity>() {
+        r.b.linear = dir.mul(r.a.speed);
+    }
+    if game.spawn.tick(dt) > 0 {
+        spawn_hazard(world, game);
+    }
 }
 
-fn game_over(app: App, g: Game) {
-    g.over = true;
-    g.crash.play();
-    g.player.set_velocity(vec2(0.0, 0.0));
-    app.flash(rgb(255, 60, 60), 0.4);
-    if g.score > g.best {
-        g.best = g.score;
-        g.save.set_int("best", g.best);
-        g.save.flush();
+fn show_score(world: World, dt: float) {
+    let game = world.resource<Game>();
+    let value = game.score * 1000 + game.best;
+    for r in world.query2<ScoreLabel, Text>() {
+        if r.a.shown != value {
+            r.a.shown = value;
+            r.b.value = "Score " + string(game.score) + "    Best " + string(game.best);
+        }
     }
-    g.hint_text.set_text("Hit!  Press R to play again");
-    g.hint_text.set_text_visible(true);
+    for r in world.query2<HintLabel, Text>() {
+        if r.a.shown != game.over {
+            r.a.shown = game.over;
+            r.b.visible = game.over;
+        }
+    }
 }
 
-fn reset(app: App, g: Game) {
-    for h in g.hazards {
-        h.despawn();
+fn pick_up(world: World, player: Entity, coin: Entity) {
+    let game = world.resource<Game>();
+    if game.over {
+        return;
     }
-    for c in g.coins {
-        c.despawn();
+    let pos = world.get<Transform>(coin).position;
+    game.score += world.get<Coin>(coin).value;
+    world.burst(pos, ParticleEmitter {
+        color_start: rgb(255, 230, 120), color_end: rgba(255, 120, 40, 0),
+        speed_min: 60.0, speed_max: 180.0, lifetime_min: 0.2, lifetime_max: 0.5,
+        size_start: 5.0, blend: Blend::Additive, ..
+    }, 24);
+    // A "+1" that floats up and goes away by itself.
+    world.spawn()
+        .insert(Transform { position: pos.add(vec2(0.0, -16.0)), .. })
+        .insert(Text { value: "+1", size: 20.0, color: rgb(255, 230, 120), align: Align::Center, .. })
+        .insert(Velocity { linear: vec2(0.0, -60.0), .. })
+        .insert(Lifetime { seconds: 0.6 });
+    game.pickup.play();
+    world.despawn(coin);
+    spawn_coin(world, game);
+}
+
+fn hit(world: World, player: Entity, hazard: Entity) {
+    let game = world.resource<Game>();
+    if game.over {
+        return;
     }
-    g.hazards = [Entity { id: 0 }];
-    g.hazards.remove(0);
-    g.coins = [Entity { id: 0 }];
-    g.coins.remove(0);
-    g.player.set_position(vec2(480.0, 270.0));
-    g.player.set_velocity(vec2(0.0, 0.0));
-    g.score = 0;
-    g.over = false;
-    g.spawn.reset();
-    g.hint_text.set_text_visible(false);
+    game.over = true;
+    game.crash.play();
+    world.get<Velocity>(player).linear = vec2(0.0, 0.0);
+    world.flash(rgb(255, 60, 60), 0.4);
+    if game.score > game.best {
+        game.best = game.score;
+        game.save.set_int("best", game.best);
+        game.save.flush();
+    }
+}
+
+fn reset(world: World, game: Game) {
+    for e in world.entities<Hazard>() {
+        world.despawn(e);
+    }
+    for e in world.entities<Coin>() {
+        world.despawn(e);
+    }
+    world.get<Transform>(game.player).position = vec2(480.0, 270.0);
+    world.get<Velocity>(game.player).linear = vec2(0.0, 0.0);
+    game.score = 0;
+    game.over = false;
+    game.spawn.reset();
     for i in range(3) {
-        spawn_coin(app, g);
+        spawn_coin(world, game);
     }
-    spawn_hazard(app, g);
+    spawn_hazard(world, game);
 }
 
-fn spawn_coin(app: App, g: Game) {
-    let pos = vec2(random::float_range(80.0, 880.0), random::float_range(90.0, 460.0));
-    let coin = app.spawn_sprite(g.coin_tex, pos);
-    let sensor = collider();
-    sensor.sensor = true;
-    coin.add_circle_collider(12.0, sensor);
-    app.tween(coin).scale_to(vec2(1.25, 1.25), 0.5, Ease::InOutSine).yoyo(-1).start();
-    g.coins.push(coin);
+fn spawn_coin(world: World, game: Game) {
+    world.spawn()
+        .insert(at(random::float_range(80.0, 880.0), random::float_range(90.0, 460.0)))
+        .insert(Sprite { texture: game.coin_tex, .. })
+        .insert(CircleCollider { radius: 12.0, sensor: true, .. })
+        .insert(tween().scale_to(vec2(1.25, 1.25), 0.5, Ease::InOutSine).yoyo(-1))
+        .insert(Coin { .. });
 }
 
-fn spawn_hazard(app: App, g: Game) {
+fn spawn_hazard(world: World, game: Game) {
     let pos = vec2(random::float_range(80.0, 880.0), 90.0);
-    if g.player.position().distance(pos) < 160.0 {
+    if world.get<Transform>(game.player).position.distance(pos) < 160.0 {
         pos = vec2(960.0 - pos.x, 460.0);
     }
-    let ball = app.spawn_sprite(g.ball_tex, pos);
-    ball.add_body(body(BodyKind::Dynamic));
-    let c = collider();
-    c.restitution = 1.0;
-    c.friction = 0.0;
-    ball.add_circle_collider(16.0, c);
     let angle = random::float_range(0.0, 6.28);
-    ball.set_velocity(vec2(math::cos(angle), math::sin(angle)).mul(220.0));
-    g.hazards.push(ball);
+    let speed = Hazard { .. }.speed;
+    world.spawn()
+        .insert(Transform { position: pos, .. })
+        .insert(Sprite { texture: game.ball_tex, .. })
+        .insert(RigidBody { .. })
+        .insert(CircleCollider { radius: 16.0, restitution: 1.0, friction: 0.0, .. })
+        .insert(Velocity { linear: vec2(math::cos(angle), math::sin(angle)).mul(speed), .. })
+        .insert(Hazard { .. });
 }
 
-// Static walls around the arena.
-fn walls(app: App) {
+// Static walls around the arena and a faint grid.
+fn arena(world: World) {
     let color = rgb(60, 66, 96);
-    wall(app, vec2(480.0, 62.0), vec2(960.0, 12.0), color);
-    wall(app, vec2(480.0, 534.0), vec2(960.0, 12.0), color);
-    wall(app, vec2(6.0, 298.0), vec2(12.0, 480.0), color);
-    wall(app, vec2(954.0, 298.0), vec2(12.0, 480.0), color);
-}
-
-fn wall(app: App, pos: Vec2, size: Vec2, c: Color) {
-    let w = app.spawn_rect(pos, size, c);
-    let col = collider();
-    col.friction = 0.0;
-    w.add_box_collider(size.mul(0.5), col);
-}
-
-fn draw_arena(app: App) {
-    app.set_z(-10.0);
+    wall(world, vec2(480.0, 62.0), vec2(960.0, 12.0), color);
+    wall(world, vec2(480.0, 534.0), vec2(960.0, 12.0), color);
+    wall(world, vec2(6.0, 298.0), vec2(12.0, 480.0), color);
+    wall(world, vec2(954.0, 298.0), vec2(12.0, 480.0), color);
     let y = 80.0;
     while y < 530.0 {
-        app.draw_line(vec2(12.0, y), vec2(948.0, y), rgba(255, 255, 255, 12), 1.0);
+        world.spawn()
+            .insert(at(480.0, y))
+            .insert(Rectangle { size: vec2(936.0, 1.0), color: rgba(255, 255, 255, 12), z: -10.0, .. });
         y += 40.0;
     }
 }
 
-fn centered(size: float) -> TextStyle {
-    let s = text_style(size, rgb(255, 255, 255));
-    s.align = Align::Center;
-    s.valign = VAlign::Middle;
-    s.outline = 2.0;
-    return s;
+fn wall(world: World, pos: Vec2, size: Vec2, c: Color) {
+    world.spawn()
+        .insert(Transform { position: pos, .. })
+        .insert(Rectangle { size: size, color: c, .. })
+        .insert(BoxCollider { half_size: size.mul(0.5), friction: 0.0, .. });
 }
 
 // A filled circle texture with a soft edge.
-fn disc(app: App, size: int, c: Color) -> Texture {
-    let pixels = [c];
-    pixels.remove(0);
+fn disc(world: World, size: int, c: Color) -> Texture {
+    let pixels: Color[] = [];
     let r = float(size) * 0.5;
     for y in range(size) {
         for x in range(size) {
             let dx = float(x) + 0.5 - r;
             let dy = float(y) + 0.5 - r;
-            let d = (dx * dx + dy * dy).sqrt();
-            let a = r - d;
+            let a = r - (dx * dx + dy * dy).sqrt();
             if a > 1.0 {
                 a = 1.0;
             }
@@ -255,17 +284,16 @@ fn disc(app: App, size: int, c: Color) -> Texture {
             pixels.push(c.alpha(a));
         }
     }
-    let tex = app.create_texture(size, size, pixels);
+    let tex = world.create_texture(size, size, pixels);
     tex.set_filter(Filter::Linear);
     return tex;
 }
 
 // A short sine blip that falls in pitch.
-fn tone(app: App, freq: float, seconds: float) -> Sound {
+fn tone(world: World, freq: float, seconds: float) -> Sound {
     let rate = 22050;
     let n = int(seconds * float(rate));
-    let samples = [0.0];
-    samples.remove(0);
+    let samples: float[] = [];
     let phase = 0.0;
     for i in range(n) {
         let t = float(i) / float(n);
@@ -273,5 +301,5 @@ fn tone(app: App, freq: float, seconds: float) -> Sound {
         phase += 6.2831853 * f / float(rate);
         samples.push(math::sin(phase) * 0.4 * (1.0 - t));
     }
-    return app.create_sound(samples, rate);
+    return world.create_sound(samples, rate);
 }
