@@ -147,7 +147,7 @@ TextureHandle tex = assets->load<Texture>("assets/player.png");
 
 - `load<Texture>("path.png")` -- loads an image as a GPU texture, returns `TextureHandle`
 - `load<Sound>("path.wav")` -- loads an audio file, returns `SoundHandle`
-- `load<Font>("path.ttf", 24)` -- loads a font at a given pixel size, returns `FontHandle`
+- `load<Font>("path.ttf", 24)` -- loads a font (TrueType, OpenType, or BMFont `.fnt`) with a default pixel size, returns `FontHandle`. Text also works with no font loaded: an empty `FontHandle` draws with the built-in font.
 
 Asset paths are relative to the working directory. Place your assets in an `assets/` folder next to the executable.
 

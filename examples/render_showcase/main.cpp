@@ -241,7 +241,7 @@ static void drawHud(ResMut<RendererResource> r, ResMut<FontResource> fonts, Res<
         char buf[160];
         std::snprintf(buf, sizeof(buf), "backend: %s\nfps: %.0f  draw calls: %d\n1-4 scale mode, P post, L lights, F12 shot",
                       r->backendName(), time->delta > 0 ? 1.f / time->delta : 0.f, r->drawCalls());
-        fonts->drawText(sc->font, buf, {32.f, 30.f}, Color(240, 230, 210));
+        fonts->drawText(sc->font, buf, {32.f, 30.f}, {.color = Color(240, 230, 210), .zOrder = 1.f});
     }
 
     // Minimap texture in the corner, framed by a nine-slice panel.

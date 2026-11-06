@@ -23,6 +23,7 @@
 
 - [Transform](components/transform.md)
 - [Sprite](components/sprite.md)
+- [Text](components/text.md)
 - [Camera](components/camera.md)
 - [Physics](components/physics.md)
 - [Particles](components/particles.md)
@@ -56,6 +57,7 @@
 - [Fireball](examples/fireball.md)
 - [Particle Storm](examples/particle-storm.md)
 - [Render Showcase](examples/render-showcase.md)
+- [Text](examples/text.md)
 
 # Reference
 

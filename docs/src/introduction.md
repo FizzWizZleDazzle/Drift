@@ -9,6 +9,7 @@
 - **2D renderer**: batched sprites and shapes, render layers, multiple cameras, render targets, custom shaders and post effects, pixel-perfect scaling
 - **Box2D physics** — Full 2D rigid body physics with collision events and sensors
 - **Particle system** — Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
+- **Text**: UTF-8 text with kerning, alignment, wrapping, outlines and shadows; a built-in font, TrueType/OpenType and BMFont pixel fonts, and a `Text` component
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** — Tiled JSON map loading and rendering
 - **ImGui integration** — Built-in debug UI via Dear ImGui
@@ -52,7 +53,7 @@ int main() {
 | Rendering | OpenGL 3.3 |
 | Physics | [Box2D](https://box2d.org) v3.0 |
 | Debug UI | [Dear ImGui](https://github.com/ocornut/imgui) |
-| Fonts | stb_truetype |
+| Fonts | stb_truetype; built-in [Noto Sans](https://github.com/notofonts/latin-greek-cyrillic) subset (SIL OFL 1.1) |
 | Images | stb_image |
 | Spritesheets | cute_aseprite |
 | Tilemaps | nlohmann/json (Tiled format) |

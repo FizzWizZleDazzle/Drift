@@ -37,7 +37,7 @@ void setup(ResMut<AssetServer> assets) {
 }
 ```
 
-The `Font` type tag accepts an additional `int sizePx` argument after the path.
+The `Font` type tag accepts an additional `int sizePx` argument after the path. It loads TrueType/OpenType files and BMFont `.fnt` files; for a bitmap font, `0` means the size the font was made at. See [Fonts](fonts.md).
 
 ## Named Methods
 

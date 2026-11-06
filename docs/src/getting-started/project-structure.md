@@ -81,6 +81,7 @@ Components are plain structs attached to entities. They carry data but no behavi
 | `SpriteAnimator.hpp` | `SpriteAnimator` | Sprite sheet animation with `AnimationClip` definitions. |
 | `CameraController.hpp` | `CameraShake`, `CameraFollow` | Camera shake (trigger with magnitude, auto-decay) and smooth follow (target entity, smoothing, dead zone). |
 | `TrailRenderer.hpp` | `TrailRenderer` | Trail rendering with width, lifetime, color lerp, and minimum distance. |
+| `Text.hpp` | `Text` | A string drawn at the entity's transform: font, size, color, alignment, wrapping, outline, shadow, layer. |
 
 #### `include/drift/plugins/` -- Plugins
 
@@ -94,7 +95,7 @@ Plugins are header-only. Each one registers resources and systems in its `build(
 | `AudioPlugin.hpp` | `AudioPlugin` | `AudioResource` for sound playback. |
 | `PhysicsPlugin.hpp` | `PhysicsPlugin` | `PhysicsResource`, physics step system, body sync, collision events. |
 | `SpritePlugin.hpp` | `SpritePlugin` | `SpriteResource`, sprite rendering extraction. |
-| `FontPlugin.hpp` | `FontPlugin` | `FontResource` for text rendering. |
+| `FontPlugin.hpp` | `FontPlugin` | `FontResource`, the `Text` component, and the system that draws `Text` entities. |
 | `ParticlePlugin.hpp` | `ParticlePlugin` | `ParticleSystemResource`, ECS-based particle update and rendering. |
 | `TilemapPlugin.hpp` | `TilemapPlugin` | `TilemapResource` for Tiled JSON map loading and rendering. |
 | `UIPlugin.hpp` | `UIPlugin` | `UIResource` for ImGui-based UI. |
@@ -115,7 +116,7 @@ Resources are singleton objects stored in `App`. Systems access them through `Re
 | `AudioResource.hpp` | `AudioResource` | Sound playback and mixing. |
 | `PhysicsResource.hpp` | `PhysicsResource` | Box2D world wrapper, body creation, raycasting, contact queries. |
 | `SpriteResource.hpp` | `SpriteResource` | Sprite sheet and texture management internals. |
-| `FontResource.hpp` | `FontResource` | Font atlas and text rendering internals. |
+| `FontResource.hpp` | `FontResource` | Font loading (TrueType, OpenType, BMFont, built-in font), text drawing and measuring. |
 | `ParticleResource.hpp` | `ParticleResource` | Legacy handle-based particle API. |
 | `ParticleSystemResource.hpp` | `ParticleSystemResource` | ECS-based particle system manager. |
 | `TilemapResource.hpp` | `TilemapResource` | Tiled map loader and renderer. |
@@ -139,7 +140,7 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 - `src/audio/` -- `AudioResource.cpp`
 - `src/physics/` -- `PhysicsResource.cpp`
 - `src/sprite/` -- `SpriteResource.cpp`
-- `src/font/` -- `FontResource.cpp`
+- `src/font/` -- `FontResource.cpp`, `GlyphAtlas.cpp` (glyph texture pages), `BMFont.cpp` (`.fnt` parser), `default/` (the built-in font and its license)
 - `src/particles/` -- `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
 - `src/tilemap/` -- `TilemapResource.cpp`
 - `src/ui/` -- `UIResource.cpp`
@@ -257,7 +258,7 @@ Place your assets in an `assets/` directory at the same level as the executable 
 assets/
   sprites/       <-- PNG images for sprites and sprite sheets
   sounds/        <-- WAV files for sound effects
-  fonts/         <-- TTF/OTF fonts
+  fonts/         <-- TTF/OTF fonts, BMFont .fnt files with their page PNGs
   maps/          <-- Tiled JSON map files
   particles/     <-- Particle texture assets
 ```
