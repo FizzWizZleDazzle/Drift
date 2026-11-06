@@ -32,9 +32,14 @@ struct Config {
     bool fullscreen = false;
     bool vsync      = true;
     bool resizable  = true;
+    bool highDpi    = true;
+    ScaleMode scaleMode = ScaleMode::Letterbox;
+    std::string renderer;     // graphics backend; empty = first available
     int32_t threadCount = 0;  // 0 = auto, 1 = sequential (no threading)
 };
 ```
+
+`width` and `height` are the logical resolution the game draws in; `scaleMode` decides how it fits the window. See [Configuration](../reference/configuration.md) for every field.
 
 The `threadCount` field controls the parallel scheduler. `0` uses `hardware_concurrency - 1` threads (capped at 7). `1` disables threading and runs all systems sequentially on the main thread.
 
