@@ -1,6 +1,6 @@
 # Math Types
 
-All math types are defined in `include/drift/Types.hpp` and live in the `drift` namespace.
+All math types are defined in `include/drift/Types.hpp` and live in the `drift` namespace. Helper functions (interpolation, angles, intersection tests, random numbers, noise) are in [Vector Helpers and Intersections](utilities.md) and [Random Numbers and Noise](random-and-noise.md).
 
 ## Vec2
 

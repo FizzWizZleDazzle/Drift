@@ -15,6 +15,7 @@
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** — Tiled JSON map loading and rendering
 - **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
+- **Gameplay toolkit**: tweens and easing, timers, rebindable input actions, save data, grid A* pathfinding, spatial hash queries, Y-sorting, seeded random numbers and noise
 - **ImGui integration** — Built-in debug UI via Dear ImGui
 - **Parallel scheduler** — Automatic multi-threaded system dispatch based on dependency analysis
 

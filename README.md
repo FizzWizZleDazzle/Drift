@@ -16,6 +16,7 @@ A 2D game engine written in C++20, built on a Bevy-inspired Entity Component Sys
 - **Sprite animation** -- Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** -- Tiled JSON map loading and rendering
 - **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
+- **Gameplay toolkit**: tweens and easing, timers, rebindable input actions, save data, grid A* pathfinding, spatial hash queries, Y-sorting, seeded random numbers and noise
 - **Parallel scheduler** -- Automatic multi-threaded system dispatch based on dependency analysis
 - **ImGui integration** -- Built-in developer overlay via Dear ImGui
 
@@ -106,8 +107,9 @@ target_link_libraries(my_game PRIVATE drift)
 | `audio` | Spatial sound sources you drag around, bus volume controls, music crossfades and playlists |
 | `lighting` | Colored lights, spot light, shadows from walls and colliders, every library post effect |
 | `text` | Built-in font, alignment, wrapping, UTF-8, outline and shadow, bitmap fonts, Text entities |
+| `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, Y-sort, save data |
 
-Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`.
+Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`. Run the unit tests with `ctest --test-dir build`.
 
 ## Technology
 

@@ -80,7 +80,7 @@ Drift exposes several CMake options you can toggle at configure time:
 | `DRIFT_DEV` | `ON` | Enables the developer overlay and debug tools (ImGui-based). Defines the `DRIFT_DEV=1` preprocessor macro. Turn this off for release/shipping builds. |
 | `DRIFT_BUILD_EXAMPLES` | `ON` | Builds the example programs in the `examples/` directory. Turn this off if you only want the engine library. |
 | `DRIFT_BACKEND_GL` | `ON` | Builds the OpenGL 3.3 / WebGL2 renderer backend. |
-| `DRIFT_BUILD_TESTS` | `ON` when Drift is the top-level project | Builds the engine tests. Run them with `ctest --test-dir build`. |
+| `DRIFT_BUILD_TESTS` | `ON` when Drift is the top-level project | Builds the engine tests in `tests/`. Run them with `ctest --test-dir build`. Off when Drift is pulled in with `FetchContent`. |
 
 To change an option, pass it with `-D` during the configure step:
 
@@ -105,6 +105,14 @@ cd examples\hello_sprites
 ```
 
 You should see a window with a player sprite you can move with WASD or arrow keys, surrounded by orbiting sprites. If you see this, your build is working correctly.
+
+To run the unit tests:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+The tests need no window. `./build/drift_tests <name>` runs only the tests whose name contains `<name>`.
 
 ## Using Drift in your own project
 
