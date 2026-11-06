@@ -56,7 +56,7 @@ static EmitterConfig makeTrailConfig(TextureHandle tex) {
     c.sizeEnd = {1.f, 2.f};
     c.colorStart = {1.f, 0.9f, 0.2f, 1.f};  // bright yellow
     c.colorEnd = {1.f, 0.3f, 0.0f, 0.f};     // orange, fade out
-    c.blendMode = ParticleBlendMode::Additive;
+    c.blendMode = BlendMode::Additive;
     c.drag = 2.f;
     c.zOrder = 7.f;
     c.velocityInheritance = 1.f;
@@ -78,7 +78,7 @@ static EmitterConfig makeExplosionConfig(TextureHandle tex) {
     c.colorEnd = {0.8f, 0.2f, 0.0f, 0.f};     // deep orange, fade
     c.gravity = {0.f, 300.f};
     c.drag = 0.5f;
-    c.blendMode = ParticleBlendMode::Additive;
+    c.blendMode = BlendMode::Additive;
     c.duration = 0.1f;          // spawn for ~100ms then stop
     c.looping = false;
     c.zOrder = 5.f;

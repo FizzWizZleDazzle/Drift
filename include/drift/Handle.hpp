@@ -37,6 +37,8 @@ struct FontTag {};
 struct TilemapTag {};
 struct EmitterTag {};
 struct CameraTag {};
+struct ShaderTag {};
+struct MaterialTag {};
 
 using TextureHandle      = Handle<TextureTag>;
 using SpritesheetHandle  = Handle<SpritesheetTag>;
@@ -47,5 +49,7 @@ using FontHandle         = Handle<FontTag>;
 using TilemapHandle      = Handle<TilemapTag>;
 using EmitterHandle      = Handle<EmitterTag>;
 using CameraHandle       = Handle<CameraTag>;
+using ShaderHandle       = Handle<ShaderTag>;
+using MaterialHandle     = Handle<MaterialTag>;
 
 } // namespace drift

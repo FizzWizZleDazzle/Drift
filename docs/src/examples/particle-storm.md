@@ -40,10 +40,10 @@ Most emitter configs use additive blending for a glowing effect. The grid patter
 
 ```cpp
 // Additive (most patterns)
-c.blendMode = ParticleBlendMode::Additive;
+c.blendMode = BlendMode::Additive;
 
 // Alpha (grid pattern)
-c.blendMode = ParticleBlendMode::Alpha;
+c.blendMode = BlendMode::Alpha;
 ```
 
 ## Color Cycling
@@ -122,7 +122,7 @@ for (auto& [id, emState] : particles->emitters) {
 | Concept | Where |
 |---------|-------|
 | `EmissionShape` variants | Point, Box, Line, Circle |
-| `ParticleBlendMode::Additive` vs `Alpha` | Per-pattern blend modes |
+| `BlendMode::Additive` vs `Alpha` | Per-pattern blend modes |
 | `ParticleSpace::Local` | Vortex pattern |
 | `Changed<T>` filter | Concurrent change detection |
 | `With<T>` filter | Orbiter-only queries |

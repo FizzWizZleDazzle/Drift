@@ -321,7 +321,6 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
         Rect srcRect = config.srcRect;
         float z = config.zOrder;
         bool isLocal = (config.space == ParticleSpace::Local);
-        bool isAdditive = (config.blendMode == ParticleBlendMode::Additive);
 
         for (int32_t i = 0; i < pool.count; ++i) {
             float t = pool.lifetimes[i] > 0.f ? (pool.ages[i] / pool.lifetimes[i]) : 1.f;
@@ -345,7 +344,7 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
             renderer->drawSprite(tex, pos, srcRect,
                                  {size, size}, pool.rotations[i], origin,
                                  tint, Flip::None, z,
-                                 isAdditive);
+                                 config.blendMode);
         }
     });
 }

@@ -41,7 +41,7 @@ c.sizeStart = {6.f, 10.f};
 c.sizeEnd = {1.f, 2.f};
 c.colorStart = {1.f, 0.9f, 0.2f, 1.f};   // bright yellow
 c.colorEnd = {1.f, 0.3f, 0.0f, 0.f};      // orange, fade to invisible
-c.blendMode = ParticleBlendMode::Additive;
+c.blendMode = BlendMode::Additive;
 c.drag = 2.f;
 c.velocityInheritance = 1.f;
 ```
@@ -108,7 +108,7 @@ fireballs.iterWithEntity([&](EntityId id, Transform2D& t, Fireball& fb) {
 | `ParticleEmitter` as ECS component | Attached directly to fireball entity |
 | `EmitterConfig` customization | Trail and explosion configurations |
 | `velocityInheritance` | Particles inherit emitter movement |
-| `ParticleBlendMode::Additive` | Glowing fire effect |
+| `BlendMode::Additive` | Glowing fire effect |
 | Particle `gravity` and `drag` | Physics-like particle behavior |
 | `duration` + `looping = false` | One-shot burst emitters |
 | Particle `boundsMin` / `boundsMax` | Spatial particle culling |

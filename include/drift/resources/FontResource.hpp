@@ -14,6 +14,7 @@ public:
     ~FontResource() override;
 
     DRIFT_RESOURCE(FontResource)
+    bool mainThreadOnly() const override { return true; }
 
     FontHandle loadFont(const char* path, float sizePx);
     void destroyFont(FontHandle font);

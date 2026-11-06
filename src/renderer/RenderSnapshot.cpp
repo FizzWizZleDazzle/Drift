@@ -1,20 +1,33 @@
 #include <drift/RenderSnapshot.hpp>
 #include <drift/World.hpp>
+#include <drift/components/GlobalTransform.hpp>
 
+#include <algorithm>
 #include <string>
 
 namespace drift {
 
+namespace {
+
+// Entities with a GlobalTransform2D (children in a hierarchy) render at
+// their composed world transform; others use Transform2D directly.
+Transform2D worldTransform(const Transform2D* local, const GlobalTransform2D* global, int32_t i) {
+    if (global) return {global[i].position, global[i].rotation, global[i].scale};
+    return local[i];
+}
+
+} // namespace
+
 void RenderSnapshot::extract(World& world, const ComponentRegistry& registry) {
-    // Build query expressions from registry instead of hardcoded strings
     ComponentId transformId = registry.get<Transform2D>();
     ComponentId spriteId    = registry.get<Sprite>();
     ComponentId cameraId    = registry.get<Camera>();
+    ComponentId globalId    = registry.getByName("GlobalTransform2D");
 
-    std::string spriteExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(spriteId);
-    std::string cameraExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(cameraId);
+    std::string optionalGlobal = globalId ? ", ?#" + std::to_string(globalId) : "";
+    std::string spriteExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(spriteId) + optionalGlobal;
+    std::string cameraExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(cameraId) + optionalGlobal;
 
-    // Extract sprites
     auto& buf = writeSpriteBuffer();
     buf.clear();
 
@@ -24,16 +37,17 @@ void RenderSnapshot::extract(World& world, const ComponentRegistry& registry) {
             world.queryField(&spriteIter, 0, sizeof(Transform2D)));
         auto* sprites = static_cast<Sprite*>(
             world.queryField(&spriteIter, 1, sizeof(Sprite)));
+        auto* globals = globalId ? static_cast<GlobalTransform2D*>(
+            world.queryFieldOptional(&spriteIter, 2, sizeof(GlobalTransform2D))) : nullptr;
 
         for (int32_t i = 0; i < spriteIter.count; ++i) {
-            buf.push_back({transforms[i], sprites[i]});
+            buf.push_back({worldTransform(transforms, globals, i), sprites[i]});
         }
     }
     world.queryFini(&spriteIter);
 
-    // Extract active camera
-    auto& cam = writeCameraBuffer();
-    cam = {};
+    auto& cams = writeCameraBuffer();
+    cams.clear();
 
     QueryIter camIter = world.queryIter(cameraExpr.c_str());
     while (world.queryNext(&camIter)) {
@@ -41,26 +55,26 @@ void RenderSnapshot::extract(World& world, const ComponentRegistry& registry) {
             world.queryField(&camIter, 0, sizeof(Transform2D)));
         auto* cameras = static_cast<Camera*>(
             world.queryField(&camIter, 1, sizeof(Camera)));
+        auto* globals = globalId ? static_cast<GlobalTransform2D*>(
+            world.queryFieldOptional(&camIter, 2, sizeof(GlobalTransform2D))) : nullptr;
 
         for (int32_t i = 0; i < camIter.count; ++i) {
-            if (cameras[i].active) {
-                cam.position = transforms[i].position;
-                cam.zoom = cameras[i].zoom;
-                cam.rotation = cameras[i].rotation;
-                cam.found = true;
-                break;
-            }
+            if (!cameras[i].active) continue;
+            cams.push_back({worldTransform(transforms, globals, i).position, cameras[i]});
         }
-        if (cam.found) break;
     }
     world.queryFini(&camIter);
+
+    std::stable_sort(cams.begin(), cams.end(), [](const CameraSnapshot& a, const CameraSnapshot& b) {
+        return a.camera.order < b.camera.order;
+    });
 }
 
 const std::vector<SpriteEntry>& RenderSnapshot::sprites() const {
     return readSpriteBuffer();
 }
 
-const CameraSnapshot& RenderSnapshot::camera() const {
+const std::vector<CameraSnapshot>& RenderSnapshot::cameras() const {
     return readCameraBuffer();
 }
 

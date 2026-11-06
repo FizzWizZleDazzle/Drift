@@ -18,6 +18,8 @@ union SDL_Event;
 
 namespace drift {
 
+namespace gfx { class Device; }
+
 class Commands;
 
 // EventHandler: receives raw SDL events (for InputResource, UIResource, etc.)
@@ -69,7 +71,7 @@ public:
 
     // Internal: get window/GPU device for subsystems
     void* sdlWindow() const;
-    void* gpuDevice() const;
+    gfx::Device* graphicsDevice() const;
 
     // Template API
     template<typename T, typename... Args>
@@ -243,6 +245,8 @@ public:
     void setSystemSet(Phase phase, size_t index, SystemSetId setId);
 
 private:
+    bool frame();
+    bool createWindowAndDevice();
     void addResourceImpl(std::type_index type, Resource* res);
     Resource* getResourceImpl(std::type_index type) const;
     void registerSystemFn(const char* name, Phase phase,

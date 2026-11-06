@@ -4,11 +4,12 @@
 #include <drift/App.hpp>
 #include <drift/Log.hpp>
 
+#include "gfx/Device.hpp"
+
 #include <SDL3/SDL.h>
 
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
-#include "imgui_impl_sdlgpu3.h"
 
 #include <cstdio>
 #include <vector>
@@ -72,6 +73,8 @@ struct UIResource::Impl {
     int widgetWindowId = 0;
     int panelCounter = 0;
     std::vector<FontHandle> fontStack;
+    ImVec2 displayOffset = ImVec2(0.f, 0.f);
+    ImVec2 framebufferSize = ImVec2(0.f, 0.f);
 
 #ifdef DRIFT_DEV
     bool devVisible = false;
@@ -115,10 +118,11 @@ UIResource::UIResource(App& app)
     : impl_(new Impl(app))
 {
     SDL_Window* window = static_cast<SDL_Window*>(app.sdlWindow());
-    SDL_GPUDevice* device = static_cast<SDL_GPUDevice*>(app.gpuDevice());
+    auto* renderer = app.getResource<RendererResource>();
+    gfx::Device* device = renderer ? renderer->device() : nullptr;
 
     if (!window || !device) {
-        DRIFT_LOG_ERROR("UIResource: window or GPU device not available");
+        DRIFT_LOG_ERROR("UIResource: window or graphics device not available");
         return;
     }
 
@@ -131,6 +135,7 @@ UIResource::UIResource(App& app)
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = nullptr;   // games do not write imgui.ini next to the executable
 
     if (!ImGui_ImplSDL3_InitForOther(window)) {
         DRIFT_LOG_ERROR("UIResource: ImGui_ImplSDL3_InitForOther failed");
@@ -139,13 +144,8 @@ UIResource::UIResource(App& app)
         return;
     }
 
-    ImGui_ImplSDLGPU3_InitInfo gpuInitInfo = {};
-    gpuInitInfo.Device            = device;
-    gpuInitInfo.ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(device, window);
-    gpuInitInfo.MSAASamples       = SDL_GPU_SAMPLECOUNT_1;
-
-    if (!ImGui_ImplSDLGPU3_Init(&gpuInitInfo)) {
-        DRIFT_LOG_ERROR("UIResource: ImGui_ImplSDLGPU3_Init failed");
+    if (!device->imguiInit()) {
+        DRIFT_LOG_ERROR("UIResource: ImGui renderer init failed");
         ImGui_ImplSDL3_Shutdown();
         ImGui::DestroyContext(impl_->imguiCtx);
         impl_->imguiCtx = nullptr;
@@ -155,39 +155,23 @@ UIResource::UIResource(App& app)
     applyTheme(impl_->theme);
     impl_->initialised = true;
 
-    // Register overlay callbacks so ImGui draw data is submitted to the GPU
-    auto* renderer = app.getResource<RendererResource>();
-    if (renderer) {
-        renderer->setPrePassCallback([](void* cmdBuf) {
-            ImDrawData* drawData = ImGui::GetDrawData();
-            if (drawData) {
-                Imgui_ImplSDLGPU3_PrepareDrawData(drawData,
-                    static_cast<SDL_GPUCommandBuffer*>(cmdBuf));
-            }
-        });
-        renderer->setInPassCallback([](void* cmdBuf, void* renderPass) {
-            ImDrawData* drawData = ImGui::GetDrawData();
-            if (drawData) {
-                ImGui_ImplSDLGPU3_RenderDrawData(drawData,
-                    static_cast<SDL_GPUCommandBuffer*>(cmdBuf),
-                    static_cast<SDL_GPURenderPass*>(renderPass));
-            }
-        });
-    }
+    // ImGui draws on top of the presented frame.
+    renderer->setOverlayCallback([device]() {
+        if (ImDrawData* drawData = ImGui::GetDrawData()) {
+            device->imguiRender(drawData);
+        }
+    });
 
     DRIFT_LOG_INFO("UIResource: initialised");
 }
 
 UIResource::~UIResource() {
     if (impl_->initialised) {
-        // Clear overlay callbacks before shutting down ImGui
         auto* renderer = impl_->app.getResource<RendererResource>();
         if (renderer) {
-            renderer->setPrePassCallback(nullptr);
-            renderer->setInPassCallback(nullptr);
+            renderer->setOverlayCallback(nullptr);
+            if (renderer->device()) renderer->device()->imguiShutdown();
         }
-
-        ImGui_ImplSDLGPU3_Shutdown();
         ImGui_ImplSDL3_Shutdown();
         if (impl_->imguiCtx) {
             ImGui::DestroyContext(impl_->imguiCtx);
@@ -196,33 +180,27 @@ UIResource::~UIResource() {
     delete impl_;
 }
 
+// ImGui works in logical coordinates: widget rects match the game's logical
+// resolution and land inside the renderer's output rect.
 void UIResource::beginFrame() {
     if (!impl_->initialised) return;
 
-    ImGui_ImplSDLGPU3_NewFrame();
+    auto* renderer = impl_->app.getResource<RendererResource>();
+    renderer->device()->imguiNewFrame();
     ImGui_ImplSDL3_NewFrame();
 
-    // Override display size to logical resolution so UI widgets use the same
-    // coordinate space regardless of actual window size.
-    auto* renderer = impl_->app.getResource<RendererResource>();
-    if (renderer) {
-        float lw = renderer->logicalWidth();
-        float lh = renderer->logicalHeight();
-        if (lw > 0.f && lh > 0.f) {
-            ImGuiIO& io = ImGui::GetIO();
-            float actualW = io.DisplaySize.x;
-            float actualH = io.DisplaySize.y;
-
-            io.DisplaySize = ImVec2(lw, lh);
-
-            if (actualW > 0.f && actualH > 0.f) {
-                // Scale framebuffer so ImGui renders at the actual resolution
-                io.DisplayFramebufferScale = ImVec2(actualW / lw, actualH / lh);
-                // Scale mouse from actual window coords to logical coords
-                io.MousePos.x = io.MousePos.x * (lw / actualW);
-                io.MousePos.y = io.MousePos.y * (lh / actualH);
-            }
-        }
+    Rect out = renderer->outputRect();
+    float lw = renderer->logicalWidth();
+    float lh = renderer->logicalHeight();
+    if (out.w > 0.f && out.h > 0.f && lw > 0.f && lh > 0.f) {
+        ImGuiIO& io = ImGui::GetIO();
+        float sx = out.w / lw, sy = out.h / lh;
+        int dw = 0, dh = 0;
+        SDL_GetWindowSizeInPixels(static_cast<SDL_Window*>(impl_->app.sdlWindow()), &dw, &dh);
+        io.DisplaySize = ImVec2(lw, lh);
+        io.DisplayFramebufferScale = ImVec2(sx, sy);
+        impl_->displayOffset = ImVec2(-out.x / sx, -out.y / sy);
+        impl_->framebufferSize = ImVec2(static_cast<float>(dw) / sx, static_cast<float>(dh) / sy);
     }
 
     ImGui::NewFrame();
@@ -232,26 +210,31 @@ void UIResource::beginFrame() {
 
 void UIResource::endFrame() {
     if (!impl_->initialised) return;
-    ImGui::EndFrame();
     ImGui::Render();
-}
-
-void UIResource::render() {
-    if (!impl_->initialised) return;
-
-    ImDrawData* drawData = ImGui::GetDrawData();
-    if (!drawData) return;
-
-    // NOTE: ImGui_ImplSDLGPU3_RenderDrawData requires an active
-    // SDL_GPUCommandBuffer and SDL_GPURenderPass. The RendererResource
-    // owns the render pass lifecycle. For now this is a placeholder —
-    // the renderer calls into ImGui at the correct moment in the frame.
-    // TODO: Expose command buffer from renderer for proper integration.
+    if (ImDrawData* dd = ImGui::GetDrawData()) {
+        // Shift the logical origin to the output rect and cover the window.
+        dd->DisplayPos = impl_->displayOffset;
+        dd->DisplaySize = impl_->framebufferSize;
+    }
 }
 
 void UIResource::processEvent(const SDL_Event& event) {
     if (!impl_->initialised) return;
-    ImGui_ImplSDL3_ProcessEvent(&event);
+    auto* renderer = impl_->app.getResource<RendererResource>();
+    SDL_Event e = event;
+    auto map = [&](float& x, float& y) {
+        Vec2 p = renderer->windowToLogical({x, y});
+        x = p.x;
+        y = p.y;
+    };
+    switch (e.type) {
+    case SDL_EVENT_MOUSE_MOTION: map(e.motion.x, e.motion.y); break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP: map(e.button.x, e.button.y); break;
+    case SDL_EVENT_MOUSE_WHEEL: map(e.wheel.mouse_x, e.wheel.mouse_y); break;
+    default: break;
+    }
+    ImGui_ImplSDL3_ProcessEvent(&e);
 }
 
 // Theming
@@ -297,7 +280,8 @@ void UIResource::image(TextureHandle texture, Rect rect, Rect srcRect) {
     impl_->beginWidgetWindow("image");
     ImGui::SetCursorScreenPos(ImVec2(rect.x, rect.y));
 
-    ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(texture.id));
+    ImTextureID texId = static_cast<ImTextureID>(
+        impl_->app.getResource<RendererResource>()->imguiTextureId(texture));
 
     ImVec2 uv0(0.f, 0.f);
     ImVec2 uv1(1.f, 1.f);
@@ -393,7 +377,8 @@ void UIResource::nineSlice(TextureHandle texture, Rect rect, Rect borders) {
     float fw = static_cast<float>(texW);
     float fh = static_cast<float>(texH);
 
-    ImTextureID texId = static_cast<ImTextureID>(static_cast<uintptr_t>(texture.id));
+    ImTextureID texId = static_cast<ImTextureID>(
+        impl_->app.getResource<RendererResource>()->imguiTextureId(texture));
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImU32 white = IM_COL32(255, 255, 255, 255);
 

@@ -15,6 +15,9 @@ drift/
     core/                  <-- App, AssetServer, Log
     ecs/                   <-- World, Commands, ScriptSystem
     renderer/              <-- RendererResource, RenderSnapshot
+    gfx/                   <-- graphics device interface and backends
+      gl/                  <-- OpenGL 3.3 backend
+      shaders/             <-- built-in shaders and the shader prelude
     input/                 <-- InputResource
     audio/                 <-- AudioResource
     physics/               <-- PhysicsResource
@@ -29,6 +32,7 @@ drift/
     flappy_bird/
     asteroid_field/
     particle_storm/
+    render_showcase/
   docs/                    <-- this documentation (mdBook)
   CMakeLists.txt           <-- build configuration
 ```
@@ -85,7 +89,7 @@ Plugins are header-only. Each one registers resources and systems in its `build(
 | Header | Plugin | What it registers |
 |--------|--------|-------------------|
 | `DefaultPlugins.hpp` | `DefaultPlugins` | All plugins below as a group. Also provides `MinimalPlugins` (input + renderer only). |
-| `RendererPlugin.hpp` | `RendererPlugin` | `RendererResource`, sprite rendering systems, GPU pipeline setup. |
+| `RendererPlugin.hpp` | `RendererPlugin` | `RendererResource` and the frame begin/end systems. |
 | `InputPlugin.hpp` | `InputPlugin` | `InputResource` for keyboard, mouse, and gamepad state. |
 | `AudioPlugin.hpp` | `AudioPlugin` | `AudioResource` for sound playback. |
 | `PhysicsPlugin.hpp` | `PhysicsPlugin` | `PhysicsResource`, physics step system, body sync, collision events. |
@@ -106,7 +110,7 @@ Resources are singleton objects stored in `App`. Systems access them through `Re
 | Header | Resource | Description |
 |--------|----------|-------------|
 | `Time.hpp` | `Time` | `delta` (float, seconds), `elapsed` (double, seconds), `frame` (uint64_t) |
-| `RendererResource.hpp` | `RendererResource` | GPU state, draw calls, `drawSpriteBatch()` for bulk rendering. |
+| `RendererResource.hpp` | `RendererResource` | Textures, sprites, shapes, cameras, render targets, shaders, post effects. |
 | `InputResource.hpp` | `InputResource` | `keyHeld()`, `keyPressed()`, `keyReleased()`, `mousePosition()`, `mouseButtonHeld()`, `mouseWheelDelta()` |
 | `AudioResource.hpp` | `AudioResource` | Sound playback and mixing. |
 | `PhysicsResource.hpp` | `PhysicsResource` | Box2D world wrapper, body creation, raycasting, contact queries. |

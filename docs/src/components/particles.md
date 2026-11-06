@@ -87,7 +87,7 @@ struct ParticleEmitter {
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `blendMode` | `ParticleBlendMode` | `Alpha` | `Alpha` for standard blending, `Additive` for glowing/fire effects. |
+| `blendMode` | `BlendMode` | `Alpha` | How particles combine with the scene. `Additive` for glowing/fire effects; any `BlendMode` works. |
 | `zOrder` | `float` | `10` | Draw order for the particle layer. |
 
 #### Duration and looping
@@ -210,7 +210,7 @@ fire.sizeStart = {8.f, 12.f};
 fire.sizeEnd = {2.f, 4.f};
 fire.colorStart = {1.f, 0.9f, 0.2f, 1.f};   // bright yellow
 fire.colorEnd = {1.f, 0.2f, 0.0f, 0.f};     // orange, fade out
-fire.blendMode = ParticleBlendMode::Additive;
+fire.blendMode = BlendMode::Additive;
 fire.drag = 1.f;
 ```
 
@@ -230,7 +230,7 @@ explosion.colorStart = {1.f, 0.95f, 0.3f, 1.f};
 explosion.colorEnd = {0.8f, 0.2f, 0.0f, 0.f};
 explosion.gravity = {0.f, 300.f};
 explosion.drag = 0.5f;
-explosion.blendMode = ParticleBlendMode::Additive;
+explosion.blendMode = BlendMode::Additive;
 explosion.duration = 0.1f;             // spawn for 100ms
 explosion.looping = false;
 
@@ -302,6 +302,6 @@ config.preWarmTime = 2.f;   // particles are already spread out on frame 1
 
 - `ParticleEmitter` requires a `Transform2D` on the same entity to define where particles spawn.
 - When `oneShot` is `true` and `looping` is `false`, the entity is despawned after the emitter's duration expires and all particles have died. This is the standard pattern for explosions and impacts.
-- The additive blend mode (`ParticleBlendMode::Additive`) creates a glowing effect where overlapping particles become brighter. Use it for fire, sparks, and energy effects.
+- The additive blend mode (`BlendMode::Additive`) creates a glowing effect where overlapping particles become brighter. Use it for fire, sparks, and energy effects.
 - `velocityInheritance` transfers the emitter entity's motion to newly spawned particles. A value of `1.0` means particles inherit the full velocity of the emitter, which creates natural-looking trails behind moving objects.
 - Particle rendering is batched internally for performance. Thousands of particles are typically fine.

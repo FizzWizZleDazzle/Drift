@@ -1,6 +1,6 @@
 # Rendering
 
-The `RendererResource` manages the GPU, textures, sprite drawing, primitives, and cameras. It uses SDL3's GPU API under the hood and provides a sorted, batched 2D rendering pipeline.
+The `RendererResource` draws everything you see: sprites, shapes, text, tilemaps and particles. You queue draws during the frame; at the end of the frame the renderer sorts them by layer and z-order, batches them, renders every camera, applies post effects, draws the HUD layer, and presents the result.
 
 **Header:** `#include <drift/resources/RendererResource.hpp>`
 
@@ -8,7 +8,7 @@ The `RendererResource` manages the GPU, textures, sprite drawing, primitives, an
 
 ## Automatic Sprite Rendering
 
-When `DefaultPlugins` is enabled, the `SpritePlugin` runs a render system that draws every entity with a `Sprite` and `Transform2D` component. You usually do not need to call `drawSprite` manually for regular game objects -- just attach components and they appear on screen.
+With `DefaultPlugins`, every entity with a `Sprite` and a `Transform2D` is drawn for you. Use the `RendererResource` directly for shapes, debug visuals, custom meshes, or anything that is not an entity.
 
 ```cpp
 void setup(Commands& cmd) {
@@ -19,207 +19,188 @@ void setup(Commands& cmd) {
 }
 ```
 
-The `RendererResource` is for cases where you need direct draw control, custom rendering, debug visuals, or bulk operations like particles.
+Draw from systems registered with `app.render<...>()`. Systems that use the renderer always run on the main thread, because the graphics context belongs to it.
 
 ## Textures
 
 ```cpp
-TextureHandle loadTexture(const char* path);
-TextureHandle createTextureFromPixels(const uint8_t* pixels, int w, int h);
+TextureHandle loadTexture(const char* path, TextureOptions options = {});
+TextureHandle createTextureFromPixels(const uint8_t* rgba, int w, int h, TextureOptions options = {});
+void          updateTexture(TextureHandle texture, int x, int y, int w, int h, const uint8_t* rgba);
+void          setTextureOptions(TextureHandle texture, TextureOptions options);
 void          destroyTexture(TextureHandle texture);
-void          getTextureSize(TextureHandle texture, int32_t* w, int32_t* h) const;
+Vec2          textureSize(TextureHandle texture) const;
+TextureHandle whiteTexture() const;
 ```
 
-`loadTexture` loads an image file (PNG, JPG, BMP) and uploads it to the GPU. It returns a generational `TextureHandle` -- a lightweight 32-bit identifier.
+`loadTexture` reads PNG, JPG, BMP, TGA and GIF files. `TextureOptions` picks the sampling: `TextureFilter::Nearest` (the default, crisp pixel art) or `Linear` (smooth scaling), and `TextureWrap::Clamp`, `Repeat` or `Mirror`.
 
 ```cpp
-void setup(ResMut<RendererResource> renderer) {
-    TextureHandle tex = renderer->loadTexture("assets/player.png");
+TextureHandle bg = renderer->loadTexture("assets/clouds.png",
+                                         {TextureFilter::Linear, TextureWrap::Repeat});
+```
 
-    int32_t w, h;
-    renderer->getTextureSize(tex, &w, &h);
-    // w = 64, h = 64
+`updateTexture` replaces a region of an existing texture, which suits procedural textures, fog-of-war masks and minimaps drawn on the CPU.
+
+## Sprites
+
+`draw` takes a `SpriteDraw`; every field except `texture` has a default:
+
+```cpp
+renderer->draw({.texture = ship, .position = pos, .rotation = angle,
+                .origin = {16.f, 16.f}, .zOrder = 5.f, .blend = BlendMode::Additive});
+```
+
+| Field | Meaning |
+|-------|---------|
+| `texture` | Texture to draw |
+| `position` | World position of the origin |
+| `srcRect` | Region of the texture in pixels; empty means the whole texture |
+| `scale`, `rotation` | Scale and rotation (radians) around `origin` |
+| `origin` | Pivot in source pixels, from the top-left |
+| `tint` | Color multiplied with the texture |
+| `flip` | `Flip::H`, `Flip::V`, or both |
+| `zOrder` | Higher draws on top within a layer |
+| `blend` | `BlendMode` (see below) |
+| `material` | Custom shader material; see [Shaders and Effects](shaders-and-effects.md) |
+| `layer` | Render layer, 0..30 for the world or `ScreenLayer` for the HUD |
+
+The `drawSprite` overloads are shorthands for common cases, and `drawSpriteBatch` draws many same-texture quads centered on their positions, which particle systems use.
+
+### Blend Modes
+
+| Mode | Use |
+|------|-----|
+| `Alpha` | Normal transparency |
+| `Additive` | Fire, glows, light |
+| `Multiply` | Shadows, tinting, light maps |
+| `Screen` | Soft brightening |
+| `Premultiplied` | Textures with premultiplied alpha |
+| `Opaque` | No blending |
+
+### Nine-Slice
+
+`drawNineSlice` stretches a panel texture to any size while keeping its corners intact. `borders` is `{left, top, right, bottom}` in source pixels.
+
+```cpp
+renderer->drawNineSlice(panelTex, Rect{20, 20, 300, 120}, {}, Vec4{8, 8, 8, 8});
+```
+
+### Meshes
+
+`drawMesh` draws arbitrary textured triangles: terrain strips, deformable sprites, ribbons, water surfaces.
+
+```cpp
+RendererResource::MeshVertex v[3] = {
+    {{0, 0}, {0, 0}}, {{100, 0}, {1, 0}}, {{50, 80}, {0.5f, 1}}};
+uint32_t idx[3] = {0, 1, 2};
+renderer->drawMesh(tex, v, 3, idx, 3);
+```
+
+## Shapes
+
+Shapes use the same queue as sprites, so they sort and batch with everything else. Thickness is in world units.
+
+```cpp
+void drawLine(Vec2 start, Vec2 end, Color color, float thickness = 1, float zOrder = 0);
+void drawPolyline(const Vec2* points, int32_t count, Color color, float thickness = 1,
+                  bool closed = false, float zOrder = 0);
+void drawRect(Rect rect, Color color, float thickness = 1, float zOrder = 0);
+void drawRectFilled(Rect rect, Color color, float zOrder = 0);
+void drawRoundedRectFilled(Rect rect, float radius, Color color, float zOrder = 0);
+void drawCircle(Vec2 center, float radius, Color color, float thickness = 1,
+                int segments = 0, float zOrder = 0);
+void drawCircleFilled(Vec2 center, float radius, Color color, int segments = 0, float zOrder = 0);
+void drawArc(Vec2 center, float radius, float startAngle, float endAngle, Color color,
+             float thickness = 1, float zOrder = 0);
+void drawTriangleFilled(Vec2 a, Vec2 b, Vec2 c, Color color, float zOrder = 0);
+void drawPolygonFilled(const Vec2* points, int32_t count, Color color, float zOrder = 0);
+```
+
+Polylines use mitered joins. `drawPolygonFilled` accepts concave polygons. Passing `segments = 0` picks a segment count from the radius.
+
+## Layers and the HUD
+
+Every draw has a layer. World layers 0..30 are drawn by cameras whose `layerMask` includes them; higher layers draw on top of lower ones. `ScreenLayer` is drawn last, in logical screen coordinates, without a camera, after post effects. Use it for HUDs and menus.
+
+```cpp
+void drawHud(ResMut<RendererResource> r) {
+    r->setLayer(ScreenLayer);
+    r->drawRectFilled({10, 10, 200 * health, 16}, Color::red());
+    r->setLayer(0);
 }
 ```
 
-`createTextureFromPixels` creates a texture from raw RGBA pixel data. Useful for procedural generation:
+`setLayer` applies to the immediate draw calls that follow; `SpriteDraw` and the `Sprite` component carry their own `layer`. `pushClipRect` / `popClipRect` clip immediate draws to a rect in logical screen pixels, which scrolling HUD panels need.
 
-```cpp
-uint8_t pixels[4 * 4 * 4]; // 4x4 RGBA
-// ... fill pixel data ...
-TextureHandle tex = renderer->createTextureFromPixels(pixels, 4, 4);
-```
+## Cameras
 
-## Sprite Drawing
-
-The `drawSprite` function has three overloads, from simple to full-featured:
-
-```cpp
-// Simple: texture at a position with z-order
-void drawSprite(TextureHandle texture, Vec2 position, float zOrder);
-
-// With source rectangle (for spritesheets)
-void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect, float zOrder);
-
-// Full control
-void drawSprite(TextureHandle texture, Vec2 position, Rect srcRect = {},
-                Vec2 scale = Vec2::one(), float rotation = 0.f,
-                Vec2 origin = {}, Color tint = Color::white(),
-                Flip flip = Flip::None, float zOrder = 0.f,
-                bool additive = false);
-```
-
-Parameters:
-
-| Parameter | Description |
-|-----------|-------------|
-| `texture` | The texture handle to draw |
-| `position` | World-space position |
-| `srcRect` | Sub-region of the texture to draw (empty = full texture) |
-| `scale` | Scale multiplier (default `{1, 1}`) |
-| `rotation` | Rotation in radians |
-| `origin` | Rotation/scale origin offset from top-left |
-| `tint` | Color tint multiplied with texture color |
-| `flip` | `Flip::H`, `Flip::V`, or `Flip::H | Flip::V` |
-| `zOrder` | Draw order (lower values draw first, higher on top) |
-| `additive` | Use additive blending (bright, glowing effects) |
-
-### Example: Drawing a Rotated Sprite
-
-```cpp
-void drawPlayer(ResMut<RendererResource> renderer, Res<Time> time,
-                Query<Transform2D, With<PlayerTag>> query) {
-    query.iter([&](const Transform2D& t) {
-        renderer->drawSprite(playerTexture, t.position, Rect{},
-                             t.scale, t.rotation,
-                             Vec2{16.f, 16.f},   // center origin on 32x32 sprite
-                             Color::white(), Flip::None, 10.f);
-    });
-}
-```
-
-## Batch Drawing
-
-For high-volume rendering (particle systems, bullet hell), use `drawSpriteBatch` to avoid per-sprite function call overhead:
-
-```cpp
-void drawSpriteBatch(TextureHandle texture, Rect srcRect,
-                     const Vec2* positions, const float* sizes,
-                     const float* rotations, const Color* tints,
-                     int32_t count, float zOrder, bool additive = false);
-```
-
-All sprites in a batch share the same texture and source rectangle. Pass arrays of positions, sizes, rotations, and tint colors.
-
-```cpp
-void renderBullets(ResMut<RendererResource> renderer) {
-    std::vector<Vec2> positions;
-    std::vector<float> sizes;
-    std::vector<float> rotations;
-    std::vector<Color> tints;
-    // ... fill from your bullet pool ...
-
-    renderer->drawSpriteBatch(bulletTexture, Rect{0, 0, 8, 8},
-                              positions.data(), sizes.data(),
-                              rotations.data(), tints.data(),
-                              (int32_t)positions.size(), 5.f);
-}
-```
-
-## Primitive Drawing
-
-For debug visuals, guides, or simple shapes:
-
-```cpp
-void drawRect(Rect rect, Color color);                               // outline
-void drawRectFilled(Rect rect, Color color);                         // filled
-void drawLine(Vec2 start, Vec2 end, Color color, float thickness);   // line
-void drawCircle(Vec2 center, float radius, Color color, int segments); // outline
-```
-
-These are drawn in world space and respect the active camera. They draw on top of sprites at their default z-order.
-
-```cpp
-void debugDraw(ResMut<RendererResource> renderer,
-               Query<Transform2D, BoxCollider2D> query) {
-    query.iter([&](const Transform2D& t, const BoxCollider2D& box) {
-        Rect r{t.position.x - box.halfSize.x, t.position.y - box.halfSize.y,
-               box.halfSize.x * 2.f, box.halfSize.y * 2.f};
-        renderer->drawRect(r, Color::green());
-    });
-}
-```
-
-## Camera
-
-The renderer manages one or more cameras. `DefaultPlugins` creates a default camera automatically.
+Most games use the `Camera` component (see [Camera](../components/camera.md)); the first active camera that draws to the screen drives the renderer's default camera. For direct control:
 
 ```cpp
 CameraHandle getDefaultCamera() const;
-CameraHandle createCamera();
+CameraHandle createCamera(const CameraDesc& desc = {});
+void         setCamera(CameraHandle camera, const CameraDesc& desc);
+CameraDesc   camera(CameraHandle camera) const;
 void         destroyCamera(CameraHandle camera);
-void         setActiveCamera(CameraHandle camera);
-
-void  setCameraPosition(CameraHandle camera, Vec2 position);
-void  setCameraZoom(CameraHandle camera, float zoom);
-void  setCameraRotation(CameraHandle camera, float rotation);
-Vec2  getCameraPosition(CameraHandle camera) const;
-float getCameraZoom(CameraHandle camera) const;
-
-Vec2 screenToWorld(CameraHandle camera, Vec2 screenPos) const;
-Vec2 worldToScreen(CameraHandle camera, Vec2 worldPos) const;
+Vec2         screenToWorld(Vec2 screenPos) const;   // default camera
+Vec2         worldToScreen(Vec2 worldPos) const;
+Vec2         screenToWorld(CameraHandle camera, Vec2 screenPos) const;
+Rect         cameraWorldBounds(CameraHandle camera) const;
 ```
 
-### Example: Camera Follow
-
-If you are not using the `CameraFollow` component, you can follow a target manually:
+A `CameraDesc` has a position, zoom, rotation, a normalized `viewport`, an `order`, a `layerMask`, an optional render-target `target`, and clear settings. Cameras render in ascending `order`. Draws outside a camera's visible bounds are culled.
 
 ```cpp
-void cameraFollow(ResMut<RendererResource> renderer,
-                  Query<Transform2D, With<PlayerTag>> query) {
-    auto camera = renderer->getDefaultCamera();
-
-    query.iter([&](const Transform2D& t) {
-        Vec2 current = renderer->getCameraPosition(camera);
-        Vec2 target = t.position;
-        Vec2 lerped = current + (target - current) * 0.05f;
-        renderer->setCameraPosition(camera, lerped);
-    });
-}
+Vec2 world = renderer->screenToWorld(input->mousePosition());
 ```
 
-### Coordinate Conversion
+## Render Targets
 
-`screenToWorld` converts a screen-space position (like mouse coordinates) to world space, accounting for camera position, zoom, and rotation.
+A render target is a texture you can render into and then draw like any other texture: minimaps, picture-in-picture, mirrors, portals, or a low-resolution layer.
 
 ```cpp
-Vec2 worldPos = renderer->screenToWorld(camera, input->mousePosition());
+TextureHandle minimap = renderer->createRenderTarget(256, 160, {TextureFilter::Linear});
+// Point a camera at it:
+cmd.spawn().insert(Transform2D{}, Camera{.zoom = 0.2f, .active = true, .order = -1,
+                                         .target = minimap, .clear = true});
+// Then draw it on the HUD:
+renderer->draw({.texture = minimap, .position = {1000, 16}, .layer = ScreenLayer});
 ```
 
-`worldToScreen` does the reverse -- useful for placing UI elements at an entity's screen position.
+## Resolution and Scale Modes
+
+The game draws in a logical resolution (`Config::width` / `height`). The scale mode decides how that resolution maps onto the window:
+
+| `ScaleMode` | Result |
+|-------------|--------|
+| `Letterbox` | Keeps the aspect ratio; bars fill the rest. The default. |
+| `Stretch` | Fills the window, distorting the aspect ratio. |
+| `Integer` | Pixel perfect: renders at exactly the logical size and scales by whole numbers. |
+| `Expand` | Keeps pixels square and grows the logical size to fill the window, so wider screens see more of the world. |
+
+```cpp
+app.setConfig({.width = 320, .height = 180, .scaleMode = ScaleMode::Integer});
+renderer->setScaleMode(ScaleMode::Letterbox);   // change at runtime
+```
+
+`logicalWidth()` and `logicalHeight()` report the size in effect this frame. Mouse positions from `InputResource` are already in logical coordinates, bars included. `windowToLogical` performs the same conversion for your own window coordinates.
 
 ## Clear Color
-
-Set the background color that fills the screen each frame before any drawing:
 
 ```cpp
 renderer->setClearColor(ColorF{0.1f, 0.1f, 0.15f, 1.0f});
 ```
 
-## Logical Resolution
-
-The renderer reports the logical resolution of the window. This matches the window size unless overridden:
+## Debugging
 
 ```cpp
-float w = renderer->logicalWidth();
-float h = renderer->logicalHeight();
+renderer->captureScreenshot("shot.png");   // saves the next presented frame
+int32_t draws   = renderer->drawCalls();    // last frame
+int32_t sprites = renderer->spriteCount();  // last frame
+const char* api = renderer->backendName();  // e.g. "gl"
 ```
 
-## Stats
+## Backends
 
-For profiling and debug overlays:
-
-```cpp
-int32_t draws   = renderer->drawCalls();   // GPU draw calls this frame
-int32_t sprites = renderer->spriteCount(); // sprites submitted this frame
-```
+Drift renders through OpenGL 3.3. When a build includes more than one backend, choose with `Config::renderer` or the `DRIFT_RENDERER` environment variable; if the requested backend cannot start, Drift falls back to the next one. See [Shaders and Effects](shaders-and-effects.md) for how shaders work across backends.

@@ -35,6 +35,7 @@
 
 - [Input](subsystems/input.md)
 - [Rendering](subsystems/rendering.md)
+- [Shaders and Effects](subsystems/shaders-and-effects.md)
 - [Audio](subsystems/audio.md)
 - [Physics](subsystems/physics-resource.md)
 - [Sprites and Sheets](subsystems/sprites-and-sheets.md)
@@ -54,6 +55,7 @@
 - [Asteroid Field](examples/asteroid-field.md)
 - [Fireball](examples/fireball.md)
 - [Particle Storm](examples/particle-storm.md)
+- [Render Showcase](examples/render-showcase.md)
 
 # Reference
 

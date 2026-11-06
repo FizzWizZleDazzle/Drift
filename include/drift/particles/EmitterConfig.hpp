@@ -9,7 +9,6 @@ namespace drift {
 
 enum class EmissionShape { Point, Circle, Ring, Box, Line };
 enum class ParticleSpace { World, Local };
-enum class ParticleBlendMode { Alpha, Additive };
 
 struct ValueRange {
     float min = 0.f, max = 0.f;
@@ -71,7 +70,7 @@ struct EmitterConfig {
     ColorF colorEnd = {1, 1, 1, 0};
 
     // Rendering
-    ParticleBlendMode blendMode = ParticleBlendMode::Alpha;
+    BlendMode blendMode = BlendMode::Alpha;
     float zOrder = 10.f;
 
     // Duration & looping

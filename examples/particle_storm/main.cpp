@@ -149,7 +149,7 @@ static EmitterConfig makeRingConfig(TextureHandle tex, float hue) {
     c.sizeEnd = {1.f, 2.f};
     c.colorStart = hueToColor(hue, 1.f);
     c.colorEnd = hueToColor(hue + 0.1f, 0.f);
-    c.blendMode = ParticleBlendMode::Additive;
+    c.blendMode = BlendMode::Additive;
     c.drag = 0.5f;
     c.zOrder = 5.f;
     return c;
@@ -168,7 +168,7 @@ static EmitterConfig makeSpiralConfig(TextureHandle tex, float hue) {
     c.sizeEnd = {1.f, 1.f};
     c.colorStart = hueToColor(hue, 1.f);
     c.colorEnd = hueToColor(hue + 0.3f, 0.f);
-    c.blendMode = ParticleBlendMode::Additive;
+    c.blendMode = BlendMode::Additive;
     c.drag = 2.f;
     c.zOrder = 5.f;
     return c;
@@ -188,7 +188,7 @@ static EmitterConfig makeGridConfig(TextureHandle tex, float hue) {
     c.sizeEnd = {2.f, 3.f};
     c.colorStart = hueToColor(hue, 0.9f);
     c.colorEnd = hueToColor(hue + 0.2f, 0.f);
-    c.blendMode = ParticleBlendMode::Alpha;
+    c.blendMode = BlendMode::Alpha;
     c.drag = 0.3f;
     c.zOrder = 4.f;
     return c;
@@ -209,7 +209,7 @@ static EmitterConfig makeRainConfig(TextureHandle tex, float hue) {
     c.gravity = {0.f, 80.f};
     c.colorStart = hueToColor(hue, 0.8f);
     c.colorEnd = hueToColor(hue, 0.f);
-    c.blendMode = ParticleBlendMode::Additive;
+    c.blendMode = BlendMode::Additive;
     c.boundsMin = {-HALF_W, -HALF_H};
     c.boundsMax = {HALF_W, HALF_H};
     c.zOrder = 5.f;
@@ -230,7 +230,7 @@ static EmitterConfig makeVortexConfig(TextureHandle tex, float hue) {
     c.sizeEnd = {1.f, 2.f};
     c.colorStart = hueToColor(hue, 1.f);
     c.colorEnd = hueToColor(hue + 0.5f, 0.f);
-    c.blendMode = ParticleBlendMode::Additive;
+    c.blendMode = BlendMode::Additive;
     c.space = ParticleSpace::Local;
     c.drag = 1.f;
     c.initialRotation = {0.f, TWO_PI};

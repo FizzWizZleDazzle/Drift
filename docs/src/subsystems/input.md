@@ -76,7 +76,7 @@ bool  mouseButtonReleased(MouseButton btn) const;  // released this frame
 float mouseWheelDelta() const;                     // scroll wheel delta
 ```
 
-Mouse positions are reported in logical coordinates (matching the resolution set by `setLogicalSize`). The `InputResource` handles the conversion from physical pixels automatically.
+Mouse positions are reported in logical screen coordinates, the same space as `Config::width` and `height`. The conversion follows the renderer's scale mode, so letterbox bars and integer scaling are accounted for. Use `RendererResource::screenToWorld` to turn the position into world coordinates.
 
 ### MouseButton Enum
 

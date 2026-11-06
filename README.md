@@ -6,7 +6,7 @@ A lightweight 2D game engine written in C++20, built on a Bevy-inspired Entity C
 
 - **Bevy-style ECS** -- Typed systems with automatic dependency injection via `Res<T>`, `ResMut<T>`, `Query<T>`, and `Commands`
 - **Plugin architecture** -- Modular subsystems (rendering, physics, audio, input, etc.) registered as plugins
-- **SDL3 + GPU backend** -- Hardware-accelerated 2D rendering with SDL3's GPU API
+- **2D renderer**: batched sprites and shapes, render layers, multiple cameras, render targets, custom shaders and post effects, pixel-perfect scaling
 - **Box2D physics** -- Full 2D rigid body physics with collision events and sensors
 - **Particle system** -- Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** -- Spritesheet-based animation clips with Aseprite import support
@@ -89,6 +89,7 @@ target_link_libraries(my_game PRIVATE drift)
 | `flappy_bird` | State machines, collision events, sprite animation, UI |
 | `asteroid_field` | Physics bodies, collision handling, trail renderers, camera shake |
 | `particle_storm` | Advanced particle configuration, multiple emitters, emission shapes |
+| `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
 
 Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`.
 
@@ -97,7 +98,8 @@ Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build b
 | Layer | Library |
 |-------|---------|
 | ECS | [flecs](https://github.com/SanderMertens/flecs) v4.0.4 |
-| Windowing & Rendering | [SDL3](https://libsdl.org) GPU API |
+| Windowing, input, audio | [SDL3](https://libsdl.org) |
+| Rendering | OpenGL 3.3 |
 | Physics | [Box2D](https://box2d.org) v3.0 |
 | Debug UI | [Dear ImGui](https://github.com/ocornut/imgui) |
 | Fonts | stb_truetype |

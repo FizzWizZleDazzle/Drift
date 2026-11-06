@@ -21,6 +21,7 @@ public:
     ~SpriteResource() override;
 
     DRIFT_RESOURCE(SpriteResource)
+    bool mainThreadOnly() const override { return true; }
 
     // Spritesheets
     SpritesheetHandle createSpritesheet(TextureHandle texture, int32_t frameW, int32_t frameH);

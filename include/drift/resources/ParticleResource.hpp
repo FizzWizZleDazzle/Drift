@@ -14,6 +14,7 @@ public:
     ~ParticleResource() override;
 
     DRIFT_RESOURCE(ParticleResource)
+    bool mainThreadOnly() const override { return true; }
 
     EmitterHandle createEmitter(const EmitterDef& def);
     void destroyEmitter(EmitterHandle emitter);

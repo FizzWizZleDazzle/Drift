@@ -20,6 +20,7 @@ public:
     ~AssetServer() override;
 
     DRIFT_RESOURCE(AssetServer)
+    bool mainThreadOnly() const override { return true; }
 
     // Registration (called by plugins during build)
     void setTextureLoader(std::function<TextureHandle(const char*)> fn);

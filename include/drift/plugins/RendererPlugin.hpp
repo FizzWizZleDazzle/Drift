@@ -8,7 +8,7 @@
 namespace drift {
 
 inline void renderer_begin_frame(ResMut<RendererResource> r) { r->beginFrame(); }
-inline void renderer_end_frame(ResMut<RendererResource> r) { r->endFrame(); r->present(); }
+inline void renderer_end_frame(ResMut<RendererResource> r) { r->endFrame(); }
 
 class RendererPlugin : public Plugin {
 public:

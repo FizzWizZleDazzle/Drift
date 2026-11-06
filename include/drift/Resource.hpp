@@ -11,6 +11,9 @@ class Resource {
 public:
     virtual ~Resource() = default;
     virtual const char* name() const { return ""; }
+    // Resources that wrap thread-bound state (a GL context, ImGui) return
+    // true; systems that access them always run on the main thread.
+    virtual bool mainThreadOnly() const { return false; }
 };
 
 // Macro for engine resources.

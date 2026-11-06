@@ -6,6 +6,8 @@
 #include <drift/resources/SpriteResource.hpp>
 #include <drift/resources/RendererResource.hpp>
 
+#include <vector>
+
 namespace drift {
 
 class SpritePlugin : public Plugin {
@@ -20,37 +22,72 @@ public:
             snapshot->swap();
         });
 
-        // Auto-render system: apply camera, then draw sprites from snapshot
-        app.addSystem("sprite_render", Phase::Render, [](App& a) {
+        // Auto-render system: sync cameras, then draw sprites from snapshot
+        app.addSystem("sprite_render", Phase::Render, [this](App& a) {
             auto* snapshot = a.getResource<RenderSnapshot>();
             auto* renderer = a.getResource<RendererResource>();
+            syncCameras(*renderer, snapshot->cameras());
 
-            // Apply camera from snapshot
-            const auto& cam = snapshot->camera();
-            if (cam.found) {
-                auto defaultCam = renderer->getDefaultCamera();
-                renderer->setCameraPosition(defaultCam, cam.position);
-                renderer->setCameraZoom(defaultCam, cam.zoom);
-                renderer->setCameraRotation(defaultCam, cam.rotation);
-            }
-
-            // Draw all sprites
             for (const auto& entry : snapshot->sprites()) {
-                if (!entry.sprite.visible) continue;
-                renderer->drawSprite(
-                    entry.sprite.texture,
-                    entry.transform.position,
-                    entry.sprite.srcRect,
-                    entry.transform.scale,
-                    entry.transform.rotation,
-                    entry.sprite.origin,
-                    entry.sprite.tint,
-                    entry.sprite.flip,
-                    entry.sprite.zOrder);
+                const Sprite& s = entry.sprite;
+                if (!s.visible) continue;
+                SpriteDraw d;
+                d.texture = s.texture;
+                d.position = entry.transform.position;
+                d.srcRect = s.srcRect;
+                d.scale = entry.transform.scale;
+                d.rotation = entry.transform.rotation;
+                d.origin = s.origin;
+                d.tint = s.tint;
+                d.flip = s.flip;
+                d.zOrder = s.zOrder;
+                d.blend = s.blend;
+                d.material = s.material;
+                d.layer = s.layer;
+                renderer->draw(d);
             }
         });
     }
     DRIFT_PLUGIN(SpritePlugin)
+
+private:
+    // The first active camera that renders to the screen drives the
+    // renderer's default camera (used by screenToWorld); every other active
+    // camera gets its own renderer camera.
+    void syncCameras(RendererResource& renderer, const std::vector<CameraSnapshot>& cams) {
+        if (cams.empty()) return;
+        size_t primary = 0;
+        for (size_t i = 0; i < cams.size(); ++i) {
+            if (!cams[i].camera.target.valid()) { primary = i; break; }
+        }
+        size_t used = 0;
+        for (size_t i = 0; i < cams.size(); ++i) {
+            const Camera& c = cams[i].camera;
+            CameraDesc d;
+            d.position = cams[i].position;
+            d.zoom = c.zoom;
+            d.rotation = c.rotation;
+            d.viewport = c.viewport;
+            d.order = c.order;
+            d.layerMask = c.layerMask;
+            d.target = c.target;
+            d.clear = c.clear;
+            d.clearColor = c.clearColor;
+            if (i == primary) {
+                renderer.setCamera(renderer.getDefaultCamera(), d);
+                continue;
+            }
+            if (extra_.size() <= used) extra_.push_back(renderer.createCamera(d));
+            renderer.setCamera(extra_[used++], d);
+        }
+        for (size_t j = used; j < extra_.size(); ++j) {
+            CameraDesc d = renderer.camera(extra_[j]);
+            d.enabled = false;
+            renderer.setCamera(extra_[j], d);
+        }
+    }
+
+    std::vector<CameraHandle> extra_;
 };
 
 } // namespace drift

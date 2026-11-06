@@ -173,7 +173,7 @@ static EmitterConfig makeExplosionConfig(TextureHandle tex, float size) {
     c.sizeEnd = {1.f, 2.f};
     c.colorStart = {1.f, 0.9f, 0.3f, 1.f};
     c.colorEnd = {1.f, 0.3f, 0.0f, 0.f};
-    c.blendMode = ParticleBlendMode::Additive;
+    c.blendMode = BlendMode::Additive;
     c.duration = 0.08f;
     c.looping = false;
     c.drag = 1.5f;

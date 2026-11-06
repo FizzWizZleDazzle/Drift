@@ -21,6 +21,7 @@ public:
     ~TilemapResource() override;
 
     DRIFT_RESOURCE(TilemapResource)
+    bool mainThreadOnly() const override { return true; }
 
     TilemapHandle loadTilemap(const char* path);
     void destroyTilemap(TilemapHandle map);

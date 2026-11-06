@@ -13,6 +13,9 @@ struct Sprite {
     Flip flip = Flip::None;
     float zOrder = 0.f;
     bool visible = true;
+    BlendMode blend = BlendMode::Alpha;
+    MaterialHandle material;        // custom shader; empty = default
+    uint8_t layer = 0;              // render layer, or ScreenLayer for HUD sprites
 };
 ```
 
@@ -29,6 +32,9 @@ struct Sprite {
 | `flip` | `Flip` | `Flip::None` | Horizontal and/or vertical flip. Values: `Flip::None`, `Flip::H`, `Flip::V`, or combined with `Flip::H | Flip::V`. |
 | `zOrder` | `float` | `0.f` | Draw order. Higher values are drawn on top of lower values. |
 | `visible` | `bool` | `true` | When `false`, the sprite is skipped during rendering. |
+| `blend` | `BlendMode` | `Alpha` | How the sprite combines with what is behind it: `Alpha`, `Additive`, `Multiply`, `Screen`, `Premultiplied`, `Opaque`. |
+| `material` | `MaterialHandle` | none | Draws the sprite with a custom shader. See [Shaders and Effects](../subsystems/shaders-and-effects.md). |
+| `layer` | `uint8_t` | `0` | Render layer. World layers 0..30 sort below higher layers and can be hidden per camera; `ScreenLayer` draws the sprite in screen coordinates on the HUD. |
 
 ## Basic usage
 
@@ -200,5 +206,5 @@ int main() {
 ## Notes
 
 - A `Sprite` without a valid `TextureHandle` will not be drawn. Always load the texture first.
-- The rendering system requires both `Transform2D` and `Sprite` on an entity for it to appear.
+- The rendering system requires both `Transform2D` and `Sprite` on an entity for it to appear. Children in a hierarchy are drawn at their composed world transform (`GlobalTransform2D`).
 - For animated sprites, pair `Sprite` with a `SpriteAnimator` component. The animation system automatically updates `srcRect` each frame. See [Sprite Animation](sprite-animation.md).

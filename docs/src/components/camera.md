@@ -1,6 +1,6 @@
 # Camera
 
-The `Camera` component defines the viewport through which the world is rendered. It controls zoom level, rotation, and whether the camera is active. Every scene needs at least one entity with both `Camera` and `Transform2D` for anything to be visible.
+The `Camera` component defines a view of the world: where it looks, how far it is zoomed, which part of the screen it fills, and which render layers it shows. Without a `Camera` entity the renderer uses a default view centered on the logical screen.
 
 ## Definition
 
@@ -9,6 +9,12 @@ struct Camera {
     float zoom = 1.f;
     float rotation = 0.f;
     bool active = false;
+    Rect viewport = {0.f, 0.f, 1.f, 1.f};
+    int32_t order = 0;
+    uint32_t layerMask = AllWorldLayers;
+    TextureHandle target;
+    bool clear = false;
+    ColorF clearColor = {0.f, 0.f, 0.f, 1.f};
 };
 ```
 
@@ -20,7 +26,12 @@ struct Camera {
 |-------|------|---------|-------------|
 | `zoom` | `float` | `1.f` | Zoom factor. `1.0` is default. Values greater than 1 zoom in; values less than 1 zoom out. |
 | `rotation` | `float` | `0.f` | Camera rotation in radians. Rotates the entire view around the camera's position. |
-| `active` | `bool` | `false` | Only the active camera is used for rendering. If multiple cameras have `active = true`, the last one processed wins. |
+| `active` | `bool` | `false` | Only active cameras render. |
+| `viewport` | `Rect` | whole screen | Normalized rect of the screen (or of `target`) to draw into, origin top-left. `{0, 0, 0.5f, 1}` is the left half. |
+| `order` | `int32_t` | `0` | Cameras render in ascending order; later cameras draw over earlier ones. The lowest-ordered camera without a `target` is the main camera used by `screenToWorld`. |
+| `layerMask` | `uint32_t` | all world layers | Bit N set = draw render layer N. Use it to keep a layer out of the minimap or to give a camera its own layer. |
+| `target` | `TextureHandle` | none | A render target to draw into instead of the screen. |
+| `clear` / `clearColor` | `bool` / `ColorF` | `false` | Clear the viewport before drawing. Useful for split screen and render targets. |
 
 ## Requirements
 
@@ -115,21 +126,39 @@ void tiltCamera(QueryMut<Camera> cameras) {
 
 ## Multiple cameras
 
-You can have multiple camera entities, but only one should be active at a time. Switch between cameras by toggling the `active` flag:
+Every active camera renders, in ascending `order`. Combine `viewport`, `layerMask` and `target` for split screen, minimaps and picture-in-picture.
+
+### Split screen
 
 ```cpp
-struct CameraRig : public Resource {
-    EntityId mainCamera = InvalidEntityId;
-    EntityId overviewCamera = InvalidEntityId;
-    bool showOverview = false;
-};
+cmd.spawn().insert(Transform2D{}, Camera{.active = true,
+    .viewport = {0.f, 0.f, 0.5f, 1.f}, .clear = true});
+cmd.spawn().insert(Transform2D{}, Camera{.active = true,
+    .viewport = {0.5f, 0.f, 0.5f, 1.f}, .order = 1, .clear = true});
+```
 
-void switchCamera(Res<InputResource> input,
-                  ResMut<CameraRig> rig,
-                  Commands& cmd) {
+Give each camera a `CameraFollow` pointing at a different player.
+
+### Minimap
+
+A camera with a `target` renders into a texture, which you then draw on the HUD:
+
+```cpp
+TextureHandle minimap = renderer->createRenderTarget(256, 160, {TextureFilter::Linear});
+cmd.spawn().insert(Transform2D{}, Camera{.zoom = 0.2f, .active = true, .order = -1,
+                                         .target = minimap, .clear = true});
+```
+
+See `examples/render_showcase` for a complete minimap.
+
+### Switching cameras
+
+Toggle `active` to switch between views:
+
+```cpp
+void switchCamera(Res<InputResource> input, ResMut<CameraRig> rig, Commands& cmd) {
     if (input->keyPressed(Key::Tab)) {
         rig->showOverview = !rig->showOverview;
-
         cmd.entity(rig->mainCamera)
             .insert<Camera>({.zoom = 1.f, .active = !rig->showOverview});
         cmd.entity(rig->overviewCamera)
@@ -205,5 +234,6 @@ int main() {
 
 ## See also
 
-- [Camera Controllers](camera-controllers.md) -- `CameraFollow` and `CameraShake` components for automatic camera behavior.
-- [Transform2D](transform.md) -- the position component that Camera depends on.
+- [Camera Controllers](camera-controllers.md): `CameraFollow` and `CameraShake` components for automatic camera behavior.
+- [Transform2D](transform.md): the position component that Camera depends on.
+- [Rendering](../subsystems/rendering.md): layers, render targets and scale modes.

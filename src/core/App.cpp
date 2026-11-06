@@ -9,6 +9,12 @@
 
 #include <SDL3/SDL.h>
 
+#include "gfx/Device.hpp"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include <unordered_map>
 #include <map>
 #include <string>
@@ -175,6 +181,9 @@ struct SystemEntry {
 
     // Profiling
     uint64_t lastDurationUs = 0;
+
+    // Resolved on first parallel run: accesses a main-thread-only resource.
+    int8_t mainThread = -1;
 };
 
 // Key for onEnter/onExit maps: (type_index of enum, int-cast enum value)
@@ -184,7 +193,8 @@ struct App::Impl {
     Config config;
 
     SDL_Window* window = nullptr;
-    SDL_GPUDevice* gpuDevice = nullptr;
+    std::unique_ptr<gfx::Device> device;
+    Time* timeRes = nullptr;
 
     bool running = false;
     bool initialised = false;
@@ -313,6 +323,19 @@ struct App::Impl {
         std::vector<bool> completed(n, false);
         int completedCount = 0;
 
+        for (auto& sys : systems) {
+            if (sys.mainThread >= 0) continue;
+            sys.mainThread = 0;
+            for (auto& d : sys.deps) {
+                if (d.kind != AccessKind::Resource) continue;
+                auto it = resourcesByType.find(d.typeId);
+                if (it != resourcesByType.end() && it->second->mainThreadOnly()) {
+                    sys.mainThread = 1;
+                    break;
+                }
+            }
+        }
+
         while (completedCount < n) {
             // Build a batch of non-conflicting systems
             std::vector<int> batch;
@@ -345,6 +368,13 @@ struct App::Impl {
 
                 // If batch already has an exclusive, skip
                 if (batchIsExclusive) continue;
+
+                // Only one main-thread system per batch (it becomes task 0)
+                if (sys.mainThread == 1) {
+                    bool haveMain = false;
+                    for (int j : batch) haveMain = haveMain || systems[j].mainThread == 1;
+                    if (haveMain) continue;
+                }
 
                 // Check conflicts with systems already in batch
                 bool conflictsWithBatch = false;
@@ -392,6 +422,14 @@ struct App::Impl {
             }
 
             if (batch.empty()) break;  // Safety: prevent infinite loop
+
+            // The main thread runs task 0.
+            for (size_t j = 1; j < batch.size(); ++j) {
+                if (systems[batch[j]].mainThread == 1) {
+                    std::swap(batch[0], batch[j]);
+                    break;
+                }
+            }
 
             if (batch.size() == 1) {
                 // Single system: run on main thread directly
@@ -461,11 +499,7 @@ App::~App() {
     for (auto* g : impl_->pluginGroups) delete g;
 
     // Shutdown SDL
-    if (impl_->gpuDevice) {
-        if (impl_->window)
-            SDL_ReleaseWindowFromGPUDevice(impl_->gpuDevice, impl_->window);
-        SDL_DestroyGPUDevice(impl_->gpuDevice);
-    }
+    impl_->device.reset();
     if (impl_->window) {
         SDL_DestroyWindow(impl_->window);
     }
@@ -642,36 +676,11 @@ int App::run() {
     }
     s.initialised = true;
 
-    const char* title = s.config.title.empty() ? "Drift Engine" : s.config.title.c_str();
+    if (!createWindowAndDevice()) {
+        return 1;
+    }
     int w = s.config.width > 0 ? s.config.width : 1280;
     int h = s.config.height > 0 ? s.config.height : 720;
-
-    SDL_WindowFlags windowFlags = 0;
-    if (s.config.fullscreen) windowFlags |= SDL_WINDOW_FULLSCREEN;
-    if (s.config.resizable) windowFlags |= SDL_WINDOW_RESIZABLE;
-
-    s.window = SDL_CreateWindow(title, w, h, windowFlags);
-    if (!s.window) {
-        DRIFT_LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
-        return 1;
-    }
-
-    s.gpuDevice = SDL_CreateGPUDevice(
-        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
-        true, nullptr);
-    if (!s.gpuDevice) {
-        DRIFT_LOG_ERROR("SDL_CreateGPUDevice failed: %s", SDL_GetError());
-        return 1;
-    }
-
-    if (!SDL_ClaimWindowForGPUDevice(s.gpuDevice, s.window)) {
-        DRIFT_LOG_ERROR("SDL_ClaimWindowForGPUDevice failed: %s", SDL_GetError());
-        return 1;
-    }
-
-    SDL_SetGPUSwapchainParameters(s.gpuDevice, s.window,
-        SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-        s.config.vsync ? SDL_GPU_PRESENTMODE_VSYNC : SDL_GPU_PRESENTMODE_IMMEDIATE);
 
     s.perfFrequency = SDL_GetPerformanceFrequency();
     s.lastCounter = SDL_GetPerformanceCounter();
@@ -682,6 +691,9 @@ int App::run() {
     // ---- Set up thread pool ----
     {
         int tc = s.config.threadCount;
+#ifdef __EMSCRIPTEN__
+        tc = 1;   // the web build has no threads
+#endif
         if (tc <= 0) {
             int hw = static_cast<int>(std::thread::hardware_concurrency());
             tc = std::max(1, std::min(hw - 1, 7));
@@ -717,7 +729,7 @@ int App::run() {
         addResourceImpl(std::type_index(typeid(RenderSnapshot)), snapshot);
     }
     // Time resource
-    auto* timeRes = addResource<Time>();
+    s.timeRes = addResource<Time>();
     // AssetServer (empty, loaders registered by plugins)
     addResource<AssetServer>();
 
@@ -769,118 +781,185 @@ int App::run() {
 
     // ---- Main loop ----
     s.running = true;
-    while (s.running) {
-        // Delta time
-        uint64_t now = SDL_GetPerformanceCounter();
-        uint64_t elapsed = now - s.lastCounter;
-        s.lastCounter = now;
-
-        s.dt = static_cast<float>(
-            static_cast<double>(elapsed) / static_cast<double>(s.perfFrequency));
-        if (s.dt > 0.25f) s.dt = 0.25f;
-
-        float instantFps = (s.dt > 0.f) ? (1.f / s.dt) : 0.f;
-        const float smoothing = 0.9f;
-        s.smoothedFps = (s.smoothedFps > 0.f)
-            ? s.smoothedFps * smoothing + instantFps * (1.f - smoothing)
-            : instantFps;
-        s.fps = s.smoothedFps;
-
-        // Update Time resource
-        timeRes->delta = s.dt;
-        timeRes->elapsed = static_cast<double>(now - s.startCounter) /
-                           static_cast<double>(s.perfFrequency);
-        timeRes->frame = s.frame;
-
-        // Increment change detection tick
-        s.world.setCurrentTick(static_cast<uint32_t>(s.frame + 1));
-
-        // Swap event buffers at frame start (events written last frame become readable)
-        for (auto& fn : s.eventUpdateFns) {
-            fn();
-        }
-
-        // PreUpdate: beginFrame() snapshots previous state before new events
-        uint64_t phaseT0 = SDL_GetPerformanceCounter();
-        s.runSystemsParallel(s.preUpdateSystems, *this);
-        s.commands.flush(s.world);
-        uint64_t preUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
-        // Poll events (updates current state for this frame)
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            for (auto* handler : s.eventHandlers) {
-                handler->processEvent(event);
-            }
-
-            if (event.type == SDL_EVENT_QUIT) {
-                s.running = false;
-            }
-        }
-
-        if (!s.running) break;
-
-        // State transitions (between event poll and Update phase)
-        processStateTransitions();
-
-        // Update phase
-        phaseT0 = SDL_GetPerformanceCounter();
-        s.runSystemsParallel(s.updateSystems, *this);
-        s.commands.flush(s.world);
-        uint64_t updateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
-        // PostUpdate phase
-        phaseT0 = SDL_GetPerformanceCounter();
-        s.runSystemsParallel(s.postUpdateSystems, *this);
-        s.commands.flush(s.world);
-        uint64_t postUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
-        // Extract phase: fill render snapshot (sequential - GPU ops)
-        phaseT0 = SDL_GetPerformanceCounter();
-        s.runSystems(s.extractSystems, *this);
-        uint64_t extractUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
-        // Render phase: auto-render from snapshot + user manual draws (sequential)
-        phaseT0 = SDL_GetPerformanceCounter();
-        s.runSystems(s.renderSystems, *this);
-        uint64_t renderUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
-        // RenderFlush phase: endFrame + present (sequential)
-        phaseT0 = SDL_GetPerformanceCounter();
-        s.runSystems(s.renderFlushSystems, *this);
-        uint64_t renderFlushUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
-
-#ifdef DRIFT_PROFILE_SYSTEMS
-        if (s.frame > 0 && s.frame % 10000 == 0) {
-            DRIFT_LOG_INFO("=== Frame %llu profile (%.1f FPS, dt=%.2fms) ===",
-                           (unsigned long long)s.frame, s.fps, s.dt * 1000.f);
-            DRIFT_LOG_INFO("  Phases: PreUpdate=%lluus  Update=%lluus  PostUpdate=%lluus  Extract=%lluus  Render=%lluus  RenderFlush=%lluus",
-                           (unsigned long long)preUpdateUs, (unsigned long long)updateUs,
-                           (unsigned long long)postUpdateUs, (unsigned long long)extractUs,
-                           (unsigned long long)renderUs, (unsigned long long)renderFlushUs);
-
-            auto printSystems = [](const char* label, std::vector<SystemEntry>& systems) {
-                for (auto& sys : systems) {
-                    if (sys.lastDurationUs > 0) {
-                        DRIFT_LOG_INFO("    [%s] %s: %lluus", label, sys.name.c_str(),
-                                       (unsigned long long)sys.lastDurationUs);
-                    }
-                }
-            };
-            printSystems("PreUpdate", s.preUpdateSystems);
-            printSystems("Update", s.updateSystems);
-            printSystems("PostUpdate", s.postUpdateSystems);
-            printSystems("Extract", s.extractSystems);
-            printSystems("Render", s.renderSystems);
-            printSystems("RenderFlush", s.renderFlushSystems);
-        }
-#endif
-
-        s.frame++;
+#ifdef __EMSCRIPTEN__
+    // The browser drives frames; this call does not return.
+    emscripten_set_main_loop_arg([](void* arg) {
+        auto* app = static_cast<App*>(arg);
+        if (!app->frame()) emscripten_cancel_main_loop();
+    }, this, 0, true);
+#else
+    while (frame()) {
     }
+#endif
 
     DRIFT_LOG_INFO("Drift engine shut down");
     return 0;
+}
+
+bool App::frame() {
+    auto& s = *impl_;
+    if (!s.running) return false;
+    // Delta time
+    uint64_t now = SDL_GetPerformanceCounter();
+    uint64_t elapsed = now - s.lastCounter;
+    s.lastCounter = now;
+
+    s.dt = static_cast<float>(
+        static_cast<double>(elapsed) / static_cast<double>(s.perfFrequency));
+    if (s.dt > 0.25f) s.dt = 0.25f;
+
+    float instantFps = (s.dt > 0.f) ? (1.f / s.dt) : 0.f;
+    const float smoothing = 0.9f;
+    s.smoothedFps = (s.smoothedFps > 0.f)
+        ? s.smoothedFps * smoothing + instantFps * (1.f - smoothing)
+        : instantFps;
+    s.fps = s.smoothedFps;
+
+    // Update Time resource
+    s.timeRes->delta = s.dt;
+    s.timeRes->elapsed = static_cast<double>(now - s.startCounter) /
+                       static_cast<double>(s.perfFrequency);
+    s.timeRes->frame = s.frame;
+
+    // Increment change detection tick
+    s.world.setCurrentTick(static_cast<uint32_t>(s.frame + 1));
+
+    // Swap event buffers at frame start (events written last frame become readable)
+    for (auto& fn : s.eventUpdateFns) {
+        fn();
+    }
+
+    // PreUpdate: beginFrame() snapshots previous state before new events
+    uint64_t phaseT0 = SDL_GetPerformanceCounter();
+    s.runSystemsParallel(s.preUpdateSystems, *this);
+    s.commands.flush(s.world);
+    uint64_t preUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+    // Poll events (updates current state for this frame)
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        for (auto* handler : s.eventHandlers) {
+            handler->processEvent(event);
+        }
+
+        if (event.type == SDL_EVENT_QUIT) {
+            s.running = false;
+        }
+    }
+
+    if (!s.running) return false;
+
+    // State transitions (between event poll and Update phase)
+    processStateTransitions();
+
+    // Update phase
+    phaseT0 = SDL_GetPerformanceCounter();
+    s.runSystemsParallel(s.updateSystems, *this);
+    s.commands.flush(s.world);
+    uint64_t updateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+    // PostUpdate phase
+    phaseT0 = SDL_GetPerformanceCounter();
+    s.runSystemsParallel(s.postUpdateSystems, *this);
+    s.commands.flush(s.world);
+    uint64_t postUpdateUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+    // Extract phase: fill render snapshot (sequential - GPU ops)
+    phaseT0 = SDL_GetPerformanceCounter();
+    s.runSystems(s.extractSystems, *this);
+    uint64_t extractUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+    // Render phase: auto-render from snapshot + user manual draws (sequential)
+    phaseT0 = SDL_GetPerformanceCounter();
+    s.runSystems(s.renderSystems, *this);
+    uint64_t renderUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+    // RenderFlush phase: endFrame + present (sequential)
+    phaseT0 = SDL_GetPerformanceCounter();
+    s.runSystems(s.renderFlushSystems, *this);
+    uint64_t renderFlushUs = (SDL_GetPerformanceCounter() - phaseT0) * 1000000 / s.perfFrequency;
+
+#ifdef DRIFT_PROFILE_SYSTEMS
+    if (s.frame > 0 && s.frame % 10000 == 0) {
+        DRIFT_LOG_INFO("=== Frame %llu profile (%.1f FPS, dt=%.2fms) ===",
+                       (unsigned long long)s.frame, s.fps, s.dt * 1000.f);
+        DRIFT_LOG_INFO("  Phases: PreUpdate=%lluus  Update=%lluus  PostUpdate=%lluus  Extract=%lluus  Render=%lluus  RenderFlush=%lluus",
+                       (unsigned long long)preUpdateUs, (unsigned long long)updateUs,
+                       (unsigned long long)postUpdateUs, (unsigned long long)extractUs,
+                       (unsigned long long)renderUs, (unsigned long long)renderFlushUs);
+
+        auto printSystems = [](const char* label, std::vector<SystemEntry>& systems) {
+            for (auto& sys : systems) {
+                if (sys.lastDurationUs > 0) {
+                    DRIFT_LOG_INFO("    [%s] %s: %lluus", label, sys.name.c_str(),
+                                   (unsigned long long)sys.lastDurationUs);
+                }
+            }
+        };
+        printSystems("PreUpdate", s.preUpdateSystems);
+        printSystems("Update", s.updateSystems);
+        printSystems("PostUpdate", s.postUpdateSystems);
+        printSystems("Extract", s.extractSystems);
+        printSystems("Render", s.renderSystems);
+        printSystems("RenderFlush", s.renderFlushSystems);
+    }
+#endif
+
+    s.frame++;
+    return s.running;
+}
+
+bool App::createWindowAndDevice() {
+    auto& s = *impl_;
+    gfx::registerBuiltinBackends();
+    const auto& available = gfx::backends();
+    if (available.empty()) {
+        DRIFT_LOG_ERROR("No graphics backend compiled in");
+        return false;
+    }
+
+    std::string wanted = s.config.renderer;
+    if (const char* env = SDL_getenv("DRIFT_RENDERER")) wanted = env;
+
+    // Requested backend first, then the rest in registration order.
+    std::vector<const gfx::BackendInfo*> order;
+    for (const auto& b : available) {
+        if (wanted == b.name) order.push_back(&b);
+    }
+    if (!wanted.empty() && order.empty()) {
+        DRIFT_LOG_WARN("Renderer '%s' is not available in this build", wanted.c_str());
+    }
+    for (const auto& b : available) {
+        if (wanted != b.name) order.push_back(&b);
+    }
+
+    const char* title = s.config.title.empty() ? "Drift Engine" : s.config.title.c_str();
+    int w = s.config.width > 0 ? s.config.width : 1280;
+    int h = s.config.height > 0 ? s.config.height : 720;
+
+    for (const gfx::BackendInfo* b : order) {
+        b->prepareWindow(s.config);
+        SDL_WindowFlags flags = static_cast<SDL_WindowFlags>(b->windowFlags());
+        if (s.config.fullscreen) flags |= SDL_WINDOW_FULLSCREEN;
+        if (s.config.resizable) flags |= SDL_WINDOW_RESIZABLE;
+        if (s.config.highDpi) flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+
+        s.window = SDL_CreateWindow(title, w, h, flags);
+        if (!s.window) {
+            DRIFT_LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
+            return false;
+        }
+        s.device = b->create(s.window, s.config);
+        if (s.device) {
+            DRIFT_LOG_INFO("Graphics backend: %s", b->name);
+            return true;
+        }
+        DRIFT_LOG_WARN("Graphics backend '%s' failed to start", b->name);
+        SDL_DestroyWindow(s.window);
+        s.window = nullptr;
+    }
+    DRIFT_LOG_ERROR("No graphics backend could start");
+    return false;
 }
 
 void App::quit() {
@@ -889,7 +968,7 @@ void App::quit() {
 
 const Config& App::config() const { return impl_->config; }
 void* App::sdlWindow() const { return impl_->window; }
-void* App::gpuDevice() const { return impl_->gpuDevice; }
+gfx::Device* App::graphicsDevice() const { return impl_->device.get(); }
 
 // ---- Ordering constraints (Phase 5) ----
 

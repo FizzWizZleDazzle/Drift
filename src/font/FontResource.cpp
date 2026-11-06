@@ -154,6 +154,13 @@ void FontResource::drawText(FontHandle font, const char* text, Vec2 position,
 
         Rect srcRect{static_cast<float>(bc.x0), static_cast<float>(bc.y0), glyphW, glyphH};
 
+        // Whitespace glyphs have no pixels; an empty source rect would
+        // mean "whole texture" to the renderer.
+        if (glyphW <= 0.f || glyphH <= 0.f) {
+            cursorX += bc.xadvance * scale;
+            continue;
+        }
+
         impl_->renderer.drawSprite(
             fd->atlasTexture, {x0, y0}, srcRect,
             {scale, scale}, 0.f, {}, color, Flip::None, 1000.f);

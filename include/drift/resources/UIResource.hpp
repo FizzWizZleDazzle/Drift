@@ -17,10 +17,10 @@ public:
     ~UIResource() override;
 
     DRIFT_RESOURCE(UIResource)
+    bool mainThreadOnly() const override { return true; }
 
     void beginFrame();
     void endFrame();
-    void render();
     void processEvent(const SDL_Event& event) override;
 
     // Theming

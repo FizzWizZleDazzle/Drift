@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <drift/Resource.hpp>
 #include <drift/App.hpp>
 #include <drift/Types.hpp>
@@ -25,8 +27,8 @@ public:
     bool keyReleased(Key key) const;
 
     // Logical resolution scaling (called by App after window creation)
-    void setLogicalSize(float w, float h);
-    void setWindow(void* window);
+    // Maps window coordinates to logical screen coordinates for mouse queries.
+    void setCoordinateMapper(std::function<Vec2(Vec2)> windowToLogical);
 
     // Mouse
     Vec2 mousePosition() const;

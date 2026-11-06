@@ -2,7 +2,7 @@
 
 **Header:** `include/drift/Config.hpp`
 
-The `Config` struct controls window creation and engine threading. Pass it to `App::setConfig()` before calling `app.run()`.
+The `Config` struct controls the window, the logical resolution, the graphics backend and engine threading. Pass it to `App::setConfig()` before calling `app.run()`.
 
 ## Config Struct
 
@@ -14,6 +14,9 @@ struct Config {
     bool fullscreen   = false;
     bool vsync        = true;
     bool resizable    = true;
+    bool highDpi      = true;
+    ScaleMode scaleMode = ScaleMode::Letterbox;
+    std::string renderer;
     int32_t threadCount = 0;
 };
 ```
@@ -23,11 +26,14 @@ struct Config {
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `title` | `std::string` | `"Drift"` | Window title bar text. |
-| `width` | `int32_t` | `1280` | Window width in pixels. |
-| `height` | `int32_t` | `720` | Window height in pixels. |
+| `width` | `int32_t` | `1280` | Logical width the game draws in, and the initial window width. |
+| `height` | `int32_t` | `720` | Logical height the game draws in, and the initial window height. |
 | `fullscreen` | `bool` | `false` | Start in fullscreen mode. |
 | `vsync` | `bool` | `true` | Enable vertical sync. Disable for uncapped frame rate (useful for stress tests). |
 | `resizable` | `bool` | `true` | Allow the user to resize the window. |
+| `highDpi` | `bool` | `true` | Render at the display's native pixel density on high-DPI screens. |
+| `scaleMode` | `ScaleMode` | `Letterbox` | How the logical resolution fits the window: `Letterbox`, `Stretch`, `Integer` (pixel perfect) or `Expand`. See [Rendering](../subsystems/rendering.md#resolution-and-scale-modes). |
+| `renderer` | `std::string` | `""` | Graphics backend by name, such as `"gl"`. Empty picks the first backend in the build. The `DRIFT_RENDERER` environment variable overrides it. |
 | `threadCount` | `int32_t` | `0` | Worker thread count for the system scheduler. See below. |
 
 ## Thread Count
@@ -36,7 +42,7 @@ The `threadCount` field controls how many worker threads the engine's system sch
 
 | Value | Behavior |
 |-------|----------|
-| `0` | **Auto** (default). Uses `hardware_concurrency - 1`, capped at 7. This is the recommended setting for most games. |
+| `0` | **Auto** (default). Uses `hardware_concurrency - 1`, capped at 7. This is the recommended setting for most games. The web build always runs sequentially. |
 | `1` | **Sequential mode**. All systems run on the main thread. Useful for debugging data races or for very simple games where threading overhead is not worthwhile. |
 | `2+` | Explicit thread count. Use this if you need fine control, for example when profiling or running on known hardware. |
 
@@ -64,13 +70,13 @@ app.setConfig({.title = "Stress Test", .vsync = false});
 
 ## Examples from the Codebase
 
-**Hello Sprites** -- standard window:
+**Hello Sprites**: standard window:
 
 ```cpp
 app.setConfig({.title = "Drift - Hello Sprites", .width = 1280, .height = 720});
 ```
 
-**Flappy Bird** -- small fixed-size window:
+**Flappy Bird**: small fixed-size window:
 
 ```cpp
 app.setConfig({
@@ -81,7 +87,7 @@ app.setConfig({
 });
 ```
 
-**Asteroid Field** -- vsync disabled for stress testing:
+**Asteroid Field**: vsync disabled for stress testing:
 
 ```cpp
 app.setConfig({

@@ -54,6 +54,9 @@ struct Vec3 {
 
 struct Vec4 {
     float x = 0.f, y = 0.f, z = 0.f, w = 0.f;
+
+    Vec4() = default;
+    constexpr Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 };
 
 struct Rect {
@@ -85,6 +88,47 @@ struct ColorF {
     ColorF() = default;
     constexpr ColorF(float r, float g, float b, float a = 1.f) : r(r), g(g), b(b), a(a) {}
 };
+
+// ---- Rendering enums ----
+
+// How a draw combines with what is already on screen.
+enum class BlendMode : uint8_t {
+    Alpha = 0,       // standard transparency
+    Additive,        // glows, fire, light
+    Multiply,        // shadows, tinting, light maps
+    Premultiplied,   // textures with premultiplied alpha
+    Screen,          // soft brightening
+    Opaque,          // no blending
+};
+
+enum class TextureFilter : uint8_t {
+    Nearest = 0,     // crisp pixels (pixel art)
+    Linear,          // smooth scaling
+};
+
+enum class TextureWrap : uint8_t {
+    Clamp = 0,
+    Repeat,
+    Mirror,
+};
+
+struct TextureOptions {
+    TextureFilter filter = TextureFilter::Nearest;
+    TextureWrap   wrap   = TextureWrap::Clamp;
+};
+
+// How the logical resolution maps onto the window.
+enum class ScaleMode : uint8_t {
+    Letterbox = 0,   // keep aspect ratio, bars fill the rest
+    Stretch,         // fill the window, distort aspect ratio
+    Integer,         // pixel perfect: render at logical size, scale by whole numbers
+    Expand,          // keep aspect of pixels; grow the logical size to fill the window
+};
+
+// Render layers. Cameras draw layers in their mask; ScreenLayer is drawn
+// last, in logical screen coordinates, without a camera (HUDs, menus).
+constexpr uint8_t ScreenLayer = 31;
+constexpr uint32_t AllWorldLayers = 0x7FFFFFFFu;
 
 // ---- Enums ----
 enum class Flip {

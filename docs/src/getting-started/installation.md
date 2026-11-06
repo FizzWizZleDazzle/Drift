@@ -1,6 +1,6 @@
 # Installation
 
-Drift is a C++20 game engine with an SDL3 GPU backend. All third-party dependencies are fetched automatically during the CMake configure step, so there is nothing to install manually beyond a compiler and CMake itself.
+Drift is a C++20 2D game engine that renders through OpenGL 3.3. All third-party dependencies are fetched automatically during the CMake configure step, so there is nothing to install manually beyond a compiler and CMake itself.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ Drift is a C++20 game engine with an SDL3 GPU backend. All third-party dependenc
 
 ### Linux-specific requirements
 
-On Linux the build links `m`, `dl`, and `pthread` automatically. Depending on your distribution you may also need the SDL3 development headers and a GPU driver that supports Vulkan or OpenGL. On Ubuntu/Debian-based systems:
+On Linux the build links `m`, `dl`, and `pthread` automatically. Depending on your distribution you may also need the windowing development headers and an OpenGL 3.3 capable driver. On Ubuntu/Debian-based systems:
 
 ```bash
 sudo apt update
@@ -20,7 +20,7 @@ sudo apt install build-essential cmake git libx11-dev libxext-dev \
     libwayland-dev libxkbcommon-dev libegl-dev
 ```
 
-The exact packages vary by distribution. If you already have a working Vulkan or OpenGL development environment, you likely have everything you need.
+The exact packages vary by distribution. If you already have a working OpenGL development environment, you likely have everything you need.
 
 ### macOS
 
@@ -40,11 +40,11 @@ Drift uses CMake `FetchContent` to download and build every dependency at config
 
 | Library | Version | Purpose |
 |---------|---------|---------|
-| [SDL3](https://github.com/libsdl-org/SDL) | `main` branch | Windowing, input, GPU rendering backend |
+| [SDL3](https://github.com/libsdl-org/SDL) | `main` branch | Windowing, input, audio, OpenGL context |
 | [flecs](https://github.com/SanderMertens/flecs) | v4.0.4 | Entity Component System |
 | [Box2D](https://github.com/erincatto/box2d) | v3.0.0 | 2D physics simulation |
 | [Dear ImGui](https://github.com/ocornut/imgui) | v1.91.8 | Developer overlay and debug UI |
-| [stb](https://github.com/nothings/stb) | latest | Image loading (stb_image), font rasterization (stb_truetype) |
+| [stb](https://github.com/nothings/stb) | latest | Image loading (stb_image), PNG screenshots (stb_image_write), font rasterization (stb_truetype) |
 | [cute_aseprite](https://github.com/RandyGaul/cute_headers) | latest | Aseprite sprite sheet loading |
 | [nlohmann/json](https://github.com/nlohmann/json) | v3.11.3 | JSON parsing (used for Tiled map support) |
 

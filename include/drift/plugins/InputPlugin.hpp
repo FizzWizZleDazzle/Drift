@@ -3,6 +3,7 @@
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
 #include <drift/resources/InputResource.hpp>
+#include <drift/resources/RendererResource.hpp>
 
 namespace drift {
 
@@ -14,14 +15,17 @@ public:
         auto* input = app.addResource<InputResource>();
         app.addEventHandler(input);
 
-        // Wire up logical resolution scaling for mouse coordinates
-        const auto& cfg = app.config();
-        float lw = static_cast<float>(cfg.width > 0 ? cfg.width : 1280);
-        float lh = static_cast<float>(cfg.height > 0 ? cfg.height : 720);
-        input->setLogicalSize(lw, lh);
-        input->setWindow(app.sdlWindow());
-
         app.addSystem<input_begin_frame>("input_begin_frame", Phase::PreUpdate);
+    }
+
+    // Mouse positions follow the renderer's scale mode (letterbox bars,
+    // integer scaling) when a renderer is present.
+    void finish(App& app) override {
+        auto* input = app.getResource<InputResource>();
+        auto* renderer = app.getResource<RendererResource>();
+        if (input && renderer) {
+            input->setCoordinateMapper([renderer](Vec2 p) { return renderer->windowToLogical(p); });
+        }
     }
     DRIFT_PLUGIN(InputPlugin)
 };

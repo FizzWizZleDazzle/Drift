@@ -7,7 +7,7 @@
 namespace drift {
 
 inline void ui_begin_frame(ResMut<UIResource> ui) { ui->beginFrame(); }
-inline void ui_end_frame(ResMut<UIResource> ui) { ui->endFrame(); ui->render(); }
+inline void ui_end_frame(ResMut<UIResource> ui) { ui->endFrame(); }
 
 class UIPlugin : public Plugin {
 public:
