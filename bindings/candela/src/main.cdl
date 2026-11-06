@@ -1082,9 +1082,11 @@ impl App {
     /// A new entity at `pos` drawing a solid rectangle centered on it.
     fn spawn_rect(self, pos: Vec2, size: Vec2, c: Color) -> Entity {
         let e = self.spawn_at(pos);
+        // Sized through the source rect, not the scale, so colliders and
+        // occluders added to the entity keep world-unit sizes.
         e.set_sprite(self.white_texture());
-        e.set_origin(vec2(0.5, 0.5));
-        e.set_scale(size);
+        e.set_frame(rect(0.0, 0.0, size.x, size.y));
+        e.set_origin(vec2(size.x * 0.5, size.y * 0.5));
         e.set_tint(c);
         return e;
     }
