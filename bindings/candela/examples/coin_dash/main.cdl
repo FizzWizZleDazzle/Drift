@@ -1,0 +1,277 @@
+// Coin Dash: collect coins, dodge the bouncing hazards.
+//
+// Arrow keys, WASD or a gamepad stick move. R restarts after a hit, Escape
+// quits. Every asset is made in code, so the example runs from anywhere:
+//
+//     candela run bindings/candela/examples/coin_dash/main.cdl
+
+import "../../src/main.cdl";
+import "std/math" as math;
+import "std/random" as random;
+
+struct Game {
+    player: Entity,
+    hazards: Entity[],
+    coins: Entity[],
+    score: int,
+    best: int,
+    over: bool,
+    spawn: Timer,
+    coin_tex: Texture,
+    ball_tex: Texture,
+    pickup: Sound,
+    crash: Sound,
+    save: Save,
+    score_text: Entity,
+    hint_text: Entity,
+}
+
+fn main() {
+    let app = start(config("Coin Dash", 960, 540));
+    let g = setup(app, app.open_save("Drift Examples", "Coin Dash", "save"));
+    while app.frame() {
+        update(app, g);
+    }
+}
+
+fn setup(app: App, save: Save) -> Game {
+    app.set_clear_color(rgb(18, 20, 32));
+    app.set_gravity(vec2(0.0, 0.0));
+
+    app.bind_axis2d("move",
+        Binding::Key(Key::Left), Binding::Key(Key::Right),
+        Binding::Key(Key::Up), Binding::Key(Key::Down));
+    app.bind_axis2d("move",
+        Binding::Key(Key::A), Binding::Key(Key::D),
+        Binding::Key(Key::W), Binding::Key(Key::S));
+    app.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+    app.bind_action("restart", Binding::Key(Key::R));
+    app.bind_action("restart", Binding::Button(GamepadButton::South));
+
+    walls(app);
+
+    let g = Game {
+        player: app.spawn_rect(vec2(480.0, 270.0), vec2(28.0, 28.0), rgb(90, 170, 255)),
+        hazards: [Entity { id: 0 }],
+        coins: [Entity { id: 0 }],
+        score: 0,
+        best: 0,
+        over: false,
+        spawn: repeating_timer(4.0),
+        coin_tex: disc(app, 24, rgb(255, 210, 60)),
+        ball_tex: disc(app, 32, rgb(240, 80, 90)),
+        pickup: tone(app, 880.0, 0.12),
+        crash: tone(app, 110.0, 0.35),
+        save: save,
+        score_text: app.spawn_text("", vec2(20.0, 14.0), 28.0, rgb(255, 255, 255)),
+        hint_text: app.spawn_text("", vec2(480.0, 270.0), 32.0, rgb(255, 255, 255)),
+    };
+    g.hazards.remove(0);
+    g.coins.remove(0);
+    g.best = g.save.get_int("best", 0);
+    g.score_text.set_text_layer(hud_layer());
+    g.hint_text.set_text_layer(hud_layer());
+    g.hint_text.set_text_style(app.default_font(), centered(32.0));
+
+    g.player.add_body(body(BodyKind::Dynamic));
+    g.player.add_box_collider(vec2(14.0, 14.0), collider());
+    g.player.set_name("player");
+
+    reset(app, g);
+    return g;
+}
+
+// Everything a frame does after the engine has run its systems.
+fn update(app: App, g: Game) {
+    if app.key_pressed(Key::Escape) {
+        app.quit();
+    }
+    if g.over {
+        if app.action_pressed("restart") {
+            reset(app, g);
+        }
+    } else {
+        play(app, g, app.dt());
+    }
+    g.score_text.set_text("Score " + str(g.score) + "    Best " + str(g.best));
+    draw_arena(app);
+}
+
+// One frame of play: move, collect, collide, spawn.
+fn play(app: App, g: Game, dt: float) {
+    let dir = app.axis2d("move");
+    g.player.set_velocity(dir.mul(320.0));
+
+    for ev in app.sensor_entered() {
+        if ev.visitor.equals(g.player) {
+            collect(app, g, ev.sensor);
+        }
+    }
+    for c in app.collisions() {
+        if c.involves(g.player) && c.other(g.player).has("CircleCollider2D") {
+            game_over(app, g);
+            return;
+        }
+    }
+    if g.spawn.tick(dt) > 0 {
+        spawn_hazard(app, g);
+    }
+}
+
+fn collect(app: App, g: Game, coin: Entity) {
+    if !coin.alive() {
+        return;
+    }
+    g.score += 1;
+    let pos = coin.position();
+    let spark = emitter();
+    spark.color_start = rgb(255, 230, 120);
+    spark.color_end = rgba(255, 120, 40, 0);
+    spark.speed_min = 60.0;
+    spark.speed_max = 180.0;
+    spark.lifetime_min = 0.2;
+    spark.lifetime_max = 0.5;
+    spark.size_start = 5.0;
+    spark.blend = Blend::Additive;
+    app.burst(pos, spark, 24);
+    g.pickup.play();
+    coin.despawn();
+    spawn_coin(app, g);
+}
+
+fn game_over(app: App, g: Game) {
+    g.over = true;
+    g.crash.play();
+    g.player.set_velocity(vec2(0.0, 0.0));
+    app.flash(rgb(255, 60, 60), 0.4);
+    if g.score > g.best {
+        g.best = g.score;
+        g.save.set_int("best", g.best);
+        g.save.flush();
+    }
+    g.hint_text.set_text("Hit!  Press R to play again");
+    g.hint_text.set_text_visible(true);
+}
+
+fn reset(app: App, g: Game) {
+    for h in g.hazards {
+        h.despawn();
+    }
+    for c in g.coins {
+        c.despawn();
+    }
+    g.hazards = [Entity { id: 0 }];
+    g.hazards.remove(0);
+    g.coins = [Entity { id: 0 }];
+    g.coins.remove(0);
+    g.player.set_position(vec2(480.0, 270.0));
+    g.player.set_velocity(vec2(0.0, 0.0));
+    g.score = 0;
+    g.over = false;
+    g.spawn.reset();
+    g.hint_text.set_text_visible(false);
+    for i in range(3) {
+        spawn_coin(app, g);
+    }
+    spawn_hazard(app, g);
+}
+
+fn spawn_coin(app: App, g: Game) {
+    let pos = vec2(random::random_range(80.0, 880.0), random::random_range(90.0, 460.0));
+    let coin = app.spawn_sprite(g.coin_tex, pos);
+    let sensor = collider();
+    sensor.sensor = true;
+    coin.add_circle_collider(12.0, sensor);
+    app.tween(coin).scale_to(vec2(1.25, 1.25), 0.5, Ease::InOutSine).yoyo(-1).start();
+    g.coins.push(coin);
+}
+
+fn spawn_hazard(app: App, g: Game) {
+    let pos = vec2(random::random_range(80.0, 880.0), 90.0);
+    if g.player.position().distance(pos) < 160.0 {
+        pos = vec2(960.0 - pos.x, 460.0);
+    }
+    let ball = app.spawn_sprite(g.ball_tex, pos);
+    ball.add_body(body(BodyKind::Dynamic));
+    let c = collider();
+    c.restitution = 1.0;
+    c.friction = 0.0;
+    ball.add_circle_collider(16.0, c);
+    let angle = random::random_range(0.0, 6.28);
+    ball.set_velocity(vec2(math::cos(angle), math::sin(angle)).mul(220.0));
+    g.hazards.push(ball);
+}
+
+// Static walls around the arena.
+fn walls(app: App) {
+    let color = rgb(60, 66, 96);
+    wall(app, vec2(480.0, 62.0), vec2(960.0, 12.0), color);
+    wall(app, vec2(480.0, 534.0), vec2(960.0, 12.0), color);
+    wall(app, vec2(6.0, 298.0), vec2(12.0, 480.0), color);
+    wall(app, vec2(954.0, 298.0), vec2(12.0, 480.0), color);
+}
+
+fn wall(app: App, pos: Vec2, size: Vec2, c: Color) {
+    let w = app.spawn_rect(pos, size, c);
+    let col = collider();
+    col.friction = 0.0;
+    w.add_box_collider(size.mul(0.5), col);
+}
+
+fn draw_arena(app: App) {
+    app.set_z(-10.0);
+    let y = 80.0;
+    while y < 530.0 {
+        app.draw_line(vec2(12.0, y), vec2(948.0, y), rgba(255, 255, 255, 12), 1.0);
+        y += 40.0;
+    }
+}
+
+fn centered(size: float) -> TextStyle {
+    let s = text_style(size, rgb(255, 255, 255));
+    s.align = Align::Center;
+    s.valign = VAlign::Middle;
+    s.outline = 2.0;
+    return s;
+}
+
+// A filled circle texture with a soft edge.
+fn disc(app: App, size: int, c: Color) -> Texture {
+    let pixels = [c];
+    pixels.remove(0);
+    let r = float(size) * 0.5;
+    for y in range(size) {
+        for x in range(size) {
+            let dx = float(x) + 0.5 - r;
+            let dy = float(y) + 0.5 - r;
+            let d = (dx * dx + dy * dy).sqrt();
+            let a = r - d;
+            if a > 1.0 {
+                a = 1.0;
+            }
+            if a < 0.0 {
+                a = 0.0;
+            }
+            pixels.push(c.alpha(a));
+        }
+    }
+    let tex = app.create_texture(size, size, pixels);
+    tex.set_filter(Filter::Linear);
+    return tex;
+}
+
+// A short sine blip that falls in pitch.
+fn tone(app: App, freq: float, seconds: float) -> Sound {
+    let rate = 22050;
+    let n = int(seconds * float(rate));
+    let samples = [0.0];
+    samples.remove(0);
+    let phase = 0.0;
+    for i in range(n) {
+        let t = float(i) / float(n);
+        let f = freq * (1.0 - 0.4 * t);
+        phase += 6.2831853 * f / float(rate);
+        samples.push(math::sin(phase) * 0.4 * (1.0 - t));
+    }
+    return app.create_sound(samples, rate);
+}

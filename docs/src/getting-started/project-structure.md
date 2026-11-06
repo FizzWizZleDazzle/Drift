@@ -45,6 +45,8 @@ drift/
     lighting/
     text/
     toolkit/
+  bindings/
+    candela/               <-- the candela drift package: C shim, candela sources, tests, Coin Dash example
   tests/                   <-- engine tests (ctest)
   cmake/                   <-- drift_add_shaders, drift_web_app, web page template
   docs/                    <-- this documentation (mdBook)
@@ -59,7 +61,7 @@ This is the only directory you need to include in your project. Every `#include 
 
 | Header | Description |
 |--------|-------------|
-| `App.hpp` | The `App` class; entry point, resource store, system scheduler, and main loop. This is the first header you include in any Drift program. |
+| `App.hpp` | The `App` class; entry point, resource store, system scheduler, and main loop (`run()`, or `start()`/`beginFrame()`/`endFrame()` for a host that owns its loop). This is the first header you include in any Drift program. |
 | `Types.hpp` | Fundamental types used everywhere: `Vec2`, `Vec3`, `Rect`, `Color`, `ColorF`, `Transform2D`, `EntityId`, `ComponentId`, `Phase`, `Key`, `MouseButton`, `BodyType`, and more. |
 | `Commands.hpp` | `Commands` deferred mutation buffer and `EntityCommands` fluent builder. Used to spawn/despawn entities and insert/remove components. |
 | `Query.hpp` | `Query<...>` (read-only) and `QueryMut<...>` (read-write) typed query system parameters. Supports `iter()`, `iterWithEntity()`, `single()`, `isEmpty()`, and `contains()`. |
@@ -235,6 +237,8 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
 | `tilemap` | Tiled and LDtk levels, parallax, animated tiles, autotiling, merged colliders, object spawners |
+
+Games written in candela have their own example, Coin Dash, in `bindings/candela/examples/coin_dash/`; see [Candela](../candela/overview.md).
 
 ## Typical user project structure
 

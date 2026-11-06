@@ -12,6 +12,7 @@ option(DRIFT_DEV "Enable dev overlay and tools" ON)
 option(DRIFT_BUILD_EXAMPLES "Build example programs" ON)
 option(DRIFT_BUILD_TESTS "Build engine tests" ${PROJECT_IS_TOP_LEVEL})
 option(DRIFT_BACKEND_GL "Build the OpenGL / WebGL2 renderer backend" ON)
+option(DRIFT_BUILD_CANDELA "Build the native library of the candela drift package (bindings/candela)" OFF)
 option(DRIFT_BACKEND_WEBGPU "Build the WebGPU renderer backend (wgpu-native on desktop, emdawnwebgpu on the web)" OFF)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DriftShaders.cmake)
@@ -415,4 +416,9 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp)
     target_link_libraries(drift_tests PRIVATE drift)
     add_test(NAME drift_tests COMMAND drift_tests)
+endif()
+
+# ---------- Candela package ----------
+if(DRIFT_BUILD_CANDELA)
+    add_subdirectory(bindings/candela)
 endif()

@@ -20,6 +20,7 @@
 - **Scenes and prefabs**: Save and load entities as JSON through component reflection; spawn prefabs with per-copy overrides
 - **Dev tools**: In-game entity inspector, performance panel, physics debug drawing, and hot reload of textures and scenes
 - **Parallel scheduler**: Automatic multi-threaded system dispatch based on dependency analysis
+- **Candela scripting**: Write a game as a [candela](candela/overview.md) program instead of C++ (desktop only)
 
 ## Architecture Overview
 
