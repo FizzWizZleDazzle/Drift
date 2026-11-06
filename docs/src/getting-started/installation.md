@@ -1,6 +1,6 @@
 # Installation
 
-Drift is a C++20 2D game engine for desktop (OpenGL 3.3) and the browser (WebGL2). All third-party dependencies are fetched automatically during the CMake configure step, so there is nothing to install manually beyond a compiler and CMake itself.
+Drift is a C++20 2D game engine for desktop (OpenGL 3.3, or optionally WebGPU) and the browser (WebGL2, or optionally WebGPU). All third-party dependencies are fetched automatically during the CMake configure step, so there is nothing to install manually beyond a compiler and CMake itself.
 
 ## Prerequisites
 
@@ -81,6 +81,7 @@ Drift exposes several CMake options you can toggle at configure time:
 | `DRIFT_BUILD_EXAMPLES` | `ON` | Builds the example programs in the `examples/` directory. Turn this off if you only want the engine library. |
 | `DRIFT_BACKEND_GL` | `ON` | Builds the OpenGL 3.3 / WebGL2 renderer backend. |
 | `DRIFT_BUILD_TESTS` | `ON` when Drift is the top-level project | Builds the engine tests in `tests/`. Run them with `ctest --test-dir build`. Off when Drift is pulled in with `FetchContent`. |
+| `DRIFT_BACKEND_WEBGPU` | `OFF` | Builds the WebGPU renderer backend. On desktop the configure step downloads a pinned prebuilt [wgpu-native](https://github.com/gfx-rs/wgpu-native) release (Linux, Windows and macOS on x86_64 or arm64); in the browser it uses Emscripten's `emdawnwebgpu` port. See [Rendering](../subsystems/rendering.md#backends). |
 
 To change an option, pass it with `-D` during the configure step:
 
@@ -166,6 +167,8 @@ Then configure with `emcmake` in a separate build directory:
 emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release
 cmake --build build-web
 ```
+
+Add `-DDRIFT_BACKEND_WEBGPU=ON` to include the WebGPU backend; pages fall back to WebGL2 in browsers without WebGPU. WebGPU builds link with Emscripten's `ASYNCIFY`, which makes the `.wasm` larger, because device setup, shader checks and screenshots wait for the browser.
 
 Each example becomes an `.html` page with its `.js`, `.wasm` and `.data` files. Browsers will not load WebAssembly from `file://`, so serve the directory:
 

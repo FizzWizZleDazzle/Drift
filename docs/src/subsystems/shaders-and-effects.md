@@ -6,7 +6,7 @@ Custom shaders change how sprites and the whole scene look: water, dissolve, out
 
 ## Writing a Shader
 
-A shader receives the interpolated vertex data and returns a color. Write it once in WGSL and let the build translate it for OpenGL and WebGL2 (see [Portable Shaders](#portable-shaders)), or write GLSL directly if your game only uses the OpenGL backend. A shader may carry both; the renderer picks the source the active backend understands.
+A shader receives the interpolated vertex data and returns a color. Write it once in WGSL: the WebGPU backend runs it directly, and the build translates it for OpenGL and WebGL2 (see [Portable Shaders](#portable-shaders)). You can also write GLSL directly if your game only uses the OpenGL backend. A shader may carry both; the renderer picks the source the active backend understands, so a GLSL-only shader fails to load on the WebGPU backend.
 
 GLSL: write `main()` and assign `o_color`. Drift prepends a prelude that declares everything below.
 
@@ -50,7 +50,7 @@ From strings:
 ```cpp
 ShaderDesc desc;
 desc.glslFragment = flashGLSL;
-desc.wgsl = flashWGSL;          // optional
+desc.wgsl = flashWGSL;          // used by the WebGPU backend
 ShaderHandle flash = renderer->createShader(desc);
 ```
 

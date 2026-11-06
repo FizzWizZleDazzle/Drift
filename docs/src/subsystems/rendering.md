@@ -198,9 +198,30 @@ renderer->setClearColor(ColorF{0.1f, 0.1f, 0.15f, 1.0f});
 renderer->captureScreenshot("shot.png");   // saves the next presented frame
 int32_t draws   = renderer->drawCalls();    // last frame
 int32_t sprites = renderer->spriteCount();  // last frame
-const char* api = renderer->backendName();  // e.g. "gl"
+const char* api = renderer->backendName();  // "gl" or "webgpu"
 ```
 
 ## Backends
 
-Drift renders through OpenGL 3.3 on desktop and WebGL2 in the browser. When a build includes more than one backend, choose with `Config::renderer` or the `DRIFT_RENDERER` environment variable; if the requested backend cannot start, Drift falls back to the next one. See [Shaders and Effects](shaders-and-effects.md) for how shaders work across backends.
+Drift has two renderer backends. Games draw the same way on both, and the output is the same.
+
+| Backend | Name | Desktop | Browser | Build option |
+|---------|------|---------|---------|--------------|
+| OpenGL | `"gl"` | OpenGL 3.3 | WebGL2 | `DRIFT_BACKEND_GL` (on by default) |
+| WebGPU | `"webgpu"` | Vulkan, Metal or Direct3D 12 through [wgpu-native](https://github.com/gfx-rs/wgpu-native) | WebGPU | `DRIFT_BACKEND_WEBGPU` (off by default) |
+
+OpenGL is the default and runs everywhere. Build with WebGPU when you want the modern native graphics APIs on desktop, or WebGPU in browsers that support it.
+
+When a build includes more than one backend, choose with `Config::renderer` or the `DRIFT_RENDERER` environment variable; an empty choice picks OpenGL. If the requested backend cannot start (no WebGPU adapter, a browser without WebGPU), Drift logs why and falls back to the next one, so a WebGPU build still runs on machines and browsers that only have OpenGL or WebGL2.
+
+```cpp
+app.setConfig({.title = "My Game", .renderer = "webgpu"});
+```
+
+```bash
+DRIFT_RENDERER=webgpu ./build/render_showcase
+```
+
+The WebGPU backend runs WGSL shaders only; see [Shaders and Effects](shaders-and-effects.md) for how to write shaders that work on both backends.
+
+In the browser, a frame that has to wait for the GPU (taking a screenshot, or creating a shader during the render phase) presents what it has drawn so far; the ImGui overlay and anything else drawn later in that frame are skipped.
