@@ -200,6 +200,13 @@ TEST(shape_component_draws) {
     s.kind = ShapeKind::Circle;
     s.radius = 20.f;
     w.set<Shape2D>(e, w.componentRegistry().get<Shape2D>(), s);
+    // The forms the Shapes page shows.
+    Commands& cmd = app.commands();
+    cmd.spawn().insert(Transform2D{.position = {480.f, 530.f}},
+                       Shape2D{.size = {960.f, 12.f}, .color = {60, 66, 96, 255}});
+    cmd.spawn().insert(Transform2D{.position = {200.f, 200.f}},
+                       Shape2D{.kind = ShapeKind::Circle, .radius = 40.f,
+                               .color = {255, 210, 60, 255}, .outline = 3.f});
     REQUIRE(app.beginFrame());
     app.endFrame();
     // Draw calls are reported for the previous frame.

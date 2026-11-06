@@ -74,7 +74,7 @@ Fields are the same as `BoxCollider2D`, except `radius` replaces `halfSize`.
 
 ### Velocity2D
 
-Read or write the current velocity of a physics body.
+Read or write the current velocity of a physics body. On an entity without a `RigidBody2D`, `PhysicsPlugin` moves its `Transform2D` by the velocity every frame instead, which is the cheapest way to move many things (see [Behaviors](behaviors.md)).
 
 ```cpp
 struct Velocity2D {

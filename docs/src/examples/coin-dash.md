@@ -6,14 +6,14 @@ A small complete game written in [candela](../candela/overview.md): steer a squa
 
 ## What It Shows
 
-- **The candela frame loop**: `setup` builds the game once, then `update` runs between `app.frame()` calls.
+- **Systems and components**: `coin_dash(app)` adds a `setup` startup system, two update systems (`play` steers and spawns, `show_score` keeps the HUD text current) and two collision handlers. `Player`, `Coin`, `Hazard` and the label markers are the game's own components; the game state is a `Game` resource.
+- **Collision handlers**: `on_sensor<Player, Coin>(pick_up)` collects a coin, `on_collision<Player, Hazard>(hit)` ends the round. Each handler gets the two entities in the declared order.
+- **Drawing with components**: the player and walls are `Rectangle`s, coins and hazards are `Sprite`s, the score and hint are `Text` on `hud_layer()`. Nothing is drawn by hand.
+- **Physics**: the player is a dynamic `RigidBody` steered through its `Velocity`; hazards are bouncy `CircleCollider`s with zero friction and full restitution; walls are static `BoxCollider`s. World gravity is off.
+- **Declarative behavior**: coins pulse with a yoyo `Tween`; a pickup spawns a "+1" `Text` with a `Velocity` that floats it up and a `Lifetime` that removes it, with no system involved.
 - **Input actions**: "move" is a 2D axis bound to the arrow keys, WASD and the left stick; "restart" is bound to R and the gamepad South button.
-- **Physics**: the player is a dynamic body moved by setting its velocity; hazards are bouncy circles with zero friction and full restitution; the walls are static box colliders. World gravity is off.
-- **Collision and sensor events**: coins are sensor colliders, collected through `app.sensor_entered()`; a hazard touching the player shows up in `app.collisions()`.
-- **Generated assets**: coin and hazard textures come from `app.create_texture` with a soft-edged disc; the pickup and crash sounds are sine sweeps from `app.create_sound`.
-- **Text and HUD**: the score and the restart hint are `Text` entities on `hud_layer()`.
-- **Tweens, particles, effects**: coins pulse with a yoyo scale tween, pickups throw an additive particle burst, and a hit flashes the screen red.
-- **Timers and save data**: a repeating `Timer` adds a hazard every few seconds; the best score goes to a `Save` in the per-user directory.
+- **Effects and audio**: pickups throw an additive particle burst and play a generated blip; a hit flashes the screen red.
+- **Timers and save data**: a repeating `Timer` in the `Game` resource adds a hazard every few seconds; the best score goes to a `Save`.
 
 ## Controls
 
@@ -32,4 +32,4 @@ cd bindings/candela
 candela run examples/coin_dash/main.cdl
 ```
 
-`tests/play_coin_dash.cdl` imports the game and plays it with synthetic key presses: it moves the player, drops a coin on it, throws a hazard at it and restarts, checking the game state after each step.
+`tests/play_coin_dash.cdl` builds the same app with one more update system that plays it with synthetic key presses: it moves the player, drops a coin on it, throws a hazard at it and restarts, checking the game state and taking screenshots after each step.

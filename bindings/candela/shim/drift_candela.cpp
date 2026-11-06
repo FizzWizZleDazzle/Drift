@@ -222,7 +222,6 @@ struct State {
     // Frame values cached at dc_sync_end, so reading them never races the
     // simulation.
     double dt = 0.0, elapsed = 0.0;
-    int64_t frame = 0;
 
     // Pipeline timing (performance-counter ticks) of the last frame.
     uint64_t returned = 0;          // dc_sync_end handed control to the script
@@ -568,7 +567,6 @@ EXPORT cint dc_sync_end() {
     if (auto* t = res<Time>()) {
         g.dt = t->delta;
         g.elapsed = t->elapsed;
-        g.frame = int64_t(t->frame);
     }
     g.drawZ = 0.f;
     reapBursts();
@@ -596,12 +594,9 @@ EXPORT double dc_stat(cint which) {
 }
 
 EXPORT cint dc_quit() { if (g.app) g.app->quit(); return 0; }
-EXPORT cint dc_close() { closeApp(); return 0; }
-EXPORT cint dc_running() { return g.app && g.app->running() ? 1 : 0; }
 
 EXPORT double dc_dt() { return g.dt; }
 EXPORT double dc_time() { return g.elapsed; }
-EXPORT cint dc_frame_count() { return g.frame; }
 
 EXPORT cint dc_set_title(const char* title) {
     if (!g.app) return 0;
@@ -1081,11 +1076,6 @@ EXPORT cint dc_despawn(cint h) {
     g.tweens.erase(int32_t(h));
     g.autoVelocity.erase(int32_t(h));
     return 0;
-}
-
-EXPORT cint dc_alive(cint h) {
-    ensureJoined();
-    return idOf(int32_t(h)) != InvalidEntityId ? 1 : 0;
 }
 
 // Handles whose entity went away in the engine since the last sync (a

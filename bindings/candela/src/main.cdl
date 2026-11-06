@@ -21,10 +21,8 @@ dylib "../dist/libdrift_candela" {
     int dc_sync_end();
     float dc_stat(int);
     int dc_quit();
-    int dc_close();
     float dc_dt();
     float dc_time();
-    int dc_frame_count();
     int dc_set_title(string);
     int dc_set_clear_color(Color);
     int dc_set_scale_mode(int);
@@ -111,7 +109,6 @@ dylib "../dist/libdrift_candela" {
     int dc_reserve();
     int dc_create(int[], int);
     int dc_despawn(int);
-    int dc_alive(int);
     int dc_dead_count();
     int dc_dead(int[], int);
     int dc_set_parent(int, int);

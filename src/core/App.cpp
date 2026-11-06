@@ -81,7 +81,7 @@ public:
         while (remaining_.load(std::memory_order_acquire) != 0) {
             auto status = doneCv_.wait_for(lock, std::chrono::seconds(5));
             if (status == std::cv_status::timeout && remaining_.load(std::memory_order_acquire) != 0) {
-                DRIFT_LOG_ERROR("ThreadPool: possible deadlock — remaining=%d, batchGen=%llu, tasks=%d",
+                DRIFT_LOG_ERROR("ThreadPool: possible deadlock: remaining=%d, batchGen=%llu, tasks=%d",
                                 remaining_.load(std::memory_order_acquire),
                                 (unsigned long long)batchGen_.load(std::memory_order_relaxed),
                                 batchTasks_ ? (int)batchTasks_->size() : 0);

@@ -33,6 +33,8 @@
 - [Trail Renderer](components/trail-renderer.md)
 - [Hierarchy](components/hierarchy.md)
 - [Lighting](components/lighting.md)
+- [Shapes](components/shapes.md)
+- [Behaviors](components/behaviors.md)
 
 # Subsystems
 
