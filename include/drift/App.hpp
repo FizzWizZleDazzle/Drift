@@ -68,8 +68,31 @@ public:
     App& addPlugins(PluginGroup* group);
     void addEventHandler(EventHandler* handler);
 
+    // Runs the app until it quits: start(), then beginFrame()/endFrame()
+    // until beginFrame() returns false. Returns 0, or 1 if start() failed.
     int run();
     void quit();
+
+    // ---- Driving the loop yourself ----
+    // For a host that owns its own loop (an embedding program or a language
+    // binding) instead of handing it to run(). Call start() once, then per
+    // frame beginFrame(), your own work, endFrame(). Between the two halves
+    // the world and every resource are safe to read and change from the
+    // calling thread: no system is running, input reflects this frame's
+    // events, physics has stepped, and draws queued on RendererResource are
+    // rendered by endFrame().
+    //
+    // Opens the window and graphics device, builds plugins and runs
+    // Startup systems. Returns false on failure. Only the first call does
+    // anything.
+    bool start();
+    // Advances time, polls events and runs PreUpdate, Update and PostUpdate.
+    // Returns false once the app has quit (window closed or quit() called);
+    // do not call endFrame() then.
+    bool beginFrame();
+    // Runs Extract, Render and RenderFlush: draws and presents the frame.
+    void endFrame();
+    bool running() const;
 
     const Config& config() const;
 
@@ -256,7 +279,6 @@ public:
     void setSystemSet(Phase phase, size_t index, SystemSetId setId);
 
 private:
-    bool frame();
     bool createWindowAndDevice();
     void addResourceImpl(std::type_index type, Resource* res);
     Resource* getResourceImpl(std::type_index type) const;

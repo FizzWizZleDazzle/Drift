@@ -77,6 +77,34 @@ PreUpdate -> [SDL event poll] -> [State transitions] -> Update -> PostUpdate -> 
 
 Commands are flushed after PreUpdate, Update, and PostUpdate phases. Startup systems also flush commands after running.
 
+## Driving the Loop Yourself
+
+`run()` owns the loop. A host that needs its own loop, such as a scripting language binding or a program embedding Drift in a larger application, drives the same frame in two halves instead:
+
+```cpp
+App app;
+app.setConfig(cfg);
+app.addPlugins<DefaultPlugins>();
+if (!app.start()) return 1;          // window, device, plugins, Startup systems
+
+while (app.beginFrame()) {           // time, events, PreUpdate, Update, PostUpdate
+    // Your work: read input, change the world, queue draws.
+    auto* input = app.getResource<InputResource>();
+    if (input->keyPressed(Key::Escape)) app.quit();
+    app.getResource<RendererResource>()->drawCircleFilled({100, 100}, 20, Color::red());
+    app.endFrame();                  // Extract, Render, RenderFlush: draw and present
+}
+```
+
+| Method | Does |
+|--------|------|
+| `start()` | Opens the window and graphics device, builds plugins and runs Startup systems. Returns `false` on failure. Only the first call does anything. |
+| `beginFrame()` | Advances time, polls events and runs PreUpdate, Update and PostUpdate. Returns `false` once the app has quit; do not call `endFrame()` then. |
+| `endFrame()` | Runs Extract, Render and RenderFlush. |
+| `running()` | `true` between a successful `start()` and the frame that sees `quit()` or a closed window. |
+
+Between `beginFrame()` and `endFrame()` no system is running, so the world and every resource are safe to read and change from the calling thread: input reflects this frame's events, physics has stepped and collision events are fresh, and draws queued on `RendererResource` show in this frame. `run()` is `start()` followed by this loop. In the browser `run()` hands the same two halves to the browser's frame callback.
+
 ## Plugin
 
 A `Plugin` registers resources, systems, and event handlers with the `App`. Implement the `Plugin` interface and use the `DRIFT_PLUGIN` macro for the name.

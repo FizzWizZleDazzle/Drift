@@ -37,8 +37,9 @@ struct SpriteAnimator {
             currentClip >= static_cast<int32_t>(clips.size())) return true;
         const auto& clip = clips[currentClip];
         if (clip.looping) return false;
-        return currentFrame >= static_cast<int32_t>(clip.frames.size()) - 1 &&
-               elapsed >= clip.frameDuration;
+        bool onLast = currentFrame >= static_cast<int32_t>(clip.frames.size()) - 1;
+        // The animation system stops a finished clip on its last frame.
+        return onLast && (!playing || elapsed >= clip.frameDuration);
     }
 };
 

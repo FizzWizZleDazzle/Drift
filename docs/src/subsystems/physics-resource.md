@@ -256,7 +256,7 @@ void setGravity(ResMut<PhysicsResource> physics) {
 }
 ```
 
-The default gravity is `{0, 9.8}` (downward in screen coordinates where Y increases downward).
+The default gravity is `{0, 9.8}` (downward in screen coordinates where Y increases downward). Units are pixels, so a game that wants a visible fall sets a larger value, such as `{0, 900}`. `physics->gravity()` returns the current value.
 
 ## Stats
 

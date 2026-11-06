@@ -187,6 +187,16 @@ PhysicsResource::PhysicsResource(Vec2 gravity) : impl_(new Impl) {
     }
 }
 
+void PhysicsResource::setGravity(Vec2 gravity) {
+    if (B2_IS_NULL(impl_->worldId)) return;
+    b2World_SetGravity(impl_->worldId, to_b2_vec2(gravity));
+}
+
+Vec2 PhysicsResource::gravity() const {
+    if (B2_IS_NULL(impl_->worldId)) return {};
+    return from_b2_vec2(b2World_GetGravity(impl_->worldId));
+}
+
 PhysicsResource::~PhysicsResource() {
     if (B2_IS_NON_NULL(impl_->worldId)) {
         b2DestroyWorld(impl_->worldId);

@@ -31,6 +31,10 @@ public:
 
     void step(float dt);
 
+    // World gravity in units per second squared (default {0, 9.8}; +Y is down).
+    void setGravity(Vec2 gravity);
+    Vec2 gravity() const;
+
     // Bodies
     PhysicsBody createBody(const BodyDef& def);
     void destroyBody(PhysicsBody body);
