@@ -23,6 +23,7 @@
 
 - [Transform](components/transform.md)
 - [Sprite](components/sprite.md)
+- [Text](components/text.md)
 - [Camera](components/camera.md)
 - [Physics](components/physics.md)
 - [Particles](components/particles.md)
@@ -60,6 +61,7 @@
 - [Render Showcase](examples/render-showcase.md)
 - [Audio](examples/audio.md)
 - [Lighting](examples/lighting.md)
+- [Text](examples/text.md)
 
 # Reference
 

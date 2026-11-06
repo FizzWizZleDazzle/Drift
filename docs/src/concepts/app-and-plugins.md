@@ -153,7 +153,7 @@ app.addPlugins<GamePlugins>();
 | `PostEffectsPlugin` | Post effect library: bloom, CRT, color grading and more |
 | `PhysicsPlugin` | Box2D-based 2D physics |
 | `SpritePlugin` | Sprite component registration and rendering |
-| `FontPlugin` | Font loading and text rendering |
+| `FontPlugin` | Font loading, text rendering, and the `Text` component |
 | `ParticlePlugin` | Particle system management |
 | `TilemapPlugin` | Tile-based map rendering |
 | `UIPlugin` | Immediate-mode UI (ImGui) |

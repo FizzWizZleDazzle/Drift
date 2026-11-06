@@ -12,6 +12,7 @@ A 2D game engine written in C++20, built on a Bevy-inspired Entity Component Sys
 - **Post effect library**: bloom, color grading, CRT, vignette, blur, pixelate, grayscale, sepia, screen fades
 - **Box2D physics** -- Full 2D rigid body physics with collision events and sensors
 - **Particle system** -- Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
+- **Text**: UTF-8 text with kerning, alignment, wrapping, outlines and shadows; a built-in font, TrueType/OpenType and BMFont pixel fonts, and a `Text` component
 - **Sprite animation** -- Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** -- Tiled JSON map loading and rendering
 - **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
@@ -104,6 +105,7 @@ target_link_libraries(my_game PRIVATE drift)
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
 | `audio` | Spatial sound sources you drag around, bus volume controls, music crossfades and playlists |
 | `lighting` | Colored lights, spot light, shadows from walls and colliders, every library post effect |
+| `text` | Built-in font, alignment, wrapping, UTF-8, outline and shadow, bitmap fonts, Text entities |
 
 Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`.
 
@@ -116,7 +118,7 @@ Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build b
 | Rendering | OpenGL 3.3 / WebGL2 |
 | Physics | [Box2D](https://box2d.org) v3.0 |
 | Debug UI | [Dear ImGui](https://github.com/ocornut/imgui) |
-| Fonts | stb_truetype |
+| Fonts | stb_truetype; built-in [Noto Sans](https://github.com/notofonts/latin-greek-cyrillic) subset (SIL OFL 1.1) |
 | Images | stb_image |
 | Audio decoding | stb_vorbis, dr_wav, dr_mp3 |
 | Spritesheets | cute_aseprite |
