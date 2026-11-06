@@ -108,7 +108,7 @@ Sounds are loaded through the `AssetServer` and played through `AudioResource`:
 ```cpp
 game->sndWing = assets->load<Sound>("assets/wing.wav");
 // ...
-if (game->sndWing.valid() && audio) audio->playSound(game->sndWing, 0.6f);
+if (game->sndWing.valid() && audio) audio->playSound(game->sndWing, {.volume = 0.6f});
 ```
 
 The game uses five sounds: wing flap, hit, point scored, die, and swoosh (menu transition).

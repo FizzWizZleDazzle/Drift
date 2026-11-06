@@ -44,7 +44,8 @@ Drift uses CMake `FetchContent` to download and build every dependency at config
 | [flecs](https://github.com/SanderMertens/flecs) | v4.0.4 | Entity Component System |
 | [Box2D](https://github.com/erincatto/box2d) | v3.0.0 | 2D physics simulation |
 | [Dear ImGui](https://github.com/ocornut/imgui) | v1.91.8 | Developer overlay and debug UI |
-| [stb](https://github.com/nothings/stb) | latest | Image loading (stb_image), PNG screenshots (stb_image_write), font rasterization (stb_truetype) |
+| [stb](https://github.com/nothings/stb) | latest | Image loading (stb_image), PNG screenshots (stb_image_write), font rasterization (stb_truetype), OGG Vorbis decoding (stb_vorbis) |
+| [dr_libs](https://github.com/mackron/dr_libs) | pinned commit | WAV (dr_wav) and MP3 (dr_mp3) decoding |
 | [cute_aseprite](https://github.com/RandyGaul/cute_headers) | latest | Aseprite sprite sheet loading |
 | [nlohmann/json](https://github.com/nlohmann/json) | v3.11.3 | JSON parsing (used for Tiled map support) |
 
@@ -78,6 +79,7 @@ Drift exposes several CMake options you can toggle at configure time:
 |--------|---------|-------------|
 | `DRIFT_DEV` | `ON` | Enables the developer overlay and debug tools (ImGui-based). Defines the `DRIFT_DEV=1` preprocessor macro. Turn this off for release/shipping builds. |
 | `DRIFT_BUILD_EXAMPLES` | `ON` | Builds the example programs in the `examples/` directory. Turn this off if you only want the engine library. |
+| `DRIFT_BUILD_TESTS` | `ON` when Drift is the top-level project | Builds the engine tests. Run them with `ctest --test-dir build`. |
 
 To change an option, pass it with `-D` during the configure step:
 

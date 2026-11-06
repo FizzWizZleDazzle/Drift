@@ -150,6 +150,28 @@ Usage:
 PanelFlags flags = PanelFlags::Border | PanelFlags::Scrollable;
 ```
 
+## LoadMode
+
+How `AudioResource::loadSound` keeps a sound in memory. See [Audio](../subsystems/audio.md).
+
+```cpp
+enum class LoadMode {
+    Decode, // decode the whole file up front; best for short effects
+    Stream, // keep the compressed file, decode while playing; best for music
+};
+```
+
+## Rolloff
+
+How a spatial `AudioSource` gets quieter between `minDistance` and `maxDistance`.
+
+```cpp
+enum class Rolloff {
+    Linear,  // straight line from full volume to silence
+    Inverse, // falls off quickly near the source; silent at maxDistance
+};
+```
+
 ## LogLevel
 
 Severity levels for the logging system. See the [Logging](logging.md) chapter for details.

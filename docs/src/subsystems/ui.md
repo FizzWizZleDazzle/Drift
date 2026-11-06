@@ -97,7 +97,7 @@ A horizontal slider that modifies `value` in place. Returns `true` when the valu
 ```cpp
 static float volume = 0.5f;
 if (ui->slider("Volume", &volume, 0.f, 1.f)) {
-    audio->setMusicVolume(volume);
+    audio->setBusVolume(audio->musicBus(), volume);
 }
 ```
 
@@ -248,11 +248,13 @@ void pauseMenu(ResMut<UIResource> ui, Res<InputResource> input,
 
     static float musicVol = 0.5f;
     if (ui->slider("Music", &musicVol, 0.f, 1.f)) {
-        audio->setMusicVolume(musicVol);
+        audio->setBusVolume(audio->musicBus(), musicVol);
     }
 
     static float sfxVol = 0.8f;
-    ui->slider("SFX", &sfxVol, 0.f, 1.f);
+    if (ui->slider("SFX", &sfxVol, 0.f, 1.f)) {
+        audio->setBusVolume(audio->sfxBus(), sfxVol);
+    }
 
     if (ui->button("Resume", Rect{50, 160, 200, 40})) {
         state->paused = false;

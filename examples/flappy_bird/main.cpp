@@ -170,7 +170,7 @@ static void spawnPipe(FlappyState& g, Commands& cmd) {
 
 static void doFlap(FlappyState& g, AudioResource* audio) {
     g.birdVel = FLAP_VELOCITY;
-    if (g.sndWing.valid() && audio) audio->playSound(g.sndWing, 0.6f);
+    if (g.sndWing.valid() && audio) audio->playSound(g.sndWing, {.volume = 0.6f});
 }
 
 // --- Startup ---
@@ -255,7 +255,7 @@ void flappyStartup(ResMut<FlappyState> game, ResMut<AssetServer> assets,
 // --- OnEnter systems ---
 void onEnterMenu(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
     resetGame(*game);
-    if (game->sndSwoosh.valid()) audio->playSound(game->sndSwoosh, 0.5f);
+    if (game->sndSwoosh.valid()) audio->playSound(game->sndSwoosh, {.volume = 0.5f});
 }
 
 void onEnterPlaying(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
@@ -263,7 +263,7 @@ void onEnterPlaying(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
 }
 
 void onEnterDead(ResMut<FlappyState> game, ResMut<AudioResource> audio) {
-    if (game->sndHit.valid()) audio->playSound(game->sndHit, 0.8f);
+    if (game->sndHit.valid()) audio->playSound(game->sndHit, {.volume = 0.8f});
     game->hitPlayed = true;
 }
 
@@ -326,7 +326,7 @@ void playingUpdate(Res<InputResource> input, Res<Time> time,
         if (!p.scored && p.x + PIPE_WIDTH < BIRD_X) {
             p.scored = true;
             game->score++;
-            if (game->sndPoint.valid()) audio->playSound(game->sndPoint, 0.7f);
+            if (game->sndPoint.valid()) audio->playSound(game->sndPoint, {.volume = 0.7f});
         }
     }
 

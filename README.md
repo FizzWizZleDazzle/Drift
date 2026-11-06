@@ -11,6 +11,7 @@ A lightweight 2D game engine written in C++20, built on a Bevy-inspired Entity C
 - **Particle system** -- Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** -- Spritesheet-based animation clips with Aseprite import support
 - **Tilemap rendering** -- Tiled JSON map loading and rendering
+- **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
 - **Parallel scheduler** -- Automatic multi-threaded system dispatch based on dependency analysis
 - **ImGui integration** -- Built-in developer overlay via Dear ImGui
 
@@ -90,6 +91,7 @@ target_link_libraries(my_game PRIVATE drift)
 | `asteroid_field` | Physics bodies, collision handling, trail renderers, camera shake |
 | `particle_storm` | Advanced particle configuration, multiple emitters, emission shapes |
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
+| `audio` | Spatial sound sources you drag around, bus volume controls, music crossfades and playlists |
 
 Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`.
 
@@ -104,6 +106,7 @@ Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build b
 | Debug UI | [Dear ImGui](https://github.com/ocornut/imgui) |
 | Fonts | stb_truetype |
 | Images | stb_image |
+| Audio decoding | stb_vorbis, dr_wav, dr_mp3 |
 | Spritesheets | cute_aseprite |
 | Tilemaps | nlohmann/json (Tiled format) |
 
