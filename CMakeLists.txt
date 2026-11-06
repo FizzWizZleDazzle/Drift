@@ -12,6 +12,9 @@ option(DRIFT_DEV "Enable dev overlay and tools" ON)
 option(DRIFT_BUILD_EXAMPLES "Build example programs" ON)
 option(DRIFT_BACKEND_GL "Build the OpenGL / WebGL2 renderer backend" ON)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DriftShaders.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DriftWeb.cmake)
+
 # ---------- Dependencies via FetchContent ----------
 include(FetchContent)
 
@@ -223,6 +226,16 @@ if(DRIFT_DEV)
     target_compile_definitions(drift PUBLIC DRIFT_DEV=1)
 endif()
 
+# Browser build: WebGL2, growable memory, no threads.
+if(EMSCRIPTEN)
+    target_link_options(drift PUBLIC
+        -sMIN_WEBGL_VERSION=2
+        -sMAX_WEBGL_VERSION=2
+        -sALLOW_MEMORY_GROWTH=1
+        -sSTACK_SIZE=1048576
+    )
+endif()
+
 # Platform libraries
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(drift PUBLIC m dl pthread)
@@ -232,12 +245,15 @@ endif()
 if(DRIFT_BUILD_EXAMPLES)
     add_executable(hello_sprites examples/hello_sprites/main.cpp)
     target_link_libraries(hello_sprites PRIVATE drift)
+    drift_web_app(hello_sprites ASSETS examples/hello_sprites/assets)
 
     add_executable(fireball examples/fireball/main.cpp)
     target_link_libraries(fireball PRIVATE drift)
+    drift_web_app(fireball)
 
     add_executable(flappy_bird examples/flappy_bird/main.cpp)
     target_link_libraries(flappy_bird PRIVATE drift)
+    drift_web_app(flappy_bird ASSETS examples/flappy_bird/assets)
     option(DRIFT_FLAPPY_IMGUI_UI "Use ImGui for Flappy Bird UI instead of sprite overlays" OFF)
     if(DRIFT_FLAPPY_IMGUI_UI)
         target_compile_definitions(flappy_bird PRIVATE FLAPPY_IMGUI_UI)
@@ -245,10 +261,23 @@ if(DRIFT_BUILD_EXAMPLES)
 
     add_executable(asteroid_field examples/asteroid_field/main.cpp)
     target_link_libraries(asteroid_field PRIVATE drift)
+    drift_web_app(asteroid_field)
 
     add_executable(particle_storm examples/particle_storm/main.cpp)
     target_link_libraries(particle_storm PRIVATE drift)
+    drift_web_app(particle_storm)
 
     add_executable(render_showcase examples/render_showcase/main.cpp)
     target_link_libraries(render_showcase PRIVATE drift)
+    # The WGSL sprite shader is translated for GL when naga is installed.
+    find_program(DRIFT_NAGA naga HINTS $ENV{HOME}/.cargo/bin)
+    if(DRIFT_NAGA)
+        drift_add_shaders(render_showcase
+            OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders/render_showcase
+            SHADERS examples/render_showcase/shaders/wobble.wgsl)
+        drift_web_app(render_showcase ASSETS examples/render_showcase/assets
+            PRELOAD ${CMAKE_CURRENT_BINARY_DIR}/shaders/render_showcase@/shaders/render_showcase)
+    else()
+        drift_web_app(render_showcase ASSETS examples/render_showcase/assets)
+    endif()
 endif()

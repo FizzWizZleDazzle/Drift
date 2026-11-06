@@ -203,4 +203,4 @@ const char* api = renderer->backendName();  // e.g. "gl"
 
 ## Backends
 
-Drift renders through OpenGL 3.3. When a build includes more than one backend, choose with `Config::renderer` or the `DRIFT_RENDERER` environment variable; if the requested backend cannot start, Drift falls back to the next one. See [Shaders and Effects](shaders-and-effects.md) for how shaders work across backends.
+Drift renders through OpenGL 3.3 on desktop and WebGL2 in the browser. When a build includes more than one backend, choose with `Config::renderer` or the `DRIFT_RENDERER` environment variable; if the requested backend cannot start, Drift falls back to the next one. See [Shaders and Effects](shaders-and-effects.md) for how shaders work across backends.

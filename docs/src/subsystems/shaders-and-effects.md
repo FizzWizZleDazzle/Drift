@@ -6,7 +6,7 @@ Custom shaders change how sprites and the whole scene look: water, dissolve, out
 
 ## Writing a Shader
 
-A shader receives the interpolated vertex data and returns a color. Write it in GLSL for the OpenGL backend. Shaders may also carry a WGSL version for backends that consume WGSL; the renderer picks the source the active backend understands.
+A shader receives the interpolated vertex data and returns a color. Write it once in WGSL and let the build translate it for OpenGL and WebGL2 (see [Portable Shaders](#portable-shaders)), or write GLSL directly if your game only uses the OpenGL backend. A shader may carry both; the renderer picks the source the active backend understands.
 
 GLSL: write `main()` and assign `o_color`. Drift prepends a prelude that declares everything below.
 
@@ -54,7 +54,28 @@ desc.wgsl = flashWGSL;          // optional
 ShaderHandle flash = renderer->createShader(desc);
 ```
 
-From files: `loadShader("shaders/flash")` reads `shaders/flash.frag.glsl` and `shaders/flash.wgsl` when they exist.
+From files: `loadShader("shaders/flash")` reads `shaders/flash.wgsl`, `shaders/flash.frag.glsl` and `shaders/flash.vert.glsl` when they exist.
+
+### Portable Shaders
+
+`drift_add_shaders` translates WGSL shaders to GLSL at build time with [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga) (`cargo install naga-cli`). For each `<name>.wgsl` it writes `<name>.wgsl`, `<name>.vert.glsl` and `<name>.frag.glsl` into `OUTPUT_DIR`, ready for `loadShader`:
+
+```cmake
+drift_add_shaders(my_game
+    OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders
+    SHADERS shaders/water.wgsl shaders/dissolve.wgsl)
+# Web builds: ship the translated files too.
+drift_web_app(my_game ASSETS assets PRELOAD ${CMAKE_CURRENT_BINARY_DIR}/shaders@/shaders)
+```
+
+With `OUTPUT_DIR` in the build directory the files sit next to the executable, and the web build preloads them at `/shaders`, so load them relative to `SDL_GetBasePath()` (which is `/` in the browser):
+
+```cpp
+std::string path = std::string(SDL_GetBasePath()) + "shaders/water";
+ShaderHandle water = renderer->loadShader(path.c_str());
+```
+
+The shader body is the same `fn fragment` function shown above; the prelude is added during translation. `examples/render_showcase` uses this for its sprite shader.
 
 Compile errors are logged with the backend name and return an empty handle.
 

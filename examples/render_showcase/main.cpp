@@ -21,8 +21,11 @@
 #include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
 
+#include <SDL3/SDL.h>
+
 #include <cmath>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 using namespace drift;
@@ -56,6 +59,7 @@ struct Showcase : Resource {
     TextureHandle minimap;
     FontHandle font;
     MaterialHandle post;
+    MaterialHandle wobble;
     int32_t postId = 0;
     EntityId mainCamera = InvalidEntityId;
     TextureHandle glow;
@@ -146,6 +150,14 @@ static void setup(ResMut<RendererResource> r, ResMut<FontResource> fonts,
     r->setMaterialParam(sc->post, 0, {1.f, 0.f, 0.f, 0.f});
     sc->postId = r->addPostEffect(0, sc->post);
 
+    // A WGSL sprite shader translated at build time by drift_add_shaders
+    // (see CMakeLists.txt). Sprites keep the default shader if it is absent.
+    std::string shaderDir = std::string(SDL_GetBasePath()) + "shaders/render_showcase/wobble";
+    if (ShaderHandle wobble = r->loadShader(shaderDir.c_str())) {
+        sc->wobble = r->createMaterial(wobble);
+        r->setMaterialParam(sc->wobble, 0, {1.f, 0.f, 0.f, 0.f});
+    }
+
     sc->glow = makeGlow(*r);
     sc->lightMap = r->createRenderTarget(640, 360, {TextureFilter::Linear});
     sc->lightHook = addLighting(*r, sc.get());
@@ -166,6 +178,7 @@ static void setup(ResMut<RendererResource> r, ResMut<FontResource> fonts,
             s.origin = {16.f, 16.f};
             s.zOrder = -1.f;
             s.tint = Color(255, 255, 255, 200);
+            s.material = sc->wobble;
             cmd.spawn().insert(Transform2D{{x * 160.f, y * 160.f}, 0.f, {1.5f, 1.5f}}, s);
         }
 }

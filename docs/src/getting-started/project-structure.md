@@ -16,7 +16,7 @@ drift/
     ecs/                   <-- World, Commands, ScriptSystem
     renderer/              <-- RendererResource, RenderSnapshot
     gfx/                   <-- graphics device interface and backends
-      gl/                  <-- OpenGL 3.3 backend
+      gl/                  <-- OpenGL 3.3 / WebGL2 backend
       shaders/             <-- built-in shaders and the shader prelude
     input/                 <-- InputResource
     audio/                 <-- AudioResource
@@ -33,6 +33,7 @@ drift/
     asteroid_field/
     particle_storm/
     render_showcase/
+  cmake/                   <-- drift_add_shaders, drift_web_app, web page template
   docs/                    <-- this documentation (mdBook)
   CMakeLists.txt           <-- build configuration
 ```

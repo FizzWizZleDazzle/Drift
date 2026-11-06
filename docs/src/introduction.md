@@ -6,7 +6,7 @@
 
 - **Bevy-style ECS** — Typed systems with automatic dependency injection via `Res<T>`, `ResMut<T>`, `Query<T>`, and `Commands`
 - **Plugin architecture** — Modular subsystems (rendering, physics, audio, input, etc.) registered as plugins
-- **2D renderer**: batched sprites and shapes, render layers, multiple cameras, render targets, custom shaders and post effects, pixel-perfect scaling
+- **2D renderer**: batched sprites and shapes, render layers, multiple cameras, render targets, custom shaders and post effects, pixel-perfect scaling. OpenGL 3.3 on desktop, WebGL2 in the browser
 - **Box2D physics** — Full 2D rigid body physics with collision events and sensors
 - **Particle system** — Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support
@@ -49,7 +49,7 @@ int main() {
 |-------|-----------|
 | ECS | [flecs](https://github.com/SanderMertens/flecs) v4.0.4 |
 | Windowing, input, audio | [SDL3](https://libsdl.org) |
-| Rendering | OpenGL 3.3 |
+| Rendering | OpenGL 3.3 / WebGL2 |
 | Physics | [Box2D](https://box2d.org) v3.0 |
 | Debug UI | [Dear ImGui](https://github.com/ocornut/imgui) |
 | Fonts | stb_truetype |

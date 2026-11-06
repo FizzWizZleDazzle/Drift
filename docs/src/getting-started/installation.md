@@ -1,6 +1,6 @@
 # Installation
 
-Drift is a C++20 2D game engine that renders through OpenGL 3.3. All third-party dependencies are fetched automatically during the CMake configure step, so there is nothing to install manually beyond a compiler and CMake itself.
+Drift is a C++20 2D game engine for desktop (OpenGL 3.3) and the browser (WebGL2). All third-party dependencies are fetched automatically during the CMake configure step, so there is nothing to install manually beyond a compiler and CMake itself.
 
 ## Prerequisites
 
@@ -78,6 +78,7 @@ Drift exposes several CMake options you can toggle at configure time:
 |--------|---------|-------------|
 | `DRIFT_DEV` | `ON` | Enables the developer overlay and debug tools (ImGui-based). Defines the `DRIFT_DEV=1` preprocessor macro. Turn this off for release/shipping builds. |
 | `DRIFT_BUILD_EXAMPLES` | `ON` | Builds the example programs in the `examples/` directory. Turn this off if you only want the engine library. |
+| `DRIFT_BACKEND_GL` | `ON` | Builds the OpenGL 3.3 / WebGL2 renderer backend. |
 
 To change an option, pass it with `-D` during the configure step:
 
@@ -90,12 +91,15 @@ cmake --build build
 
 After building with examples enabled, run one of the example programs to verify everything works:
 
+Examples load their assets relative to the working directory, so run them from their example folder:
+
 ```bash
 # Linux / macOS
-./build/hello_sprites
+cd examples/hello_sprites && ../../build/hello_sprites
 
-# Windows (from the repo root)
-.\build\Debug\hello_sprites.exe
+# Windows
+cd examples\hello_sprites
+..\..\build\Debug\hello_sprites.exe
 ```
 
 You should see a window with a player sprite you can move with WASD or arrow keys, surrounded by orbiting sprites. If you see this, your build is working correctly.
@@ -133,3 +137,52 @@ cmake --build build
 ```
 
 CMake will automatically fetch Drift and all of its transitive dependencies. See the [Hello World](hello-world.md) chapter for what to put in `main.cpp`.
+
+## Building for the web
+
+Drift builds for the browser with [Emscripten](https://emscripten.org). The same game code runs unchanged; the web build renders through WebGL2 and runs systems on one thread.
+
+Install the Emscripten SDK once:
+
+```bash
+git clone https://github.com/emscripten-core/emsdk.git
+cd emsdk && ./emsdk install latest && ./emsdk activate latest
+source ./emsdk_env.sh
+```
+
+Then configure with `emcmake` in a separate build directory:
+
+```bash
+emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release
+cmake --build build-web
+```
+
+Each example becomes an `.html` page with its `.js`, `.wasm` and `.data` files. Browsers will not load WebAssembly from `file://`, so serve the directory:
+
+```bash
+cd build-web && python3 -m http.server 8000
+# open http://localhost:8000/flappy_bird.html
+```
+
+### Web builds of your own game
+
+Call `drift_web_app` on your game target. It packages asset folders, sets the page template, and does nothing in desktop builds, so you can call it unconditionally:
+
+```cmake
+add_executable(my_game main.cpp)
+target_link_libraries(my_game PRIVATE drift)
+drift_web_app(my_game ASSETS assets)                 # files appear under "assets/"
+# drift_web_app(my_game ASSETS assets SHELL web/index.html)   # your own page
+```
+
+`PRELOAD <src>@<dst>` maps any other directory into the virtual file system. A custom `SHELL` page must contain a `<canvas id="canvas">` and the `{{{ SCRIPT }}}` placeholder; start from `cmake/drift_shell.html`.
+
+## Shader translation (optional)
+
+Custom shaders written in WGSL are translated to GLSL at build time by [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga). You only need it if your game uses `drift_add_shaders`:
+
+```bash
+cargo install naga-cli
+```
+
+See [Shaders and Effects](../subsystems/shaders-and-effects.md).
