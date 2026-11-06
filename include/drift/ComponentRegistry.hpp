@@ -32,6 +32,12 @@ public:
         return ids_.find(std::type_index(typeid(T))) != ids_.end();
     }
 
+    // Id for a type known only at runtime; 0 if it was never registered.
+    ComponentId get(std::type_index type) const {
+        auto it = ids_.find(type);
+        return it != ids_.end() ? it->second : 0;
+    }
+
     void addByName(const char* name, ComponentId id) {
         if (name) idsByName_[name] = id;
     }

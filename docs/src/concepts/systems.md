@@ -186,7 +186,7 @@ app.addSystem("my_lambda_system", Phase::Update, [](App& app) {
 });
 ```
 
-Lambda systems are always exclusive in the parallel scheduler -- they cannot run concurrently with other systems because the engine cannot analyze their resource access at compile time. Prefer typed system functions for production code.
+Lambda systems are always exclusive in the parallel scheduler: they cannot run concurrently with other systems because the engine cannot analyze their resource access at compile time. Systems registered after a lambda in the same phase wait for it. Use a lambda when a system needs the whole world at once, such as saving or spawning a [scene](../subsystems/scenes.md); prefer typed system functions otherwise.
 
 ## Parallel Scheduler
 
@@ -195,7 +195,7 @@ The engine automatically parallelizes systems within the PreUpdate, Update, and 
 1. For each phase, it builds batches of non-conflicting systems.
 2. Two systems conflict if they access any overlapping type where at least one access is a write.
 3. Non-conflicting systems in a batch run simultaneously on the thread pool.
-4. Lambda systems and systems with no tracked dependencies are marked exclusive and always run alone.
+4. Lambda systems and systems with no tracked dependencies are marked exclusive and always run alone. Nothing registered after an exclusive system runs before it.
 5. Ordering constraints (`.before()`/`.after()`) are respected: a system will not be batched until its predecessors complete.
 
 The scheduler uses the function signature to determine access patterns:

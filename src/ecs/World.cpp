@@ -1,4 +1,5 @@
 #include <drift/World.hpp>
+#include <drift/Reflect.hpp>
 #include <drift/Log.hpp>
 #include <drift/components/Sprite.hpp>
 #include <drift/components/Camera.hpp>
@@ -8,6 +9,7 @@
 #include "flecs.h"
 
 #include <cstring>
+#include <string>
 
 namespace drift {
 
@@ -51,12 +53,50 @@ World::World()
     }
 
     // Register built-in components (also populate ComponentRegistry)
-    impl_->transform2dId = registerComponent<Transform2D>("Transform2D");
-    impl_->spriteId = registerComponent<Sprite>("Sprite");
-    impl_->cameraId = registerComponent<Camera>("Camera");
-    impl_->nameId = registerComponent<Name>("Name");
-    impl_->parentId = registerComponent<Parent>("Parent");
-    impl_->childrenId = registerComponent<Children>("Children");
+    reflect::enumType<BlendMode>("BlendMode", {
+        {"Alpha", BlendMode::Alpha}, {"Additive", BlendMode::Additive},
+        {"Multiply", BlendMode::Multiply}, {"Premultiplied", BlendMode::Premultiplied},
+        {"Screen", BlendMode::Screen}, {"Opaque", BlendMode::Opaque}});
+    reflect::enumType<Flip>("Flip", {
+        {"None", Flip::None}, {"H", Flip::H}, {"V", Flip::V}, {"HV", Flip::H | Flip::V}});
+
+    reflect::component<Transform2D>(*this, "Transform2D")
+        .field("position", &Transform2D::position)
+        .field("rotation", &Transform2D::rotation)
+        .field("scale", &Transform2D::scale);
+    reflect::component<Sprite>(*this, "Sprite")
+        .field("texture", &Sprite::texture)
+        .field("srcRect", &Sprite::srcRect)
+        .field("origin", &Sprite::origin)
+        .field("tint", &Sprite::tint)
+        .field("flip", &Sprite::flip)
+        .field("zOrder", &Sprite::zOrder)
+        .field("visible", &Sprite::visible)
+        .field("blend", &Sprite::blend)
+        .field("layer", &Sprite::layer);
+    reflect::component<Camera>(*this, "Camera")
+        .field("zoom", &Camera::zoom)
+        .field("rotation", &Camera::rotation)
+        .field("active", &Camera::active)
+        .field("viewport", &Camera::viewport)
+        .field("order", &Camera::order)
+        .field("layerMask", &Camera::layerMask)
+        .field("clear", &Camera::clear)
+        .field("clearColor", &Camera::clearColor);
+    reflect::component<Name>(*this, "Name")
+        .field("value", &Name::value);
+    // Children is derived from Parent, so only Parent is described; scenes
+    // rebuild Children when they load.
+    reflect::component<Parent>(*this, "Parent")
+        .entity("entity", &Parent::entity);
+    registerComponent<Children>("Children");
+
+    impl_->transform2dId = registry_.get<Transform2D>();
+    impl_->spriteId = registry_.get<Sprite>();
+    impl_->cameraId = registry_.get<Camera>();
+    impl_->nameId = registry_.get<Name>();
+    impl_->parentId = registry_.get<Parent>();
+    impl_->childrenId = registry_.get<Children>();
 
     DRIFT_LOG_INFO("ECS world created (flecs)");
 }
@@ -94,6 +134,48 @@ ComponentId World::registerComponent(const char* name, size_t size, size_t align
         return 0;
     }
     return static_cast<ComponentId>(id);
+}
+
+namespace {
+
+const ComponentLifecycle& lifecycleOf(const ecs_type_info_t* ti) {
+    return *static_cast<const ComponentLifecycle*>(ti->hooks.ctx);
+}
+
+void hookCtor(void* ptr, int32_t count, const ecs_type_info_t* ti) {
+    auto* p = static_cast<char*>(ptr);
+    for (int32_t i = 0; i < count; ++i) lifecycleOf(ti).construct(p + i * ti->size);
+}
+
+void hookDtor(void* ptr, int32_t count, const ecs_type_info_t* ti) {
+    auto* p = static_cast<char*>(ptr);
+    for (int32_t i = 0; i < count; ++i) lifecycleOf(ti).destroy(p + i * ti->size);
+}
+
+void hookCopy(void* dst, const void* src, int32_t count, const ecs_type_info_t* ti) {
+    auto* d = static_cast<char*>(dst);
+    auto* s = static_cast<const char*>(src);
+    for (int32_t i = 0; i < count; ++i) lifecycleOf(ti).copy(d + i * ti->size, s + i * ti->size);
+}
+
+void hookMove(void* dst, void* src, int32_t count, const ecs_type_info_t* ti) {
+    auto* d = static_cast<char*>(dst);
+    auto* s = static_cast<char*>(src);
+    for (int32_t i = 0; i < count; ++i) lifecycleOf(ti).move(d + i * ti->size, s + i * ti->size);
+}
+
+} // namespace
+
+void World::setComponentLifecycle(ComponentId component, const ComponentLifecycle& lifecycle) {
+    if (!impl_->ecs || !component) return;
+    ecs_type_hooks_t hooks = {};
+    hooks.ctor = hookCtor;
+    hooks.dtor = hookDtor;
+    hooks.copy = hookCopy;
+    hooks.move = hookMove;
+    hooks.ctx = new ComponentLifecycle(lifecycle);
+    hooks.ctx_free = [](void* ctx) { delete static_cast<ComponentLifecycle*>(ctx); };
+    ecs_set_hooks_id(impl_->ecs, static_cast<ecs_entity_t>(component), &hooks);
 }
 
 ComponentId World::lookupComponent(const char* name) const {
@@ -167,6 +249,19 @@ bool World::hasComponent(EntityId entity, ComponentId component) const {
     if (!impl_->ecs) return false;
     return ecs_has_id(impl_->ecs, static_cast<ecs_entity_t>(entity),
                       static_cast<ecs_id_t>(component));
+}
+
+std::vector<EntityId> World::entitiesWith(ComponentId component) {
+    std::vector<EntityId> out;
+    if (!impl_->ecs || !component) return out;
+    std::string expr = "#" + std::to_string(component);
+    QueryIter it = queryIter(expr.c_str());
+    while (queryNext(&it)) {
+        EntityId* ents = queryEntities(&it);
+        out.insert(out.end(), ents, ents + it.count);
+    }
+    queryFini(&it);
+    return out;
 }
 
 // ---------------------------------------------------------------------------

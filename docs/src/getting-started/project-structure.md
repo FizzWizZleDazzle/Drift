@@ -66,7 +66,9 @@ This is the only directory you need to include in your project. Every `#include 
 | `Resource.hpp` | `Resource` base class, `Res<T>` (read-only) and `ResMut<T>` (read-write) wrappers used as system parameters. |
 | `Plugin.hpp` | `Plugin` and `PluginGroup` base classes for modular subsystem registration. |
 | `System.hpp` | System traits, `AccessDescriptor`, and compile-time dependency extraction from system function signatures. |
-| `AssetServer.hpp` | `AssetServer` resource with `load<Texture>()`, `load<Sound>()`, `load<Font>()` template API. |
+| `AssetServer.hpp` | `AssetServer` resource with `load<Texture>()`, `load<Sound>()`, `load<Font>()` template API, path lookup and hot reload hooks. |
+| `Reflect.hpp` | Component reflection: describe a component's fields once for scenes and the inspector. |
+| `Scene.hpp` | `SceneResource`: save, load and spawn JSON scenes and prefabs. |
 | `World.hpp` | Low-level ECS world (wraps flecs). Typically accessed indirectly through `Query` and `Commands`. |
 | `Events.hpp` | `Events<T>` double-buffered storage, `EventWriter<T>`, `EventReader<T>` system parameters. |
 | `State.hpp` | `State<T>`, `NextState<T>` for finite state machines with `OnEnter`/`OnExit` system hooks. |
@@ -127,6 +129,8 @@ Each plugin registers resources and systems in its `build()` method. Most are he
 | `TweenPlugin.hpp` | `TweenPlugin` | `Tweens` resource, advanced in PostUpdate; `TweenFinished` events. |
 | `YSortPlugin.hpp` | `YSortPlugin` | Sets `Sprite::zOrder` from y for entities with `YSort`. |
 | `SavePlugin.hpp` | `SavePlugin` | `SaveData` opened on the per-user save directory. Not in `DefaultPlugins`; it needs your game's name. |
+| `ScenePlugin.hpp` | `ScenePlugin` | `SceneResource` for JSON scenes and prefabs. |
+| `HotReloadPlugin.hpp` | `HotReloadPlugin` | Reloads textures and scenes when their files change (desktop; in `DefaultPlugins` with `DRIFT_DEV`). |
 
 #### `include/drift/resources/` -- Resource types
 
@@ -195,6 +199,19 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 - `src/effects/` -- `PostEffects.cpp` and the effect shaders
 - `src/gameplay/` -- `Tween.cpp`, `InputActions.cpp`, `SaveData.cpp`, `SpatialHash.cpp`, `Pathfinding.cpp`
 - `src/math/` -- `Noise.cpp`
+- `src/core/`: `App.cpp`, `AssetServer.cpp`, `Reflect.cpp`, `Log.cpp`
+- `src/ecs/`: `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
+- `src/renderer/`: `RendererResource.cpp`, `RenderSnapshot.cpp`
+- `src/input/`: `InputResource.cpp`
+- `src/audio/`: `AudioResource.cpp`
+- `src/physics/`: `PhysicsResource.cpp`
+- `src/sprite/`: `SpriteResource.cpp`
+- `src/font/`: `FontResource.cpp`
+- `src/particles/`: `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
+- `src/tilemap/`: `TilemapResource.cpp`
+- `src/ui/`: `UIResource.cpp`, `DevInspector.cpp`, `DevPerformance.cpp`
+- `src/scene/`: `SceneResource.cpp`
+- `src/hotreload/`: `HotReload.cpp`
 
 You should not need to read or modify these files when building a game. They are linked into the `drift` static library automatically.
 
@@ -211,6 +228,7 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `particle_storm` | Advanced particle system configuration, multiple emitters |
 | `audio` | Spatial audio sources, mixer buses, music crossfades and playlists |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* on a noise-generated grid, spatial queries, Y-sort, save data |
+| `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
 
 ## Typical user project structure
 

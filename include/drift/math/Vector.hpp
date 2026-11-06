@@ -122,7 +122,7 @@ inline bool approx(Vec2 a, Vec2 b, float epsilon = 1e-5f) {
     return approx(a.x, b.x, epsilon) && approx(a.y, b.y, epsilon);
 }
 // Reflect v about a surface with unit normal n.
-inline Vec2 reflect(Vec2 v, Vec2 n) { return v - n * (2.f * dot(v, n)); }
+inline Vec2 reflectVector(Vec2 v, Vec2 n) { return v - n * (2.f * dot(v, n)); }
 // Project v onto onto (any length, non-zero).
 inline Vec2 project(Vec2 v, Vec2 onto) {
     float l2 = onto.lengthSq();

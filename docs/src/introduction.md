@@ -17,6 +17,8 @@
 - **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
 - **Gameplay toolkit**: tweens and easing, timers, rebindable input actions, save data, grid A* pathfinding, spatial hash queries, Y-sorting, seeded random numbers and noise
 - **ImGui integration** — Built-in debug UI via Dear ImGui
+- **Scenes and prefabs**: Save and load entities as JSON through component reflection; spawn prefabs with per-copy overrides
+- **Dev tools**: In-game entity inspector, performance panel, physics debug drawing, and hot reload of textures and scenes
 - **Parallel scheduler** — Automatic multi-threaded system dispatch based on dependency analysis
 
 ## Architecture Overview

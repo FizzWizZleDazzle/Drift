@@ -25,6 +25,7 @@ Draw from systems registered with `app.render<...>()`. Systems that use the rend
 
 ```cpp
 TextureHandle loadTexture(const char* path, TextureOptions options = {});
+bool          reloadTexture(TextureHandle texture, const char* path);
 TextureHandle createTextureFromPixels(const uint8_t* rgba, int w, int h, TextureOptions options = {});
 void          updateTexture(TextureHandle texture, int x, int y, int w, int h, const uint8_t* rgba);
 void          setTextureOptions(TextureHandle texture, TextureOptions options);
@@ -41,6 +42,8 @@ TextureHandle bg = renderer->loadTexture("assets/clouds.png",
 ```
 
 `updateTexture` replaces a region of an existing texture, which suits procedural textures, fog-of-war masks and minimaps drawn on the CPU.
+
+`reloadTexture(texture, path)` reads an image file into an existing texture. The handle stays valid, so everything drawing it shows the new image, and the size may change. Hot reload uses it; see [Asset Server](asset-server.md#hot-reload).
 
 ## Sprites
 

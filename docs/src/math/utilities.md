@@ -37,7 +37,7 @@ Free functions for the vector math and overlap tests most 2D games need. They wo
 | `distance(a, b)`, `distanceSq(a, b)` | Distance between points |
 | `lerp(a, b, t)`, `clamp(v, lo, hi)`, `approx(a, b)` | Component-wise versions of the scalar functions |
 | `clampLength(v, max)` | `v` shortened to at most `max` |
-| `reflect(v, n)`, `project(v, onto)` | Reflection about a unit normal; projection onto a vector |
+| `reflectVector(v, n)`, `project(v, onto)` | Reflection about a unit normal; projection onto a vector |
 | `moveTowards(a, b, maxDistance)`, `smoothDamp(...)`, `damp(...)` | Vector versions |
 | `hadamard(a, b)` | Component-wise product |
 

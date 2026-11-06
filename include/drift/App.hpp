@@ -13,6 +13,7 @@
 #include <functional>
 #include <string>
 #include <typeindex>
+#include <vector>
 
 union SDL_Event;
 
@@ -32,6 +33,13 @@ public:
 class App;
 
 using SystemSetId = int;
+
+// How long a system took the last time it ran.
+struct SystemTiming {
+    std::string name;
+    Phase phase;
+    uint64_t microseconds = 0;
+};
 
 // Handle returned by phase shortcuts for chaining .before()/.after() ordering
 class SystemHandle {
@@ -64,6 +72,9 @@ public:
     void quit();
 
     const Config& config() const;
+
+    // Per-system timings from the scheduler, in phase and run order.
+    std::vector<SystemTiming> systemTimings() const;
 
     // World + Commands access
     World& world();

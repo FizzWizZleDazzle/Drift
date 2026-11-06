@@ -18,6 +18,9 @@ public:
         assets->setTextureLoader([renderer](const char* path) {
             return renderer->loadTexture(path);
         });
+        assets->setReloader("texture", [renderer](uint32_t id, const std::string& path) {
+            return renderer->reloadTexture(TextureHandle{id}, path.c_str());
+        });
         app.addSystem<renderer_begin_frame>("renderer_begin", Phase::PreUpdate);
         app.addSystem<renderer_end_frame>("renderer_end", Phase::RenderFlush);
     }

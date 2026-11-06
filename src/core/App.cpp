@@ -390,6 +390,12 @@ struct App::Impl {
                 bool blockedByOrder = false;
                 for (int p = 0; p < i; ++p) {
                     if (completed[p]) continue;
+                    // An exclusive system may touch anything, so nothing
+                    // registered after it runs before it.
+                    if (isExclusive(systems[p])) {
+                        blockedByOrder = true;
+                        break;
+                    }
                     // If there's a conflict with an uncompleted predecessor, skip
                     if (conflicts(sys, systems[p])) {
                         blockedByOrder = true;
@@ -967,6 +973,18 @@ void App::quit() {
 }
 
 const Config& App::config() const { return impl_->config; }
+
+std::vector<SystemTiming> App::systemTimings() const {
+    std::vector<SystemTiming> out;
+    const Phase phases[] = {Phase::PreUpdate, Phase::Update, Phase::PostUpdate,
+                            Phase::Extract, Phase::Render, Phase::RenderFlush};
+    for (Phase p : phases) {
+        for (const auto& sys : impl_->systemsForPhase(p)) {
+            out.push_back(SystemTiming{sys.name, p, sys.lastDurationUs});
+        }
+    }
+    return out;
+}
 void* App::sdlWindow() const { return impl_->window; }
 gfx::Device* App::graphicsDevice() const { return impl_->device.get(); }
 

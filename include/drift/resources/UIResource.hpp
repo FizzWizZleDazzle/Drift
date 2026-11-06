@@ -5,6 +5,8 @@
 #include <drift/Handle.hpp>
 #include <drift/Types.hpp>
 
+#include <functional>
+
 union SDL_Event;
 
 namespace drift {
@@ -44,6 +46,12 @@ public:
     void setAnchor(Anchor anchor);
 
 #ifdef DRIFT_DEV
+    // Dev overlay: a menu of panels, shown and hidden with the dev key (F1
+    // by default). Each panel is an ImGui window; `draw` fills it with ImGui
+    // calls and runs as an exclusive system, so it may change the world.
+    using DevPanel = std::function<void(App&)>;
+    void addDevPanel(const char* name, DevPanel draw, bool open = false);
+    void setDevToggleKey(Key key);
     void devToggle();
     void devRender();
     bool devIsVisible() const;

@@ -11,6 +11,17 @@ namespace drift {
 struct PhysicsBody { int32_t index; int16_t world; uint16_t revision; };
 struct PhysicsShape { int32_t index; int16_t world; uint16_t revision; };
 
+class RendererResource;
+
+// What the physics debug overlay draws. Off by default.
+struct PhysicsDebugDraw {
+    bool enabled = false;
+    bool shapes = true;       // collider outlines (filled for solid bodies)
+    bool aabbs = false;       // shape bounding boxes
+    bool contacts = false;    // contact points and normals
+    bool joints = false;
+};
+
 class PhysicsResource : public Resource {
 public:
     explicit PhysicsResource(Vec2 gravity = {0.f, 9.8f});
@@ -55,6 +66,12 @@ public:
     int32_t overlapAABB(Rect aabb, CollisionFilter filter, PhysicsShape* outShapes, int32_t maxShapes) const;
 
     int32_t bodyCount() const;
+
+    // Debug overlay, drawn in world space by PhysicsPlugin's render system.
+    void setDebugDraw(const PhysicsDebugDraw& options);
+    const PhysicsDebugDraw& debugDraw() const;
+    // Queue the debug shapes on the renderer now (Render phase).
+    void drawDebug(RendererResource& renderer) const;
 
 private:
     struct Impl;

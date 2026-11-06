@@ -7,6 +7,7 @@
 
 #include <drift/resources/PhysicsResource.hpp>
 #include <drift/Log.hpp>
+#include <drift/resources/RendererResource.hpp>
 
 #include "box2d/box2d.h"
 
@@ -96,6 +97,7 @@ static b2ShapeDef make_b2_shape_def(const ShapeDef& def) {
 
 struct PhysicsResource::Impl {
     b2WorldId worldId = b2_nullWorldId;
+    PhysicsDebugDraw debug;
 
     // Sub-step count passed to b2World_Step.  4 is a good balance between
     // accuracy and performance for a 2D game at 60 Hz.
@@ -488,6 +490,113 @@ int32_t PhysicsResource::bodyCount() const {
     if (B2_IS_NULL(impl_->worldId)) return 0;
     b2Counters counters = b2World_GetCounters(impl_->worldId);
     return counters.bodyCount;
+}
+
+// =============================================================================
+// Debug draw
+// =============================================================================
+
+namespace {
+
+constexpr float kDebugZ = 1e5f;
+constexpr float kDebugLine = 1.5f;
+
+Color debugColor(b2HexColor c, uint8_t alpha = 255) {
+    uint32_t v = static_cast<uint32_t>(c);
+    return Color{static_cast<uint8_t>((v >> 16) & 0xFF), static_cast<uint8_t>((v >> 8) & 0xFF),
+                 static_cast<uint8_t>(v & 0xFF), alpha};
+}
+
+RendererResource& rr(void* ctx) { return *static_cast<RendererResource*>(ctx); }
+
+void ddPolygon(const b2Vec2* v, int n, b2HexColor color, void* ctx) {
+    rr(ctx).drawPolyline(reinterpret_cast<const Vec2*>(v), n, debugColor(color), kDebugLine, true, kDebugZ);
+}
+
+void ddSolidPolygon(b2Transform xf, const b2Vec2* v, int n, float radius, b2HexColor color, void* ctx) {
+    (void)radius;
+    Vec2 pts[b2_maxPolygonVertices];
+    n = n > b2_maxPolygonVertices ? b2_maxPolygonVertices : n;
+    for (int i = 0; i < n; ++i) {
+        b2Vec2 p = b2TransformPoint(xf, v[i]);
+        pts[i] = {p.x, p.y};
+    }
+    rr(ctx).drawPolygonFilled(pts, n, debugColor(color, 60), kDebugZ);
+    rr(ctx).drawPolyline(pts, n, debugColor(color), kDebugLine, true, kDebugZ);
+}
+
+void ddCircle(b2Vec2 c, float radius, b2HexColor color, void* ctx) {
+    rr(ctx).drawCircle({c.x, c.y}, radius, debugColor(color), kDebugLine, 0, kDebugZ);
+}
+
+void ddSolidCircle(b2Transform xf, float radius, b2HexColor color, void* ctx) {
+    Vec2 c{xf.p.x, xf.p.y};
+    rr(ctx).drawCircleFilled(c, radius, debugColor(color, 60), 0, kDebugZ);
+    rr(ctx).drawCircle(c, radius, debugColor(color), kDebugLine, 0, kDebugZ);
+    b2Vec2 axis = b2RotateVector(xf.q, b2Vec2{radius, 0.f});
+    rr(ctx).drawLine(c, {c.x + axis.x, c.y + axis.y}, debugColor(color), kDebugLine, kDebugZ);
+}
+
+void ddCapsule(b2Vec2 p1, b2Vec2 p2, float radius, b2HexColor color, void* ctx) {
+    Color col = debugColor(color);
+    b2Vec2 d = b2Normalize(b2Sub(p2, p1));
+    b2Vec2 n{-d.y * radius, d.x * radius};
+    rr(ctx).drawCircle({p1.x, p1.y}, radius, col, kDebugLine, 0, kDebugZ);
+    rr(ctx).drawCircle({p2.x, p2.y}, radius, col, kDebugLine, 0, kDebugZ);
+    rr(ctx).drawLine({p1.x + n.x, p1.y + n.y}, {p2.x + n.x, p2.y + n.y}, col, kDebugLine, kDebugZ);
+    rr(ctx).drawLine({p1.x - n.x, p1.y - n.y}, {p2.x - n.x, p2.y - n.y}, col, kDebugLine, kDebugZ);
+}
+
+void ddSolidCapsule(b2Vec2 p1, b2Vec2 p2, float radius, b2HexColor color, void* ctx) {
+    ddCapsule(p1, p2, radius, color, ctx);
+}
+
+void ddSegment(b2Vec2 p1, b2Vec2 p2, b2HexColor color, void* ctx) {
+    rr(ctx).drawLine({p1.x, p1.y}, {p2.x, p2.y}, debugColor(color), kDebugLine, kDebugZ);
+}
+
+void ddTransform(b2Transform xf, void* ctx) {
+    (void)xf;
+    (void)ctx;
+}
+
+void ddPoint(b2Vec2 p, float size, b2HexColor color, void* ctx) {
+    // Box2D sizes points in screen pixels; draw them as small discs.
+    rr(ctx).drawCircleFilled({p.x, p.y}, size * 0.5f + 1.f, debugColor(color), 8, kDebugZ);
+}
+
+void ddString(b2Vec2, const char*, void*) {}
+
+} // namespace
+
+void PhysicsResource::setDebugDraw(const PhysicsDebugDraw& options) {
+    impl_->debug = options;
+}
+
+const PhysicsDebugDraw& PhysicsResource::debugDraw() const {
+    return impl_->debug;
+}
+
+void PhysicsResource::drawDebug(RendererResource& renderer) const {
+    if (!b2World_IsValid(impl_->worldId)) return;
+    b2DebugDraw dd = {};
+    dd.DrawPolygon = ddPolygon;
+    dd.DrawSolidPolygon = ddSolidPolygon;
+    dd.DrawCircle = ddCircle;
+    dd.DrawSolidCircle = ddSolidCircle;
+    dd.DrawCapsule = ddCapsule;
+    dd.DrawSolidCapsule = ddSolidCapsule;
+    dd.DrawSegment = ddSegment;
+    dd.DrawTransform = ddTransform;
+    dd.DrawPoint = ddPoint;
+    dd.DrawString = ddString;
+    dd.drawShapes = impl_->debug.shapes;
+    dd.drawAABBs = impl_->debug.aabbs;
+    dd.drawContacts = impl_->debug.contacts;
+    dd.drawContactNormals = impl_->debug.contacts;
+    dd.drawJoints = impl_->debug.joints;
+    dd.context = &renderer;
+    b2World_Draw(impl_->worldId, &dd);
 }
 
 } // namespace drift

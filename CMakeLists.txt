@@ -148,6 +148,7 @@ set(DRIFT_SOURCES
 
     # Asset server
     src/core/AssetServer.cpp
+    src/core/Reflect.cpp
 
     # Subsystem resources
     src/renderer/RendererResource.cpp
@@ -164,6 +165,12 @@ set(DRIFT_SOURCES
     src/particles/ParticleSystem.cpp
     src/tilemap/TilemapResource.cpp
     src/ui/UIResource.cpp
+    src/ui/DevInspector.cpp
+    src/ui/DevPerformance.cpp
+
+    # Scenes, prefabs and hot reload
+    src/scene/SceneResource.cpp
+    src/hotreload/HotReload.cpp
 
     # Optional units
     src/lighting/Lighting.cpp
@@ -381,6 +388,10 @@ if(DRIFT_BUILD_EXAMPLES)
     add_executable(toolkit examples/toolkit/main.cpp)
     target_link_libraries(toolkit PRIVATE drift)
     drift_web_app(toolkit)
+
+    add_executable(scene_editor examples/scene_editor/main.cpp)
+    target_link_libraries(scene_editor PRIVATE drift)
+    drift_web_app(scene_editor ASSETS examples/scene_editor/assets)
 endif()
 
 # ---------- Tests ----------

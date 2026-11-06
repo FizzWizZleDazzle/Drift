@@ -4,6 +4,10 @@
 #include <drift/App.hpp>
 #include <drift/Log.hpp>
 
+#ifdef DRIFT_DEV
+#include "ui/DevPanels.hpp"
+#endif
+
 #include "gfx/Device.hpp"
 
 #include <SDL3/SDL.h>
@@ -12,6 +16,7 @@
 #include "imgui_impl_sdl3.h"
 
 #include <cstdio>
+#include <string>
 #include <vector>
 
 namespace drift {
@@ -77,6 +82,15 @@ struct UIResource::Impl {
 
 #ifdef DRIFT_DEV
     bool devVisible = false;
+    Key devKey = Key::F1;
+    struct Panel {
+        std::string name;
+        DevPanel draw;
+        bool open = false;
+        int slot = -1;   // screen position, assigned when first opened
+    };
+    std::vector<Panel> panels;
+    int nextSlot = 0;
 #endif
 
     Impl(App& a) : app(a) {}
@@ -153,6 +167,11 @@ UIResource::UIResource(App& app)
 
     applyTheme(impl_->theme);
     impl_->initialised = true;
+
+#ifdef DRIFT_DEV
+    addDevPanel("Inspector", makeInspectorPanel(), true);
+    addDevPanel("Performance", makePerformancePanel(), false);
+#endif
 
     // ImGui draws on top of the presented frame.
     renderer->setOverlayCallback([device]() {
@@ -233,6 +252,12 @@ void UIResource::processEvent(const SDL_Event& event) {
     case SDL_EVENT_MOUSE_WHEEL: map(e.wheel.mouse_x, e.wheel.mouse_y); break;
     default: break;
     }
+#ifdef DRIFT_DEV
+    if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat &&
+        static_cast<int>(e.key.scancode) == static_cast<int>(impl_->devKey)) {
+        devToggle();
+    }
+#endif
     ImGui_ImplSDL3_ProcessEvent(&e);
 }
 
@@ -403,34 +428,66 @@ void UIResource::devToggle() {
     impl_->devVisible = !impl_->devVisible;
 }
 
+void UIResource::addDevPanel(const char* name, DevPanel draw, bool open) {
+    if (!name || !draw) return;
+    for (auto& p : impl_->panels) {
+        if (p.name == name) {
+            p.draw = std::move(draw);
+            return;
+        }
+    }
+    impl_->panels.push_back({name, std::move(draw), open});
+}
+
+void UIResource::setDevToggleKey(Key key) {
+    impl_->devKey = key;
+}
+
 void UIResource::devRender() {
     if (!impl_->initialised || !impl_->devVisible) return;
 
+    ImGuiIO& io = ImGui::GetIO();
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(280, 180), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowBgAlpha(0.75f);
+    ImGui::SetNextWindowBgAlpha(0.85f);
 
     ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoFocusOnAppearing;
+        ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_AlwaysAutoResize;
 
-    if (ImGui::Begin("Drift Dev Overlay", &impl_->devVisible, flags)) {
+    if (ImGui::Begin("Drift Dev", &impl_->devVisible, flags)) {
         auto* timeRes = impl_->app.getResource<Time>();
         float dt = timeRes ? timeRes->delta : 0.f;
         float fps = (dt > 0.f) ? (1.f / dt) : 0.f;
-        ImGui::Text("FPS: %.1f (%.2f ms)", fps, dt * 1000.f);
-
+        ImGui::Text("%.1f FPS (%.2f ms)  frame %llu", fps, dt * 1000.f,
+                    static_cast<unsigned long long>(timeRes ? timeRes->frame : 0));
         ImGui::Separator();
-        ImGui::Text("Frame: %llu",
-                     static_cast<unsigned long long>(timeRes ? timeRes->frame : 0));
-        ImGui::Text("Time:  %.2f s", timeRes ? timeRes->elapsed : 0.0);
-
-        ImGui::Separator();
-        if (ImGui::Button("Close")) {
-            impl_->devVisible = false;
+        for (auto& p : impl_->panels) {
+            ImGui::Checkbox(p.name.c_str(), &p.open);
         }
     }
     ImGui::End();
+
+    // Panels start along the right edge, out of the way of the scene: the
+    // first one gets the full height, later ones fill columns of two
+    // further left.
+    for (auto& p : impl_->panels) {
+        if (!p.open) continue;
+        if (p.slot < 0) p.slot = impl_->nextSlot++;
+        float fullH = io.DisplaySize.y - 20.f;
+        int col = p.slot == 0 ? 0 : 1 + (p.slot - 1) / 2;
+        int row = p.slot == 0 ? 0 : (p.slot - 1) % 2;
+        float h = p.slot == 0 ? fullH : fullH * 0.5f - 4.f;
+        float x = io.DisplaySize.x - 370.f * static_cast<float>(col + 1);
+        float y = 10.f + static_cast<float>(row) * (fullH * 0.5f + 4.f);
+        ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(360.f, h), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowBgAlpha(0.9f);
+        if (ImGui::Begin(p.name.c_str(), &p.open, ImGuiWindowFlags_NoSavedSettings)) {
+            p.draw(impl_->app);
+        }
+        ImGui::End();
+    }
 }
 
 bool UIResource::devIsVisible() const {

@@ -87,6 +87,9 @@ public:
 
     // ---- Textures ----
     TextureHandle loadTexture(const char* path, TextureOptions options = {});
+    // Re-read an image file into an existing texture; the handle stays valid
+    // and the size may change. Used by hot reload.
+    bool reloadTexture(TextureHandle texture, const char* path);
     TextureHandle createTextureFromPixels(const uint8_t* rgba, int w, int h, TextureOptions options = {});
     void updateTexture(TextureHandle texture, int x, int y, int w, int h, const uint8_t* rgba);
     void setTextureOptions(TextureHandle texture, TextureOptions options);

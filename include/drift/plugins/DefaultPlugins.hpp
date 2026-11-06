@@ -20,6 +20,10 @@
 #include <drift/plugins/InputActionsPlugin.hpp>
 #include <drift/plugins/SpatialPlugin.hpp>
 #include <drift/plugins/YSortPlugin.hpp>
+#include <drift/plugins/ScenePlugin.hpp>
+#ifdef DRIFT_DEV
+#include <drift/plugins/HotReloadPlugin.hpp>
+#endif
 
 namespace drift {
 
@@ -45,6 +49,10 @@ public:
         app.addPlugin<SpatialPlugin>();
         app.addPlugin<TweenPlugin>();
         app.addPlugin<YSortPlugin>();
+        app.addPlugin<ScenePlugin>();
+#ifdef DRIFT_DEV
+        app.addPlugin<HotReloadPlugin>();
+#endif
     }
 };
 

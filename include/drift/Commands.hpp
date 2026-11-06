@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <type_traits>
 #include <typeinfo>
 
 namespace drift {
@@ -73,7 +74,15 @@ public:
         if (!registry_.has<T>() && world_) {
             world_->registerComponent<T>(typeid(T).name());
         }
-        insert(entity, registry_.get<T>(), &value, sizeof(T));
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            insert(entity, registry_.get<T>(), &value, sizeof(T));
+        } else {
+            // Not plain bytes: keep a real copy and let the world copy-construct it.
+            ComponentId id = registry_.get<T>();
+            queue([entity, id, copy = value](World& w) {
+                if (w.isAlive(entity) && id != 0) w.setComponent(entity, id, &copy, sizeof(T));
+            });
+        }
     }
 
     // Queue an arbitrary deferred mutation to run during flush.

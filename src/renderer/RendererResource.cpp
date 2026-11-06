@@ -40,6 +40,7 @@ struct TextureEntry {
     int32_t width = 0;
     int32_t height = 0;
     bool renderTarget = false;
+    TextureOptions options = {};
 };
 
 struct ShaderEntry {
@@ -778,25 +779,59 @@ void RendererResource::setClearColor(ColorF color) {
 // Textures
 // =============================================================================
 
-TextureHandle RendererResource::loadTexture(const char* path, TextureOptions options) {
-    if (!path || !impl_->device) return {};
+static uint8_t* decodeImageFile(const char* path, int* w, int* h) {
     size_t size = 0;
     void* data = SDL_LoadFile(path, &size);
     if (!data) {
         DRIFT_LOG_ERROR("loadTexture: cannot read '%s': %s", path, SDL_GetError());
-        return {};
+        return nullptr;
     }
-    int w = 0, h = 0, n = 0;
+    int n = 0;
     uint8_t* pixels = stbi_load_from_memory(static_cast<const stbi_uc*>(data),
-                                            static_cast<int>(size), &w, &h, &n, 4);
+                                            static_cast<int>(size), w, h, &n, 4);
     SDL_free(data);
     if (!pixels) {
         DRIFT_LOG_ERROR("loadTexture: cannot decode '%s': %s", path, stbi_failure_reason());
-        return {};
     }
+    return pixels;
+}
+
+TextureHandle RendererResource::loadTexture(const char* path, TextureOptions options) {
+    if (!path || !impl_->device) return {};
+    int w = 0, h = 0;
+    uint8_t* pixels = decodeImageFile(path, &w, &h);
+    if (!pixels) return {};
     TextureHandle t = createTextureFromPixels(pixels, w, h, options);
     stbi_image_free(pixels);
     return t;
+}
+
+bool RendererResource::reloadTexture(TextureHandle texture, const char* path) {
+    TextureEntry* e = impl_->textures.get(texture);
+    if (!e || !path || e->renderTarget || !impl_->device) return false;
+    int w = 0, h = 0;
+    uint8_t* pixels = decodeImageFile(path, &w, &h);
+    if (!pixels) return false;
+    if (w == e->width && h == e->height) {
+        impl_->device->updateTexture(e->id, 0, 0, w, h, pixels);
+    } else {
+        gfx::TextureDesc d;
+        d.width = w;
+        d.height = h;
+        d.filter = toGfx(e->options.filter);
+        d.wrap = toGfx(e->options.wrap);
+        gfx::TextureId id = impl_->device->createTexture(d, pixels);
+        if (!id) {
+            stbi_image_free(pixels);
+            return false;
+        }
+        impl_->device->destroyTexture(e->id);
+        e->id = id;
+        e->width = w;
+        e->height = h;
+    }
+    stbi_image_free(pixels);
+    return true;
 }
 
 TextureHandle RendererResource::createTextureFromPixels(const uint8_t* rgba, int w, int h,
@@ -809,7 +844,7 @@ TextureHandle RendererResource::createTextureFromPixels(const uint8_t* rgba, int
     d.wrap = toGfx(options.wrap);
     gfx::TextureId id = impl_->device->createTexture(d, rgba);
     if (!id) return {};
-    return impl_->textures.create({id, w, h, false});
+    return impl_->textures.create({id, w, h, false, options});
 }
 
 TextureHandle RendererResource::createRenderTarget(int w, int h, TextureOptions options) {
@@ -822,7 +857,7 @@ TextureHandle RendererResource::createRenderTarget(int w, int h, TextureOptions 
     d.renderTarget = true;
     gfx::TextureId id = impl_->device->createTexture(d, nullptr);
     if (!id) return {};
-    return impl_->textures.create({id, w, h, true});
+    return impl_->textures.create({id, w, h, true, options});
 }
 
 void RendererResource::updateTexture(TextureHandle texture, int x, int y, int w, int h,
@@ -834,6 +869,7 @@ void RendererResource::updateTexture(TextureHandle texture, int x, int y, int w,
 
 void RendererResource::setTextureOptions(TextureHandle texture, TextureOptions options) {
     if (TextureEntry* e = impl_->textures.get(texture)) {
+        e->options = options;
         impl_->device->setTextureSampling(e->id, toGfx(options.filter), toGfx(options.wrap));
     }
 }

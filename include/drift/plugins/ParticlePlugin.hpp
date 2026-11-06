@@ -1,6 +1,7 @@
 #pragma once
 
 #include <drift/Plugin.hpp>
+#include <drift/Reflect.hpp>
 #include <drift/App.hpp>
 #include <drift/resources/ParticleResource.hpp>
 #include <drift/resources/ParticleSystemResource.hpp>
@@ -27,6 +28,55 @@ inline void particles_render(ResMut<ParticleResource> particles) { particles->re
 class ParticlePlugin : public Plugin {
 public:
     void build(App& app) override {
+        reflect::enumType<EmissionShape>("EmissionShape", {
+            {"Point", EmissionShape::Point}, {"Circle", EmissionShape::Circle},
+            {"Ring", EmissionShape::Ring}, {"Box", EmissionShape::Box},
+            {"Line", EmissionShape::Line}});
+        reflect::enumType<ParticleSpace>("ParticleSpace", {
+            {"World", ParticleSpace::World}, {"Local", ParticleSpace::Local}});
+        reflect::type<ValueRange>("ValueRange")
+            .field("min", &ValueRange::min)
+            .field("max", &ValueRange::max);
+        reflect::type<BurstEntry>("BurstEntry")
+            .field("time", &BurstEntry::time)
+            .field("count", &BurstEntry::count)
+            .field("cycles", &BurstEntry::cycles)
+            .field("interval", &BurstEntry::interval);
+        reflect::type<EmitterConfig>("EmitterConfig")
+            .field("texture", &EmitterConfig::texture)
+            .field("srcRect", &EmitterConfig::srcRect)
+            .field("shape", &EmitterConfig::shape)
+            .field("shapeRadius", &EmitterConfig::shapeRadius)
+            .field("shapeExtents", &EmitterConfig::shapeExtents)
+            .field("spawnRate", &EmitterConfig::spawnRate)
+            .field("maxParticles", &EmitterConfig::maxParticles)
+            .field("bursts", &EmitterConfig::bursts)
+            .field("lifetime", &EmitterConfig::lifetime)
+            .field("speed", &EmitterConfig::speed)
+            .field("angle", &EmitterConfig::angle)
+            .field("velocityInheritance", &EmitterConfig::velocityInheritance)
+            .field("gravity", &EmitterConfig::gravity)
+            .field("drag", &EmitterConfig::drag)
+            .field("sizeStart", &EmitterConfig::sizeStart)
+            .field("sizeEnd", &EmitterConfig::sizeEnd)
+            .field("initialRotation", &EmitterConfig::initialRotation)
+            .field("angularVelocity", &EmitterConfig::angularVelocity)
+            .field("colorStart", &EmitterConfig::colorStart)
+            .field("colorEnd", &EmitterConfig::colorEnd)
+            .field("blendMode", &EmitterConfig::blendMode)
+            .field("zOrder", &EmitterConfig::zOrder)
+            .field("duration", &EmitterConfig::duration)
+            .field("looping", &EmitterConfig::looping)
+            .field("space", &EmitterConfig::space)
+            .field("preWarmTime", &EmitterConfig::preWarmTime)
+            .field("boundsMin", &EmitterConfig::boundsMin)
+            .field("boundsMax", &EmitterConfig::boundsMax)
+            .field("seed", &EmitterConfig::seed);
+        reflect::component<ParticleEmitter>(app.world(), "ParticleEmitter")
+            .field("config", &ParticleEmitter::config)
+            .field("playing", &ParticleEmitter::playing)
+            .field("oneShot", &ParticleEmitter::oneShot);
+
         // Legacy resource (for backward compatibility)
         app.addResource<ParticleResource>(*app.getResource<RendererResource>());
         app.addSystem<particles_update>("particles_update", Phase::PostUpdate);
