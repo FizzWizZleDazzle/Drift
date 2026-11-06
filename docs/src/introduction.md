@@ -7,6 +7,8 @@
 - **Bevy-style ECS** — Typed systems with automatic dependency injection via `Res<T>`, `ResMut<T>`, `Query<T>`, and `Commands`
 - **Plugin architecture** — Modular subsystems (rendering, physics, audio, input, etc.) registered as plugins
 - **2D renderer**: batched sprites and shapes, render layers, multiple cameras, render targets, custom shaders and post effects, pixel-perfect scaling
+- **2D lighting**: point and spot lights, ambient light, hard shadows from occluders
+- **Post effect library**: bloom, color grading, CRT, vignette, blur, pixelate, grayscale, sepia, screen fades
 - **Box2D physics** — Full 2D rigid body physics with collision events and sensors
 - **Particle system** — Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** — Spritesheet-based animation clips with Aseprite import support

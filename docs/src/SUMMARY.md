@@ -30,12 +30,14 @@
 - [Camera Controllers](components/camera-controllers.md)
 - [Trail Renderer](components/trail-renderer.md)
 - [Hierarchy](components/hierarchy.md)
+- [Lighting](components/lighting.md)
 
 # Subsystems
 
 - [Input](subsystems/input.md)
 - [Rendering](subsystems/rendering.md)
 - [Shaders and Effects](subsystems/shaders-and-effects.md)
+- [Post Effect Library](subsystems/post-effects.md)
 - [Audio](subsystems/audio.md)
 - [Physics](subsystems/physics-resource.md)
 - [Sprites and Sheets](subsystems/sprites-and-sheets.md)
@@ -56,6 +58,7 @@
 - [Fireball](examples/fireball.md)
 - [Particle Storm](examples/particle-storm.md)
 - [Render Showcase](examples/render-showcase.md)
+- [Lighting](examples/lighting.md)
 
 # Reference
 

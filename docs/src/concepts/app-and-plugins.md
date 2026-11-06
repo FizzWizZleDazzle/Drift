@@ -149,6 +149,7 @@ app.addPlugins<GamePlugins>();
 |--------|---------|
 | `InputPlugin` | Keyboard, mouse, gamepad input |
 | `RendererPlugin` | GPU rendering, sprite batching |
+| `PostEffectsPlugin` | Post effect library: bloom, CRT, color grading and more |
 | `AudioPlugin` | Sound effects and music |
 | `PhysicsPlugin` | Box2D-based 2D physics |
 | `SpritePlugin` | Sprite component registration and rendering |
