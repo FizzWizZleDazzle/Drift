@@ -51,7 +51,7 @@ drift/
   CMakeLists.txt           <-- build configuration
 ```
 
-### `include/drift/` -- Public headers
+### `include/drift/`: Public headers
 
 This is the only directory you need to include in your project. Every `#include <drift/...>` path resolves here.
 
@@ -59,7 +59,7 @@ This is the only directory you need to include in your project. Every `#include 
 
 | Header | Description |
 |--------|-------------|
-| `App.hpp` | The `App` class -- entry point, resource store, system scheduler, and main loop. This is the first header you include in any Drift program. |
+| `App.hpp` | The `App` class; entry point, resource store, system scheduler, and main loop. This is the first header you include in any Drift program. |
 | `Types.hpp` | Fundamental types used everywhere: `Vec2`, `Vec3`, `Rect`, `Color`, `ColorF`, `Transform2D`, `EntityId`, `ComponentId`, `Phase`, `Key`, `MouseButton`, `BodyType`, and more. |
 | `Commands.hpp` | `Commands` deferred mutation buffer and `EntityCommands` fluent builder. Used to spawn/despawn entities and insert/remove components. |
 | `Query.hpp` | `Query<...>` (read-only) and `QueryMut<...>` (read-write) typed query system parameters. Supports `iter()`, `iterWithEntity()`, `single()`, `isEmpty()`, and `contains()`. |
@@ -77,11 +77,11 @@ This is the only directory you need to include in your project. Every `#include 
 | `Config.hpp` | `Config` struct for window and engine settings. |
 | `Log.hpp` | Logging utilities. |
 | `Math.hpp` | Additional math helpers. |
-| `Handle.hpp` | `TextureHandle`, `SoundHandle`, `FontHandle` -- lightweight typed handles for assets. |
+| `Handle.hpp` | `TextureHandle`, `SoundHandle`, `FontHandle`; lightweight typed handles for assets. |
 | `Entity.hpp` | Entity-related utilities. |
 | `ComponentRegistry.hpp` | Maps C++ types to flecs `ComponentId` values. Used internally by `Commands` and `Query`. |
 
-#### `include/drift/components/` -- Component types
+#### `include/drift/components/`: Component types
 
 Components are plain structs attached to entities. They carry data but no behavior.
 
@@ -101,7 +101,7 @@ Components are plain structs attached to entities. They carry data but no behavi
 | `Light2D.hpp` | `PointLight2D`, `SpotLight2D`, `LightOccluder2D` | 2D lights and shadow-casting occluders. Need `LightingPlugin`. |
 | `Text.hpp` | `Text` | A string drawn at the entity's transform: font, size, color, alignment, wrapping, outline, shadow, layer. |
 
-#### `include/drift/plugins/` -- Plugins
+#### `include/drift/plugins/`: Plugins
 
 Each plugin registers resources and systems in its `build()` method. Most are header-only.
 | `Tilemap.hpp` | `Tilemap` | Places a loaded Tiled or LDtk map in the world: draw order, render layer, culling camera, colliders, object spawning. |
@@ -136,7 +136,7 @@ Each plugin registers resources and systems in its `build()` method. Most are he
 | `ScenePlugin.hpp` | `ScenePlugin` | `SceneResource` for JSON scenes and prefabs. |
 | `HotReloadPlugin.hpp` | `HotReloadPlugin` | Reloads textures and scenes when their files change (desktop; in `DefaultPlugins` with `DRIFT_DEV`). |
 
-#### `include/drift/resources/` -- Resource types
+#### `include/drift/resources/`: Resource types
 
 Resources are singleton objects stored in `App`. Systems access them through `Res<T>` (read-only) or `ResMut<T>` (read-write) parameters.
 
@@ -154,14 +154,14 @@ Resources are singleton objects stored in `App`. Systems access them through `Re
 | `TilemapResource.hpp` | `TilemapResource` | Tiled and LDtk loading, chunked map rendering, tile queries, merged colliders, autotiling. |
 | `UIResource.hpp` | `UIResource` | ImGui integration and UI state. |
 
-#### `include/drift/particles/` -- Particle system internals
+#### `include/drift/particles/`: Particle system internals
 
 | Header | Type | Description |
 |--------|------|-------------|
 | `EmitterConfig.hpp` | `EmitterConfig` | Full emitter configuration: emission shapes, bursts, drag, rotation, local/world space, pre-warm. |
 | `ParticlePool.hpp` | `ParticlePool` | SoA (Structure of Arrays) compact storage with O(1) swap-remove. |
 
-#### `include/drift/gameplay/` -- Gameplay toolkit
+#### `include/drift/gameplay/`: Gameplay toolkit
 
 Each header stands alone; use the ones your game needs. See the Gameplay chapter.
 
@@ -175,7 +175,7 @@ Each header stands alone; use the ones your game needs. See the Gameplay chapter
 | `SpatialHash.hpp` | `SpatialHash` | Uniform-grid neighbour and area queries. |
 | `Pathfinding.hpp` | `NavGrid`, `findPath` | Grid A* with weights and diagonal rules. |
 
-#### `include/drift/math/` -- Math utilities
+#### `include/drift/math/`: Math utilities
 
 | Header | Types | Description |
 |--------|-------|-------------|
@@ -184,25 +184,25 @@ Each header stands alone; use the ones your game needs. See the Gameplay chapter
 | `Random.hpp` | `Rng` | Seeded PCG32 generator: ranges, weighted pick, shuffle. |
 | `Noise.hpp` | `Noise` | Seeded 2D value, Perlin and simplex noise with fBm. |
 
-### `src/` -- Implementation files
+### `src/`: Implementation files
 
 The `src/` directory mirrors the subsystem layout. Each subdirectory contains the `.cpp` files for one subsystem:
 
-- `src/core/` -- `App.cpp`, `AssetServer.cpp`, `Log.cpp`
-- `src/ecs/` -- `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
-- `src/renderer/` -- `RendererResource.cpp`, `RenderSnapshot.cpp`
-- `src/input/` -- `InputResource.cpp`
-- `src/audio/` -- `AudioResource.cpp`, `Mixer.cpp` (voices, buses, music), `Decoder.cpp` (WAV, OGG, MP3)
-- `src/physics/` -- `PhysicsResource.cpp`
-- `src/sprite/` -- `SpriteResource.cpp`
-- `src/font/` -- `FontResource.cpp`, `GlyphAtlas.cpp` (glyph texture pages), `BMFont.cpp` (`.fnt` parser), `default/` (the built-in font and its license)
-- `src/particles/` -- `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
-- `src/tilemap/` -- `TilemapResource.cpp`, `TiledLoader.cpp`, `LdtkLoader.cpp`, `TilemapPlugin.cpp`
-- `src/ui/` -- `UIResource.cpp`
-- `src/lighting/` -- `Lighting.cpp` and the light shader
-- `src/effects/` -- `PostEffects.cpp` and the effect shaders
-- `src/gameplay/` -- `Tween.cpp`, `InputActions.cpp`, `SaveData.cpp`, `SpatialHash.cpp`, `Pathfinding.cpp`
-- `src/math/` -- `Noise.cpp`
+- `src/core/`: `App.cpp`, `AssetServer.cpp`, `Log.cpp`
+- `src/ecs/`: `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
+- `src/renderer/`: `RendererResource.cpp`, `RenderSnapshot.cpp`
+- `src/input/`: `InputResource.cpp`
+- `src/audio/`: `AudioResource.cpp`, `Mixer.cpp` (voices, buses, music), `Decoder.cpp` (WAV, OGG, MP3)
+- `src/physics/`: `PhysicsResource.cpp`
+- `src/sprite/`: `SpriteResource.cpp`
+- `src/font/`: `FontResource.cpp`, `GlyphAtlas.cpp` (glyph texture pages), `BMFont.cpp` (`.fnt` parser), `default/` (the built-in font and its license)
+- `src/particles/`: `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
+- `src/tilemap/`: `TilemapResource.cpp`, `TiledLoader.cpp`, `LdtkLoader.cpp`, `TilemapPlugin.cpp`
+- `src/ui/`: `UIResource.cpp`
+- `src/lighting/`: `Lighting.cpp` and the light shader
+- `src/effects/`: `PostEffects.cpp` and the effect shaders
+- `src/gameplay/`: `Tween.cpp`, `InputActions.cpp`, `SaveData.cpp`, `SpatialHash.cpp`, `Pathfinding.cpp`
+- `src/math/`: `Noise.cpp`
 - `src/core/`: `App.cpp`, `AssetServer.cpp`, `Reflect.cpp`, `Log.cpp`
 - `src/ecs/`: `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
 - `src/renderer/`: `RendererResource.cpp`, `RenderSnapshot.cpp`
@@ -219,7 +219,7 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 
 You should not need to read or modify these files when building a game. They are linked into the `drift` static library automatically.
 
-### `examples/` -- Example programs
+### `examples/`: Example programs
 
 Each example is a single `main.cpp` file demonstrating different engine features:
 

@@ -76,7 +76,7 @@ if (state) {
 
 Systems do not call `getResource` directly. Instead, they declare resource parameters using the `Res<T>` and `ResMut<T>` wrappers, and the engine injects them automatically.
 
-### Res\<T\> -- read-only access
+### Res\<T\>: read-only access
 
 ```cpp
 void displayScore(Res<GameState> game) {
@@ -86,7 +86,7 @@ void displayScore(Res<GameState> game) {
 
 `Res<T>` provides `operator->()` and `operator*()` that return `const T*` and `const T&` respectively. You cannot modify the resource through a `Res<T>`.
 
-### ResMut\<T\> -- read-write access
+### ResMut\<T\>: read-write access
 
 ```cpp
 void addScore(ResMut<GameState> game) {

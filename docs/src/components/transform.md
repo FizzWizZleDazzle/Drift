@@ -1,6 +1,6 @@
 # Transform2D
 
-`Transform2D` is the core spatial component in Drift. Every entity that has a visual presence in the world -- sprites, cameras, particle emitters, physics bodies -- needs a `Transform2D` to define where it is, how it is rotated, and how it is scaled.
+`Transform2D` is the core spatial component in Drift. Every entity that has a visual presence in the world (sprites, cameras, particle emitters, physics bodies) needs a `Transform2D` to define where it is, how it is rotated, and how it is scaled.
 
 ## Definition
 

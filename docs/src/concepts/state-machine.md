@@ -1,6 +1,6 @@
 # State Machine
 
-The state machine lets you organize your game into distinct phases -- menus, gameplay, pause screens, cutscenes -- and run different systems depending on which state is active. States are enums. The engine tracks the current value, handles transitions, and fires enter/exit callbacks automatically.
+The state machine lets you organize your game into distinct phases (menus, gameplay, pause screens, cutscenes) and run different systems depending on which state is active. States are enums. The engine tracks the current value, handles transitions, and fires enter/exit callbacks automatically.
 
 ```cpp
 #include <drift/App.hpp>   // includes State.hpp
@@ -23,8 +23,8 @@ enum class GamePhase {
 
 Call `initState<T>(initial)` during setup to register the state type with an initial value. This creates two resources internally:
 
-- `State<T>` -- holds the current state value (`state->current`).
-- `NextState<T>` -- a write handle for requesting transitions (`next->set(value)`).
+- `State<T>`: holds the current state value (`state->current`).
+- `NextState<T>`: a write handle for requesting transitions (`next->set(value)`).
 
 ```cpp
 int main() {
@@ -40,7 +40,7 @@ The initial state's `onEnter` callbacks run before the first frame.
 
 ## Conditional systems with inState
 
-The `inState(value)` function returns a `RunCondition` -- a predicate checked before every frame. If the condition is false, the system is skipped entirely. Use it to bind systems to specific states.
+The `inState(value)` function returns a `RunCondition`; a predicate checked before every frame. If the condition is false, the system is skipped entirely. Use it to bind systems to specific states.
 
 ```cpp
 void menuUpdate(Res<InputResource> input, ResMut<NextState<GamePhase>> next) {
@@ -117,7 +117,7 @@ app.onEnter<onEnterMenu>(GamePhase::Menu, "enter_menu");
 app.onEnter<onEnterPlaying>(GamePhase::Playing, "enter_playing");
 ```
 
-`onEnter` systems are full typed systems -- they can declare any combination of `Res<T>`, `ResMut<T>`, `Query<T>`, `Commands&`, and other system parameters.
+`onEnter` systems are full typed systems; they can declare any combination of `Res<T>`, `ResMut<T>`, `Query<T>`, `Commands&`, and other system parameters.
 
 The `onEnter` callback for the initial state (the value passed to `initState`) runs before the first frame, so you can use it to set up the initial scene.
 

@@ -297,12 +297,12 @@ int main() {
 }
 ```
 
-In this example, rotating the sun causes the planets to orbit around it, and moons orbit their respective planets -- all handled automatically by transform propagation.
+In this example, rotating the sun causes the planets to orbit around it, and moons orbit their respective planets; all handled automatically by transform propagation.
 
 ## Notes
 
 - The maximum number of direct children per entity is 16 (`MaxChildren`). This is a compile-time constant.
 - `GlobalTransform2D` is computed in `PostUpdate`. If you read it during `Update`, you are reading the previous frame's value. For most game logic this is fine.
 - The `Name` component is a 64-character fixed buffer. It is purely for debugging and has no effect on engine behavior.
-- Despawning a parent cascades to all descendants. There is no way to "orphan" children -- if you want a child to survive, reparent it first by changing its `Parent` component and updating the old and new parent's `Children` component.
+- Despawning a parent cascades to all descendants. There is no way to "orphan" children: if you want a child to survive, reparent it first by changing its `Parent` component and updating the old and new parent's `Children` component.
 - `withChildren` is the preferred way to build hierarchies because it correctly sets up both `Parent` and `Children` in a single fluent call.

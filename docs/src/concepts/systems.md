@@ -1,6 +1,6 @@
 # Systems
 
-Systems are free functions that contain your game logic. They are registered with the `App`, assigned to a phase, and called every frame (or once, for startup systems). The engine automatically injects their parameters -- resources, queries, commands, and events -- based on the function signature.
+Systems are free functions that contain your game logic. They are registered with the `App`, assigned to a phase, and called every frame (or once, for startup systems). The engine automatically injects their parameters (resources, queries, commands, and events) based on the function signature.
 
 ## Typed System Functions
 

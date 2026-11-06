@@ -206,7 +206,7 @@ Each frame, the `SpriteAnimationPlugin` system does the following for every enti
    - If `looping` is `false`, clamp to the last frame and set `playing = false`.
 5. Write `clips[currentClip].frames[currentFrame]` into `sprite.srcRect`.
 
-Because the system writes to `Sprite::srcRect`, you should not manually set `srcRect` on entities that also have a `SpriteAnimator` -- the animation system will overwrite it.
+Because the system writes to `Sprite::srcRect`, you should not manually set `srcRect` on entities that also have a `SpriteAnimator`; the animation system will overwrite it.
 
 ## Notes
 

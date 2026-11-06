@@ -80,12 +80,12 @@ app.update<helloSystem>();
 
 Systems are plain free functions. The engine inspects each parameter type at compile time to automatically inject the correct resource, query, or command buffer. Common system parameter types:
 
-- `Res<T>` -- read-only access to resource `T`
-- `ResMut<T>` -- read-write access to resource `T`
-- `Query<T, U, ...>` -- read-only query over entities with components `T`, `U`, ...
-- `QueryMut<T, U, ...>` -- read-write query over entities
-- `Commands&` -- deferred entity mutation buffer
-- `EventReader<T>` / `EventWriter<T>` -- event channels
+- `Res<T>`: read-only access to resource `T`
+- `ResMut<T>`: read-write access to resource `T`
+- `Query<T, U, ...>`: read-only query over entities with components `T`, `U`, ...
+- `QueryMut<T, U, ...>`: read-write query over entities
+- `Commands&`: deferred entity mutation buffer
+- `EventReader<T>` / `EventWriter<T>`: event channels
 
 The `update<fn>()` shorthand registers the function in the `Phase::Update` phase. Other phase shortcuts include `startup<fn>()` (runs once), `preUpdate<fn>()`, `postUpdate<fn>()`, and `render<fn>()`.
 
@@ -145,9 +145,9 @@ TextureHandle tex = assets->load<Texture>("assets/player.png");
 
 `AssetServer` is a resource registered by `DefaultPlugins`. The `load<T>()` template dispatches to the correct loader based on the type tag:
 
-- `load<Texture>("path.png")` -- loads an image as a GPU texture, returns `TextureHandle`
-- `load<Sound>("path.wav")` -- loads an audio file, returns `SoundHandle`
-- `load<Font>("path.ttf", 24)` -- loads a font (TrueType, OpenType, or BMFont `.fnt`) with a default pixel size, returns `FontHandle`. Text also works with no font loaded: an empty `FontHandle` draws with the built-in font.
+- `load<Texture>("path.png")`: loads an image as a GPU texture, returns `TextureHandle`
+- `load<Sound>("path.wav")`: loads an audio file, returns `SoundHandle`
+- `load<Font>("path.ttf", 24)`: loads a font (TrueType, OpenType, or BMFont `.fnt`) with a default pixel size, returns `FontHandle`. Text also works with no font loaded: an empty `FontHandle` draws with the built-in font.
 
 Asset paths are relative to the working directory. Place your assets in an `assets/` folder next to the executable.
 
@@ -216,7 +216,7 @@ int main() {
 
 A few things to note:
 
-- **`QueryMut<Transform2D, With<Sprite>>`** iterates all entities that have both `Transform2D` and `Sprite`, giving mutable access to `Transform2D`. The `With<Sprite>` is a filter -- it requires the component to be present but does not yield it in the callback.
+- **`QueryMut<Transform2D, With<Sprite>>`** iterates all entities that have both `Transform2D` and `Sprite`, giving mutable access to `Transform2D`. The `With<Sprite>` is a filter: it requires the component to be present but does not yield it in the callback.
 
 - **`sprites.iter([&](Transform2D& t) { ... })`** iterates every matching entity. The callback receives only the data components (`Transform2D`), not the filters.
 
@@ -302,14 +302,14 @@ int main() {
 
 Key patterns demonstrated here:
 
-1. **Custom resources** inherit from `Resource` and are registered with `app.initResource<T>()` (idempotent -- safe to call multiple times).
+1. **Custom resources** inherit from `Resource` and are registered with `app.initResource<T>()` (idempotent: safe to call multiple times).
 2. **Marker components** like `PlayerTag` are empty structs used with `With<PlayerTag>` to filter queries. They are auto-registered when first used in a query.
 3. **Entity references** can be stored as `EntityId` values in resources and later used with `cmd.entity(id)` to mutate specific entities.
-4. **`Name{"Player"}`** is a debug label component -- useful for identifying entities in the dev overlay.
+4. **`Name{"Player"}`** is a debug label component: useful for identifying entities in the dev overlay.
 5. **`EntityCommands::insert()`** returns the `EntityId` via implicit conversion (`operator EntityId()`), so you can capture it directly: `EntityId id = cmd.spawn().insert(...)`.
 
 ## Next steps
 
-- [Project Structure](project-structure.md) -- understand how the engine is organized
-- [ECS Concepts](../concepts/ecs.md) -- deeper dive into entities, components, systems, and queries
-- [Components Reference](../components/sprite.md) -- full reference for built-in components
+- [Project Structure](project-structure.md): understand how the engine is organized
+- [ECS Concepts](../concepts/ecs.md): deeper dive into entities, components, systems, and queries
+- [Components Reference](../components/sprite.md): full reference for built-in components

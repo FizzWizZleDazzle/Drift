@@ -132,7 +132,7 @@ Each frame (in `PostUpdate`), the shake system:
 4. Adds `offset * intensity` to the camera's `Transform2D` position.
 5. Decays `intensity` exponentially: `intensity *= exp(-decay * dt)`.
 
-Because the shake modifies position additively, it works alongside `CameraFollow` -- the follow system moves the camera to the target, and then the shake system adds displacement on top.
+Because the shake modifies position additively, it works alongside `CameraFollow`; the follow system moves the camera to the target, and then the shake system adds displacement on top.
 
 ### Basic usage
 

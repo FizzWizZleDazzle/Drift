@@ -47,11 +47,11 @@ c.velocityInheritance = 1.f;
 ```
 
 Key fields:
-- **`velocityInheritance`** -- particles inherit the emitter's velocity at spawn time, creating a natural trailing effect.
-- **`drag`** -- decelerates particles over their lifetime.
-- **`blendMode = Additive`** -- particles brighten overlapping areas, giving a glowing fire look.
-- **`colorStart` / `colorEnd`** -- gradient from bright yellow to transparent orange.
-- **`sizeStart` / `sizeEnd`** -- particles shrink as they age.
+- **`velocityInheritance`**: particles inherit the emitter's velocity at spawn time, creating a natural trailing effect.
+- **`drag`**: decelerates particles over their lifetime.
+- **`blendMode = Additive`**: particles brighten overlapping areas, giving a glowing fire look.
+- **`colorStart` / `colorEnd`**: gradient from bright yellow to transparent orange.
+- **`sizeStart` / `sizeEnd`**: particles shrink as they age.
 
 ### Explosion Config
 
@@ -69,9 +69,9 @@ c.boundsMax = { HALF_W,  HALF_H};
 ```
 
 Key fields:
-- **`duration` + `looping = false`** -- the emitter runs for 100ms, spawns all its particles, then stops. The entity remains alive while particles fade out, then the particle system cleans it up.
-- **`gravity`** -- a constant acceleration applied to all particles (Vec2).
-- **`boundsMin` / `boundsMax`** -- particles that leave this rectangle are killed early.
+- **`duration` + `looping = false`**: the emitter runs for 100ms, spawns all its particles, then stops. The entity remains alive while particles fade out, then the particle system cleans it up.
+- **`gravity`**: a constant acceleration applied to all particles (Vec2).
+- **`boundsMin` / `boundsMax`**: particles that leave this rectangle are killed early.
 
 ## Procedural Textures
 

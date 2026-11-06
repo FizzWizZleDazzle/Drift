@@ -88,8 +88,8 @@ void onKill(EventReader<EnemyKilled> kills, ResMut<GameState> game) {
 
 Events use two internal buffers:
 
-1. **Current buffer** -- receives `send()` calls during the current frame.
-2. **Previous buffer** -- holds events from the last frame, readable via `EventReader`.
+1. **Current buffer**: receives `send()` calls during the current frame.
+2. **Previous buffer**: holds events from the last frame, readable via `EventReader`.
 
 At the start of each frame, the engine swaps the buffers: the current buffer becomes the previous buffer (now readable), and the current buffer is cleared for new events.
 
@@ -110,7 +110,7 @@ app.initEvent<ScoreChanged>();
 app.initEvent<EnemyKilled>();
 ```
 
-`initEvent` is idempotent -- calling it multiple times for the same type is safe.
+`initEvent` is idempotent; calling it multiple times for the same type is safe.
 
 ## Built-in collision events
 
@@ -149,7 +149,7 @@ void onCollision(EventReader<CollisionStart> collisions,
 
 ### SensorStart / SensorEnd
 
-Sent when an entity enters or exits a sensor volume. Sensors are colliders with `isSensor = true` -- they detect overlap but do not produce physical contact forces.
+Sent when an entity enters or exits a sensor volume. Sensors are colliders with `isSensor = true`; they detect overlap but do not produce physical contact forces.
 
 ```cpp
 struct SensorStart {

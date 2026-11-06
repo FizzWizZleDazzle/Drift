@@ -194,6 +194,6 @@ constexpr EntityId InvalidEntityId = 0;
 using ComponentId = uint64_t;
 ```
 
-- **`EntityId`** -- a 64-bit identifier for an entity in the ECS world. Internally backed by flecs entity IDs.
-- **`InvalidEntityId`** -- the zero value, used as a null sentinel. Always check before using an `EntityId` stored from a previous frame.
-- **`ComponentId`** -- a 64-bit identifier for a component type, also a flecs entity ID internally.
+- **`EntityId`**: a 64-bit identifier for an entity in the ECS world. Internally backed by flecs entity IDs.
+- **`InvalidEntityId`**: the zero value, used as a null sentinel. Always check before using an `EntityId` stored from a previous frame.
+- **`ComponentId`**: a 64-bit identifier for a component type, also a flecs entity ID internally.

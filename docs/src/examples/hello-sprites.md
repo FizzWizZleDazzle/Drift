@@ -60,10 +60,10 @@ cmd.spawn()
 ```
 
 Key points:
-- **Variadic insert** -- multiple components passed in a single `insert()` call.
-- **`withChildren`** -- spawns child entities that are automatically linked to the parent via the hierarchy system.
-- **Marker components** -- `PlayerTag{}` and `OrbiterTag{}` are empty structs used solely for query filtering.
-- **`Name`** -- a debug label component (64-char fixed-size string).
+- **Variadic insert**: multiple components passed in a single `insert()` call.
+- **`withChildren`**: spawns child entities that are automatically linked to the parent via the hierarchy system.
+- **Marker components**: `PlayerTag{}` and `OrbiterTag{}` are empty structs used solely for query filtering.
+- **`Name`**: a debug label component (64-char fixed-size string).
 
 **Spawning grid tiles:**
 

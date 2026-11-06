@@ -58,9 +58,9 @@ app.setConfig({
 
 The lifecycle is:
 
-1. **Construction** -- `App app;` creates the app with default state.
-2. **Configuration** -- `setConfig()`, `addPlugins()`, `addPlugin()`, `addResource()`, `addSystem()`, etc.
-3. **Run** -- `app.run()` initializes SDL, creates the window and GPU device, then:
+1. **Construction**: `App app;` creates the app with default state.
+2. **Configuration**: `setConfig()`, `addPlugins()`, `addPlugin()`, `addResource()`, `addSystem()`, etc.
+3. **Run**: `app.run()` initializes SDL, creates the window and GPU device, then:
    - Builds all plugin groups (calls `PluginGroup::build(App&)`)
    - Builds all individual plugins (calls `Plugin::build(App&)`)
    - Finishes all individual plugins (calls `Plugin::finish(App&)`)
@@ -105,7 +105,7 @@ public:
 
 **`build(App&)`** is called first for every plugin, in registration order. This is where you register resources, systems, and components.
 
-**`finish(App&)`** is called after all plugins have been built. Use it when your plugin depends on resources created by other plugins. `finish()` is optional -- the default implementation is a no-op.
+**`finish(App&)`** is called after all plugins have been built. Use it when your plugin depends on resources created by other plugins. `finish()` is optional: the default implementation is a no-op.
 
 **`name()`** returns a string identifier. The `DRIFT_PLUGIN(Name)` macro implements it for you:
 

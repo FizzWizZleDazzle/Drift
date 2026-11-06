@@ -13,7 +13,7 @@ struct Handle {
 };
 ```
 
-The `T` parameter is a **phantom type** (tag struct) -- it exists only for compile-time type safety. A `TextureHandle` and a `SoundHandle` are distinct types even though both wrap a `uint32_t`.
+The `T` parameter is a **phantom type** (tag struct); it exists only for compile-time type safety. A `TextureHandle` and a `SoundHandle` are distinct types even though both wrap a `uint32_t`.
 
 ### Bit Layout
 

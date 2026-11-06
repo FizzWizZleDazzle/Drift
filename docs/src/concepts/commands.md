@@ -1,6 +1,6 @@
 # Commands
 
-`Commands` is the deferred mutation API. All entity creation, component insertion, component removal, and entity destruction go through commands. Mutations are queued up during system execution and applied (flushed) to the `World` at defined synchronization points -- after `Startup`, `PreUpdate`, `Update`, and `PostUpdate` phases.
+`Commands` is the deferred mutation API. All entity creation, component insertion, component removal, and entity destruction go through commands. Mutations are queued up during system execution and applied (flushed) to the `World` at defined synchronization points; after `Startup`, `PreUpdate`, `Update`, and `PostUpdate` phases.
 
 This deferred model is critical for thread safety. When the parallel scheduler runs multiple systems concurrently, each thread gets its own `Commands` buffer. After a parallel batch completes, all buffers are flushed to the world sequentially.
 
@@ -196,7 +196,7 @@ cmd.queue([](World& world) {
 });
 ```
 
-Use `queue()` sparingly -- it bypasses the typed safety of `EntityCommands` and runs with exclusive world access. It is useful for:
+Use `queue()` sparingly; it bypasses the typed safety of `EntityCommands` and runs with exclusive world access. It is useful for:
 
 - Bulk entity operations that would be slow with individual commands
 - Interacting with flecs features not exposed by the typed API

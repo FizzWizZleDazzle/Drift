@@ -4,7 +4,7 @@ Drift uses an Entity Component System (ECS) architecture built on top of [flecs]
 
 ## Entities
 
-An entity is a unique 64-bit identifier. It has no data or behavior on its own -- it is just an ID that components are attached to.
+An entity is a unique 64-bit identifier. It has no data or behavior on its own; it is just an ID that components are attached to.
 
 ```cpp
 using EntityId = uint64_t;
@@ -111,7 +111,7 @@ Explicit registration lets you provide a clean name (instead of the mangled `typ
 
 ## World
 
-The `World` class wraps the flecs world. It manages entity creation, component storage, and query iteration. You typically do not interact with the `World` directly in game code -- instead, you use `Commands` for mutations and `Query`/`QueryMut` for reads. However, plugins and advanced code can access it through `app.world()`.
+The `World` class wraps the flecs world. It manages entity creation, component storage, and query iteration. You typically do not interact with the `World` directly in game code; instead, you use `Commands` for mutations and `Query`/`QueryMut` for reads. However, plugins and advanced code can access it through `app.world()`.
 
 ```cpp
 // In a plugin's build() method

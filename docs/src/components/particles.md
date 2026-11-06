@@ -32,7 +32,7 @@ struct ParticleEmitter {
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `texture` | `TextureHandle` | (invalid) | Texture used for each particle. A small white square works well -- tint with `colorStart`/`colorEnd`. |
+| `texture` | `TextureHandle` | (invalid) | Texture used for each particle. A small white square works well; tint with `colorStart`/`colorEnd`. |
 | `srcRect` | `Rect` | `{}` | Source rectangle within the texture. `{}` uses the full texture. |
 
 #### Emission
@@ -142,7 +142,7 @@ struct BurstEntry {
 };
 ```
 
-Example -- a repeating burst every 0.5 seconds:
+Example: a repeating burst every 0.5 seconds:
 
 ```cpp
 config.bursts.push_back(BurstEntry{

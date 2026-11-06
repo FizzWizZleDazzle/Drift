@@ -323,6 +323,6 @@ int main() {
 ## Notes
 
 - Physics bodies require a `Transform2D` on the same entity. The physics system reads the initial position from it and writes back every frame.
-- Do not manually move a `Dynamic` body's `Transform2D` each frame -- let the physics engine control it through velocity and forces. To teleport a body, set its position once via `Commands::entity().insert<Transform2D>(...)`.
+- Do not manually move a `Dynamic` body's `Transform2D` each frame: let the physics engine control it through velocity and forces. To teleport a body, set its position once via `Commands::entity().insert<Transform2D>(...)`.
 - Collision events are delivered via the event system. Events from frame N are readable on frame N+1. See the [Events](../concepts/events.md) chapter for details on `EventReader` and `EventWriter`.
 - Body type meanings: `Static` = never moves (walls, floor); `Dynamic` = fully simulated (players, projectiles); `Kinematic` = programmatically moved (moving platforms, elevators).

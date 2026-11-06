@@ -58,7 +58,7 @@ This distinction is intentional: `iter()` is the common case and avoids passing 
 
 Filters refine which entities a query matches without adding data columns to the callback. They appear alongside data components in the template argument list.
 
-### With\<T\> -- require a component
+### With\<T\>: require a component
 
 `With<T>` requires the entity to have component `T` but does **not** yield it. This is useful for marker components or when you only need to know the component exists.
 
@@ -74,7 +74,7 @@ void moveEnemies(QueryMut<Transform2D, With<Enemy>> query, Res<Time> time) {
 }
 ```
 
-### Without\<T\> -- exclude a component
+### Without\<T\>: exclude a component
 
 `Without<T>` excludes entities that have component `T`.
 
@@ -89,7 +89,7 @@ void applyDamage(QueryMut<Health, Without<Invincible>> query) {
 }
 ```
 
-### Optional\<T\> -- maybe present
+### Optional\<T\>: maybe present
 
 `Optional<T>` does not filter entities. Instead, the callback receives a pointer (`T*`) that is `nullptr` when the component is absent.
 
@@ -115,7 +115,7 @@ void healSystem(QueryMut<Health, Optional<Shield>> query) {
 }
 ```
 
-### Changed\<T\> -- only changed this tick
+### Changed\<T\>: only changed this tick
 
 `Changed<T>` filters to entities whose component `T` was modified during the current tick. The component is **not** yielded (it behaves like `With<T>` for data purposes).
 
@@ -128,7 +128,7 @@ void onHealthChanged(Query<Health, Changed<Health>> query) {
 }
 ```
 
-### Added\<T\> -- only added this tick
+### Added\<T\>: only added this tick
 
 `Added<T>` filters to entities that had component `T` added during the current tick.
 

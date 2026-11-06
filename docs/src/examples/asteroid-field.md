@@ -10,7 +10,7 @@ The player controls a ship with WASD and aims with the mouse. Left-click fires b
 
 ## Procedural Textures
 
-All visuals are generated at startup from pixel data -- no image files are needed:
+All visuals are generated at startup from pixel data; no image files are needed:
 
 ```cpp
 game->asteroidTex[0] = makeCircleTexture(renderer.get(), 24, game->rng);

@@ -65,10 +65,10 @@ void colorCycle(Res<Time> time,
 
 The example deliberately registers multiple systems that run in parallel to stress-test the query system:
 
-- **`orbitUpdate`** -- writes `Transform2D` on orbiters
-- **`colorCycle`** -- writes `Sprite` and `ParticleEmitter`
-- **`changeMonitor`** -- reads `Changed<Sprite>` concurrently with `colorCycle` writing `Sprite`
-- **`positionMonitor`** -- reads `Transform2D` with `With<OrbiterTag>` filter
+- **`orbitUpdate`**: writes `Transform2D` on orbiters
+- **`colorCycle`**: writes `Sprite` and `ParticleEmitter`
+- **`changeMonitor`**: reads `Changed<Sprite>` concurrently with `colorCycle` writing `Sprite`
+- **`positionMonitor`**: reads `Transform2D` with `With<OrbiterTag>` filter
 
 This exercises the engine's query mutex handling and change-tick synchronization under real contention.
 

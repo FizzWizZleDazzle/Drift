@@ -209,4 +209,4 @@ int main() {
 - `TrailRenderer` only works on entities that move. A stationary entity will accumulate a single point that fades away.
 - The `minDistance` field prevents the ring buffer from filling up with redundant points when the entity barely moves. Increase it for fast objects to keep the trail smooth with fewer points.
 - Trail rendering uses `drawLine` calls internally, which are not batched the same way sprites are. Hundreds of trail-bearing entities are fine, but thousands may affect performance.
-- To temporarily disable a trail without removing the component, you can set `lifetime` to `0` -- existing points will expire immediately and no new points will be recorded.
+- To temporarily disable a trail without removing the component, you can set `lifetime` to `0`: existing points will expire immediately and no new points will be recorded.

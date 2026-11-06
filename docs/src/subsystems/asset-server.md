@@ -166,7 +166,7 @@ If you call `load<T>()` before the corresponding loader has been registered, it 
 | Scenario | Recommendation |
 |----------|---------------|
 | Loading a texture in a startup system | Either works. `AssetServer` or `RendererResource` are equivalent. |
-| Loading mixed asset types in one system | `AssetServer` -- one dependency instead of three. |
+| Loading mixed asset types in one system | `AssetServer`; one dependency instead of three. |
 | Runtime loading (e.g., level transitions) | `AssetServer` keeps the loading code uniform. |
 | Subsystem-specific operations (getTextureSize, destroyTexture) | Use the subsystem resource directly. `AssetServer` loads and tracks assets. |
 | Assets that scenes save or hot reload watches | `AssetServer`. Assets loaded directly through a subsystem resource have no recorded path. |
