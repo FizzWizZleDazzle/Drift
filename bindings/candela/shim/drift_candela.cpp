@@ -1,18 +1,31 @@
 // drift_candela: the C side of the candela `drift` package.
 //
-// candela's foreign interface carries int32, double, null-terminated
+// candela's foreign interface carries int64, double, null-terminated
 // strings, packed int/float arrays and structs of those, and nothing that
-// could hold a pointer or call back into the script. So the candela program
-// owns the main loop and this file owns one drift::App: dc_frame() closes the
-// previous frame (render and present) and opens the next one (events,
-// update, physics), and every other call reads or changes the world in
-// between, from the same thread.
+// could hold a pointer or call back into the script. The frame loop lives in
+// the package's candela code (App.run()), which calls two functions here
+// once per frame:
 //
-// Entities are 64-bit flecs ids; they cross as small int handles from a
-// table here. Engine handles (textures, sounds, fonts, ...) are already
-// 32-bit and cross as they are. 0 is never a valid handle. Strings returned
-// to candela are copied out by the caller before the next call, so one
-// static buffer serves every string-returning function.
+//   dc_sync_begin()  waits for the simulation started last frame;
+//                    the script's component changes are then written into
+//                    the world (dc_create, dc_set, dc_move_many, ...).
+//   dc_sync_end()    renders and presents the frame, polls input, copies
+//                    collision events and the component values the script
+//                    reads (the snapshot), then starts the next frame's
+//                    simulation on a background thread and returns, so the
+//                    simulation runs while the script's systems do.
+//
+// While the simulation runs the script must not touch the world. Reads of
+// engine-driven components come from the snapshot (dc_pull); calls that
+// need the live world (physics queries, audio, scenes, ...) wait for the
+// simulation first (ensureJoined). Resources that are mainThreadOnly() are
+// never used by the background simulation, so textures, fonts, drawing and
+// post effects need no wait.
+//
+// Entities cross as small int handles from a table here, never reused, so a
+// stale handle never names a new entity. Engine handles (textures, sounds,
+// fonts, ...) are already 32-bit and cross as they are. 0 is never a valid
+// handle. Returned strings live in one static buffer until the next call.
 
 #include <drift/App.hpp>
 #include <drift/AssetServer.hpp>
@@ -21,13 +34,17 @@
 #include <drift/PhysicsSyncSystem.hpp>
 #include <drift/Reflect.hpp>
 #include <drift/Scene.hpp>
+#include <drift/components/AudioSource.hpp>
+#include <drift/components/Behavior.hpp>
 #include <drift/components/Camera.hpp>
 #include <drift/components/CameraController.hpp>
+#include <drift/components/GlobalTransform.hpp>
 #include <drift/components/Hierarchy.hpp>
 #include <drift/components/Light2D.hpp>
 #include <drift/components/Name.hpp>
 #include <drift/components/ParticleEmitter.hpp>
 #include <drift/components/Physics.hpp>
+#include <drift/components/Shape.hpp>
 #include <drift/components/Sprite.hpp>
 #include <drift/components/SpriteAnimator.hpp>
 #include <drift/components/Text.hpp>
@@ -52,13 +69,16 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <typeinfo>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #ifdef _WIN32
@@ -69,7 +89,7 @@
 
 using namespace drift;
 
-// ---- Structs that cross the boundary (doubles, int32_t, nested) ----------
+// ---- Structs that cross the boundary (doubles, int64_t, nested) ----------
 
 // candela 0.1.6 passes its int as int64_t, in arguments, returns and
 // struct fields alike.
@@ -79,39 +99,6 @@ struct DV2 { double x, y; };
 struct DRect { double x, y, w, h; };
 struct DColor { double r, g, b, a; };
 struct DCell { cint x, y; };
-
-struct DCollider {
-    DV2 offset;
-    double density, friction, restitution;
-    cint sensor, category, mask;
-};
-
-struct DBody {
-    cint kind;            // BodyType
-    cint fixedRotation;
-    double gravityScale, linearDamping, angularDamping;
-};
-
-struct DEmitter {
-    double rate;
-    double lifetimeMin, lifetimeMax;
-    double speedMin, speedMax;
-    double angleMin, angleMax;
-    double sizeStart, sizeEnd;
-    DColor colorStart, colorEnd;
-    DV2 gravity;
-    double drag;
-    cint maxParticles;
-    cint blend;           // BlendMode
-    cint texture;         // 0 = white square
-    cint shape;           // EmissionShape
-    double shapeRadius;
-    DV2 shapeExtents;
-    double duration;         // -1 = forever
-    cint looping;
-    double z;
-    cint layer;
-};
 
 struct DTextStyle {
     double size;
@@ -166,13 +153,38 @@ uint8_t channel(double c) {
 Color color(DColor c) { return {channel(c.r), channel(c.g), channel(c.b), channel(c.a)}; }
 ColorF colorf(DColor c) { return {float(c.r), float(c.g), float(c.b), float(c.a)}; }
 DColor dcolor(Color c) { return {c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0}; }
-DColor dcolorf(ColorF c) { return {c.r, c.g, c.b, c.a}; }
 
 // Engine handles are 32-bit ids; a candela int holds them unchanged.
 cint bits(uint32_t v) { return cint(v); }
 uint32_t ubits(cint v) { return uint32_t(v); }
 
 template <typename H> H handle(cint v) { return H{uint32_t(v)}; }
+
+// ---- Component kinds ------------------------------------------------------
+//
+// Every engine component the candela side mirrors has a kind number and a
+// fixed layout of doubles (see the codec functions below and the matching
+// encode/decode functions in src/main.cdl).
+
+enum Kind : int32_t {
+    KTransform = 0, KVelocity, KSprite, KShape, KText, KCamera, KCameraFollow,
+    KRigidBody, KBoxCollider, KCircleCollider, KEmitter, KPointLight, KSpotLight,
+    KOccluder, KAudioSource, KTilemap, KAnimator, KLifetime, KOscillate, KFollow,
+    KName, KTween, KindCount
+};
+
+// Doubles per entity that dc_pull returns for the kinds the engine changes.
+int32_t pullStride(int32_t kind) {
+    switch (kind) {
+        case KTransform: return 5;   // x, y, rotation, scale x, scale y
+        case KVelocity: return 3;    // x, y, angular
+        case KSprite: return 8;      // frame x, y, w, h, color r, g, b, a
+        case KCamera: return 1;      // zoom
+        case KAnimator: return 4;    // clip, frame, finished, playing
+        case KLifetime: return 1;    // seconds left
+    }
+    return 0;
+}
 
 // ---- State ---------------------------------------------------------------
 
@@ -181,9 +193,14 @@ struct Burst {
     double despawnAt;
 };
 
+struct Snapshot {
+    std::unordered_map<int32_t, std::array<double, 8>> rows;
+};
+
 struct State {
     App* app = nullptr;
-    bool frameOpen = false;
+    bool pipelined = true;
+    bool simInFlight = false;
     std::string error;
     std::string text;               // returned strings live here until the next call
 
@@ -191,12 +208,35 @@ struct State {
     std::unordered_map<int32_t, EntityId> ids;
     std::unordered_map<EntityId, int32_t> handles;
     int32_t nextHandle = 1;
+    std::vector<int32_t> dead;      // handles whose entity went away engine-side
+
+    // Values of engine-driven components as they were when the simulation
+    // started, for the handles the script read last frame or wrote.
+    Snapshot snaps[KindCount];
+    std::unordered_set<int32_t> interest[KindCount];
+    std::unordered_set<int32_t> nextInterest[KindCount];
+
+    // Collision and sensor events of the last simulation, as handle pairs.
+    std::vector<int32_t> events[4];
+
+    // Frame values cached at dc_sync_end, so reading them never races the
+    // simulation.
+    double dt = 0.0, elapsed = 0.0;
+    int64_t frame = 0;
+
+    // Pipeline timing (performance-counter ticks) of the last frame.
+    uint64_t returned = 0;          // dc_sync_end handed control to the script
+    uint64_t scriptDone = 0;        // dc_sync_begin was called
+    uint64_t joined = 0;            // the simulation had finished
+    uint64_t syncStart = 0, syncEnd = 0;
+    uint64_t renderTicks = 0;
+    SimulationTiming sim;
+    double stats[8] = {};
 
     float drawZ = 0.f;
-    std::vector<int32_t> query;     // last dc_query result
 
-    std::unordered_map<int32_t, std::unique_ptr<TweenBuilder>> tweenBuilders;
-    int32_t nextBuilder = 1;
+    std::unordered_map<int32_t, TweenId> tweens;          // Tween component per handle
+    std::unordered_set<int32_t> autoVelocity;            // Velocity2D added for a body
 
     std::vector<std::unique_ptr<SaveData>> saves;
 
@@ -214,6 +254,16 @@ State g;
 
 template <typename T> T* res() { return g.app ? g.app->getResource<T>() : nullptr; }
 World* world() { return g.app ? &g.app->world() : nullptr; }
+
+double ms(uint64_t ticks) { return double(ticks) * 1000.0 / double(SDL_GetPerformanceFrequency()); }
+
+// Waits for the background simulation, so the caller may touch the world.
+void ensureJoined() {
+    if (!g.app || !g.simInFlight) return;
+    g.app->finishSimulation();
+    g.simInFlight = false;
+    g.joined = SDL_GetPerformanceCounter();
+}
 
 int32_t handleOf(EntityId id) {
     if (id == InvalidEntityId) return 0;
@@ -260,18 +310,7 @@ template <typename T> void put(EntityId e, const T& value) {
     world()->set<T>(e, cid<T>(), value);
 }
 
-// Copy, edit, write back, so change ticks and hooks see the change.
-template <typename T, typename Fn> void edit(int32_t h, Fn&& fn) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return;
-    T value{};
-    if (const T* cur = get<T>(e)) value = *cur;
-    fn(value);
-    put<T>(e, value);
-}
-
-template <typename T> void removeComponent(int32_t h) {
-    EntityId e = idOf(h);
+template <typename T> void removeComponent(EntityId e) {
     if (e == InvalidEntityId) return;
     world()->removeComponent(e, cid<T>());
 }
@@ -286,17 +325,6 @@ int32_t fail(const std::string& message) {
     return 0;
 }
 
-void teleportBody(EntityId e, Vec2 position) {
-    auto* bridge = res<PhysicsBridge>();
-    auto* physics = res<PhysicsResource>();
-    if (!bridge || !physics) return;
-    auto it = bridge->entityToBody.find(e);
-    if (it == bridge->entityToBody.end()) return;
-    Vec2 offset{};
-    if (auto* box = get<BoxCollider2D>(e)) offset = box->offset;
-    physics->setBodyPosition(it->second, position + offset);
-}
-
 const PhysicsBody* bodyOf(EntityId e) {
     auto* bridge = res<PhysicsBridge>();
     if (!bridge) return nullptr;
@@ -304,30 +332,47 @@ const PhysicsBody* bodyOf(EntityId e) {
     return it == bridge->entityToBody.end() ? nullptr : &it->second;
 }
 
-EmitterConfig emitterConfig(const DEmitter& d) {
+// Moves a body Box2D owns to follow a Transform2D the script set.
+void teleportBody(EntityId e, Vec2 position, float rotation) {
+    auto* physics = res<PhysicsResource>();
+    const PhysicsBody* b = bodyOf(e);
+    if (!b || !physics) return;
+    Vec2 offset{};
+    if (auto* box = get<BoxCollider2D>(e)) offset = box->offset;
+    physics->setBodyPosition(*b, position + offset);
+    physics->setBodyRotation(*b, rotation);
+}
+
+// Emitter layout (31 doubles): rate, lifetime min, max, speed min, max,
+// angle min, max, size start, end, color start rgba, color end rgba,
+// gravity x, y, drag, max particles, blend, texture, shape, shape radius,
+// shape extents x, y, duration, looping, z, playing.
+constexpr int32_t EmitterSize = 31;
+
+EmitterConfig emitterConfig(const double* d) {
     EmitterConfig c;
-    c.texture = handle<TextureHandle>(d.texture);
+    c.spawnRate = float(d[0]);
+    c.lifetime = {float(d[1]), float(d[2])};
+    c.speed = {float(d[3]), float(d[4])};
+    c.angle = {float(d[5]), float(d[6])};
+    c.sizeStart = {float(d[7]), float(d[7])};
+    c.sizeEnd = {float(d[8]), float(d[8])};
+    c.colorStart = {float(d[9]), float(d[10]), float(d[11]), float(d[12])};
+    c.colorEnd = {float(d[13]), float(d[14]), float(d[15]), float(d[16])};
+    c.gravity = {float(d[17]), float(d[18])};
+    c.drag = float(d[19]);
+    c.maxParticles = d[20] > 0 ? uint32_t(d[20]) : 256;
+    c.blendMode = static_cast<BlendMode>(int(d[21]));
+    c.texture = handle<TextureHandle>(cint(d[22]));
     if (!c.texture.valid()) {
         if (auto* r = res<RendererResource>()) c.texture = r->whiteTexture();
     }
-    c.spawnRate = float(d.rate);
-    c.lifetime = {float(d.lifetimeMin), float(d.lifetimeMax)};
-    c.speed = {float(d.speedMin), float(d.speedMax)};
-    c.angle = {float(d.angleMin), float(d.angleMax)};
-    c.sizeStart = {float(d.sizeStart), float(d.sizeStart)};
-    c.sizeEnd = {float(d.sizeEnd), float(d.sizeEnd)};
-    c.colorStart = colorf(d.colorStart);
-    c.colorEnd = colorf(d.colorEnd);
-    c.gravity = v2(d.gravity);
-    c.drag = float(d.drag);
-    c.maxParticles = d.maxParticles > 0 ? d.maxParticles : 256;
-    c.blendMode = static_cast<BlendMode>(d.blend);
-    c.shape = static_cast<EmissionShape>(d.shape);
-    c.shapeRadius = float(d.shapeRadius);
-    c.shapeExtents = v2(d.shapeExtents);
-    c.duration = float(d.duration);
-    c.looping = d.looping != 0;
-    c.zOrder = float(d.z);
+    c.shape = static_cast<EmissionShape>(int(d[23]));
+    c.shapeRadius = float(d[24]);
+    c.shapeExtents = {float(d[25]), float(d[26])};
+    c.duration = float(d[27]);
+    c.looping = d[28] != 0;
+    c.zOrder = float(d[29]);
     return c;
 }
 
@@ -348,23 +393,14 @@ TextStyle textStyle(const DTextStyle& d) {
     return s;
 }
 
-PhysicsBody* bodyFor(int32_t h) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return nullptr;
-    return const_cast<PhysicsBody*>(bodyOf(e));
-}
-
 void reapBursts() {
-    auto* time = res<Time>();
     World* w = world();
-    if (!time || !w) return;
-    double now = time->elapsed;
+    if (!w) return;
+    double now = g.elapsed;
     auto& b = g.bursts;
     for (size_t i = 0; i < b.size();) {
         if (now >= b[i].despawnAt) {
             if (w->isAlive(b[i].entity)) w->destroyEntity(b[i].entity);
-            auto it = g.handles.find(b[i].entity);
-            if (it != g.handles.end()) forget(it->second);
             b[i] = b.back();
             b.pop_back();
         } else {
@@ -375,17 +411,21 @@ void reapBursts() {
 
 void closeApp() {
     if (!g.app) return;
-    if (g.frameOpen) g.app->endFrame();
+    ensureJoined();
     for (auto& s : g.saves) {
         if (s && s->dirty()) s->flush();
     }
-    g.tweenBuilders.clear();
     delete g.app;
     g.app = nullptr;
-    g.frameOpen = false;
     g.ids.clear();
     g.handles.clear();
-    g.query.clear();
+    g.dead.clear();
+    for (auto& s : g.snaps) s.rows.clear();
+    for (auto& s : g.interest) s.clear();
+    for (auto& s : g.nextInterest) s.clear();
+    for (auto& e : g.events) e.clear();
+    g.tweens.clear();
+    g.autoVelocity.clear();
     g.scenes.clear();
     g.objects.clear();
     g.bursts.clear();
@@ -398,11 +438,69 @@ void closeApp() {
 // App and frame loop
 // =========================================================================
 
+namespace {
+
+int32_t knownHandle(EntityId e) {
+    auto it = g.handles.find(e);
+    return it == g.handles.end() ? 0 : it->second;
+}
+
+void collectEvents() {
+    for (auto& e : g.events) e.clear();
+    auto* cb = res<CollisionBridge>();
+    if (!cb) return;
+    auto add = [](int k, EntityId a, EntityId b) {
+        int32_t ha = knownHandle(a), hb = knownHandle(b);
+        if (!ha || !hb) return;
+        g.events[k].push_back(ha);
+        g.events[k].push_back(hb);
+    };
+    for (int32_t i = 0; i < cb->collisionStartCount(); ++i) add(0, cb->collisionStartA(i), cb->collisionStartB(i));
+    for (int32_t i = 0; i < cb->collisionEndCount(); ++i) add(1, cb->collisionEndA(i), cb->collisionEndB(i));
+    for (int32_t i = 0; i < cb->sensorStartCount(); ++i) add(2, cb->sensorStartA(i), cb->sensorStartB(i));
+    for (int32_t i = 0; i < cb->sensorEndCount(); ++i) add(3, cb->sensorEndA(i), cb->sensorEndB(i));
+}
+
+// Handles whose entity is gone (a Lifetime ran out, a parent was despawned).
+void collectDead() {
+    g.dead.clear();
+    World* w = world();
+    for (auto it = g.ids.begin(); it != g.ids.end();) {
+        if (!w->isAlive(it->second)) {
+            g.dead.push_back(it->first);
+            g.handles.erase(it->second);
+            it = g.ids.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool readPull(int32_t kind, EntityId e, double* out);
+
+void takeSnapshot() {
+    for (int32_t k = 0; k < KindCount; ++k) {
+        auto& snap = g.snaps[k];
+        snap.rows.clear();
+        if (!g.pipelined) { g.interest[k].clear(); continue; }
+        for (int32_t h : g.interest[k]) {
+            EntityId e = idOf(h);
+            if (e == InvalidEntityId) continue;
+            std::array<double, 8> row{};
+            if (readPull(k, e, row.data())) snap.rows.emplace(h, row);
+        }
+        g.interest[k].clear();
+    }
+}
+
+} // namespace
+
 EXPORT const char* dc_error() { return g.error.c_str(); }
 
 EXPORT cint dc_start(const char* title, cint width, cint height,
-                        cint fullscreen, cint vsync, cint resizable,
-                        cint scaleMode, cint lighting, const char* renderer) {
+                     cint fullscreen, cint vsync, cint resizable,
+                     cint scaleMode, cint lighting, const char* renderer,
+                     cint pipelined, cint threads) {
     if (g.app) return fail("drift is already running");
     Config cfg;
     cfg.title = title ? title : "Drift";
@@ -413,6 +511,7 @@ EXPORT cint dc_start(const char* title, cint width, cint height,
     cfg.resizable = resizable != 0;
     cfg.scaleMode = static_cast<ScaleMode>(scaleMode);
     cfg.renderer = renderer ? renderer : "";
+    cfg.threadCount = int(threads);
 
     g.app = new App();
     g.app->setConfig(cfg);
@@ -423,34 +522,86 @@ EXPORT cint dc_start(const char* title, cint width, cint height,
         g.app = nullptr;
         return fail("could not open a window and graphics device");
     }
+    g.pipelined = pipelined != 0;
     return 1;
 }
 
-// Ends the frame opened by the previous call, then opens the next one.
-// Returns 0 when the app has quit; the window is closed by then.
-EXPORT cint dc_frame() {
+// Waits for the simulation the last dc_sync_end started. After this the
+// script's component changes go into the world.
+EXPORT cint dc_sync_begin() {
     if (!g.app) return 0;
-    if (g.frameOpen) {
-        g.app->endFrame();
-        g.frameOpen = false;
+    g.scriptDone = SDL_GetPerformanceCounter();
+    bool wasInFlight = g.simInFlight;
+    ensureJoined();
+    if (!wasInFlight && g.joined < g.returned) g.joined = g.scriptDone;
+    g.sim = g.app->lastSimulation();
+    double script = ms(g.scriptDone - g.returned);
+    double sim = g.sim.end > g.sim.start ? ms(g.sim.end - g.sim.start) : 0.0;
+    double overlap = 0.0;
+    if (g.sim.async && g.sim.end > g.sim.start) {
+        uint64_t a = std::max(g.sim.start, g.returned);
+        uint64_t b = std::min(g.sim.end, g.scriptDone);
+        if (b > a) overlap = ms(b - a);
     }
-    if (!g.app->beginFrame()) {
+    g.stats[0] = script;
+    g.stats[1] = sim;
+    g.stats[2] = overlap;
+    g.stats[3] = g.joined > g.scriptDone ? ms(g.joined - g.scriptDone) : 0.0;
+    g.stats[5] = double(g.sim.deferredUs) / 1000.0;
+    g.stats[7] = g.sim.async ? 1.0 : 0.0;
+    return 1;
+}
+
+// Draws and presents the frame, starts the next one and its simulation.
+// Returns 0 once the app has quit; the window is closed by then.
+EXPORT cint dc_sync_end() {
+    if (!g.app) return 0;
+    ensureJoined();
+    uint64_t r0 = SDL_GetPerformanceCounter();
+    g.app->endFrame();
+    g.renderTicks = SDL_GetPerformanceCounter() - r0;
+    g.stats[4] = ms(g.renderTicks);
+    if (!g.app->pollFrame()) {
         closeApp();
         return 0;
     }
-    g.frameOpen = true;
+    if (auto* t = res<Time>()) {
+        g.dt = t->delta;
+        g.elapsed = t->elapsed;
+        g.frame = int64_t(t->frame);
+    }
     g.drawZ = 0.f;
     reapBursts();
+    if (!g.pipelined) g.app->simulate();
+    collectEvents();
+    collectDead();
+    takeSnapshot();
+    if (g.pipelined) {
+        g.app->simulateAsync();
+        g.simInFlight = true;
+    }
+    g.returned = SDL_GetPerformanceCounter();
+    g.stats[6] = g.scriptDone ? ms(g.returned - g.scriptDone) : 0.0;
     return 1;
+}
+
+// Timing of the last frame in milliseconds: 0 script systems, 1 engine
+// simulation, 2 the two overlapping, 3 waiting for the simulation after the
+// script finished, 4 rendering and presenting, 5 systems that had to wait
+// for the main thread, 6 the serial part of the frame (writing changes,
+// rendering, polling, snapshot), 7 1.0 when the simulation ran in the
+// background.
+EXPORT double dc_stat(cint which) {
+    return which >= 0 && which < 8 ? g.stats[which] : 0.0;
 }
 
 EXPORT cint dc_quit() { if (g.app) g.app->quit(); return 0; }
 EXPORT cint dc_close() { closeApp(); return 0; }
 EXPORT cint dc_running() { return g.app && g.app->running() ? 1 : 0; }
 
-EXPORT double dc_dt() { auto* t = res<Time>(); return t ? t->delta : 0.0; }
-EXPORT double dc_time() { auto* t = res<Time>(); return t ? t->elapsed : 0.0; }
-EXPORT cint dc_frame_count() { auto* t = res<Time>(); return t ? int32_t(t->frame) : 0; }
+EXPORT double dc_dt() { return g.dt; }
+EXPORT double dc_time() { return g.elapsed; }
+EXPORT cint dc_frame_count() { return g.frame; }
 
 EXPORT cint dc_set_title(const char* title) {
     if (!g.app) return 0;
@@ -466,10 +617,6 @@ EXPORT cint dc_set_clear_color(DColor c) {
 EXPORT cint dc_set_scale_mode(cint mode) {
     if (auto* r = res<RendererResource>()) r->setScaleMode(static_cast<ScaleMode>(mode));
     return 0;
-}
-EXPORT cint dc_scale_mode() {
-    auto* r = res<RendererResource>();
-    return r ? int32_t(r->scaleMode()) : 0;
 }
 EXPORT cint dc_set_logical_size(cint w, cint h) {
     if (auto* r = res<RendererResource>()) r->setLogicalSize(w, h);
@@ -885,121 +1032,74 @@ EXPORT DV2 dc_world_to_screen(DV2 p) {
 // =========================================================================
 // Entities
 // =========================================================================
+//
+// The script spawns entities by reserving a handle (no world access, so it
+// can happen while the simulation runs) and creating them all at the next
+// sync. Despawning, parenting and component writes happen at the sync too.
 
-EXPORT cint dc_spawn() {
+// A new handle for an entity dc_create makes later.
+EXPORT cint dc_reserve() { return g.app ? g.nextHandle++ : 0; }
+
+// Makes entities for reserved handles, each with a Transform2D.
+EXPORT cint dc_create(const cint* hs, cint n) {
     World* w = world();
     if (!w) return 0;
-    EntityId e = w->createEntity();
-    w->set<Transform2D>(e, cid<Transform2D>(), Transform2D{});
-    return handleOf(e);
+    ensureJoined();
+    for (cint i = 0; i < n; ++i) {
+        int32_t h = int32_t(hs[i]);
+        if (g.ids.count(h)) continue;
+        EntityId e = w->createEntity();
+        w->set<Transform2D>(e, cid<Transform2D>(), Transform2D{});
+        g.ids[h] = e;
+        g.handles[e] = h;
+    }
+    return 0;
 }
+
+// Removes the entity and its children.
 EXPORT cint dc_despawn(cint h) {
-    EntityId e = idOf(h);
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
     if (e != InvalidEntityId) {
-        // Children go with their parent.
-        if (auto* ch = get<Children>(e)) {
-            Children copy = *ch;
-            for (int i = 0; i < copy.count; ++i) {
-                auto it = g.handles.find(copy.ids[i]);
-                if (it != g.handles.end()) dc_despawn(it->second);
-                else if (world()->isAlive(copy.ids[i])) world()->destroyEntity(copy.ids[i]);
+        std::vector<EntityId> stack{e};
+        std::vector<EntityId> order;
+        while (!stack.empty()) {
+            EntityId cur = stack.back();
+            stack.pop_back();
+            order.push_back(cur);
+            if (auto* ch = get<Children>(cur)) {
+                for (int i = 0; i < ch->count; ++i) {
+                    if (world()->isAlive(ch->ids[i])) stack.push_back(ch->ids[i]);
+                }
             }
         }
-        world()->destroyEntity(e);
+        for (auto it = order.rbegin(); it != order.rend(); ++it) {
+            if (world()->isAlive(*it)) world()->destroyEntity(*it);
+        }
     }
-    forget(h);
-    return 0;
-}
-EXPORT cint dc_alive(cint h) { return idOf(h) != InvalidEntityId ? 1 : 0; }
-
-EXPORT cint dc_set_name(cint h, const char* name) {
-    EntityId e = idOf(h);
-    if (e != InvalidEntityId) put<Name>(e, Name(name));
-    return 0;
-}
-EXPORT const char* dc_name(cint h) {
-    EntityId e = idOf(h);
-    const Name* n = e != InvalidEntityId ? get<Name>(e) : nullptr;
-    return keep(n ? n->value : "");
-}
-EXPORT cint dc_find(const char* name) {
-    World* w = world();
-    if (!w || !name) return 0;
-    for (EntityId e : w->entitiesWith(cid<Name>())) {
-        const Name* n = get<Name>(e);
-        if (n && std::strcmp(n->value, name) == 0) return handleOf(e);
-    }
+    forget(int32_t(h));
+    g.tweens.erase(int32_t(h));
+    g.autoVelocity.erase(int32_t(h));
     return 0;
 }
 
-// Entities matching a flecs query expression over component names, such as
-// "Sprite" or "RigidBody2D, Velocity2D". Returns the count; dc_query_at reads them.
-EXPORT cint dc_query(const char* expr) {
-    g.query.clear();
-    World* w = world();
-    if (!w || !expr || !*expr) return 0;
-    QueryIter it = w->queryIter(expr);
-    if (!it._internal) return -1;
-    while (w->queryNext(&it)) {
-        EntityId* ents = w->queryEntities(&it);
-        for (int32_t i = 0; i < it.count; ++i) g.query.push_back(handleOf(ents[i]));
-    }
-    w->queryFini(&it);
-    return int32_t(g.query.size());
-}
-EXPORT cint dc_query_at(cint i) {
-    return i >= 0 && i < int32_t(g.query.size()) ? g.query[size_t(i)] : 0;
+EXPORT cint dc_alive(cint h) {
+    ensureJoined();
+    return idOf(int32_t(h)) != InvalidEntityId ? 1 : 0;
 }
 
-EXPORT cint dc_has(cint h, const char* component) {
-    EntityId e = idOf(h);
-    World* w = world();
-    if (e == InvalidEntityId || !w) return 0;
-    ComponentId c = w->componentRegistry().getByName(component);
-    return c && w->hasComponent(e, c) ? 1 : 0;
-}
-EXPORT cint dc_remove(cint h, const char* component) {
-    EntityId e = idOf(h);
-    World* w = world();
-    if (e == InvalidEntityId || !w) return 0;
-    ComponentId c = w->componentRegistry().getByName(component);
-    if (c) w->removeComponent(e, c);
+// Handles whose entity went away in the engine since the last sync (a
+// Lifetime ran out, a parent took it along).
+EXPORT cint dc_dead_count() { return cint(g.dead.size()); }
+EXPORT cint dc_dead(cint* out, cint n) {
+    for (cint i = 0; i < n && i < cint(g.dead.size()); ++i) out[i] = g.dead[size_t(i)];
     return 0;
-}
-
-// Any reflected component as JSON (the scene file form).
-EXPORT const char* dc_component_json(cint h, const char* component) {
-    EntityId e = idOf(h);
-    World* w = world();
-    const auto* info = component ? reflect::findComponent(component) : nullptr;
-    if (e == InvalidEntityId || !w || !info) return keep("");
-    ComponentId c = info->id(*w);
-    if (!c || !w->hasComponent(e, c)) return keep("");
-    reflect::JsonContext ctx;
-    ctx.assets = res<AssetServer>();
-    return keep(reflect::toJson(*info->info, w->getComponent(e, c), ctx).dump());
-}
-EXPORT cint dc_set_component_json(cint h, const char* component, const char* text) {
-    EntityId e = idOf(h);
-    World* w = world();
-    const auto* info = component ? reflect::findComponent(component) : nullptr;
-    if (e == InvalidEntityId || !w) return fail("not a live entity");
-    if (!info) return fail(std::string("no reflected component named ") + (component ? component : ""));
-    auto j = nlohmann::json::parse(text ? text : "", nullptr, false);
-    if (j.is_discarded()) return fail("invalid JSON");
-    ComponentId c = info->id(*w);
-    if (!c) return fail(std::string(component) + " is not registered");
-    reflect::Value value(*info->info, w->hasComponent(e, c) ? w->getComponent(e, c) : nullptr);
-    reflect::JsonContext ctx;
-    ctx.assets = res<AssetServer>();
-    reflect::fromJson(*info->info, value.get(), j, ctx);
-    w->setComponent(e, c, value.get(), info->info->size);
-    return 1;
 }
 
 EXPORT cint dc_set_parent(cint child, cint parent) {
-    EntityId c = idOf(child);
-    EntityId p = idOf(parent);
+    ensureJoined();
+    EntityId c = idOf(int32_t(child));
+    EntityId p = idOf(int32_t(parent));
     if (c == InvalidEntityId) return 0;
     if (const Parent* old = get<Parent>(c)) {
         if (old->entity != InvalidEntityId && world()->isAlive(old->entity)) {
@@ -1020,299 +1120,799 @@ EXPORT cint dc_set_parent(cint child, cint parent) {
     put<Children>(p, ch);
     return 0;
 }
-EXPORT cint dc_parent(cint h) {
-    EntityId e = idOf(h);
-    const Parent* p = e != InvalidEntityId ? get<Parent>(e) : nullptr;
-    return p ? handleOf(p->entity) : 0;
-}
 
-// ---- Transform ----
-
-EXPORT cint dc_set_position(cint h, DV2 p) {
-    edit<Transform2D>(h, [&](Transform2D& t) { t.position = v2(p); });
-    EntityId e = idOf(h);
-    if (e != InvalidEntityId) teleportBody(e, v2(p));
-    return 0;
-}
-EXPORT DV2 dc_position(cint h) {
-    EntityId e = idOf(h);
-    const Transform2D* t = e != InvalidEntityId ? get<Transform2D>(e) : nullptr;
-    return t ? dv(t->position) : DV2{0, 0};
-}
 EXPORT DV2 dc_world_position(cint h) {
-    EntityId e = idOf(h);
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
     if (e == InvalidEntityId) return {0, 0};
     if (const auto* gt = get<GlobalTransform2D>(e)) return dv(gt->position);
     const Transform2D* t = get<Transform2D>(e);
     return t ? dv(t->position) : DV2{0, 0};
 }
-EXPORT cint dc_set_rotation(cint h, double r) {
-    edit<Transform2D>(h, [&](Transform2D& t) { t.rotation = float(r); });
-    EntityId e = idOf(h);
-    if (const PhysicsBody* b = e != InvalidEntityId ? bodyOf(e) : nullptr)
-        res<PhysicsResource>()->setBodyRotation(*b, float(r));
-    return 0;
+
+// Any reflected component as JSON (the scene file form), for components
+// the package does not mirror.
+EXPORT const char* dc_component_json(cint h, const char* component) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    World* w = world();
+    const auto* info = component ? reflect::findComponent(component) : nullptr;
+    if (e == InvalidEntityId || !w || !info) return keep("");
+    ComponentId c = info->id(*w);
+    if (!c || !w->hasComponent(e, c)) return keep("");
+    reflect::JsonContext ctx;
+    ctx.assets = res<AssetServer>();
+    return keep(reflect::toJson(*info->info, w->getComponent(e, c), ctx).dump());
 }
-EXPORT double dc_rotation(cint h) {
-    EntityId e = idOf(h);
-    const Transform2D* t = e != InvalidEntityId ? get<Transform2D>(e) : nullptr;
-    return t ? t->rotation : 0.0;
-}
-EXPORT cint dc_set_scale(cint h, DV2 s) {
-    edit<Transform2D>(h, [&](Transform2D& t) { t.scale = v2(s); });
-    return 0;
-}
-EXPORT DV2 dc_scale(cint h) {
-    EntityId e = idOf(h);
-    const Transform2D* t = e != InvalidEntityId ? get<Transform2D>(e) : nullptr;
-    return t ? dv(t->scale) : DV2{1, 1};
+EXPORT cint dc_set_component_json(cint h, const char* component, const char* text) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    World* w = world();
+    const auto* info = component ? reflect::findComponent(component) : nullptr;
+    if (e == InvalidEntityId || !w) return fail("not a live entity");
+    if (!info) return fail(std::string("no reflected component named ") + (component ? component : ""));
+    auto j = nlohmann::json::parse(text ? text : "", nullptr, false);
+    if (j.is_discarded()) return fail("invalid JSON");
+    ComponentId c = info->id(*w);
+    if (!c) return fail(std::string(component) + " is not registered");
+    reflect::Value value(*info->info, w->hasComponent(e, c) ? w->getComponent(e, c) : nullptr);
+    reflect::JsonContext ctx;
+    ctx.assets = res<AssetServer>();
+    reflect::fromJson(*info->info, value.get(), j, ctx);
+    w->setComponent(e, c, value.get(), info->info->size);
+    return 1;
 }
 
-// ---- Sprite ----
+// =========================================================================
+// Components
+// =========================================================================
+//
+// Layouts, in doubles (bools are 0/1, enums their index, handles ints):
+//
+//   Transform       x, y, rotation, scale x, scale y
+//   Velocity        x, y, angular
+//   Sprite          texture, frame x, y, w, h, anchor x, y, color r, g, b, a,
+//                   flip (1 x, 2 y), z, layer, visible, blend, mask; string image
+//                   mask: 1 frame, 2 color, 4 the rest
+//   Shape           kind, w, h, radius, color r, g, b, a, outline, corner,
+//                   anchor x, y, z, layer, visible
+//   Text            size, color r, g, b, a, align, valign, wrap, line spacing,
+//                   outline, outline color r, g, b, a, z, layer, visible, font;
+//                   string text
+//   Camera          zoom, rotation, active, order, viewport x, y, w, h
+//   CameraFollow    target, smoothing, offset x, y, dead zone x, y
+//   RigidBody       kind, fixed rotation, gravity scale, linear damping,
+//                   angular damping
+//   BoxCollider     half x, y, offset x, y, sensor, density, friction,
+//                   restitution, category, mask
+//   CircleCollider  radius, offset x, y, sensor, density, friction,
+//                   restitution, category, mask
+//   ParticleEmitter see emitterConfig() above
+//   PointLight      color r, g, b, intensity, radius, falloff, shadows
+//   SpotLight       color r, g, b, intensity, radius, falloff, direction,
+//                   angle, softness, shadows
+//   LightOccluder   shape, half x, y, radius
+//   AudioSource     sound, bus, volume, pitch, loop, autoplay, spatial,
+//                   min distance, max distance
+//   Tilemap         map, z, layer, colliders
+//   Animator        clip, playing, clip count, then per clip: frame count,
+//                   frame seconds, looping, x, y, w, h per frame
+//   Lifetime        seconds
+//   Oscillate       amplitude x, y, frequency, phase
+//   Follow          target, speed, distance, offset x, y
+//   Name            (none); string name
+//   Tween           repeat, yoyo, step count, then per step: kind, a, b, c,
+//                   d, seconds, ease
 
-EXPORT cint dc_set_sprite(cint h, cint tex) {
-    edit<Sprite>(h, [&](Sprite& s) { s.texture = handle<TextureHandle>(tex); });
-    return 0;
-}
-EXPORT cint dc_sprite_texture(cint h) {
-    EntityId e = idOf(h);
-    const Sprite* s = e != InvalidEntityId ? get<Sprite>(e) : nullptr;
-    return s ? bits(s->texture.id) : 0;
-}
-EXPORT cint dc_sprite_set_rect(cint h, DRect r) { edit<Sprite>(h, [&](Sprite& s) { s.srcRect = rect(r); }); return 0; }
-EXPORT DRect dc_sprite_rect(cint h) {
-    EntityId e = idOf(h);
-    const Sprite* s = e != InvalidEntityId ? get<Sprite>(e) : nullptr;
-    return s ? drect(s->srcRect) : DRect{0, 0, 0, 0};
-}
-EXPORT cint dc_sprite_set_origin(cint h, DV2 o) { edit<Sprite>(h, [&](Sprite& s) { s.origin = v2(o); }); return 0; }
-EXPORT cint dc_sprite_set_tint(cint h, DColor c) { edit<Sprite>(h, [&](Sprite& s) { s.tint = color(c); }); return 0; }
-EXPORT DColor dc_sprite_tint(cint h) {
-    EntityId e = idOf(h);
-    const Sprite* s = e != InvalidEntityId ? get<Sprite>(e) : nullptr;
-    return s ? dcolor(s->tint) : DColor{1, 1, 1, 1};
-}
-EXPORT cint dc_sprite_set_flip(cint h, cint flip) { edit<Sprite>(h, [&](Sprite& s) { s.flip = static_cast<Flip>(flip); }); return 0; }
-EXPORT cint dc_sprite_set_z(cint h, double z) { edit<Sprite>(h, [&](Sprite& s) { s.zOrder = float(z); }); return 0; }
-EXPORT cint dc_sprite_set_layer(cint h, cint l) { edit<Sprite>(h, [&](Sprite& s) { s.layer = uint8_t(std::clamp<cint>(l, 0, 31)); }); return 0; }
-EXPORT cint dc_sprite_set_visible(cint h, cint v) { edit<Sprite>(h, [&](Sprite& s) { s.visible = v != 0; }); return 0; }
-EXPORT cint dc_sprite_set_blend(cint h, cint b) { edit<Sprite>(h, [&](Sprite& s) { s.blend = static_cast<BlendMode>(b); }); return 0; }
-EXPORT cint dc_remove_sprite(cint h) { removeComponent<Sprite>(h); return 0; }
+namespace {
 
-// ---- Sprite animation (SpriteAnimator clips of source rects) ----
+TextureHandle spriteTexture(double tex, const char* image) {
+    if (tex != 0) return handle<TextureHandle>(cint(tex));
+    if (image && *image) {
+        if (auto* assets = res<AssetServer>()) {
+            TextureHandle t = assets->loadTexture(image);
+            if (!t.valid()) g.error = std::string("cannot load texture ") + image;
+            return t;
+        }
+        return {};
+    }
+    auto* r = res<RendererResource>();
+    return r ? r->whiteTexture() : TextureHandle{};
+}
 
-// rects: x, y, w, h per frame; count is the number of floats.
-EXPORT cint dc_anim_add_clip(cint h, const double* rects, cint count, double frameDuration, cint looping) {
-    int32_t index = -1;
-    edit<SpriteAnimator>(h, [&](SpriteAnimator& a) {
+Ease ease(int32_t e) { return static_cast<Ease>(std::clamp(e, 0, int32_t(Ease::Count_) - 1)); }
+
+template <typename T> void fillCollider(T& c, const double* d) {
+    c.offset = {float(d[0]), float(d[1])};
+    c.isSensor = d[2] != 0;
+    c.density = float(d[3]);
+    c.friction = float(d[4]);
+    c.restitution = float(d[5]);
+    c.filter.category = uint32_t(d[6]);
+    c.filter.mask = uint32_t(d[7]);
+}
+
+void startTween(int32_t h, EntityId e, const double* d, int32_t n) {
+    auto* tw = res<Tweens>();
+    if (!tw) return;
+    auto old = g.tweens.find(h);
+    if (old != g.tweens.end()) {
+        tw->stop(old->second, false);
+        g.tweens.erase(old);
+    }
+    if (n < 3) return;
+    TweenBuilder b = tw->on(e);
+    int32_t steps = int32_t(d[2]);
+    for (int32_t i = 0; i < steps && 3 + i * 7 + 6 < n; ++i) {
+        const double* s = d + 3 + i * 7;
+        float secs = float(s[5]);
+        Ease ez = ease(int32_t(s[6]));
+        switch (int(s[0])) {
+            case 0: b.moveTo({float(s[1]), float(s[2])}, secs, ez); break;
+            case 1: b.moveBy({float(s[1]), float(s[2])}, secs, ez); break;
+            case 2: b.scaleTo({float(s[1]), float(s[2])}, secs, ez); break;
+            case 3: b.rotateTo(float(s[1]), secs, ez); break;
+            case 4: b.rotateBy(float(s[1]), secs, ez); break;
+            case 5: b.fadeTo(float(s[1]), secs, ez); break;
+            case 6: b.zoomTo(float(s[1]), secs, ez); break;
+            case 7: b.tintTo(color(DColor{s[1], s[2], s[3], s[4]}), secs, ez); break;
+            case 8: b.delay(secs); break;
+        }
+    }
+    int32_t times = int32_t(d[0]);
+    if (times != 0) b.loop(times, d[1] != 0 ? TweenLoop::Yoyo : TweenLoop::Restart);
+    g.tweens[h] = b.start();
+}
+
+void setAnimator(EntityId e, const double* d, int32_t n) {
+    SpriteAnimator a{};
+    const SpriteAnimator* cur = get<SpriteAnimator>(e);
+    if (cur) a = *cur;
+    std::vector<AnimationClip> clips;
+    int32_t count = n >= 3 ? int32_t(d[2]) : 0;
+    int32_t at = 3;
+    for (int32_t c = 0; c < count && at + 3 <= n; ++c) {
         AnimationClip clip;
-        for (int32_t i = 0; i + 3 < count; i += 4)
-            clip.frames.push_back({float(rects[i]), float(rects[i + 1]), float(rects[i + 2]), float(rects[i + 3])});
-        clip.frameDuration = float(frameDuration);
-        clip.looping = looping != 0;
-        a.clips.push_back(std::move(clip));
-        index = int32_t(a.clips.size()) - 1;
-        if (a.clips.size() == 1) a.play(0);
-    });
-    EntityId e = idOf(h);
-    if (e != InvalidEntityId && !get<Sprite>(e)) put<Sprite>(e, Sprite{});
-    return index;
-}
-EXPORT cint dc_anim_play(cint h, cint clip) { edit<SpriteAnimator>(h, [&](SpriteAnimator& a) { a.play(clip); }); return 0; }
-EXPORT cint dc_anim_stop(cint h) { edit<SpriteAnimator>(h, [&](SpriteAnimator& a) { a.stop(); }); return 0; }
-EXPORT cint dc_anim_clip(cint h) {
-    EntityId e = idOf(h);
-    const SpriteAnimator* a = e != InvalidEntityId ? get<SpriteAnimator>(e) : nullptr;
-    return a ? a->currentClip : -1;
-}
-EXPORT cint dc_anim_frame(cint h) {
-    EntityId e = idOf(h);
-    const SpriteAnimator* a = e != InvalidEntityId ? get<SpriteAnimator>(e) : nullptr;
-    return a ? a->currentFrame : 0;
-}
-EXPORT cint dc_anim_finished(cint h) {
-    EntityId e = idOf(h);
-    const SpriteAnimator* a = e != InvalidEntityId ? get<SpriteAnimator>(e) : nullptr;
-    return !a || a->isFinished() ? 1 : 0;
+        int32_t frames = int32_t(d[at]);
+        clip.frameDuration = float(d[at + 1]);
+        clip.looping = d[at + 2] != 0;
+        at += 3;
+        for (int32_t f = 0; f < frames && at + 4 <= n; ++f, at += 4)
+            clip.frames.push_back({float(d[at]), float(d[at + 1]), float(d[at + 2]), float(d[at + 3])});
+        clips.push_back(std::move(clip));
+    }
+    bool same = cur && clips.size() == a.clips.size();
+    for (size_t i = 0; same && i < clips.size(); ++i) {
+        const auto& x = clips[i];
+        const auto& y = a.clips[i];
+        same = x.frameDuration == y.frameDuration && x.looping == y.looping && x.frames.size() == y.frames.size();
+        for (size_t f = 0; same && f < x.frames.size(); ++f) {
+            same = x.frames[f].x == y.frames[f].x && x.frames[f].y == y.frames[f].y &&
+                   x.frames[f].w == y.frames[f].w && x.frames[f].h == y.frames[f].h;
+        }
+    }
+    int32_t clip = int32_t(d[0]);
+    bool playing = d[1] != 0;
+    if (!same) {
+        a.clips = std::move(clips);
+        a.play(clip);
+    } else if (clip != a.currentClip) {
+        a.play(clip);
+    }
+    if (!playing) a.playing = false;
+    else if (!a.playing && !a.isFinished()) a.playing = true;
+    put<SpriteAnimator>(e, a);
+    if (!get<Sprite>(e)) put<Sprite>(e, Sprite{});
 }
 
-// ---- Text ----
+// Writes one component from its layout.
+void writeKind(int32_t kind, int32_t h, EntityId e, const double* d, int32_t n, const char* s) {
+    switch (kind) {
+        case KTransform: {
+            if (n < 5) return;
+            Transform2D t;
+            if (const Transform2D* cur = get<Transform2D>(e)) t = *cur;
+            t.position = {float(d[0]), float(d[1])};
+            t.rotation = float(d[2]);
+            t.scale = {float(d[3]), float(d[4])};
+            put<Transform2D>(e, t);
+            teleportBody(e, t.position, t.rotation);
+            break;
+        }
+        case KVelocity: {
+            if (n < 3) return;
+            put<Velocity2D>(e, Velocity2D{{float(d[0]), float(d[1])}, float(d[2])});
+            g.autoVelocity.erase(h);
+            break;
+        }
+        case KSprite: {
+            if (n < 17) return;
+            const Sprite* cur = get<Sprite>(e);
+            Sprite sp = cur ? *cur : Sprite{};
+            int32_t mask = cur ? int32_t(d[16]) : 7;
+            if (mask & 4) {
+                sp.texture = spriteTexture(d[0], s);
+                sp.flip = static_cast<Flip>(int(d[11]));
+                sp.zOrder = float(d[12]);
+                sp.layer = uint8_t(std::clamp(int(d[13]), 0, 31));
+                sp.visible = d[14] != 0;
+                sp.blend = static_cast<BlendMode>(int(d[15]));
+            }
+            if (mask & 1) sp.srcRect = d[3] > 0 ? Rect{float(d[1]), float(d[2]), float(d[3]), float(d[4])} : Rect{};
+            if (mask & 2) sp.tint = color(DColor{d[7], d[8], d[9], d[10]});
+            if (mask & 5) {
+                Vec2 size = {sp.srcRect.w, sp.srcRect.h};
+                if (size.x <= 0)
+                    if (auto* r = res<RendererResource>()) size = r->textureSize(sp.texture);
+                sp.origin = {float(d[5]) * size.x, float(d[6]) * size.y};
+            }
+            put<Sprite>(e, sp);
+            break;
+        }
+        case KShape: {
+            if (n < 15) return;
+            Shape2D sh;
+            sh.kind = d[0] != 0 ? ShapeKind::Circle : ShapeKind::Rectangle;
+            sh.size = {float(d[1]), float(d[2])};
+            sh.radius = float(d[3]);
+            sh.color = color(DColor{d[4], d[5], d[6], d[7]});
+            sh.outline = float(d[8]);
+            sh.cornerRadius = float(d[9]);
+            sh.anchor = {float(d[10]), float(d[11])};
+            sh.zOrder = float(d[12]);
+            sh.layer = uint8_t(std::clamp(int(d[13]), 0, 31));
+            sh.visible = d[14] != 0;
+            put<Shape2D>(e, sh);
+            break;
+        }
+        case KText: {
+            if (n < 19) return;
+            Text t;
+            t.set(s ? s : "");
+            t.size = float(d[0]);
+            t.color = color(DColor{d[1], d[2], d[3], d[4]});
+            t.align = static_cast<TextAlign>(int(d[5]));
+            t.valign = static_cast<TextVAlign>(int(d[6]));
+            t.wrapWidth = float(d[7]);
+            t.lineSpacing = float(d[8]);
+            t.outlineWidth = float(d[9]);
+            t.outlineColor = color(DColor{d[10], d[11], d[12], d[13]});
+            t.zOrder = float(d[14]);
+            t.layer = uint8_t(std::clamp(int(d[15]), 0, 31));
+            t.visible = d[16] != 0;
+            t.font = handle<FontHandle>(cint(d[17]));
+            put<Text>(e, t);
+            break;
+        }
+        case KCamera: {
+            if (n < 8) return;
+            Camera c;
+            if (const Camera* cur = get<Camera>(e)) c = *cur;
+            c.zoom = float(d[0]);
+            c.rotation = float(d[1]);
+            c.active = d[2] != 0;
+            c.order = int32_t(d[3]);
+            c.viewport = {float(d[4]), float(d[5]), float(d[6]), float(d[7])};
+            put<Camera>(e, c);
+            break;
+        }
+        case KCameraFollow: {
+            if (n < 6) return;
+            CameraFollow f;
+            f.target = idOf(int32_t(d[0]));
+            f.smoothing = float(d[1]);
+            f.offset = {float(d[2]), float(d[3])};
+            f.deadZone = {float(d[4]), float(d[5])};
+            put<CameraFollow>(e, f);
+            break;
+        }
+        case KRigidBody: {
+            if (n < 5) return;
+            RigidBody2D rb;
+            rb.type = static_cast<BodyType>(int(d[0]));
+            rb.fixedRotation = d[1] != 0;
+            rb.gravityScale = float(d[2]);
+            rb.linearDamping = float(d[3]);
+            rb.angularDamping = float(d[4]);
+            put<RigidBody2D>(e, rb);
+            // Velocity2D marks a body Box2D moves; static and kinematic
+            // bodies follow their Transform2D instead.
+            if (rb.type == BodyType::Dynamic && !get<Velocity2D>(e)) {
+                put<Velocity2D>(e, Velocity2D{});
+                g.autoVelocity.insert(h);
+            }
+            break;
+        }
+        case KBoxCollider: {
+            if (n < 10) return;
+            BoxCollider2D c;
+            c.halfSize = {float(d[0]), float(d[1])};
+            fillCollider(c, d + 2);
+            put<BoxCollider2D>(e, c);
+            break;
+        }
+        case KCircleCollider: {
+            if (n < 9) return;
+            CircleCollider2D c;
+            c.radius = float(d[0]);
+            fillCollider(c, d + 1);
+            put<CircleCollider2D>(e, c);
+            break;
+        }
+        case KEmitter: {
+            if (n < EmitterSize) return;
+            ParticleEmitter pe;
+            if (const ParticleEmitter* cur = get<ParticleEmitter>(e)) pe = *cur;
+            pe.config = emitterConfig(d);
+            pe.playing = d[30] != 0;
+            put<ParticleEmitter>(e, pe);
+            break;
+        }
+        case KPointLight: {
+            if (n < 7) return;
+            PointLight2D l;
+            l.color = {float(d[0]), float(d[1]), float(d[2]), 1.f};
+            l.intensity = float(d[3]);
+            l.radius = float(d[4]);
+            l.falloff = float(d[5]);
+            l.castShadows = d[6] != 0;
+            put<PointLight2D>(e, l);
+            break;
+        }
+        case KSpotLight: {
+            if (n < 10) return;
+            SpotLight2D l;
+            l.color = {float(d[0]), float(d[1]), float(d[2]), 1.f};
+            l.intensity = float(d[3]);
+            l.radius = float(d[4]);
+            l.falloff = float(d[5]);
+            l.direction = float(d[6]);
+            l.angle = float(d[7]);
+            l.softness = float(d[8]);
+            l.castShadows = d[9] != 0;
+            put<SpotLight2D>(e, l);
+            break;
+        }
+        case KOccluder: {
+            if (n < 4) return;
+            LightOccluder2D o;
+            o.shape = static_cast<OccluderShape>(int(d[0]));
+            o.halfSize = {float(d[1]), float(d[2])};
+            o.radius = float(d[3]);
+            put<LightOccluder2D>(e, o);
+            break;
+        }
+        case KAudioSource: {
+            if (n < 9) return;
+            AudioSource a;
+            const AudioSource* cur = get<AudioSource>(e);
+            if (cur) a = *cur;
+            SoundHandle sound = handle<SoundHandle>(cint(d[0]));
+            bool restart = cur && cur->sound.id != sound.id;
+            a.sound = sound;
+            a.bus = handle<BusHandle>(cint(d[1]));
+            a.volume = float(d[2]);
+            a.pitch = float(d[3]);
+            a.loop = d[4] != 0;
+            a.autoplay = d[5] != 0;
+            a.spatial = d[6] != 0;
+            a.minDistance = float(d[7]);
+            a.maxDistance = float(d[8]);
+            if (restart && a.autoplay) a.playRequested = true;
+            put<AudioSource>(e, a);
+            break;
+        }
+        case KTilemap: {
+            if (n < 4) return;
+            Tilemap t;
+            if (const Tilemap* cur = get<Tilemap>(e)) t = *cur;
+            t.map = handle<TilemapHandle>(cint(d[0]));
+            t.zOrder = float(d[1]);
+            t.renderLayer = uint8_t(std::clamp(int(d[2]), 0, 31));
+            t.colliders = d[3] != 0;
+            put<Tilemap>(e, t);
+            break;
+        }
+        case KAnimator: setAnimator(e, d, n); break;
+        case KLifetime: if (n >= 1) put<Lifetime>(e, Lifetime{float(d[0])}); break;
+        case KOscillate: {
+            if (n < 4) return;
+            Oscillate o;
+            if (const Oscillate* cur = get<Oscillate>(e)) o = *cur;
+            o.amplitude = {float(d[0]), float(d[1])};
+            o.frequency = float(d[2]);
+            o.phase = float(d[3]);
+            put<Oscillate>(e, o);
+            break;
+        }
+        case KFollow: {
+            if (n < 5) return;
+            Follow f;
+            f.target = idOf(int32_t(d[0]));
+            f.speed = float(d[1]);
+            f.distance = float(d[2]);
+            f.offset = {float(d[3]), float(d[4])};
+            put<Follow>(e, f);
+            break;
+        }
+        case KName: put<Name>(e, Name(s ? s : "")); break;
+        case KTween: startTween(h, e, d, n); break;
+    }
+}
 
-EXPORT cint dc_set_text(cint h, const char* text) { edit<Text>(h, [&](Text& t) { t.set(text ? text : ""); }); return 0; }
-EXPORT const char* dc_text(cint h) {
-    EntityId e = idOf(h);
-    const Text* t = e != InvalidEntityId ? get<Text>(e) : nullptr;
-    return keep(t ? std::string(t->str()) : "");
+void removeKind(int32_t kind, int32_t h, EntityId e) {
+    switch (kind) {
+        case KTransform: put<Transform2D>(e, Transform2D{}); break;   // every entity keeps one
+        case KVelocity: removeComponent<Velocity2D>(e); break;
+        case KSprite: removeComponent<Sprite>(e); break;
+        case KShape: removeComponent<Shape2D>(e); break;
+        case KText: removeComponent<Text>(e); break;
+        case KCamera: removeComponent<Camera>(e); break;
+        case KCameraFollow: removeComponent<CameraFollow>(e); break;
+        case KRigidBody:
+            removeComponent<RigidBody2D>(e);
+            if (g.autoVelocity.erase(h)) removeComponent<Velocity2D>(e);
+            break;
+        case KBoxCollider: removeComponent<BoxCollider2D>(e); break;
+        case KCircleCollider: removeComponent<CircleCollider2D>(e); break;
+        case KEmitter: removeComponent<ParticleEmitter>(e); break;
+        case KPointLight: removeComponent<PointLight2D>(e); break;
+        case KSpotLight: removeComponent<SpotLight2D>(e); break;
+        case KOccluder: removeComponent<LightOccluder2D>(e); break;
+        case KAudioSource: {
+            if (const AudioSource* a = get<AudioSource>(e)) {
+                if (auto* audio = res<AudioResource>()) audio->stopSound(a->instance, 0.f);
+            }
+            removeComponent<AudioSource>(e);
+            break;
+        }
+        case KTilemap: removeComponent<Tilemap>(e); break;
+        case KAnimator: removeComponent<SpriteAnimator>(e); break;
+        case KLifetime: removeComponent<Lifetime>(e); break;
+        case KOscillate: removeComponent<Oscillate>(e); break;
+        case KFollow: removeComponent<Follow>(e); break;
+        case KName: removeComponent<Name>(e); break;
+        case KTween: {
+            auto it = g.tweens.find(h);
+            if (it != g.tweens.end()) {
+                if (auto* tw = res<Tweens>()) tw->stop(it->second, false);
+                g.tweens.erase(it);
+            }
+            break;
+        }
+    }
 }
-EXPORT cint dc_text_style(cint h, cint font, DTextStyle s) {
-    edit<Text>(h, [&](Text& t) {
-        t.font = handle<FontHandle>(font);
-        t.size = float(s.size);
-        t.color = color(s.color);
-        t.align = static_cast<TextAlign>(s.align);
-        t.valign = static_cast<TextVAlign>(s.valign);
-        t.wrapWidth = float(s.wrap);
-        t.lineSpacing = float(s.lineSpacing);
-        t.outlineWidth = float(s.outline);
-        t.outlineColor = color(s.outlineColor);
-        t.shadowOffset = v2(s.shadow);
-        t.shadowColor = color(s.shadowColor);
-        t.richText = s.rich != 0;
-    });
-    return 0;
-}
-EXPORT cint dc_text_set_color(cint h, DColor c) { edit<Text>(h, [&](Text& t) { t.color = color(c); }); return 0; }
-EXPORT cint dc_text_set_size(cint h, double size) { edit<Text>(h, [&](Text& t) { t.size = float(size); }); return 0; }
-EXPORT cint dc_text_set_z(cint h, double z) { edit<Text>(h, [&](Text& t) { t.zOrder = float(z); }); return 0; }
-EXPORT cint dc_text_set_layer(cint h, cint l) { edit<Text>(h, [&](Text& t) { t.layer = uint8_t(std::clamp<cint>(l, 0, 31)); }); return 0; }
-EXPORT cint dc_text_set_visible(cint h, cint v) { edit<Text>(h, [&](Text& t) { t.visible = v != 0; }); return 0; }
 
-// ---- Camera ----
+bool readPull(int32_t kind, EntityId e, double* out) {
+    switch (kind) {
+        case KTransform: {
+            const Transform2D* t = get<Transform2D>(e);
+            if (!t) return false;
+            out[0] = t->position.x; out[1] = t->position.y; out[2] = t->rotation;
+            out[3] = t->scale.x; out[4] = t->scale.y;
+            return true;
+        }
+        case KVelocity: {
+            const Velocity2D* v = get<Velocity2D>(e);
+            if (!v) return false;
+            out[0] = v->linear.x; out[1] = v->linear.y; out[2] = v->angular;
+            return true;
+        }
+        case KSprite: {
+            const Sprite* s = get<Sprite>(e);
+            if (!s) return false;
+            out[0] = s->srcRect.x; out[1] = s->srcRect.y; out[2] = s->srcRect.w; out[3] = s->srcRect.h;
+            DColor c = dcolor(s->tint);
+            out[4] = c.r; out[5] = c.g; out[6] = c.b; out[7] = c.a;
+            return true;
+        }
+        case KCamera: {
+            const Camera* c = get<Camera>(e);
+            if (!c) return false;
+            out[0] = c->zoom;
+            return true;
+        }
+        case KAnimator: {
+            const SpriteAnimator* a = get<SpriteAnimator>(e);
+            if (!a) return false;
+            out[0] = a->currentClip; out[1] = a->currentFrame;
+            out[2] = a->isFinished() ? 1 : 0; out[3] = a->playing ? 1 : 0;
+            return true;
+        }
+        case KLifetime: {
+            const Lifetime* l = get<Lifetime>(e);
+            if (!l) return false;
+            out[0] = l->seconds;
+            return true;
+        }
+    }
+    return false;
+}
 
-EXPORT cint dc_add_camera(cint h) { edit<Camera>(h, [&](Camera& c) { c.active = true; }); return 0; }
-EXPORT cint dc_camera_set_zoom(cint h, double z) { edit<Camera>(h, [&](Camera& c) { c.zoom = float(z); }); return 0; }
-EXPORT double dc_camera_zoom(cint h) {
-    EntityId e = idOf(h);
-    const Camera* c = e != InvalidEntityId ? get<Camera>(e) : nullptr;
-    return c ? c->zoom : 1.0;
+bool pullable(int32_t kind) { return pullStride(kind) > 0; }
+
+constexpr double Missing = -1e300;
+
+} // namespace
+
+// Writes one component. `data` holds the kind's layout; `s` its string
+// field, "" when it has none.
+EXPORT cint dc_set(cint kind, cint h, const double* data, cint n, const char* s) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    if (e == InvalidEntityId || kind < 0 || kind >= KindCount) return 0;
+    writeKind(int32_t(kind), int32_t(h), e, data, int32_t(n), s);
+    if (pullable(int32_t(kind))) g.interest[kind].insert(int32_t(h));
+    return 1;
 }
-EXPORT cint dc_camera_set_active(cint h, cint a) { edit<Camera>(h, [&](Camera& c) { c.active = a != 0; }); return 0; }
-EXPORT cint dc_camera_set_viewport(cint h, DRect r) { edit<Camera>(h, [&](Camera& c) { c.viewport = rect(r); }); return 0; }
-EXPORT cint dc_camera_set_order(cint h, cint o) { edit<Camera>(h, [&](Camera& c) { c.order = o; }); return 0; }
-EXPORT cint dc_camera_set_layers(cint h, cint mask) { edit<Camera>(h, [&](Camera& c) { c.layerMask = ubits(mask); }); return 0; }
-EXPORT cint dc_camera_set_target(cint h, cint tex) { edit<Camera>(h, [&](Camera& c) { c.target = handle<TextureHandle>(tex); }); return 0; }
-EXPORT cint dc_camera_set_clear(cint h, cint clear, DColor col) {
-    edit<Camera>(h, [&](Camera& c) { c.clear = clear != 0; c.clearColor = colorf(col); });
+
+// Writes one component on many entities: `stride` doubles each.
+EXPORT cint dc_set_many(cint kind, const cint* hs, cint n, const double* data, cint stride) {
+    ensureJoined();
+    if (kind < 0 || kind >= KindCount) return 0;
+    for (cint i = 0; i < n; ++i) {
+        EntityId e = idOf(int32_t(hs[i]));
+        if (e == InvalidEntityId) continue;
+        writeKind(int32_t(kind), int32_t(hs[i]), e, data + i * stride, int32_t(stride), "");
+        if (pullable(int32_t(kind))) g.interest[kind].insert(int32_t(hs[i]));
+    }
     return 0;
 }
-EXPORT cint dc_camera_follow(cint h, cint target, double smoothing, DV2 offset, DV2 deadZone) {
-    EntityId t = idOf(target);
-    edit<CameraFollow>(h, [&](CameraFollow& f) {
-        f.target = t;
-        f.smoothing = float(smoothing);
-        f.offset = v2(offset);
-        f.deadZone = v2(deadZone);
-    });
+
+// Adds what the script changed to the Transform2D of many entities: five
+// doubles each (x, y, rotation, scale x, scale y), so the change composes
+// with what the simulation did to the same entity meanwhile.
+EXPORT cint dc_move_many(const cint* hs, cint n, const double* delta) {
+    ensureJoined();
+    for (cint i = 0; i < n; ++i) {
+        EntityId e = idOf(int32_t(hs[i]));
+        if (e == InvalidEntityId) continue;
+        const double* d = delta + i * 5;
+        Transform2D t;
+        if (const Transform2D* cur = get<Transform2D>(e)) t = *cur;
+        t.position += {float(d[0]), float(d[1])};
+        t.rotation += float(d[2]);
+        t.scale += {float(d[3]), float(d[4])};
+        put<Transform2D>(e, t);
+        teleportBody(e, t.position, t.rotation);
+        g.interest[KTransform].insert(int32_t(hs[i]));
+    }
     return 0;
 }
-EXPORT cint dc_camera_shake(cint h, double intensity, double decay, double frequency) {
-    edit<CameraShake>(h, [&](CameraShake& s) {
-        s.decay = float(decay);
-        s.frequency = float(frequency);
-        s.trigger(float(intensity));
-    });
+
+EXPORT cint dc_remove(cint kind, cint h) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    if (e == InvalidEntityId || kind < 0 || kind >= KindCount) return 0;
+    removeKind(int32_t(kind), int32_t(h), e);
     return 0;
+}
+
+// Reads the engine-driven fields of a kind for many entities into `out`
+// (pullStride doubles each), from the snapshot taken when the simulation
+// started. An entity without the component gets Missing (-1e300) in its
+// first slot.
+EXPORT cint dc_pull(cint kind, const cint* hs, cint n, double* out) {
+    if (!g.app || kind < 0 || kind >= KindCount) return 0;
+    int32_t stride = pullStride(int32_t(kind));
+    if (!stride) return 0;
+    auto& snap = g.snaps[kind];
+    for (cint i = 0; i < n; ++i) {
+        int32_t h = int32_t(hs[i]);
+        double* o = out + i * stride;
+        g.interest[kind].insert(h);
+        auto it = snap.rows.find(h);
+        if (it != snap.rows.end()) {
+            std::copy(it->second.begin(), it->second.begin() + stride, o);
+            continue;
+        }
+        ensureJoined();
+        EntityId e = idOf(h);
+        double row[8];
+        if (e != InvalidEntityId && readPull(int32_t(kind), e, row)) std::copy(row, row + stride, o);
+        else o[0] = Missing;
+    }
+    return 0;
+}
+
+// Collision and sensor events of the last simulation. kind: 0 collision
+// started, 1 collision ended, 2 sensor entered (sensor, visitor), 3 sensor
+// exited. Pairs of handles; the count is of pairs.
+EXPORT cint dc_event_count(cint kind) {
+    return kind >= 0 && kind < 4 ? cint(g.events[kind].size() / 2) : 0;
+}
+EXPORT cint dc_events(cint kind, cint* out, cint n) {
+    if (kind < 0 || kind >= 4) return 0;
+    const auto& ev = g.events[kind];
+    for (cint i = 0; i < n && i < cint(ev.size()); ++i) out[i] = ev[size_t(i)];
+    return 0;
+}
+
+// ---- Entities made by the engine (scenes) ----
+
+// Bit N set: the entity has kind N, for the kinds dc_get reads.
+EXPORT cint dc_kinds(cint h) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    if (e == InvalidEntityId) return 0;
+    cint m = 0;
+    auto bit = [&](int k, bool has) { if (has) m |= cint(1) << k; };
+    bit(KTransform, get<Transform2D>(e));
+    bit(KVelocity, get<Velocity2D>(e) && !get<RigidBody2D>(e));
+    bit(KSprite, get<Sprite>(e));
+    bit(KShape, get<Shape2D>(e));
+    bit(KText, get<Text>(e));
+    bit(KCamera, get<Camera>(e));
+    bit(KRigidBody, get<RigidBody2D>(e));
+    bit(KBoxCollider, get<BoxCollider2D>(e));
+    bit(KCircleCollider, get<CircleCollider2D>(e));
+    bit(KPointLight, get<PointLight2D>(e));
+    bit(KSpotLight, get<SpotLight2D>(e));
+    bit(KOccluder, get<LightOccluder2D>(e));
+    bit(KLifetime, get<Lifetime>(e));
+    bit(KName, get<Name>(e));
+    return m;
+}
+
+// Reads a whole component in its layout (the inverse of dc_set). Returns
+// the number of doubles written, 0 when the entity lacks it.
+EXPORT cint dc_get(cint kind, cint h, double* d, cint n) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    if (e == InvalidEntityId) return 0;
+    auto need = [&](cint k) { return n >= k; };
+    switch (kind) {
+        case KTransform: case KVelocity: case KLifetime: {
+            double row[8];
+            if (!readPull(int32_t(kind), e, row)) return 0;
+            cint k = pullStride(int32_t(kind));
+            if (!need(k)) return 0;
+            std::copy(row, row + k, d);
+            return k;
+        }
+        case KSprite: {
+            const Sprite* s = get<Sprite>(e);
+            if (!s || !need(17)) return 0;
+            Vec2 size = {s->srcRect.w, s->srcRect.h};
+            if (size.x <= 0)
+                if (auto* r = res<RendererResource>()) size = r->textureSize(s->texture);
+            DColor c = dcolor(s->tint);
+            double v[17] = {double(s->texture.id), s->srcRect.x, s->srcRect.y, s->srcRect.w, s->srcRect.h,
+                            size.x > 0 ? s->origin.x / size.x : 0.5, size.y > 0 ? s->origin.y / size.y : 0.5,
+                            c.r, c.g, c.b, c.a, double(int(s->flip)), s->zOrder, double(s->layer),
+                            s->visible ? 1.0 : 0.0, double(int(s->blend)), 7};
+            std::copy(v, v + 17, d);
+            return 17;
+        }
+        case KShape: {
+            const Shape2D* s = get<Shape2D>(e);
+            if (!s || !need(15)) return 0;
+            DColor c = dcolor(s->color);
+            double v[15] = {s->kind == ShapeKind::Circle ? 1.0 : 0.0, s->size.x, s->size.y, s->radius,
+                            c.r, c.g, c.b, c.a, s->outline, s->cornerRadius, s->anchor.x, s->anchor.y,
+                            s->zOrder, double(s->layer), s->visible ? 1.0 : 0.0};
+            std::copy(v, v + 15, d);
+            return 15;
+        }
+        case KText: {
+            const Text* t = get<Text>(e);
+            if (!t || !need(19)) return 0;
+            DColor c = dcolor(t->color), o = dcolor(t->outlineColor);
+            double v[19] = {t->size, c.r, c.g, c.b, c.a, double(int(t->align)), double(int(t->valign)),
+                            t->wrapWidth, t->lineSpacing, t->outlineWidth, o.r, o.g, o.b, o.a,
+                            t->zOrder, double(t->layer), t->visible ? 1.0 : 0.0, double(t->font.id), 0};
+            std::copy(v, v + 19, d);
+            return 19;
+        }
+        case KCamera: {
+            const Camera* c = get<Camera>(e);
+            if (!c || !need(8)) return 0;
+            double v[8] = {c->zoom, c->rotation, c->active ? 1.0 : 0.0, double(c->order),
+                           c->viewport.x, c->viewport.y, c->viewport.w, c->viewport.h};
+            std::copy(v, v + 8, d);
+            return 8;
+        }
+        case KRigidBody: {
+            const RigidBody2D* b = get<RigidBody2D>(e);
+            if (!b || !need(5)) return 0;
+            double v[5] = {double(int(b->type)), b->fixedRotation ? 1.0 : 0.0, b->gravityScale,
+                           b->linearDamping, b->angularDamping};
+            std::copy(v, v + 5, d);
+            return 5;
+        }
+        case KBoxCollider: {
+            const BoxCollider2D* c = get<BoxCollider2D>(e);
+            if (!c || !need(10)) return 0;
+            double v[10] = {c->halfSize.x, c->halfSize.y, c->offset.x, c->offset.y, c->isSensor ? 1.0 : 0.0,
+                            c->density, c->friction, c->restitution, double(c->filter.category), double(c->filter.mask)};
+            std::copy(v, v + 10, d);
+            return 10;
+        }
+        case KCircleCollider: {
+            const CircleCollider2D* c = get<CircleCollider2D>(e);
+            if (!c || !need(9)) return 0;
+            double v[9] = {c->radius, c->offset.x, c->offset.y, c->isSensor ? 1.0 : 0.0,
+                           c->density, c->friction, c->restitution, double(c->filter.category), double(c->filter.mask)};
+            std::copy(v, v + 9, d);
+            return 9;
+        }
+        case KPointLight: {
+            const PointLight2D* l = get<PointLight2D>(e);
+            if (!l || !need(7)) return 0;
+            double v[7] = {l->color.r, l->color.g, l->color.b, l->intensity, l->radius, l->falloff,
+                           l->castShadows ? 1.0 : 0.0};
+            std::copy(v, v + 7, d);
+            return 7;
+        }
+        case KSpotLight: {
+            const SpotLight2D* l = get<SpotLight2D>(e);
+            if (!l || !need(10)) return 0;
+            double v[10] = {l->color.r, l->color.g, l->color.b, l->intensity, l->radius, l->falloff,
+                            l->direction, l->angle, l->softness, l->castShadows ? 1.0 : 0.0};
+            std::copy(v, v + 10, d);
+            return 10;
+        }
+        case KName: return get<Name>(e) ? 1 : 0;   // the name is dc_get_string's
+        case KOccluder: {
+            const LightOccluder2D* o = get<LightOccluder2D>(e);
+            if (!o || !need(4)) return 0;
+            double v[4] = {double(int(o->shape)), o->halfSize.x, o->halfSize.y, o->radius};
+            std::copy(v, v + 4, d);
+            return 4;
+        }
+    }
+    return 0;
+}
+
+// The string field of a kind: Text text, Name name, Sprite image path.
+EXPORT const char* dc_get_string(cint kind, cint h) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    if (e == InvalidEntityId) return keep("");
+    switch (kind) {
+        case KText: { const Text* t = get<Text>(e); return keep(t ? std::string(t->str()) : ""); }
+        case KName: { const Name* nm = get<Name>(e); return keep(nm ? nm->value : ""); }
+        case KSprite: {
+            const Sprite* s = get<Sprite>(e);
+            auto* assets = res<AssetServer>();
+            if (!s || !assets) return keep("");
+            return keep(assets->pathOf(s->texture));
+        }
+    }
+    return keep("");
 }
 
 // ---- Physics ----
 
-EXPORT cint dc_add_body(cint h, DBody b) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    RigidBody2D rb;
-    rb.type = static_cast<BodyType>(b.kind);
-    rb.fixedRotation = b.fixedRotation != 0;
-    rb.gravityScale = float(b.gravityScale);
-    rb.linearDamping = float(b.linearDamping);
-    rb.angularDamping = float(b.angularDamping);
-    put<RigidBody2D>(e, rb);
-    // Velocity2D marks a body Box2D moves; static and kinematic bodies
-    // follow their Transform2D instead.
-    if (rb.type == BodyType::Dynamic && !get<Velocity2D>(e)) put<Velocity2D>(e, Velocity2D{});
-    return 0;
-}
-
-namespace {
-template <typename T> void fillCollider(T& c, const DCollider& d) {
-    c.offset = v2(d.offset);
-    c.density = float(d.density);
-    c.friction = float(d.friction);
-    c.restitution = float(d.restitution);
-    c.isSensor = d.sensor != 0;
-    c.filter.category = ubits(d.category);
-    c.filter.mask = ubits(d.mask);
-}
-}
-
-EXPORT cint dc_add_box_collider(cint h, DV2 half, DCollider d) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    BoxCollider2D c;
-    c.halfSize = v2(half);
-    fillCollider(c, d);
-    put<BoxCollider2D>(e, c);
-    return 0;
-}
-EXPORT cint dc_add_circle_collider(cint h, double radius, DCollider d) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    CircleCollider2D c;
-    c.radius = float(radius);
-    fillCollider(c, d);
-    put<CircleCollider2D>(e, c);
-    return 0;
-}
-EXPORT cint dc_remove_body(cint h) {
-    removeComponent<BoxCollider2D>(h);
-    removeComponent<CircleCollider2D>(h);
-    removeComponent<RigidBody2D>(h);
-    removeComponent<Velocity2D>(h);
-    return 0;
-}
-EXPORT cint dc_set_velocity(cint h, DV2 v) {
-    edit<Velocity2D>(h, [&](Velocity2D& vel) { vel.linear = v2(v); });
-    return 0;
-}
-EXPORT DV2 dc_velocity(cint h) {
-    EntityId e = idOf(h);
-    const Velocity2D* v = e != InvalidEntityId ? get<Velocity2D>(e) : nullptr;
-    return v ? dv(v->linear) : DV2{0, 0};
-}
 EXPORT cint dc_apply_impulse(cint h, DV2 impulse) {
-    PhysicsBody* b = bodyFor(h);
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    const PhysicsBody* b = e != InvalidEntityId ? bodyOf(e) : nullptr;
     auto* physics = res<PhysicsResource>();
     if (!b || !physics) return 0;
     physics->applyImpulse(*b, v2(impulse));
     // The ECS velocity is pushed back into Box2D before each step; keep it in sync.
-    EntityId e = idOf(h);
     Vec2 vel = physics->getBodyVelocity(*b);
-    if (get<Velocity2D>(e)) edit<Velocity2D>(h, [&](Velocity2D& v) { v.linear = vel; });
+    if (Velocity2D* v = get<Velocity2D>(e)) {
+        Velocity2D nv = *v;
+        nv.linear = vel;
+        put<Velocity2D>(e, nv);
+    }
     return 0;
 }
 EXPORT cint dc_apply_force(cint h, DV2 force) {
-    PhysicsBody* b = bodyFor(h);
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    const PhysicsBody* b = e != InvalidEntityId ? bodyOf(e) : nullptr;
     auto* physics = res<PhysicsResource>();
     if (b && physics) physics->applyForce(*b, v2(force));
     return 0;
 }
-EXPORT cint dc_set_gravity(DV2 g2) { if (auto* p = res<PhysicsResource>()) p->setGravity(v2(g2)); return 0; }
-EXPORT DV2 dc_gravity() { auto* p = res<PhysicsResource>(); return p ? dv(p->gravity()) : DV2{0, 0}; }
+EXPORT cint dc_set_gravity(DV2 g2) { ensureJoined(); if (auto* p = res<PhysicsResource>()) p->setGravity(v2(g2)); return 0; }
+EXPORT DV2 dc_gravity() { ensureJoined(); auto* p = res<PhysicsResource>(); return p ? dv(p->gravity()) : DV2{0, 0}; }
 
-// kind: 0 collision start, 1 collision end, 2 sensor start, 3 sensor end.
-EXPORT cint dc_contact_count(cint kind) {
-    auto* cb = res<CollisionBridge>();
-    if (!cb) return 0;
-    switch (kind) {
-        case 0: return cb->collisionStartCount();
-        case 1: return cb->collisionEndCount();
-        case 2: return cb->sensorStartCount();
-        case 3: return cb->sensorEndCount();
-    }
-    return 0;
-}
-EXPORT cint dc_contact_entity(cint kind, cint i, cint which) {
-    auto* cb = res<CollisionBridge>();
-    if (!cb) return 0;
-    EntityId e = InvalidEntityId;
-    switch (kind) {
-        case 0: e = which ? cb->collisionStartB(i) : cb->collisionStartA(i); break;
-        case 1: e = which ? cb->collisionEndB(i) : cb->collisionEndA(i); break;
-        case 2: e = which ? cb->sensorStartB(i) : cb->sensorStartA(i); break;
-        case 3: e = which ? cb->sensorEndB(i) : cb->sensorEndA(i); break;
-    }
-    return handleOf(e);
-}
 EXPORT DHit dc_raycast(DV2 origin, DV2 direction, double distance, cint mask) {
+    ensureJoined();
     DHit out{0, {0, 0}, {0, 0}, 0};
     auto* p = res<PhysicsResource>();
     if (!p) return out;
@@ -1326,28 +1926,27 @@ EXPORT DHit dc_raycast(DV2 origin, DV2 direction, double distance, cint mask) {
     return out;
 }
 
+EXPORT cint dc_camera_shake(cint h, double intensity, double decay, double frequency) {
+    ensureJoined();
+    EntityId e = idOf(int32_t(h));
+    if (e == InvalidEntityId) return 0;
+    CameraShake s;
+    if (const CameraShake* cur = get<CameraShake>(e)) s = *cur;
+    s.decay = float(decay);
+    s.frequency = float(frequency);
+    s.trigger(float(intensity));
+    put<CameraShake>(e, s);
+    return 0;
+}
+
 // ---- Particles ----
 
-EXPORT cint dc_add_emitter(cint h, DEmitter d) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    ParticleEmitter pe;
-    pe.config = emitterConfig(d);
-    put<ParticleEmitter>(e, pe);
-    return 0;
-}
-EXPORT cint dc_emitter_set_playing(cint h, cint playing) {
-    edit<ParticleEmitter>(h, [&](ParticleEmitter& p) { p.playing = playing != 0; });
-    return 0;
-}
-EXPORT cint dc_emitter_set_rate(cint h, double rate) {
-    edit<ParticleEmitter>(h, [&](ParticleEmitter& p) { p.config.spawnRate = float(rate); });
-    return 0;
-}
-// A one-off burst of `count` particles at `pos`, cleaned up when it fades.
-EXPORT cint dc_burst(DV2 pos, DEmitter d, cint count) {
+// A one-off burst of `count` particles at `pos` with an emitter layout,
+// cleaned up when it fades.
+EXPORT cint dc_burst(DV2 pos, const double* d, cint n, cint count) {
     World* w = world();
-    if (!w) return 0;
+    if (!w || n < EmitterSize) return 0;
+    ensureJoined();
     EntityId e = w->createEntity();
     Transform2D t;
     t.position = v2(pos);
@@ -1357,64 +1956,16 @@ EXPORT cint dc_burst(DV2 pos, DEmitter d, cint count) {
     pe.config.spawnRate = 0.f;
     pe.config.looping = false;
     pe.config.duration = 0.05f;
-    pe.config.maxParticles = std::max<uint32_t>(pe.config.maxParticles, uint32_t(count));
+    pe.config.maxParticles = std::max<int32_t>(pe.config.maxParticles, int32_t(count));
     pe.config.bursts.push_back(BurstEntry{0.f, int32_t(count), 1, 0.f});
     pe.oneShot = true;
     put<ParticleEmitter>(e, pe);
-    auto* time = res<Time>();
-    double now = time ? time->elapsed : 0.0;
-    g.bursts.push_back({e, now + d.lifetimeMax + 0.2});
+    g.bursts.push_back({e, g.elapsed + d[2] + 0.2});
     return 0;
 }
 
-// ---- Lights (need Config.lighting) ----
+// ---- Lighting ----
 
-EXPORT cint dc_add_point_light(cint h, DColor c, double intensity, double radius, double falloff, cint shadows) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    PointLight2D l;
-    l.color = colorf(c);
-    l.intensity = float(intensity);
-    l.radius = float(radius);
-    l.falloff = float(falloff);
-    l.castShadows = shadows != 0;
-    put<PointLight2D>(e, l);
-    return 0;
-}
-EXPORT cint dc_add_spot_light(cint h, DColor c, double intensity, double radius, double falloff,
-                              double direction, double angle, double softness, cint shadows) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    SpotLight2D l;
-    l.color = colorf(c);
-    l.intensity = float(intensity);
-    l.radius = float(radius);
-    l.falloff = float(falloff);
-    l.direction = float(direction);
-    l.angle = float(angle);
-    l.softness = float(softness);
-    l.castShadows = shadows != 0;
-    put<SpotLight2D>(e, l);
-    return 0;
-}
-EXPORT cint dc_light_set_color(cint h, DColor c, double intensity) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    if (get<PointLight2D>(e)) edit<PointLight2D>(h, [&](PointLight2D& l) { l.color = colorf(c); l.intensity = float(intensity); });
-    if (get<SpotLight2D>(e)) edit<SpotLight2D>(h, [&](SpotLight2D& l) { l.color = colorf(c); l.intensity = float(intensity); });
-    return 0;
-}
-// shape: 0 box (half size), 1 circle (radius = size.x), 3 the entity's collider.
-EXPORT cint dc_add_occluder(cint h, cint shape, DV2 size) {
-    EntityId e = idOf(h);
-    if (e == InvalidEntityId) return 0;
-    LightOccluder2D o;
-    o.shape = static_cast<OccluderShape>(shape);
-    o.halfSize = v2(size);
-    o.radius = float(size.x);
-    put<LightOccluder2D>(e, o);
-    return 0;
-}
 EXPORT cint dc_set_ambient(DColor c) {
     auto* s = res<LightingSettings>();
     if (!s) return 0;
@@ -1471,77 +2022,18 @@ EXPORT cint dc_flash(DColor c, double seconds) {
 }
 
 // =========================================================================
-// Tweens
+// Tweens (the Tween component is written through dc_set)
 // =========================================================================
 
-EXPORT cint dc_tween_begin(cint h) {
-    auto* t = res<Tweens>();
-    if (!t) return 0;
-    EntityId e = h ? idOf(h) : InvalidEntityId;
-    int32_t id = g.nextBuilder++;
-    g.tweenBuilders[id] = std::make_unique<TweenBuilder>(e != InvalidEntityId ? t->on(e) : t->sequence());
-    return id;
-}
-
-namespace {
-TweenBuilder* builder(int32_t b) {
-    auto it = g.tweenBuilders.find(b);
-    return it == g.tweenBuilders.end() ? nullptr : it->second.get();
-}
-Ease ease(int32_t e) { return static_cast<Ease>(std::clamp(e, 0, int32_t(Ease::Count_) - 1)); }
-}
-
-// step: 0 moveTo, 1 moveBy, 2 scaleTo, 3 rotateTo (v.x), 4 rotateBy (v.x),
-// 5 fadeTo (v.x), 6 zoomTo (v.x), 7 delay (duration).
-EXPORT cint dc_tween_step(cint b, cint step, DV2 v, double duration, cint e) {
-    TweenBuilder* tb = builder(b);
-    if (!tb) return 0;
-    float d = float(duration);
-    switch (step) {
-        case 0: tb->moveTo(v2(v), d, ease(e)); break;
-        case 1: tb->moveBy(v2(v), d, ease(e)); break;
-        case 2: tb->scaleTo(v2(v), d, ease(e)); break;
-        case 3: tb->rotateTo(float(v.x), d, ease(e)); break;
-        case 4: tb->rotateBy(float(v.x), d, ease(e)); break;
-        case 5: tb->fadeTo(float(v.x), d, ease(e)); break;
-        case 6: tb->zoomTo(float(v.x), d, ease(e)); break;
-        case 7: tb->delay(d); break;
-    }
-    return 0;
-}
-EXPORT cint dc_tween_tint(cint b, DColor c, double duration, cint e) {
-    if (TweenBuilder* tb = builder(b)) tb->tintTo(color(c), float(duration), ease(e));
-    return 0;
-}
-EXPORT cint dc_tween_loop(cint b, cint times, cint yoyo) {
-    if (TweenBuilder* tb = builder(b)) tb->loop(times, yoyo ? TweenLoop::Yoyo : TweenLoop::Restart);
-    return 0;
-}
-EXPORT cint dc_tween_start(cint b) {
-    auto it = g.tweenBuilders.find(b);
-    if (it == g.tweenBuilders.end()) return 0;
-    TweenId id = it->second->start();
-    g.tweenBuilders.erase(it);
-    return bits(id);
-}
-EXPORT cint dc_tween_stop(cint id, cint complete) { if (auto* t = res<Tweens>()) t->stop(ubits(id), complete != 0); return 0; }
-EXPORT cint dc_tween_pause(cint id) { if (auto* t = res<Tweens>()) t->pause(ubits(id)); return 0; }
-EXPORT cint dc_tween_resume(cint id) { if (auto* t = res<Tweens>()) t->resume(ubits(id)); return 0; }
-EXPORT cint dc_tween_active(cint id) { auto* t = res<Tweens>(); return t && t->isActive(ubits(id)) ? 1 : 0; }
-EXPORT cint dc_tween_stop_all(cint h) {
-    auto* t = res<Tweens>();
-    EntityId e = idOf(h);
-    if (t && e != InvalidEntityId) t->stopAll(e);
-    return 0;
-}
-EXPORT cint dc_tween_time_scale(double s) { if (auto* t = res<Tweens>()) t->timeScale = float(s); return 0; }
-EXPORT double dc_ease(cint e, double t) { return easing::apply(ease(e), float(t)); }
+EXPORT cint dc_tween_time_scale(double s) { ensureJoined(); if (auto* t = res<Tweens>()) t->timeScale = float(s); return 0; }
+EXPORT double dc_ease(cint e, double t) { return easing::apply(ease(int32_t(e)), float(t)); }
 
 // =========================================================================
 // Audio
 // =========================================================================
 
 EXPORT cint dc_sound_load(const char* path, cint stream) {
+    ensureJoined();
     auto* a = res<AudioResource>();
     if (!a) return fail("drift is not running");
     SoundHandle s;
@@ -1552,6 +2044,7 @@ EXPORT cint dc_sound_load(const char* path, cint stream) {
 }
 // samples: interleaved when channels == 2; count is the number of floats.
 EXPORT cint dc_sound_create(const double* samples, cint count, cint channels, cint rate) {
+    ensureJoined();
     auto* a = res<AudioResource>();
     if (!a) return fail("drift is not running");
     if (channels < 1 || channels > 2 || count < channels) return fail("a sound needs 1 or 2 channels and at least one frame");
@@ -1560,10 +2053,11 @@ EXPORT cint dc_sound_create(const double* samples, cint count, cint channels, ci
     if (!s.valid()) return fail("cannot create sound");
     return bits(s.id);
 }
-EXPORT double dc_sound_duration(cint s) { auto* a = res<AudioResource>(); return a ? a->soundDuration(handle<SoundHandle>(s)) : 0.0; }
-EXPORT cint dc_sound_destroy(cint s) { if (auto* a = res<AudioResource>()) a->destroySound(handle<SoundHandle>(s)); return 0; }
-EXPORT cint dc_sound_max_instances(cint s, cint n) { if (auto* a = res<AudioResource>()) a->setSoundMaxInstances(handle<SoundHandle>(s), n); return 0; }
+EXPORT double dc_sound_duration(cint s) { ensureJoined(); auto* a = res<AudioResource>(); return a ? a->soundDuration(handle<SoundHandle>(s)) : 0.0; }
+EXPORT cint dc_sound_destroy(cint s) { ensureJoined(); if (auto* a = res<AudioResource>()) a->destroySound(handle<SoundHandle>(s)); return 0; }
+EXPORT cint dc_sound_max_instances(cint s, cint n) { ensureJoined(); if (auto* a = res<AudioResource>()) a->setSoundMaxInstances(handle<SoundHandle>(s), n); return 0; }
 EXPORT cint dc_sound_play(cint s, DPlay p) {
+    ensureJoined();
     auto* a = res<AudioResource>();
     if (!a) return 0;
     PlayParams pp;
@@ -1576,15 +2070,16 @@ EXPORT cint dc_sound_play(cint s, DPlay p) {
     pp.priority = p.priority;
     return bits(a->playSound(handle<SoundHandle>(s), pp).id);
 }
-EXPORT cint dc_voice_stop(cint v, double fade) { if (auto* a = res<AudioResource>()) a->stopSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
-EXPORT cint dc_voice_pause(cint v, double fade) { if (auto* a = res<AudioResource>()) a->pauseSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
-EXPORT cint dc_voice_resume(cint v, double fade) { if (auto* a = res<AudioResource>()) a->resumeSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
-EXPORT cint dc_voice_set_volume(cint v, double vol, double fade) { if (auto* a = res<AudioResource>()) a->setSoundVolume(handle<PlayingSoundHandle>(v), float(vol), float(fade)); return 0; }
-EXPORT cint dc_voice_set_pan(cint v, double pan) { if (auto* a = res<AudioResource>()) a->setSoundPan(handle<PlayingSoundHandle>(v), float(pan)); return 0; }
-EXPORT cint dc_voice_set_pitch(cint v, double p) { if (auto* a = res<AudioResource>()) a->setSoundPitch(handle<PlayingSoundHandle>(v), float(p)); return 0; }
-EXPORT cint dc_voice_playing(cint v) { auto* a = res<AudioResource>(); return a && a->isSoundPlaying(handle<PlayingSoundHandle>(v)) ? 1 : 0; }
+EXPORT cint dc_voice_stop(cint v, double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->stopSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
+EXPORT cint dc_voice_pause(cint v, double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->pauseSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
+EXPORT cint dc_voice_resume(cint v, double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->resumeSound(handle<PlayingSoundHandle>(v), float(fade)); return 0; }
+EXPORT cint dc_voice_set_volume(cint v, double vol, double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->setSoundVolume(handle<PlayingSoundHandle>(v), float(vol), float(fade)); return 0; }
+EXPORT cint dc_voice_set_pan(cint v, double pan) { ensureJoined(); if (auto* a = res<AudioResource>()) a->setSoundPan(handle<PlayingSoundHandle>(v), float(pan)); return 0; }
+EXPORT cint dc_voice_set_pitch(cint v, double p) { ensureJoined(); if (auto* a = res<AudioResource>()) a->setSoundPitch(handle<PlayingSoundHandle>(v), float(p)); return 0; }
+EXPORT cint dc_voice_playing(cint v) { ensureJoined(); auto* a = res<AudioResource>(); return a && a->isSoundPlaying(handle<PlayingSoundHandle>(v)) ? 1 : 0; }
 
 EXPORT cint dc_bus(cint which) {
+    ensureJoined();
     auto* a = res<AudioResource>();
     if (!a) return 0;
     switch (which) {
@@ -1594,16 +2089,18 @@ EXPORT cint dc_bus(cint which) {
     }
 }
 EXPORT cint dc_bus_create(const char* name, cint parent) {
+    ensureJoined();
     auto* a = res<AudioResource>();
     return a ? bits(a->createBus(name, handle<BusHandle>(parent)).id) : 0;
 }
-EXPORT cint dc_bus_set_volume(cint b, double v, double fade) { if (auto* a = res<AudioResource>()) a->setBusVolume(handle<BusHandle>(b), float(v), float(fade)); return 0; }
-EXPORT double dc_bus_volume(cint b) { auto* a = res<AudioResource>(); return a ? a->busVolume(handle<BusHandle>(b)) : 0.0; }
-EXPORT cint dc_bus_set_muted(cint b, cint m) { if (auto* a = res<AudioResource>()) a->setBusMuted(handle<BusHandle>(b), m != 0); return 0; }
-EXPORT cint dc_bus_set_paused(cint b, cint p) { if (auto* a = res<AudioResource>()) a->setBusPaused(handle<BusHandle>(b), p != 0); return 0; }
-EXPORT cint dc_bus_stop(cint b, double fade) { if (auto* a = res<AudioResource>()) a->stopBus(handle<BusHandle>(b), float(fade)); return 0; }
+EXPORT cint dc_bus_set_volume(cint b, double v, double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->setBusVolume(handle<BusHandle>(b), float(v), float(fade)); return 0; }
+EXPORT double dc_bus_volume(cint b) { ensureJoined(); auto* a = res<AudioResource>(); return a ? a->busVolume(handle<BusHandle>(b)) : 0.0; }
+EXPORT cint dc_bus_set_muted(cint b, cint m) { ensureJoined(); if (auto* a = res<AudioResource>()) a->setBusMuted(handle<BusHandle>(b), m != 0); return 0; }
+EXPORT cint dc_bus_set_paused(cint b, cint p) { ensureJoined(); if (auto* a = res<AudioResource>()) a->setBusPaused(handle<BusHandle>(b), p != 0); return 0; }
+EXPORT cint dc_bus_stop(cint b, double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->stopBus(handle<BusHandle>(b), float(fade)); return 0; }
 
 EXPORT cint dc_music_play(cint s, double crossfade, double volume, cint loop) {
+    ensureJoined();
     auto* a = res<AudioResource>();
     if (!a) return 0;
     MusicParams p;
@@ -1612,11 +2109,11 @@ EXPORT cint dc_music_play(cint s, double crossfade, double volume, cint loop) {
     p.loop = loop != 0;
     return a->playMusic(handle<SoundHandle>(s), p) ? 1 : 0;
 }
-EXPORT cint dc_music_stop(double fade) { if (auto* a = res<AudioResource>()) a->stopMusic(float(fade)); return 0; }
-EXPORT cint dc_music_pause(double fade) { if (auto* a = res<AudioResource>()) a->pauseMusic(float(fade)); return 0; }
-EXPORT cint dc_music_resume(double fade) { if (auto* a = res<AudioResource>()) a->resumeMusic(float(fade)); return 0; }
-EXPORT cint dc_music_playing() { auto* a = res<AudioResource>(); return a && a->isMusicPlaying() ? 1 : 0; }
-EXPORT cint dc_audio_has_device() { auto* a = res<AudioResource>(); return a && a->hasDevice() ? 1 : 0; }
+EXPORT cint dc_music_stop(double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->stopMusic(float(fade)); return 0; }
+EXPORT cint dc_music_pause(double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->pauseMusic(float(fade)); return 0; }
+EXPORT cint dc_music_resume(double fade) { ensureJoined(); if (auto* a = res<AudioResource>()) a->resumeMusic(float(fade)); return 0; }
+EXPORT cint dc_music_playing() { ensureJoined(); auto* a = res<AudioResource>(); return a && a->isMusicPlaying() ? 1 : 0; }
+EXPORT cint dc_audio_has_device() { ensureJoined(); auto* a = res<AudioResource>(); return a && a->hasDevice() ? 1 : 0; }
 
 // =========================================================================
 // Save data
@@ -1676,15 +2173,6 @@ EXPORT cint dc_tilemap_load(const char* path, const char* level) {
     TilemapHandle m = t->loadTilemap(path, level && *level ? level : nullptr);
     if (!m.valid()) return fail(std::string("cannot load tilemap ") + path);
     return bits(m.id);
-}
-EXPORT cint dc_set_tilemap(cint h, cint map, double z, cint layer, cint colliders) {
-    edit<Tilemap>(h, [&](Tilemap& t) {
-        t.map = handle<TilemapHandle>(map);
-        t.zOrder = float(z);
-        t.renderLayer = uint8_t(std::clamp<cint>(layer, 0, 31));
-        t.colliders = colliders != 0;
-    });
-    return 0;
 }
 namespace { TilemapResource* maps() { return res<TilemapResource>(); } }
 EXPORT DCell dc_tilemap_size(cint m) {
@@ -1777,35 +2265,33 @@ EXPORT cint dc_scene_load(const char* path) {
 EXPORT cint dc_scene_spawn(cint scene, DV2 offset, cint parent, const char* overrides) {
     auto* s = res<SceneResource>();
     if (!s) return fail("drift is not running");
+    ensureJoined();
     SceneSpawnOptions o;
     o.offset = v2(offset);
-    o.parent = parent ? idOf(parent) : InvalidEntityId;
+    o.parent = parent ? idOf(int32_t(parent)) : InvalidEntityId;
     if (overrides && *overrides) {
         o.overrides = nlohmann::json::parse(overrides, nullptr, false);
         if (o.overrides.is_discarded()) return fail("overrides are not valid JSON");
     }
     SceneInstance inst = s->spawnNow(handle<SceneHandle>(scene), o);
     g.scenes.push_back(std::move(inst));
-    return int32_t(g.scenes.size());
+    return cint(g.scenes.size());
 }
 namespace {
-const SceneInstance* instance(int32_t i) { return i > 0 && i <= int32_t(g.scenes.size()) ? &g.scenes[size_t(i - 1)] : nullptr; }
+const SceneInstance* instance(cint i) { return i > 0 && i <= cint(g.scenes.size()) ? &g.scenes[size_t(i - 1)] : nullptr; }
 }
 EXPORT cint dc_scene_count(cint inst, cint roots) {
     auto* in = instance(inst);
-    return in ? int32_t(roots ? in->roots.size() : in->entities.size()) : 0;
+    return in ? cint(roots ? in->roots.size() : in->entities.size()) : 0;
 }
 EXPORT cint dc_scene_entity(cint inst, cint roots, cint i) {
     auto* in = instance(inst);
     if (!in) return 0;
     const auto& list = roots ? in->roots : in->entities;
-    return i >= 0 && i < int32_t(list.size()) ? handleOf(list[size_t(i)]) : 0;
-}
-EXPORT cint dc_scene_find(cint inst, const char* name) {
-    auto* in = instance(inst);
-    return in ? handleOf(in->find(name)) : 0;
+    return i >= 0 && i < cint(list.size()) ? handleOf(list[size_t(i)]) : 0;
 }
 EXPORT cint dc_scene_save(const char* path) {
+    ensureJoined();
     auto* s = res<SceneResource>();
     return s && s->save(path) ? 1 : 0;
 }

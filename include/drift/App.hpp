@@ -41,6 +41,18 @@ struct SystemTiming {
     uint64_t microseconds = 0;
 };
 
+// When the last frame's simulation (Update and PostUpdate) ran, on the
+// SDL performance-counter clock (SDL_GetPerformanceCounter ticks).
+// `start`/`end` bracket the part that ran in simulate() or on the
+// background thread of simulateAsync(); `deferredUs` is the time
+// finishSimulation() spent on systems that had to wait for the main thread.
+struct SimulationTiming {
+    uint64_t start = 0;
+    uint64_t end = 0;
+    uint64_t deferredUs = 0;
+    bool async = false;
+};
+
 // Handle returned by phase shortcuts for chaining .before()/.after() ordering
 class SystemHandle {
 public:
@@ -88,11 +100,41 @@ public:
     bool start();
     // Advances time, polls events and runs PreUpdate, Update and PostUpdate.
     // Returns false once the app has quit (window closed or quit() called);
-    // do not call endFrame() then.
+    // do not call endFrame() then. The same as pollFrame() then simulate().
     bool beginFrame();
     // Runs Extract, Render and RenderFlush: draws and presents the frame.
+    // Finishes a simulation still in flight first.
     void endFrame();
     bool running() const;
+
+    // ---- Stepping the frame in parts ----
+    // beginFrame() is these two calls. A host that has its own work to do
+    // each frame can call them separately and run the simulation on a
+    // background thread while it works.
+    //
+    // Advances time, polls events and runs PreUpdate and state transitions.
+    // Returns false once the app has quit.
+    bool pollFrame();
+    // Runs Update and PostUpdate on the calling thread (with the worker
+    // pool, as beginFrame() does).
+    void simulate();
+    // Starts Update and PostUpdate on a background thread and returns at
+    // once. Until finishSimulation() the caller must not touch the world,
+    // Commands, or any resource a system may use; resources that are
+    // mainThreadOnly() are the exception, because systems that use them do
+    // not run on the background thread. Those systems, and systems that
+    // conflict with them, wait for finishSimulation(), which runs them on
+    // the calling thread; they keep their order among themselves and
+    // against conflicting systems, but exclusive (lambda) systems registered
+    // after them run first. Exclusive systems run on the background thread,
+    // so they must not use thread-bound state. Without threads (the web
+    // build, or Config::threadCount = 1) this is simulate().
+    void simulateAsync();
+    // Waits for simulateAsync() and runs the systems it left for the main
+    // thread. Does nothing when no simulation is in flight.
+    void finishSimulation();
+    // When the last simulation ran; see SimulationTiming.
+    SimulationTiming lastSimulation() const;
 
     const Config& config() const;
 

@@ -4,7 +4,13 @@
 //     SDL_VIDEO_DRIVER=offscreen candela run tests/test_lighting.cdl [dir]
 
 import "std/assert" as assert;
-import "../src/main.cdl" { collider, config, rgb, start, vec2 };
+import "../src/main.cdl" { BoxCollider, LightOccluder, OccluderShape, PointLight, Rectangle, SpotLight, World, app, at, config, rgb, vec2 };
+
+struct Shot {
+    dir: string,
+    frames: int,
+    lamp_id: int,
+}
 
 fn main() {
     let dir = ".";
@@ -14,37 +20,34 @@ fn main() {
     }
     let cfg = config("lighting test", 480, 270);
     cfg.lighting = true;
-    let app = start(cfg);
-    app.set_clear_color(rgb(160, 160, 170));
-    app.set_ambient(rgb(20, 20, 30));
-
-    let lamp = app.spawn_at(vec2(160.0, 135.0));
-    lamp.add_point_light(rgb(255, 220, 160), 1.5, 220.0);
-    let spot = app.spawn_at(vec2(400.0, 40.0));
-    spot.add_spot_light(rgb(120, 160, 255), 1.2, 260.0, 2.2, 0.7);
-    spot.set_light_color(rgb(140, 180, 255), 1.4);
-
-    let wall = app.spawn_rect(vec2(240.0, 135.0), vec2(20.0, 120.0), rgb(90, 90, 90));
-    wall.add_occluder_box(vec2(10.0, 60.0));
-    let post = app.spawn_at(vec2(100.0, 220.0));
-    post.add_occluder_circle(12.0);
-    let crate = app.spawn_rect(vec2(320.0, 200.0), vec2(24.0, 24.0), rgb(120, 80, 40));
-    crate.add_box_collider(vec2(12.0, 12.0), collider());
-    crate.add_occluder_from_collider();
-
-    assert::is_true(lamp.has("PointLight2D"));
-    assert::is_true(spot.has("SpotLight2D"));
-    assert::is_true(wall.has("LightOccluder2D"));
-
-    let n = 0;
-    while app.frame() {
-        n += 1;
-        if n == 3 {
-            app.screenshot(dir + "/lighting_test.png");
+    app(cfg).startup(fn(world) {
+        world.set_clear_color(rgb(160, 160, 170));
+        world.set_ambient(rgb(20, 20, 30));
+        let lamp = world.spawn().insert(at(160.0, 135.0))
+            .insert(PointLight { color: rgb(255, 220, 160), intensity: 1.5, radius: 220.0, .. }).id();
+        world.spawn().insert(at(400.0, 40.0))
+            .insert(SpotLight { color: rgb(140, 180, 255), intensity: 1.4, radius: 260.0, direction: 2.2, angle: 0.7, .. });
+        world.spawn().insert(at(240.0, 135.0))
+            .insert(Rectangle { size: vec2(20.0, 120.0), color: rgb(90, 90, 90), .. })
+            .insert(LightOccluder { half_size: vec2(10.0, 60.0), .. });
+        world.spawn().insert(at(100.0, 220.0))
+            .insert(LightOccluder { shape: OccluderShape::Circle, radius: 12.0, .. });
+        world.spawn().insert(at(320.0, 200.0))
+            .insert(Rectangle { size: vec2(24.0, 24.0), color: rgb(120, 80, 40), .. })
+            .insert(BoxCollider { half_size: vec2(12.0, 12.0), .. })
+            .insert(LightOccluder { shape: OccluderShape::FromCollider, .. });
+        world.insert_resource(Shot { dir: dir, frames: 0, lamp_id: lamp.id });
+    }).update(fn(world, dt) {
+        let s = world.resource<Shot>();
+        s.frames += 1;
+        if s.frames == 3 {
+            assert::eq(world.count<PointLight>(), 1);
+            assert::eq(world.count<SpotLight>(), 1);
+            world.screenshot(s.dir + "/lighting_test.png");
         }
-        if n == 6 {
-            app.quit();
+        if s.frames == 6 {
+            world.quit();
         }
-    }
+    }).run();
     print("lighting: ok");
 }

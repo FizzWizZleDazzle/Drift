@@ -41,4 +41,11 @@ if(DRIFT_BUILD_TESTS AND DRIFT_CANDELA_EXE)
             ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
             TIMEOUT 180)
     endforeach()
+    # The same checks with the simulation run after the systems.
+    add_test(NAME candela_test_drift_sequential
+        COMMAND ${DRIFT_CANDELA_EXE} run tests/test_drift.cdl ${CMAKE_CURRENT_BINARY_DIR} 0
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(candela_test_drift_sequential PROPERTIES
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
+        TIMEOUT 180)
 endif()

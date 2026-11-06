@@ -5,13 +5,26 @@
 //
 //     SDL_VIDEO_DRIVER=offscreen candela run tests/play_coin_dash.cdl /tmp
 //
-// Steps are timed in seconds, not frames, because a headless run can draw
+// The script is one more update system, added after the game's own. Steps
+// are timed in seconds, not frames, because a headless run can draw
 // thousands of frames a second.
 
 import "std/assert" as assert;
 import "std/fs";
-import "../src/main.cdl" { Key, config, start, vec2 };
-import "../examples/coin_dash/main.cdl" { setup, update };
+import "../src/main.cdl" { Key, Transform, Velocity, World, app, config, vec2 };
+import "../examples/coin_dash/main.cdl" { Coin, Game, Hazard, Player, SaveFile, coin_dash };
+
+struct Script {
+    dir: string,
+    save_path: string,
+    step: int,
+    at: float,
+    start_x: float,
+    moved: bool,
+    collected: bool,
+    hit: bool,
+    restarted: bool,
+}
 
 fn main() {
     let dir = ".";
@@ -19,76 +32,92 @@ fn main() {
     if args.len() > 0 {
         dir = args[0];
     }
-    let app = start(config("Coin Dash test", 960, 540));
     let save_path = dir + "/coin_dash_test_save.json";
     if fs::exists(save_path) {
         fs::delete(save_path);
     }
-    let g = setup(app, app.open_save_file(save_path));
-    let start_pos = g.player.position();
-    let step = 0;
-    let at = 0.0;
-    let moved = false;
-    let collected = false;
-    let hit = false;
-    let restarted = false;
-
-    while app.frame() {
-        let t = app.time() - at;
-        if step == 0 {
-            // Calm the hazards so the scripted steps are not cut short.
-            for h in g.hazards {
-                h.set_position(vec2(100.0, 100.0));
-                h.set_velocity(vec2(0.0, 0.0));
-            }
-            app.send_key(Key::Right, true);
-            step = 1;
-            at = app.time();
-        } else if step == 1 && t > 0.4 {
-            app.send_key(Key::Right, false);
-            moved = g.player.position().x > start_pos.x + 40.0;
-            app.screenshot(dir + "/coin_dash_moved.png");
-            // Drop a coin on the player; the sensor reports it next frame.
-            g.coins[0].set_position(g.player.position());
-            step = 2;
-            at = app.time();
-        } else if step == 2 && t > 0.2 {
-            collected = g.score == 1;
-            // Throw a hazard at the player.
-            let p = g.player.position();
-            g.hazards[0].set_position(vec2(p.x - 100.0, p.y));
-            g.hazards[0].set_velocity(vec2(500.0, 0.0));
-            step = 3;
-            at = app.time();
-        } else if step == 3 && (g.over || t > 2.0) {
-            hit = g.over;
-            step = 4;
-            at = app.time();
-        } else if step == 4 && t > 0.3 {
-            app.screenshot(dir + "/coin_dash_hit.png");
-            app.send_key(Key::R, true);
-            step = 5;
-            at = app.time();
-        } else if step == 5 && t > 0.1 {
-            app.send_key(Key::R, false);
-            restarted = !g.over && g.score == 0;
-            step = 6;
-            at = app.time();
-        } else if step == 6 && t > 0.5 {
-            app.screenshot(dir + "/coin_dash_restarted.png");
-            step = 7;
-            at = app.time();
-        } else if step == 7 && t > 0.1 {
-            app.quit();
-        }
-        update(app, g);
-    }
-    print("moved", moved, "collected", collected, "hit", hit, "restarted", restarted);
-    assert::is_true(moved);
-    assert::is_true(collected);
-    assert::is_true(hit);
-    assert::is_true(restarted);
-    assert::eq(g.save.get_int("best", 0), 1);
+    let a = app(config("Coin Dash test", 960, 540)).startup(fn(world) {
+        world.insert_resource(SaveFile { path: save_path });
+        world.insert_resource(Script { dir: dir, save_path: save_path, step: 0, at: 0.0, start_x: 0.0,
+                                       moved: false, collected: false, hit: false, restarted: false });
+    });
+    coin_dash(a).update(drive).run();
     fs::delete(save_path);
     print("coin dash: ok");
+}
+
+fn player_x(world: World) -> float {
+    for r in world.query2<Player, Transform>() {
+        return r.b.position.x;
+    }
+    return 0.0;
+}
+
+fn drive(world: World, dt: float) {
+    let s = world.resource<Script>();
+    let game = world.resource<Game>();
+    let input = world.input();
+    let t = world.time() - s.at;
+    if s.step == 0 {
+        // Calm the hazards so the scripted steps are not cut short.
+        for r in world.query3<Hazard, Transform, Velocity>() {
+            r.b.position = vec2(100.0, 100.0);
+            r.c.linear = vec2(0.0, 0.0);
+        }
+        s.start_x = player_x(world);
+        input.send_key(Key::Right, true);
+        s.step = 1;
+        s.at = world.time();
+    } else if s.step == 1 && t > 0.4 {
+        input.send_key(Key::Right, false);
+        s.moved = player_x(world) > s.start_x + 40.0;
+        world.screenshot(s.dir + "/coin_dash_moved.png");
+        // Drop a coin on the player; the sensor reports it a frame later.
+        let p = world.get<Transform>(game.player).position;
+        for r in world.query2<Coin, Transform>() {
+            r.b.position = vec2(p.x, p.y);
+            break;
+        }
+        s.step = 2;
+        s.at = world.time();
+    } else if s.step == 2 && t > 0.2 {
+        s.collected = game.score == 1;
+        // Shows the "+1" floating up from the pickup.
+        world.screenshot(s.dir + "/coin_dash_collected.png");
+        // Throw a hazard at the player.
+        let p = world.get<Transform>(game.player).position;
+        for r in world.query3<Hazard, Transform, Velocity>() {
+            r.b.position = vec2(p.x - 100.0, p.y);
+            r.c.linear = vec2(500.0, 0.0);
+            break;
+        }
+        s.step = 3;
+        s.at = world.time();
+    } else if s.step == 3 && (game.over || t > 2.0) {
+        s.hit = game.over;
+        s.step = 4;
+        s.at = world.time();
+    } else if s.step == 4 && t > 0.3 {
+        world.screenshot(s.dir + "/coin_dash_hit.png");
+        input.send_key(Key::R, true);
+        s.step = 5;
+        s.at = world.time();
+    } else if s.step == 5 && t > 0.1 {
+        input.send_key(Key::R, false);
+        s.restarted = !game.over && game.score == 0;
+        s.step = 6;
+        s.at = world.time();
+    } else if s.step == 6 && t > 0.5 {
+        world.screenshot(s.dir + "/coin_dash_restarted.png");
+        s.step = 7;
+        s.at = world.time();
+    } else if s.step == 7 && t > 0.1 {
+        print("moved", s.moved, "collected", s.collected, "hit", s.hit, "restarted", s.restarted);
+        assert::is_true(s.moved);
+        assert::is_true(s.collected);
+        assert::is_true(s.hit);
+        assert::is_true(s.restarted);
+        assert::eq(game.save.get_int("best", 0), 1);
+        world.quit();
+    }
 }
