@@ -8,6 +8,8 @@ A 2D game engine written in C++20, built on a Bevy-inspired Entity Component Sys
 - **Plugin architecture** -- Modular subsystems (rendering, physics, audio, input, etc.) registered as plugins
 - **2D renderer**: batched sprites and shapes, render layers, multiple cameras, render targets, custom shaders and post effects, pixel-perfect scaling
 - **Desktop and web**: OpenGL 3.3 on desktop, WebGL2 in the browser through Emscripten
+- **2D lighting**: point and spot lights, ambient light, hard shadows from occluders
+- **Post effect library**: bloom, color grading, CRT, vignette, blur, pixelate, grayscale, sepia, screen fades
 - **Box2D physics** -- Full 2D rigid body physics with collision events and sensors
 - **Particle system** -- Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Sprite animation** -- Spritesheet-based animation clips with Aseprite import support
@@ -101,6 +103,7 @@ target_link_libraries(my_game PRIVATE drift)
 | `particle_storm` | Advanced particle configuration, multiple emitters, emission shapes |
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
 | `audio` | Spatial sound sources you drag around, bus volume controls, music crossfades and playlists |
+| `lighting` | Colored lights, spot light, shadows from walls and colliders, every library post effect |
 
 Build examples with `cmake -B build -DDRIFT_BUILD_EXAMPLES=ON && cmake --build build`.
 

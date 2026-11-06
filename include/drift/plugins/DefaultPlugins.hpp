@@ -3,6 +3,7 @@
 #include <drift/Plugin.hpp>
 #include <drift/plugins/InputPlugin.hpp>
 #include <drift/plugins/RendererPlugin.hpp>
+#include <drift/plugins/PostEffectsPlugin.hpp>
 #include <drift/plugins/AudioPlugin.hpp>
 #include <drift/plugins/PhysicsPlugin.hpp>
 #include <drift/plugins/SpritePlugin.hpp>
@@ -22,6 +23,7 @@ public:
     void build(App& app) override {
         app.addPlugin<InputPlugin>();
         app.addPlugin<RendererPlugin>();
+        app.addPlugin<PostEffectsPlugin>();
         app.addPlugin<AudioPlugin>();
         app.addPlugin<PhysicsPlugin>();
         app.addPlugin<SpritePlugin>();

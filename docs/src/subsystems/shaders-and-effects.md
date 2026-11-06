@@ -95,7 +95,9 @@ Draws with the same material and texture still batch together.
 
 ## Post Effects
 
-Post effects run on the whole scene after every camera has rendered, before the HUD layer. The simplest post effect is a material; the scene arrives as `texture0`.
+Post effects run on the whole scene after every camera has rendered, before the HUD layer. For bloom, vignette, CRT, color grading, blur and other common effects, use the [Post Effect Library](post-effects.md); this section is for writing your own.
+
+The simplest post effect is a material; the scene arrives as `texture0`.
 
 ```cpp
 int32_t id = renderer->addPostEffect(0, crtMaterial);   // order 0

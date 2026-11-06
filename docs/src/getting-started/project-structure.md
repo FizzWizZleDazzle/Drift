@@ -10,6 +10,7 @@ drift/
     components/            <-- ECS component types
     plugins/               <-- Plugin headers (header-only)
     resources/             <-- Resource types (singletons)
+    effects/               <-- Post effect library
     particles/             <-- Particle system types
   src/                     <-- implementation files (not public)
     core/                  <-- App, AssetServer, Log
@@ -26,6 +27,8 @@ drift/
     particles/             <-- ParticleResource (legacy), ParticleSystem (ECS-based)
     tilemap/               <-- TilemapResource
     ui/                    <-- UIResource
+    lighting/              <-- 2D lights, shadows and their shaders
+    effects/               <-- post effect library and its shaders
   examples/                <-- example programs
     hello_sprites/
     fireball/
@@ -36,6 +39,7 @@ drift/
     audio/
   tests/                   <-- engine tests (ctest)
   cmake/                   <-- drift_add_shaders, drift_web_app, web page template
+    lighting/
   docs/                    <-- this documentation (mdBook)
   CMakeLists.txt           <-- build configuration
 ```
@@ -85,10 +89,11 @@ Components are plain structs attached to entities. They carry data but no behavi
 | `CameraController.hpp` | `CameraShake`, `CameraFollow` | Camera shake (trigger with magnitude, auto-decay) and smooth follow (target entity, smoothing, dead zone). |
 | `TrailRenderer.hpp` | `TrailRenderer` | Trail rendering with width, lifetime, color lerp, and minimum distance. |
 | `AudioSource.hpp` | `AudioSource`, `AudioListener` | A sound played from an entity, optionally positional, and the entity it is heard from. |
+| `Light2D.hpp` | `PointLight2D`, `SpotLight2D`, `LightOccluder2D` | 2D lights and shadow-casting occluders. Need `LightingPlugin`. |
 
 #### `include/drift/plugins/` -- Plugins
 
-Plugins are header-only. Each one registers resources and systems in its `build()` method.
+Each plugin registers resources and systems in its `build()` method. Most are header-only.
 
 | Header | Plugin | What it registers |
 |--------|--------|-------------------|
@@ -106,6 +111,8 @@ Plugins are header-only. Each one registers resources and systems in its `build(
 | `SpriteAnimationPlugin.hpp` | `SpriteAnimationPlugin` | Updates `Sprite::srcRect` from `SpriteAnimator` each frame. |
 | `CameraPlugin.hpp` | `CameraPlugin` | `CameraFollow` and `CameraShake` systems in PostUpdate. |
 | `TrailPlugin.hpp` | `TrailPlugin` | Trail update and rendering systems. |
+| `PostEffectsPlugin.hpp` | `PostEffectsPlugin` | `PostEffects` resource: the post effect library. |
+| `LightingPlugin.hpp` | `LightingPlugin` | `LightingSettings`, light and occluder components, light maps per camera. Not in `DefaultPlugins`. |
 
 #### `include/drift/resources/` -- Resource types
 
@@ -147,6 +154,8 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 - `src/particles/` -- `ParticleResource.cpp` (legacy), `ParticleSystem.cpp` (ECS-based)
 - `src/tilemap/` -- `TilemapResource.cpp`
 - `src/ui/` -- `UIResource.cpp`
+- `src/lighting/` -- `Lighting.cpp` and the light shader
+- `src/effects/` -- `PostEffects.cpp` and the effect shaders
 
 You should not need to read or modify these files when building a game. They are linked into the `drift` static library automatically.
 
