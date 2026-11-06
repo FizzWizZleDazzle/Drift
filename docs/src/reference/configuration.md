@@ -33,7 +33,7 @@ struct Config {
 | `resizable` | `bool` | `true` | Allow the user to resize the window. |
 | `highDpi` | `bool` | `true` | Render at the display's native pixel density on high-DPI screens. |
 | `scaleMode` | `ScaleMode` | `Letterbox` | How the logical resolution fits the window: `Letterbox`, `Stretch`, `Integer` (pixel perfect) or `Expand`. See [Rendering](../subsystems/rendering.md#resolution-and-scale-modes). |
-| `renderer` | `std::string` | `""` | Graphics backend by name, such as `"gl"`. Empty picks the first backend in the build. The `DRIFT_RENDERER` environment variable overrides it. |
+| `renderer` | `std::string` | `""` | Graphics backend by name: `"gl"` or `"webgpu"`. Empty picks the first backend in the build (OpenGL when it is built). The `DRIFT_RENDERER` environment variable overrides it. See [Rendering](../subsystems/rendering.md#backends). |
 | `threadCount` | `int32_t` | `0` | Worker thread count for the system scheduler. See below. |
 
 ## Thread Count

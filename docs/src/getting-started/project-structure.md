@@ -17,6 +17,7 @@ drift/
     renderer/              <-- RendererResource, RenderSnapshot
     gfx/                   <-- graphics device interface and backends
       gl/                  <-- OpenGL 3.3 / WebGL2 backend
+      wgpu/                <-- WebGPU backend (optional)
       shaders/             <-- built-in shaders and the shader prelude
     input/                 <-- InputResource
     audio/                 <-- AudioResource

@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(DRIFT_DEV "Enable dev overlay and tools" ON)
 option(DRIFT_BUILD_EXAMPLES "Build example programs" ON)
 option(DRIFT_BACKEND_GL "Build the OpenGL / WebGL2 renderer backend" ON)
+option(DRIFT_BACKEND_WEBGPU "Build the WebGPU renderer backend (wgpu-native on desktop, emdawnwebgpu on the web)" OFF)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DriftShaders.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/DriftWeb.cmake)
@@ -165,6 +166,10 @@ if(DRIFT_BACKEND_GL)
         set_source_files_properties(${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
             PROPERTIES COMPILE_DEFINITIONS IMGUI_IMPL_OPENGL_ES3)
     endif()
+endif()
+
+if(DRIFT_BACKEND_WEBGPU)
+    include(src/gfx/wgpu/WebGPU.cmake)
 endif()
 
 if(NOT DRIFT_GFX_BACKENDS)
