@@ -1,0 +1,74 @@
+name: set up a Drift build
+description: >
+  The tools every Drift build job needs: the Linux headers SDL builds against,
+  the MSVC environment on Windows, ccache, and the naga shader translator.
+
+inputs:
+  cache-key:
+    description: Names this job's compiler cache, so jobs that build differently keep separate caches.
+    required: true
+  desktop:
+    description: Whether this job builds for the desktop. Web jobs need none of the Linux window and audio headers.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # SDL is built from source, and it compiles in the video and audio drivers
+    # whose headers it finds. Mesa is there for the runtime as well: the app
+    # tests open a window through SDL's offscreen driver, which renders with
+    # EGL, and the runner has no GPU, so llvmpipe draws it.
+    - name: Install the Linux build dependencies
+      if: runner.os == 'Linux' && inputs.desktop == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -yq --no-install-recommends \
+          ninja-build pkg-config \
+          libasound2-dev libpulse-dev libpipewire-0.3-dev \
+          libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+          libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
+          libwayland-dev libdecor-0-dev libdrm-dev libgbm-dev \
+          libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev libgl1-mesa-dri \
+          libdbus-1-dev libudev-dev
+
+    - name: Install Ninja
+      if: runner.os == 'Linux' && inputs.desktop != 'true'
+      shell: bash
+      run: sudo apt-get install -yq --no-install-recommends ninja-build
+
+    # Ninja needs cl.exe on PATH; the Visual Studio generator would find it on
+    # its own but puts binaries under Release/, away from the shaders.
+    - name: Enter the MSVC environment
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Ninja
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install ninja
+
+    # Dependencies come from FetchContent at configure time, and compiling them
+    # is most of a clean build. The clones are quick; the compile is what is
+    # worth keeping, so the cache is the compiler's rather than the build tree.
+    - name: Set up ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ inputs.cache-key }}-${{ runner.os }}
+        max-size: 1G
+
+    # naga translates WGSL to GLSL for drift_add_shaders. render_showcase uses
+    # it when it is installed, so a build without it skips that path.
+    - name: Restore naga
+      id: naga
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/naga
+          ~/.cargo/bin/naga.exe
+        key: naga-cli-30.0.1-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Install naga
+      if: steps.naga.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install naga-cli --version 30.0.1 --locked

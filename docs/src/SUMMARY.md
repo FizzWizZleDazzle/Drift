@@ -93,3 +93,4 @@
 - [Configuration](reference/configuration.md)
 - [Logging](reference/logging.md)
 - [Handles](reference/handles.md)
+- [Releases](reference/releasing.md)

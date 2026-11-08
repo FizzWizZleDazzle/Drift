@@ -1,8 +1,17 @@
 name: Deploy Docs
 
+# Publishes the mdBook in docs/ to GitHub Pages, so the site describes the
+# newest release. release.yml calls this after it publishes a release: the
+# release is created with the workflow token, and a workflow token raises no
+# events, so a `release: published` trigger here would never fire. Run it by
+# hand to republish.
+#
+# The github-pages environment only deploys refs its branch policy allows.
+# A release run is on the tag, so the policy needs a tag rule for v* beside
+# main; see docs/src/reference/releasing.md.
+
 on:
-  release:
-    types: [published]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -23,7 +32,7 @@ jobs:
       - name: Install mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
-          mdbook-version: latest
+          mdbook-version: 0.5.2
 
       - name: Build docs
         run: mdbook build docs

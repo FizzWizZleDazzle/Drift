@@ -1,0 +1,173 @@
+name: release
+
+# Publishes a GitHub release on every vX.Y.Z tag: the assets build-artifacts.yml
+# builds, sha256sums.txt, and notes from the history. Then it republishes the
+# docs site and moves main to the next version, so pushing the tag is the whole
+# of cutting a release. docs/src/reference/releasing.md is the maintainer's
+# side of this.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+jobs:
+  # Every asset is built from the tag, and the engine, the source archive's
+  # folder and the candela package all report the version CMakeLists.txt
+  # names. A tag that disagrees would publish a release whose files call
+  # themselves something else, so this gates the build rather than running
+  # inside it, and a disagreement costs one runner instead of every leg.
+  version:
+    name: check the tag matches the tree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compare the tag with every version copy
+        run: python3 scripts/bump-version.py --check "${GITHUB_REF_NAME#v}"
+
+  artifacts:
+    name: build
+    needs: version
+    uses: ./.github/workflows/build-artifacts.yml
+
+  release:
+    name: publish release
+    needs: artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # The whole history, for the previous tag the notes start from.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # checkout can leave an annotated tag fetched as a lightweight one,
+      # which loses the message the notes open with.
+      - name: Fetch the tag as pushed
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+      - name: Write the release notes
+        run: sh scripts/release-notes.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/notes.md"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Drift ${{ github.ref_name }}
+          body_path: ${{ runner.temp }}/notes.md
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/sha256sums.txt
+          fail_on_unmatched_files: true
+
+  # Called rather than triggered by the release: the release above is made
+  # with the workflow token, which raises no events.
+  docs:
+    name: publish the docs site
+    needs: release
+    uses: ./.github/workflows/docs.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+  # Cutting a release is a tag push and nothing else, so the version main
+  # carries has to move afterwards on its own. This commits that move straight
+  # to main. The next version is always the next patch: nothing here can know
+  # whether the work after a release is a fix or a feature, and a number that
+  # is always one patch ahead is corrected by one more commit. To go to a minor
+  # or major version, run scripts/bump-version.py by hand.
+  #
+  # It pushes over SSH with the BUMP_DEPLOY_KEY deploy key rather than with the
+  # workflow token, because a push made with the workflow token raises no
+  # events, so the bump would land on main without a ci run behind it; and a
+  # deploy key keeps working if main gains a ruleset with the key as a bypass
+  # actor.
+  #
+  # Re-running the workflow after fixing a build leg reaches this job again and
+  # finds main already at or past the next version, so it stops before it
+  # commits anything; the same check keeps a re-run of an older release from
+  # walking main backwards. The push is never forced. A main that moved under
+  # a long build refuses the push, and the retry takes main again and
+  # re-decides on top of it.
+  bump:
+    name: move main to the next version
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Commit the next version to main
+        env:
+          DEPLOY_KEY: ${{ secrets.BUMP_DEPLOY_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          released="${TAG#v}"
+          next="${released%.*}.$(( 10#${released##*.} + 1 ))"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ -z "${DEPLOY_KEY:-}" ]; then
+            echo "release.yml: BUMP_DEPLOY_KEY is not set, so main still says ${released} while ${TAG} is out." >&2
+            echo "Add the secret and re-run this job, or run scripts/bump-version.py ${next} on main by hand." >&2
+            exit 1
+          fi
+
+          key_file="$(mktemp)"
+          chmod 600 "${key_file}"
+          trap 'rm -f "${key_file}"' EXIT
+          printf '%s\n' "${DEPLOY_KEY}" > "${key_file}"
+          export GIT_SSH_COMMAND="ssh -i ${key_file} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+          attempt=0
+          while :; do
+            attempt=$(( attempt + 1 ))
+
+            # Decide against main as it is now, not as it was when the run
+            # started.
+            git fetch --quiet origin main
+            git reset --quiet --hard FETCH_HEAD
+
+            current="$(python3 scripts/bump-version.py --current)"
+            oldest="$(printf '%s\n%s\n' "$current" "$next" | sort -V | head -1)"
+            if [ "$current" = "$next" ] || [ "$oldest" = "$next" ]; then
+              echo "::notice::main is at ${current}, at or past ${next}; nothing to bump"
+              exit 0
+            fi
+
+            python3 scripts/bump-version.py "$next"
+            if git diff --quiet; then
+              echo "release.yml: bump-version.py changed nothing on the way to ${next}" >&2
+              exit 1
+            fi
+            git commit -qam "Set the version to ${next}"
+
+            if git push "git@github.com:${GITHUB_REPOSITORY}.git" HEAD:main; then
+              echo "main is at ${next}"
+              exit 0
+            fi
+
+            if [ "$attempt" -ge 3 ]; then
+              echo "release.yml: pushing to main was refused, so main still says ${current} while ${TAG} is out." >&2
+              echo "Check that BUMP_DEPLOY_KEY is a deploy key with write access, then re-run this job, or run scripts/bump-version.py ${next} on main by hand." >&2
+              exit 1
+            fi
+            echo "::notice::the push was refused; taking main again and re-deciding"
+          done

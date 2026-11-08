@@ -48,6 +48,7 @@ Drift uses CMake `FetchContent` to download and build every dependency at config
 | [dr_libs](https://github.com/mackron/dr_libs) | pinned commit | WAV (dr_wav) and MP3 (dr_mp3) decoding |
 | [cute_aseprite](https://github.com/RandyGaul/cute_headers) | latest | Aseprite sprite sheet loading |
 | [nlohmann/json](https://github.com/nlohmann/json) | v3.11.3 | JSON parsing (used for Tiled map support) |
+| [toml++](https://github.com/marzer/tomlplusplus) | v3.4.0 | Reading `drift.toml` |
 
 The first build takes longer because CMake will clone and compile these dependencies. Subsequent builds reuse the cached results in your build directory.
 
@@ -55,7 +56,7 @@ The first build takes longer because CMake will clone and compile these dependen
 
 ```bash
 git clone https://github.com/FizzWizZleDazzle/Drift.git
-cd drift
+cd Drift
 cmake -B build
 cmake --build build
 ```
@@ -149,6 +150,20 @@ cmake --build build
 ```
 
 CMake will automatically fetch Drift and all of its transitive dependencies. See the [Hello World](hello-world.md) chapter for what to put in `main.cpp`.
+
+### Using a release
+
+`GIT_TAG main` follows the newest commit. To build against a fixed version instead, point `FetchContent` at the source archive a [release](https://github.com/FizzWizZleDazzle/Drift/releases) publishes, with its digest from that release's `sha256sums.txt`:
+
+```cmake
+FetchContent_Declare(
+    drift
+    URL      https://github.com/FizzWizZleDazzle/Drift/releases/download/vX.Y.Z/drift-src.tar.gz
+    URL_HASH SHA256=<the drift-src.tar.gz line of sha256sums.txt>
+)
+```
+
+Replace `vX.Y.Z` with the release you want. The download is checked against the digest, and the same version always builds the same source. Releases also carry prebuilt examples for Linux, macOS, Windows and the browser; see [Releases](../reference/releasing.md).
 
 ## Building for the web
 

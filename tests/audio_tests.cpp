@@ -591,7 +591,7 @@ void testSpatialize() {
 // from the mixer in real time.
 void testAudioResource() {
     std::printf("AudioResource on the dummy driver\n");
-    SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
+    SDL_SetHintWithPriority(SDL_HINT_AUDIO_DRIVER, "dummy", SDL_HINT_OVERRIDE);
     AudioResource audio;
     CHECK(audio.hasDevice());
     SoundHandle s = audio.loadSound(DRIFT_TEST_DATA_DIR "/tone440.ogg");
@@ -611,7 +611,9 @@ void testAudioResource() {
 // Without a device, update() advances playback so sounds still end.
 void testNoDevice() {
     std::printf("AudioResource without a device\n");
-    SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "no-such-driver");
+    // Override priority, so an SDL_AUDIO_DRIVER in the environment does not
+    // win over the test's choice of driver.
+    SDL_SetHintWithPriority(SDL_HINT_AUDIO_DRIVER, "no-such-driver", SDL_HINT_OVERRIDE);
     AudioResource audio;
     CHECK(!audio.hasDevice());
     std::vector<float> pcm(4800, 0.25f); // 0.1 s
@@ -629,7 +631,7 @@ void testNoDevice() {
 // stopping when the entity goes away.
 void testAudioSourceSystem() {
     std::printf("AudioSource system\n");
-    SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
+    SDL_SetHintWithPriority(SDL_HINT_AUDIO_DRIVER, "dummy", SDL_HINT_OVERRIDE);
     AudioResource audio;
     AudioSourceTracking tracking;
     World world;

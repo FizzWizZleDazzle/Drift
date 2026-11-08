@@ -1,0 +1,169 @@
+name: build-artifacts
+
+# Builds the files a release publishes. release.yml calls this on a version
+# tag; it is separate so that a nightly or a manual dry run can build the same
+# set without publishing anything.
+#
+# Assets are named after what they are and, for builds, the platform:
+# drift-<what>[-<os>-<arch>].<ext>, the scheme candela uses. The version is in
+# the download URL (releases/download/vX.Y.Z/...), not in the name, so a link
+# to releases/latest/download/<name> keeps working from one release to the
+# next. Each archive unpacks into one folder named after itself.
+#
+#   drift-src.tar.gz                    the source tree, for FetchContent URL
+#   drift-examples-<os>-<arch>.tar.gz   example programs (.zip on Windows)
+#   drift-examples-web.zip              example pages for the browser
+#   drift-docs.tar.gz                   the built mdBook
+#   sha256sums.txt                      the digest of every file above
+#
+# The examples use the default GL / WebGL2 backend and keep DRIFT_DEV on, so
+# the inspector and the scene editor's panels are there.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SDL_AUDIO_DRIVER: dummy
+
+jobs:
+  # A source archive of the tree being released. GitHub's own tag archives
+  # are generated on request and their bytes are not promised to stay the
+  # same, so a URL_HASH pinned to one can break; this one is uploaded once
+  # and its digest is in sha256sums.txt.
+  source:
+    name: source archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Archive the tree
+        run: |
+          version="$(python3 scripts/bump-version.py --current)"
+          mkdir -p dist
+          git archive --format=tar.gz --prefix="drift-${version}/" -o dist/drift-src.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-src
+          path: dist/drift-src.tar.gz
+          if-no-files-found: error
+
+  examples:
+    name: examples (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+            ext: tar.gz
+          - platform: macos-aarch64
+            os: macos-latest
+            ext: tar.gz
+          - platform: windows-x86_64
+            os: windows-latest
+            ext: zip
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: release-${{ matrix.platform }}
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DDRIFT_BUILD_TESTS=OFF
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build
+        run: cmake --build build
+      - name: Package
+        shell: bash
+        # Windows runners name the interpreter python, the others python3.
+        run: |
+          python=python3
+          if [ "$RUNNER_OS" = Windows ]; then python=python; fi
+          "$python" scripts/package.py examples build "dist/drift-examples-${{ matrix.platform }}.${{ matrix.ext }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-examples-${{ matrix.platform }}
+          path: dist/drift-examples-${{ matrix.platform }}.${{ matrix.ext }}
+          if-no-files-found: error
+
+  web:
+    name: examples (web)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: release-web
+          desktop: "false"
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.13
+          actions-cache-folder: emsdk-cache-release
+      - name: Configure
+        run: >
+          emcmake cmake -S . -B build-web -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build
+        run: cmake --build build-web
+      - name: Package
+        run: python3 scripts/package.py web build-web dist/drift-examples-web.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-examples-web
+          path: dist/drift-examples-web.zip
+          if-no-files-found: error
+
+  docs:
+    name: docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 0.5.2
+      - run: mdbook build docs
+      - name: Package
+        run: python3 scripts/package.py dir docs/book dist/drift-docs.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-docs
+          path: dist/drift-docs.tar.gz
+          if-no-files-found: error
+
+  # One checksum file in sha256sum's own format, covering every asset, so
+  # `sha256sum -c --ignore-missing sha256sums.txt` checks whatever was
+  # downloaded beside it.
+  sums:
+    name: checksum the assets
+    needs: [source, examples, web, docs]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write sha256sums.txt
+        working-directory: dist
+        run: |
+          sha256sum *.tar.gz *.zip > sha256sums.txt
+          cat sha256sums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sha256sums
+          path: dist/sha256sums.txt
+          if-no-files-found: error

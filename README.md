@@ -64,6 +64,8 @@ height = 720
 
 To use Drift from your own project, pull it in with `FetchContent` and link `drift`; call `drift_web_app(my_game)` to make the same target build for the web. See [Installation](docs/src/getting-started/installation.md).
 
+[Releases](https://github.com/FizzWizZleDazzle/Drift/releases) carry a source archive to pin your build to, and the examples ready to run on Linux, macOS, Windows and in the browser.
+
 ## What You Get
 
 - **Rendering**: batched sprites and shapes (also as rectangle and circle components), render layers with a HUD layer, multiple cameras (split screen, minimaps), render targets, custom shaders written once in WGSL, pixel-perfect scaling. OpenGL 3.3 on desktop, WebGL2 in the browser, and an optional WebGPU backend for both.
