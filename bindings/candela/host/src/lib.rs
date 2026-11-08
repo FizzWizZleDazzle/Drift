@@ -1221,6 +1221,11 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
                 Err(why) => errors.push(format!("drift_unknown_parameter: {name}({pname}): {why}")),
             }
         }
+        let per_entity = ps.iter().any(|p| matches!(p, Param::One(_) | Param::OneEntity));
+        let per_event = ps.iter().filter(|p| matches!(p, Param::OneContact { .. } | Param::OneMessage(_))).count();
+        if (per_entity && per_event > 0) || per_event > 1 {
+            errors.push(format!("drift_mixed_singular: {name} runs once per entity or once per event, not both"));
+        }
         let startup = matches!(a.arg("schedule"), Some(AttributeValue::Variant { name: v, .. }) if v == "Startup");
         let enabled = !matches!(a.arg("enabled"), Some(AttributeValue::Bool(false)));
         systems.push(System {

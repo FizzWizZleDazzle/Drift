@@ -7,6 +7,7 @@ The candela compiler checks the game before it runs: types, attributes and their
 | Error | Meaning |
 |-------|---------|
 | `drift_unknown_parameter` | A system parameter's type is not a component, query row, tuple list, lookup, resource, state, message, contact, `Commands` or engine resource |
+| `drift_mixed_singular` | A system takes a single component and a single event, or two single events; it runs once per entity or once per event, not both |
 | `drift_unknown_condition` | `run_if:` names a function Drift cannot call |
 | `drift_condition_parameter` | A condition takes something other than resources, engine resources and queries |
 | `drift_not_a_component` | A query row, tuple or lookup names a struct that is not a `@component` or engine component |
