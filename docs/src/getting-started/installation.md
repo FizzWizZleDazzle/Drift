@@ -180,16 +180,16 @@ cd build-web && python3 -m http.server 8000
 
 ### Web builds of your own game
 
-Call `drift_web_app` on your game target. It packages asset folders, sets the page template, and does nothing in desktop builds, so you can call it unconditionally:
+Call `drift_web_app` on your game target. It packages the game's `drift.toml` and asset folder, sets the page template, and does nothing in desktop builds, so you can call it unconditionally:
 
 ```cmake
 add_executable(my_game main.cpp)
 target_link_libraries(my_game PRIVATE drift)
-drift_web_app(my_game ASSETS assets)                 # files appear under "assets/"
-# drift_web_app(my_game ASSETS assets SHELL web/index.html)   # your own page
+drift_web_app(my_game)                                # drift.toml and assets/ from this folder
+# drift_web_app(my_game PROJECT game SHELL web/index.html)   # another folder, your own page
 ```
 
-`PRELOAD <src>@<dst>` maps any other directory into the virtual file system. A custom `SHELL` page must contain a `<canvas id="canvas">` and the `{{{ SCRIPT }}}` placeholder; start from `cmake/drift_shell.html`.
+`PROJECT <dir>` is the folder holding `drift.toml`; it defaults to the current source directory. The asset folder packaged is the one `assets` in the `[project]` section names (`assets` by default), under the same path, so the game loads the same relative paths as on desktop. `ASSETS <dir>...` packages other folders at `assets/` instead. `PRELOAD <src>@<dst>` maps any other directory into the virtual file system. A custom `SHELL` page must contain a `<canvas id="canvas">` and the `{{{ SCRIPT }}}` placeholder; start from `cmake/drift_shell.html`.
 
 ## Shader translation (optional)
 

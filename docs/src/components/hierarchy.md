@@ -288,7 +288,9 @@ void rotateSun(Res<Time> time, QueryMut<Transform2D, With<Name>> named) {
 
 int main() {
     App app;
-    app.setConfig({.title = "Hierarchy Example", .width = 800, .height = 600});
+    app.config().window.title = "Hierarchy Example";
+    app.config().window.width = 800;
+    app.config().window.height = 600;
     app.addPlugins<DefaultPlugins>();
     app.initResource<SolarSystem>();
     app.startup<setup>();

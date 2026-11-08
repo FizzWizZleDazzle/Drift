@@ -589,7 +589,7 @@ std::unique_ptr<Device> glCreate(SDL_Window* window, const Config& cfg) {
         return nullptr;
     }
     SDL_GL_MakeCurrent(window, ctx);
-    SDL_GL_SetSwapInterval(cfg.vsync ? 1 : 0);
+    SDL_GL_SetSwapInterval(cfg.render.vsync ? 1 : 0);
 
     gl::Functions fns;
     const char* missing = nullptr;

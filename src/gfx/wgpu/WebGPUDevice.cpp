@@ -116,7 +116,7 @@ struct Pending {
 
 class WebGPUDevice final : public Device {
 public:
-    WebGPUDevice(SDL_Window* window, const Config& cfg) : window_(window), vsync_(cfg.vsync) {}
+    WebGPUDevice(SDL_Window* window, const Config& cfg) : window_(window), vsync_(cfg.render.vsync) {}
 
     ~WebGPUDevice() override {
         releaseFrameTexture();

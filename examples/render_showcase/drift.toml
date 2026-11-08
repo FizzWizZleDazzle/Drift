@@ -1,0 +1,8 @@
+[project]
+name = "Render Showcase"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - render showcase"
+width = 1280
+height = 720

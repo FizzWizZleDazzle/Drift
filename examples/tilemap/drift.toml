@@ -1,0 +1,8 @@
+[project]
+name = "Tilemap"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - Tilemap"
+width = 1280
+height = 720

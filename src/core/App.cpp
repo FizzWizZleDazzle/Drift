@@ -191,6 +191,7 @@ using StateKey = std::pair<std::type_index, int>;
 
 struct App::Impl {
     Config config;
+    Settings* settings = nullptr;   // owned as a resource
 
     SDL_Window* window = nullptr;
     std::unique_ptr<gfx::Device> device;
@@ -571,7 +572,39 @@ struct App::Impl {
     }
 };
 
-App::App() : impl_(std::make_unique<Impl>()) {}
+App::App() : impl_(std::make_unique<Impl>()) {
+    // The engine's drift.toml sections. The enum first: fields of an
+    // undescribed type are skipped.
+    reflect::enumType<ScaleMode>("ScaleMode", {{"Letterbox", ScaleMode::Letterbox},
+                                               {"Stretch", ScaleMode::Stretch},
+                                               {"Integer", ScaleMode::Integer},
+                                               {"Expand", ScaleMode::Expand}});
+    auto bindConfig = [this]<typename T>(const char* section, T& target, SettingsOptions opts) {
+        reflect::TypeBuilder<T> b = reflect::type<T>(section);
+        T::describe(b);
+        impl_->settings->bind(section, *b.info(), &target, std::move(opts));
+    };
+    impl_->settings = addResource<Settings>();
+    auto& c = impl_->config;
+    bindConfig("project", c.project, {.restart = {"name", "organization", "version", "entry", "assets"}});
+    bindConfig("window", c.window, {.restart = {"width", "height", "high_dpi"}});
+    bindConfig("render", c.render, {.restart = {"backend", "vsync"}});
+    bindConfig("app", c.app, {.restart = {"threads"}});
+    // Window keys that apply while running.
+    impl_->settings->onChange("window", [this](const std::vector<std::string>& keys) {
+        auto& s = *impl_;
+        if (!s.window) return;
+        for (const auto& k : keys) {
+            if (k == "title") SDL_SetWindowTitle(s.window, s.config.title().c_str());
+            else if (k == "fullscreen") SDL_SetWindowFullscreen(s.window, s.config.window.fullscreen);
+            else if (k == "resizable") SDL_SetWindowResizable(s.window, s.config.window.resizable);
+        }
+    });
+    impl_->settings->onChange("project", [this](const std::vector<std::string>&) {
+        auto& s = *impl_;
+        if (s.window && s.config.window.title.empty()) SDL_SetWindowTitle(s.window, s.config.title().c_str());
+    });
+}
 
 App::~App() {
     // Stop the simulation thread and the pool first (joins threads before
@@ -600,9 +633,23 @@ App::~App() {
     }
 }
 
-App& App::setConfig(const Config& cfg) {
-    impl_->config = cfg;
+App& App::args(int argc, char** argv) {
+    impl_->settings->parseArgs(argc, argv);
     return *this;
+}
+
+Config& App::config() {
+    impl_->settings->load();
+    return impl_->config;
+}
+
+Settings& App::settingsStore() {
+    impl_->settings->load();
+    return *impl_->settings;
+}
+
+void App::onSettingsChanged(const char* section, std::function<void(const std::vector<std::string>&)> fn) {
+    impl_->settings->onChange(section, std::move(fn));
 }
 
 App& App::addPlugin(Plugin* plugin) {
@@ -796,11 +843,15 @@ bool App::start() {
     }
     s.initialised = true;
 
+    // drift.toml, then the environment and --set over what code changed.
+    s.settings->load();
+    s.settings->applyOverrides();
+
     if (!createWindowAndDevice()) {
         return false;
     }
-    int w = s.config.width > 0 ? s.config.width : 1280;
-    int h = s.config.height > 0 ? s.config.height : 720;
+    int w = s.config.window.width > 0 ? s.config.window.width : 1280;
+    int h = s.config.window.height > 0 ? s.config.window.height : 720;
 
     s.perfFrequency = SDL_GetPerformanceFrequency();
     s.lastCounter = SDL_GetPerformanceCounter();
@@ -810,7 +861,7 @@ bool App::start() {
 
     // ---- Set up thread pool ----
     {
-        int tc = s.config.threadCount;
+        int tc = s.config.app.threads;
 #ifdef __EMSCRIPTEN__
         tc = 1;   // the web build has no threads
 #endif
@@ -851,7 +902,15 @@ bool App::start() {
     // Time resource
     s.timeRes = addResource<Time>();
     // AssetServer (empty, loaders registered by plugins)
-    addResource<AssetServer>();
+    auto* assets = addResource<AssetServer>();
+    // drift.toml is an asset too, so whatever watches asset files (hot
+    // reload in dev builds) reloads it.
+    if (!s.settings->file().empty()) {
+        assets->track("settings", 1, s.settings->file().c_str());
+        assets->setReloader("settings", [this](uint32_t, const std::string&) {
+            return impl_->settings->reload();
+        });
+    }
 
     // ---- Build plugins (deferred so window/GPU are available) ----
     for (auto* g : s.pluginGroups) {
@@ -864,6 +923,10 @@ bool App::start() {
     for (auto* p : s.plugins) {
         p->finish(*this);
     }
+    // Plugins bound their sections while building; overrides win over the
+    // values code set in main(), and keys nothing reads are likely typos.
+    s.settings->applyOverrides();
+    s.settings->warnUnknownKeys();
 
     // ---- Sort systems by system set order ----
     auto sortBySet = [&](std::vector<SystemEntry>& systems, Phase phase) {
@@ -994,7 +1057,7 @@ void App::simulateAsync() {
 #ifdef __EMSCRIPTEN__
     simulate();
 #else
-    if (s.config.threadCount == 1) {
+    if (s.config.app.threads == 1) {
         simulate();
         return;
     }
@@ -1082,8 +1145,7 @@ bool App::createWindowAndDevice() {
         return false;
     }
 
-    std::string wanted = s.config.renderer;
-    if (const char* env = SDL_getenv("DRIFT_RENDERER")) wanted = env;
+    const std::string& wanted = s.config.render.backend;
 
     // Requested backend first, then the rest in registration order.
     std::vector<const gfx::BackendInfo*> order;
@@ -1097,16 +1159,16 @@ bool App::createWindowAndDevice() {
         if (wanted != b.name) order.push_back(&b);
     }
 
-    const char* title = s.config.title.empty() ? "Drift Engine" : s.config.title.c_str();
-    int w = s.config.width > 0 ? s.config.width : 1280;
-    int h = s.config.height > 0 ? s.config.height : 720;
+    const char* title = s.config.title().c_str();
+    int w = s.config.window.width > 0 ? s.config.window.width : 1280;
+    int h = s.config.window.height > 0 ? s.config.window.height : 720;
 
     for (const gfx::BackendInfo* b : order) {
         b->prepareWindow(s.config);
         SDL_WindowFlags flags = static_cast<SDL_WindowFlags>(b->windowFlags());
-        if (s.config.fullscreen) flags |= SDL_WINDOW_FULLSCREEN;
-        if (s.config.resizable) flags |= SDL_WINDOW_RESIZABLE;
-        if (s.config.highDpi) flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+        if (s.config.window.fullscreen) flags |= SDL_WINDOW_FULLSCREEN;
+        if (s.config.window.resizable) flags |= SDL_WINDOW_RESIZABLE;
+        if (s.config.window.highDpi) flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
         s.window = SDL_CreateWindow(title, w, h, flags);
         if (!s.window) {

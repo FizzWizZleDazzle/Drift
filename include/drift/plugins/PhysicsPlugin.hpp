@@ -23,10 +23,26 @@ inline void physics_debug_draw(Res<PhysicsResource> physics, ResMut<RendererReso
     if (physics->debugDraw().enabled) physics->drawDebug(*renderer);
 }
 
+// The [physics] section of drift.toml: the world's starting settings.
+// Change them while running through PhysicsResource.
+struct PhysicsSettings : public Resource {
+    DRIFT_RESOURCE(PhysicsSettings)
+
+    Vec2 gravity = {0.f, 9.8f};
+
+    static void describe(reflect::TypeBuilder<PhysicsSettings>& t) {
+        t.field("gravity", &PhysicsSettings::gravity);
+    }
+};
+
 class PhysicsPlugin : public Plugin {
 public:
     void build(App& app) override {
-        app.addResource<PhysicsResource>(Vec2{0.f, 9.8f});
+        auto& settings = app.settings<PhysicsSettings>("physics");
+        auto* physicsRes = app.addResource<PhysicsResource>(settings.gravity);
+        app.onSettingsChanged("physics", [physicsRes, &settings](const std::vector<std::string>&) {
+            physicsRes->setGravity(settings.gravity);
+        });
 
         // Register physics components
         auto& world = app.world();

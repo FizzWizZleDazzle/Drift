@@ -1,0 +1,9 @@
+[project]
+name = "Particle Storm"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - Particle Storm (Stress Test)"
+
+[render]
+vsync = false

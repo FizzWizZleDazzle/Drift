@@ -157,9 +157,9 @@ QueryMut<Transform2D, Optional<Name>> named
 ### Main
 
 ```cpp
-int main(int, char*[]) {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - Hello Sprites", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setupGame>();
@@ -167,6 +167,8 @@ int main(int, char*[]) {
     return app.run();
 }
 ```
+
+The window title and size come from `examples/hello_sprites/drift.toml`; see [Configuration](../reference/configuration.md).
 
 ## Concepts Demonstrated
 

@@ -1,0 +1,8 @@
+[project]
+name = "Hello Sprites"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - Hello Sprites"
+width = 1280
+height = 720

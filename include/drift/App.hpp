@@ -2,6 +2,7 @@
 
 #include <drift/Types.hpp>
 #include <drift/Config.hpp>
+#include <drift/Settings.hpp>
 #include <drift/Handle.hpp>
 #include <drift/Resource.hpp>
 #include <drift/Plugin.hpp>
@@ -74,8 +75,36 @@ public:
     App();
     ~App();
 
+    // ---- Settings ----
+    // Settings come from defaults, then drift.toml, then code, then
+    // DRIFT_<SECTION>_<KEY> environment variables and --set flags.
+    //
+    // Reads --config <path> and --set section.key=value. Call it first, so
+    // the file it names is the one read.
+    App& args(int argc, char** argv);
+    // The engine's settings. Change fields before run() to override
+    // drift.toml for this game; environment and --set values still win.
+    Config& config();
+    // Every drift.toml value, by path, and the bindings below.
+    Settings& settingsStore();
+    // Binds [section] of drift.toml to resource T and returns it, adding it
+    // on first use. T describes its fields with a static
+    // describe(reflect::TypeBuilder<T>&); see Settings.hpp.
+    template<typename T>
+    T& settings(const char* section, SettingsOptions options = {}) {
+        T* res = getResource<T>();
+        if (!res) {
+            reflect::TypeBuilder<T> b = reflect::type<T>(section);
+            T::describe(b);
+            res = addResource<T>();
+        }
+        settingsStore().bind(section, *reflect::typeOf<T>(), res, std::move(options));
+        return *res;
+    }
+    // Runs `fn` after a reload of drift.toml changed keys of [section].
+    void onSettingsChanged(const char* section, std::function<void(const std::vector<std::string>&)> fn);
+
     // Builder
-    App& setConfig(const Config& cfg);
     App& addPlugin(Plugin* plugin);
     App& addPlugins(PluginGroup* group);
     void addEventHandler(EventHandler* handler);
@@ -128,7 +157,7 @@ public:
     // against conflicting systems, but exclusive (lambda) systems registered
     // after them run first. Exclusive systems run on the background thread,
     // so they must not use thread-bound state. Without threads (the web
-    // build, or Config::threadCount = 1) this is simulate().
+    // build, or config().app.threads = 1) this is simulate().
     void simulateAsync();
     // Waits for simulateAsync() and runs the systems it left for the main
     // thread. Does nothing when no simulation is in flight.

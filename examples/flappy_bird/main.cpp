@@ -561,16 +561,14 @@ void flappyUI(Res<State<GamePhase>> state, Res<FlappyState> game) {
 }
 #endif
 
-int main(int /*argc*/, char* /*argv*/[]) {
+int main(int argc, char** argv) {
     srand(42);
 
     App app;
-    app.setConfig({
-        .title = "Flappy Bird - Drift Engine",
-        .width = SCREEN_W * WINDOW_SCALE,
-        .height = SCREEN_H * WINDOW_SCALE,
-        .resizable = false,
-    });
+    app.args(argc, argv);   // window and project settings: drift.toml
+    // The game is laid out for this size, so code sets it over drift.toml.
+    app.config().window.width = SCREEN_W * WINDOW_SCALE;
+    app.config().window.height = SCREEN_H * WINDOW_SCALE;
     app.addPlugins<DefaultPlugins>();
     app.addResource<FlappyState>();
     app.initState<GamePhase>(GamePhase::Menu);

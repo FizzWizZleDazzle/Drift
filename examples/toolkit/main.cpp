@@ -316,11 +316,11 @@ static void drawHud(ResMut<RendererResource> r, ResMut<FontResource> fonts, Res<
     r->setLayer(0);
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - gameplay toolkit", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
-    app.addPlugin(new SavePlugin("Drift", "toolkit-example"));
+    app.addPlugin<SavePlugin>();   // saves under [project] organization/name
     app.addResource<Demo>();
     app.startup<setup>();
     app.update<controls>("controls");

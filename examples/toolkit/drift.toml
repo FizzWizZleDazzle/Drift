@@ -1,0 +1,8 @@
+[project]
+name = "Toolkit"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - gameplay toolkit"
+width = 1280
+height = 720

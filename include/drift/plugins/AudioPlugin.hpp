@@ -95,10 +95,34 @@ inline void audioUpdate(ResMut<AudioResource> audio, Res<Time> time) {
     audio->update(time->delta);
 }
 
+// The [audio] section of drift.toml: starting volumes of the built-in
+// buses, 0..1. Change them while running through AudioResource.
+struct AudioSettings : public Resource {
+    DRIFT_RESOURCE(AudioSettings)
+
+    float masterVolume = 1.f;
+    float musicVolume = 1.f;
+    float sfxVolume = 1.f;
+
+    static void describe(reflect::TypeBuilder<AudioSettings>& t) {
+        t.field("master_volume", &AudioSettings::masterVolume)
+         .field("music_volume", &AudioSettings::musicVolume)
+         .field("sfx_volume", &AudioSettings::sfxVolume);
+    }
+};
+
 class AudioPlugin : public Plugin {
 public:
     void build(App& app) override {
         auto* audio = app.addResource<AudioResource>();
+        auto& settings = app.settings<AudioSettings>("audio");
+        auto apply = [audio, &settings](const std::vector<std::string>&) {
+            audio->setBusVolume(audio->masterBus(), settings.masterVolume);
+            audio->setBusVolume(audio->musicBus(), settings.musicVolume);
+            audio->setBusVolume(audio->sfxBus(), settings.sfxVolume);
+        };
+        apply({});
+        app.onSettingsChanged("audio", apply);
         auto* assets = app.getResource<AssetServer>();
         assets->setSoundLoader([audio](const char* path) {
             return audio->loadSound(path);

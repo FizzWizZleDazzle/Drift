@@ -1,0 +1,8 @@
+[project]
+name = "Lighting"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - lighting"
+width = 1280
+height = 720

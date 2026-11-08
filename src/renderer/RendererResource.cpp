@@ -570,11 +570,23 @@ RendererResource::RendererResource(App& app)
     impl_->device = app.graphicsDevice();
 
     const auto& cfg = app.config();
-    impl_->configW = static_cast<float>(cfg.width > 0 ? cfg.width : 1280);
-    impl_->configH = static_cast<float>(cfg.height > 0 ? cfg.height : 720);
+    impl_->configW = static_cast<float>(cfg.window.width > 0 ? cfg.window.width : 1280);
+    impl_->configH = static_cast<float>(cfg.window.height > 0 ? cfg.window.height : 720);
     impl_->logicalW = impl_->configW;
     impl_->logicalH = impl_->configH;
-    impl_->scaleMode = cfg.scaleMode;
+    impl_->scaleMode = cfg.window.scaleMode;
+    impl_->clearColor = cfg.render.clearColor;
+    // Live reload of drift.toml.
+    app.onSettingsChanged("window", [this, &app](const std::vector<std::string>& keys) {
+        for (const auto& k : keys) {
+            if (k == "scale_mode") impl_->scaleMode = app.config().window.scaleMode;
+        }
+    });
+    app.onSettingsChanged("render", [this, &app](const std::vector<std::string>& keys) {
+        for (const auto& k : keys) {
+            if (k == "clear_color") impl_->clearColor = app.config().render.clearColor;
+        }
+    });
     impl_->startTime = impl_->lastTime = static_cast<double>(SDL_GetTicksNS()) * 1e-9;
 
     if (!impl_->device) {

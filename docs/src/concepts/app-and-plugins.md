@@ -12,7 +12,7 @@ using namespace drift;
 
 int main() {
     App app;
-    app.setConfig({.title = "My Game", .width = 1280, .height = 720});
+    app.config().window.title = "My Game";
     app.addPlugins<DefaultPlugins>();
     return app.run();
 }
@@ -22,48 +22,37 @@ This creates a window, initializes the GPU, sets up all default subsystems, and 
 
 ## Config
 
-`Config` controls window and engine settings. Pass it to `setConfig()` before calling `run()`.
+Window, rendering and engine settings come from `drift.toml` beside the game, which plugins and the game read their own sections from as well. `app.config()` holds the engine's part; change fields in code before `run()` to override the file:
 
-```cpp
-struct Config {
-    std::string title = "Drift";
-    int32_t width  = 1280;
-    int32_t height = 720;
-    bool fullscreen = false;
-    bool vsync      = true;
-    bool resizable  = true;
-    bool highDpi    = true;
-    ScaleMode scaleMode = ScaleMode::Letterbox;
-    std::string renderer;     // graphics backend; empty = first available
-    int32_t threadCount = 0;  // 0 = auto, 1 = sequential (no threading)
-};
+```toml
+[window]
+title = "Asteroid Field"
+width = 1920
+height = 1080
+
+[app]
+threads = 4   # 3 workers + main thread
 ```
 
-`width` and `height` are the logical resolution the game draws in; `scaleMode` decides how it fits the window. See [Configuration](../reference/configuration.md) for every field.
-
-The `threadCount` field controls the parallel scheduler. `0` uses `hardware_concurrency - 1` threads (capped at 7). `1` disables threading and runs all systems sequentially on the main thread.
-
 ```cpp
-app.setConfig({
-    .title = "Asteroid Field",
-    .width = 1920,
-    .height = 1080,
-    .fullscreen = true,
-    .vsync = false,
-    .threadCount = 4,  // 3 workers + main thread
-});
+App app;
+app.args(argc, argv);                  // lets --config and --set reach the settings
+app.config().render.vsync = false;     // code wins over drift.toml
 ```
+
+`window.width` and `window.height` are the logical resolution the game draws in; `window.scale_mode` decides how it fits the window. `app.threads` controls the parallel scheduler: `0` uses `hardware_concurrency - 1` threads (capped at 7), `1` runs every system on the main thread. See [Configuration](../reference/configuration.md) for every section, the order values are applied in, and live reload.
 
 ## App Lifecycle
 
 The lifecycle is:
 
 1. **Construction**: `App app;` creates the app with default state.
-2. **Configuration**: `setConfig()`, `addPlugins()`, `addPlugin()`, `addResource()`, `addSystem()`, etc.
-3. **Run**: `app.run()` initializes SDL, creates the window and GPU device, then:
+2. **Configuration**: `args()`, `config()`, `addPlugins()`, `addPlugin()`, `addResource()`, `addSystem()`, etc.
+3. **Run**: `app.run()` initializes SDL, reads `drift.toml` (if nothing read it earlier), creates the window and GPU device, then:
    - Builds all plugin groups (calls `PluginGroup::build(App&)`)
    - Builds all individual plugins (calls `Plugin::build(App&)`)
    - Finishes all individual plugins (calls `Plugin::finish(App&)`)
+   - Applies environment and `--set` settings again, over what code changed
    - Sorts systems by system set ordering
    - Runs all Startup-phase systems (once)
    - Runs initial `OnEnter` state callbacks
@@ -83,7 +72,7 @@ Commands are flushed after PreUpdate, Update, and PostUpdate phases. Startup sys
 
 ```cpp
 App app;
-app.setConfig(cfg);
+app.config().window.title = "Embedded";
 app.addPlugins<DefaultPlugins>();
 if (!app.start()) return 1;          // window, device, plugins, Startup systems
 
@@ -127,7 +116,7 @@ while (app.pollFrame()) {          // time, events, PreUpdate, state transitions
 | `finishSimulation()` | Waits for the background part, then runs the systems it left for the main thread. Does nothing when no simulation is in flight |
 | `lastSimulation()` | A `SimulationTiming`: when the simulation started and ended on the performance-counter clock, whether it ran in the background, and how long the main-thread remainder took |
 
-Between `simulateAsync()` and `finishSimulation()` the host must not touch the world, `Commands`, or a resource any system may use. Resources that are `mainThreadOnly()` (the renderer, fonts, the asset server, ...) are the exception: systems that use them do not run on the background thread. Instead they, and systems ordered after them by a conflicting access, wait for `finishSimulation()` and run on the calling thread in their usual order; exclusive systems registered after them run first, on the background thread, so an exclusive system must not use thread-bound state. Without threads (the web build, or `Config::threadCount = 1`) `simulateAsync()` is `simulate()`. `endFrame()` finishes a simulation still in flight. The candela package drives its frames this way.
+Between `simulateAsync()` and `finishSimulation()` the host must not touch the world, `Commands`, or a resource any system may use. Resources that are `mainThreadOnly()` (the renderer, fonts, the asset server, ...) are the exception: systems that use them do not run on the background thread. Instead they, and systems ordered after them by a conflicting access, wait for `finishSimulation()` and run on the calling thread in their usual order; exclusive systems registered after them run first, on the background thread, so an exclusive system must not use thread-bound state. Without threads (the web build, or `[app] threads = 1`) `simulateAsync()` is `simulate()`. `endFrame()` finishes a simulation still in flight. The candela package drives its frames this way.
 
 ## Plugin
 
@@ -291,7 +280,7 @@ void gameLoop(Res<Time> time, ResMut<GameState> game, Commands& cmd) {
 
 int main() {
     App app;
-    app.setConfig({.title = "My Game", .width = 1280, .height = 720});
+    app.config().window.title = "My Game";
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>("setup");

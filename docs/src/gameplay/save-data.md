@@ -4,14 +4,16 @@
 
 **Header:** `#include <drift/gameplay/SaveData.hpp>`
 
-**Plugin:** `SavePlugin` (not in `DefaultPlugins`; it needs your game's name)
+**Plugin:** `SavePlugin` (not in `DefaultPlugins`)
 
 ## Setup
 
 ```cpp
 app.addPlugins<DefaultPlugins>();
-app.addPlugin(new SavePlugin("MyStudio", "MyGame"));          // slot "save"
+app.addPlugin<SavePlugin>();                                   // slot "save"
 ```
+
+The save directory is named after `organization` and `name` in the `[project]` section of [drift.toml](../reference/configuration.md). To name it in code instead, pass the names: `app.addPlugin(new SavePlugin("MyStudio", "MyGame"))`.
 
 The file is `<user data dir>/<org>/<app>/<slot>.json`. The directory comes from `SDL_GetPrefPath`:
 

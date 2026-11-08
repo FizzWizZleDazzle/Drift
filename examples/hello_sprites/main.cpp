@@ -142,9 +142,9 @@ void updateGame(Res<InputResource> input, Res<Time> time,
     (void)named; // used just to verify compilation of Optional<T> queries
 }
 
-int main(int /*argc*/, char* /*argv*/[]) {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - Hello Sprites", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();  // idempotent: safe to call multiple times
     app.startup<setupGame>();

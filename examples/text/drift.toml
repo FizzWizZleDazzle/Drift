@@ -1,0 +1,8 @@
+[project]
+name = "Text"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - text"
+width = 1280
+height = 720

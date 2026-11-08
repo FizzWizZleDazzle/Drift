@@ -78,7 +78,7 @@ bool  mouseButtonReleased(MouseButton btn) const;  // released this frame
 float mouseWheelDelta() const;                     // scroll wheel delta
 ```
 
-Mouse positions are reported in logical screen coordinates, the same space as `Config::width` and `height`. The conversion follows the renderer's scale mode, so letterbox bars and integer scaling are accounted for. Use `RendererResource::screenToWorld` to turn the position into world coordinates.
+Mouse positions are reported in logical screen coordinates, the same space as the logical resolution, `window.width` and `window.height` in [drift.toml](../reference/configuration.md). The conversion follows the renderer's scale mode, so letterbox bars and integer scaling are accounted for. Use `RendererResource::screenToWorld` to turn the position into world coordinates.
 
 ### MouseButton Enum
 

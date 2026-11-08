@@ -1,0 +1,8 @@
+[project]
+name = "Audio"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - audio"
+width = 1280
+height = 720

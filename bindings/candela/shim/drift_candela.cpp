@@ -501,19 +501,17 @@ EXPORT cint dc_start(const char* title, cint width, cint height,
                      cint scaleMode, cint lighting, const char* renderer,
                      cint pipelined, cint threads) {
     if (g.app) return fail("drift is already running");
-    Config cfg;
-    cfg.title = title ? title : "Drift";
-    cfg.width = width;
-    cfg.height = height;
-    cfg.fullscreen = fullscreen != 0;
-    cfg.vsync = vsync != 0;
-    cfg.resizable = resizable != 0;
-    cfg.scaleMode = static_cast<ScaleMode>(scaleMode);
-    cfg.renderer = renderer ? renderer : "";
-    cfg.threadCount = int(threads);
-
     g.app = new App();
-    g.app->setConfig(cfg);
+    Config& cfg = g.app->config();
+    cfg.window.title = title ? title : "Drift";
+    cfg.window.width = int32_t(width);
+    cfg.window.height = int32_t(height);
+    cfg.window.fullscreen = fullscreen != 0;
+    cfg.window.resizable = resizable != 0;
+    cfg.window.scaleMode = static_cast<ScaleMode>(scaleMode);
+    cfg.render.vsync = vsync != 0;
+    cfg.render.backend = renderer ? renderer : "";
+    cfg.app.threads = int32_t(threads);
     g.app->addPlugins<DefaultPlugins>();
     if (lighting) g.app->addPlugin<LightingPlugin>();
     if (!g.app->start()) {

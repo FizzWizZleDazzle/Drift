@@ -128,9 +128,9 @@ public:
     DRIFT_PLUGIN(EditorPlugin)
 };
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - Scene Editor", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
     app.addPlugin<EditorPlugin>();
     return app.run();

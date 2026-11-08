@@ -44,7 +44,7 @@ void hello(Res<Time> time) {
 
 int main() {
     App app;
-    app.setConfig({.title = "My Game", .width = 1280, .height = 720});
+    app.config().window.title = "My Game";
     app.addPlugins<DefaultPlugins>();
     app.update<hello>();
     return app.run();

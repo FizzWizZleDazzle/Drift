@@ -239,7 +239,7 @@ void damageEnemies(Res<Time> time,
 
 int main() {
     App app;
-    app.setConfig({.title = "ECS Demo"});
+    app.config().window.title = "ECS Demo";
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>("setup");

@@ -195,7 +195,9 @@ void setup(ResMut<GameState> game, ResMut<AssetServer> assets, Commands& cmd) {
 
 int main() {
     App app;
-    app.setConfig({.title = "Sprite Example", .width = 800, .height = 600});
+    app.config().window.title = "Sprite Example";
+    app.config().window.width = 800;
+    app.config().window.height = 600;
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>();

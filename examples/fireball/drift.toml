@@ -1,0 +1,6 @@
+[project]
+name = "Fireball"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - Fireball Particles"

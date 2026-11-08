@@ -58,14 +58,13 @@ void afterBound(ResMut<Seq> s) { s->order.push_back("after"); }
 
 void otherSystem(ResMut<OtherRes> o) { o->ranOn = std::this_thread::get_id(); }
 
-Config testConfig() {
-    Config cfg;
-    cfg.title = "drift app tests";
-    cfg.width = 320;
-    cfg.height = 180;
-    cfg.vsync = false;
-    cfg.threadCount = 4;
-    return cfg;
+void testConfig(App& app) {
+    Config& cfg = app.config();
+    cfg.window.title = "drift app tests";
+    cfg.window.width = 320;
+    cfg.window.height = 180;
+    cfg.render.vsync = false;
+    cfg.app.threads = 4;
 }
 
 double seconds(uint64_t ticks) { return double(ticks) / double(SDL_GetPerformanceFrequency()); }
@@ -74,7 +73,7 @@ double seconds(uint64_t ticks) { return double(ticks) / double(SDL_GetPerformanc
 
 TEST(simulate_async_overlaps_the_caller) {
     App app;
-    app.setConfig(testConfig());
+    testConfig(app);
     app.addResource<BoundRes>();
     app.addResource<Seq>();
     app.addResource<SlowRes>();
@@ -115,7 +114,7 @@ TEST(simulate_async_overlaps_the_caller) {
 
 TEST(simulate_runs_on_the_caller) {
     App app;
-    app.setConfig(testConfig());
+    testConfig(app);
     app.addResource<BoundRes>();
     app.addResource<Seq>();
     app.addResource<SlowRes>();
@@ -140,7 +139,7 @@ void step(App& app, int ms) {
 
 TEST(behaviors_lifetime_oscillate_follow) {
     App app;
-    app.setConfig(testConfig());
+    testConfig(app);
     app.addPlugin<BehaviorPlugin>();
     REQUIRE(app.start());
     World& w = app.world();
@@ -188,7 +187,7 @@ TEST(behaviors_lifetime_oscillate_follow) {
 
 TEST(shape_component_draws) {
     App app;
-    app.setConfig(testConfig());
+    testConfig(app);
     app.addPlugin<RendererPlugin>();
     app.addPlugin<ShapePlugin>();
     REQUIRE(app.start());

@@ -246,11 +246,15 @@ void explosionDamage(Res<PhysicsResource> physics, Vec2 center, float radius) {
 
 ## Gravity
 
-```cpp
-// Set at construction
-PhysicsResource physics(Vec2{0.f, 9.8f});
+The world starts with `gravity` from the `[physics]` section of [drift.toml](../reference/configuration.md):
 
-// Or change at runtime -- for example, low-gravity zone
+```toml
+[physics]
+gravity = [0, 900]
+```
+
+```cpp
+// Change it at runtime, for example in a low-gravity zone
 void setGravity(ResMut<PhysicsResource> physics) {
     physics->setGravity(Vec2{0.f, 4.9f});  // half gravity
 }

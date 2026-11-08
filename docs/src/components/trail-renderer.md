@@ -195,7 +195,9 @@ void moveOrbiters(Res<Time> time, QueryMut<Transform2D, Orbiter> orbiters) {
 
 int main() {
     App app;
-    app.setConfig({.title = "Trail Renderer", .width = 800, .height = 600});
+    app.config().window.title = "Trail Renderer";
+    app.config().window.width = 800;
+    app.config().window.height = 600;
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>();

@@ -269,9 +269,9 @@ static void hud(ResMut<UIResource> ui, Res<PostEffects> fx, Res<Demo> demo, Res<
     ui->label(text.c_str(), {16.f, 12.f});
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - lighting", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
     app.addPlugin<LightingPlugin>();
     app.addResource<Demo>();

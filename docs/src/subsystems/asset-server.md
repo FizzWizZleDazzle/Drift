@@ -85,9 +85,9 @@ Handles from the asset server are shared. Destroying one through `RendererResour
 
 ## Hot Reload
 
-In development builds (`DRIFT_DEV`) on desktop, `HotReloadPlugin` checks the files of loaded assets a couple of times per second and reloads the ones that changed on disk. Textures reload in place (the handle stays the same and the size may change), and [scenes](scenes.md) update their live entities in place. Edit an image or a scene file in another program and the running game shows it.
+In development builds (`DRIFT_DEV`) on desktop, `HotReloadPlugin` checks the files of loaded assets a couple of times per second and reloads the ones that changed on disk. Textures reload in place (the handle stays the same and the size may change), and [scenes](scenes.md) update their live entities in place. Edit an image or a scene file in another program and the running game shows it. The game's [drift.toml](../reference/configuration.md#live-reload) is watched the same way.
 
-`HotReloadResource` controls it:
+`HotReloadResource` controls it, starting from the `[hot_reload]` section of drift.toml (`enabled`, `interval`):
 
 ```cpp
 auto* hr = app.getResource<HotReloadResource>();
@@ -206,7 +206,7 @@ void spawnPlayer(Res<GameAssets> ga, Commands& cmd) {
 
 int main() {
     App app;
-    app.setConfig({.title = "Asset Server Demo", .width = 1280, .height = 720});
+    app.config().window.title = "Asset Server Demo";
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameAssets>();
     app.startup<loadAllAssets>("load_assets");

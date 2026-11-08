@@ -311,7 +311,9 @@ void spawnOnClick(Res<InputResource> input, ResMut<GameState> game,
 
 int main() {
     App app;
-    app.setConfig({.title = "Physics Example", .width = 800, .height = 600});
+    app.config().window.title = "Physics Example";
+    app.config().window.width = 800;
+    app.config().window.height = 600;
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>();

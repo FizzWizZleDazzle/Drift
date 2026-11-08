@@ -214,20 +214,13 @@ Each worker thread gets its own `Commands` buffer. After a parallel batch comple
 
 ### Controlling Thread Count
 
-Set `Config::threadCount` to control parallelism:
+Set `threads` in the `[app]` section of `drift.toml` (or `app.config().app.threads` in code, or `--set app.threads=1` for one run):
 
-```cpp
-app.setConfig({
-    .threadCount = 0,   // auto: hardware_concurrency - 1, capped at 7
-});
-
-app.setConfig({
-    .threadCount = 1,   // sequential: no threading at all
-});
-
-app.setConfig({
-    .threadCount = 4,   // exactly 4 threads (3 workers + main)
-});
+```toml
+[app]
+threads = 0   # auto: hardware_concurrency - 1, capped at 7
+# threads = 1 # sequential: no threading at all
+# threads = 4 # exactly 4 threads (3 workers + main)
 ```
 
 ## Complete Example
@@ -285,7 +278,7 @@ void moveSystem(Res<Time> time, QueryMut<Transform2D, Velocity> movers) {
 
 int main() {
     App app;
-    app.setConfig({.title = "Systems Demo"});
+    app.config().window.title = "Systems Demo";
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
 

@@ -171,11 +171,12 @@ void update(Res<InputResource> input, Res<Time> time,
     });
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - Fireball Particles",
-                   .width = static_cast<int32_t>(W),
-                   .height = static_cast<int32_t>(H)});
+    app.args(argc, argv);   // window and project settings: drift.toml
+    // The game is laid out for this size, so code sets it over drift.toml.
+    app.config().window.width = static_cast<int32_t>(W);
+    app.config().window.height = static_cast<int32_t>(H);
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>();

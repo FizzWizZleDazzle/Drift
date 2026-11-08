@@ -86,7 +86,13 @@ cmd.spawn().insert(Transform2D{{0.f, 200.f}}, RigidBody2D{.type = BodyType::Stat
 
 ## LightingSettings
 
-A resource that holds the scene-wide options. Change it from any system.
+A resource that holds the scene-wide options. It starts from the `[lighting]` section of [drift.toml](../reference/configuration.md) (keys `enabled`, `ambient`, `layer_mask`, `resolution_scale`), and any system can change it.
+
+```toml
+[lighting]
+ambient = [0.15, 0.15, 0.25]
+resolution_scale = 0.5
+```
 
 ```cpp
 void nightfall(ResMut<LightingSettings> lighting, Res<Time> time) {

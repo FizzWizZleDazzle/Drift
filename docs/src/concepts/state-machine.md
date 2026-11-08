@@ -274,7 +274,9 @@ void gameOverUpdate(Res<InputResource> input, ResMut<NextState<GamePhase>> next)
 // --- Main ---
 int main() {
     App app;
-    app.setConfig({.title = "State Machine Example", .width = 800, .height = 600});
+    app.config().window.title = "State Machine Example";
+    app.config().window.width = 800;
+    app.config().window.height = 600;
     app.addPlugins<DefaultPlugins>();
     app.addResource<GameData>();
 

@@ -17,7 +17,7 @@ void helloSystem(Res<Time> time) {
 
 int main() {
     App app;
-    app.setConfig({.title = "Hello Drift", .width = 1280, .height = 720});
+    app.config().window.title = "Hello Drift";
     app.addPlugins<DefaultPlugins>();
     app.update<helloSystem>();
     return app.run();
@@ -49,20 +49,21 @@ Let's break this down line by line.
 ### Configuration
 
 ```cpp
-app.setConfig({.title = "Hello Drift", .width = 1280, .height = 720});
+app.config().window.title = "Hello Drift";
 ```
 
-`setConfig` accepts a `Config` struct using C++20 designated initializers. The full set of fields:
+`app.config()` holds the engine's settings: the window, the graphics backend and the scheduler. The usual place for them is a `drift.toml` file next to the game, which the engine reads at startup:
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `title` | `std::string` | `"Drift"` | Window title |
-| `width` | `int32_t` | `1280` | Window width in pixels |
-| `height` | `int32_t` | `720` | Window height in pixels |
-| `fullscreen` | `bool` | `false` | Start in fullscreen mode |
-| `vsync` | `bool` | `true` | Enable vertical sync |
-| `resizable` | `bool` | `true` | Allow window resizing |
-| `threadCount` | `int32_t` | `0` | Worker threads. 0 = auto, 1 = sequential |
+```toml
+[project]
+name = "Hello Drift"
+
+[window]
+width = 1280
+height = 720
+```
+
+Values set in code override the file. See [Configuration](../reference/configuration.md) for every setting.
 
 ### Plugins
 
@@ -130,7 +131,7 @@ void setup(ResMut<AssetServer> assets, Commands& cmd) {
 
 int main() {
     App app;
-    app.setConfig({.title = "Hello Sprite", .width = 1280, .height = 720});
+    app.config().window.title = "Hello Sprite";
     app.addPlugins<DefaultPlugins>();
     app.startup<setup>();
     return app.run();
@@ -206,7 +207,7 @@ void movePlayer(Res<InputResource> input, Res<Time> time,
 
 int main() {
     App app;
-    app.setConfig({.title = "Hello Movement", .width = 1280, .height = 720});
+    app.config().window.title = "Hello Movement";
     app.addPlugins<DefaultPlugins>();
     app.startup<setup>();
     app.update<movePlayer>();
@@ -291,7 +292,7 @@ void movePlayer(Res<InputResource> input, Res<Time> time,
 
 int main() {
     App app;
-    app.setConfig({.title = "Hello Drift", .width = 1280, .height = 720});
+    app.config().window.title = "Hello Drift";
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>();

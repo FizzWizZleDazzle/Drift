@@ -269,9 +269,9 @@ static void drawHud(ResMut<RendererResource> r, ResMut<FontResource> fonts, Res<
     r->setLayer(0);
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - render showcase", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
     app.addResource<Showcase>();
     app.startup<setup>();

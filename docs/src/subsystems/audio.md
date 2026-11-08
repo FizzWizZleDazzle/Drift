@@ -113,6 +113,15 @@ When all voices are busy, a new sound replaces the lowest priority voice, oldest
 
 Every sound plays on a bus. Buses form a tree: `music` and `sfx` sit under `master`, and buses you create go under `master` unless you give a parent. A bus's volume, mute and pause apply to everything below it.
 
+The built-in buses start at the volumes in the `[audio]` section of [drift.toml](../reference/configuration.md), from 0 to 1:
+
+```toml
+[audio]
+master_volume = 0.8
+music_volume = 0.5
+sfx_volume = 1.0
+```
+
 ```cpp
 BusHandle masterBus() const;
 BusHandle musicBus() const;

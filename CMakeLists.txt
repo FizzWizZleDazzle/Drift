@@ -90,7 +90,15 @@ FetchContent_Declare(
 )
 set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(SDL3 flecs box2d json)
+# toml++ - header-only, reads drift.toml
+FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+    GIT_SHALLOW    TRUE
+)
+
+FetchContent_MakeAvailable(SDL3 flecs box2d json tomlplusplus)
 
 # stb - header-only, just need the path
 FetchContent_GetProperties(stb)
@@ -135,6 +143,7 @@ set(DRIFT_SOURCES
     # Core
     src/core/App.cpp
     src/core/Log.cpp
+    src/core/Settings.cpp
 
     # ECS
     src/ecs/World.cpp
@@ -318,6 +327,7 @@ target_link_libraries(drift PUBLIC
     nlohmann_json::nlohmann_json
     ${DRIFT_GFX_BACKEND_LIBS}
 )
+target_link_libraries(drift PRIVATE tomlplusplus::tomlplusplus)
 
 if(DRIFT_DEV)
     target_compile_definitions(drift PUBLIC DRIFT_DEV=1)
@@ -342,15 +352,15 @@ endif()
 if(DRIFT_BUILD_EXAMPLES)
     add_executable(hello_sprites examples/hello_sprites/main.cpp)
     target_link_libraries(hello_sprites PRIVATE drift)
-    drift_web_app(hello_sprites ASSETS examples/hello_sprites/assets)
+    drift_web_app(hello_sprites PROJECT examples/hello_sprites)
 
     add_executable(fireball examples/fireball/main.cpp)
     target_link_libraries(fireball PRIVATE drift)
-    drift_web_app(fireball)
+    drift_web_app(fireball PROJECT examples/fireball)
 
     add_executable(flappy_bird examples/flappy_bird/main.cpp)
     target_link_libraries(flappy_bird PRIVATE drift)
-    drift_web_app(flappy_bird ASSETS examples/flappy_bird/assets)
+    drift_web_app(flappy_bird PROJECT examples/flappy_bird)
     option(DRIFT_FLAPPY_IMGUI_UI "Use ImGui for Flappy Bird UI instead of sprite overlays" OFF)
     if(DRIFT_FLAPPY_IMGUI_UI)
         target_compile_definitions(flappy_bird PRIVATE FLAPPY_IMGUI_UI)
@@ -358,11 +368,11 @@ if(DRIFT_BUILD_EXAMPLES)
 
     add_executable(asteroid_field examples/asteroid_field/main.cpp)
     target_link_libraries(asteroid_field PRIVATE drift)
-    drift_web_app(asteroid_field)
+    drift_web_app(asteroid_field PROJECT examples/asteroid_field)
 
     add_executable(particle_storm examples/particle_storm/main.cpp)
     target_link_libraries(particle_storm PRIVATE drift)
-    drift_web_app(particle_storm)
+    drift_web_app(particle_storm PROJECT examples/particle_storm)
 
     add_executable(render_showcase examples/render_showcase/main.cpp)
     target_link_libraries(render_showcase PRIVATE drift)
@@ -372,35 +382,35 @@ if(DRIFT_BUILD_EXAMPLES)
         drift_add_shaders(render_showcase
             OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders/render_showcase
             SHADERS examples/render_showcase/shaders/wobble.wgsl)
-        drift_web_app(render_showcase ASSETS examples/render_showcase/assets
+        drift_web_app(render_showcase PROJECT examples/render_showcase
             PRELOAD ${CMAKE_CURRENT_BINARY_DIR}/shaders/render_showcase@/shaders/render_showcase)
     else()
-        drift_web_app(render_showcase ASSETS examples/render_showcase/assets)
+        drift_web_app(render_showcase PROJECT examples/render_showcase)
     endif()
 
     add_executable(audio examples/audio/main.cpp)
     target_link_libraries(audio PRIVATE drift)
-    drift_web_app(audio)
+    drift_web_app(audio PROJECT examples/audio)
 
     add_executable(lighting examples/lighting/main.cpp)
     target_link_libraries(lighting PRIVATE drift)
-    drift_web_app(lighting)
+    drift_web_app(lighting PROJECT examples/lighting)
 
     add_executable(text examples/text/main.cpp)
     target_link_libraries(text PRIVATE drift)
-    drift_web_app(text ASSETS examples/text/assets)
+    drift_web_app(text PROJECT examples/text)
 
     add_executable(toolkit examples/toolkit/main.cpp)
     target_link_libraries(toolkit PRIVATE drift)
-    drift_web_app(toolkit)
+    drift_web_app(toolkit PROJECT examples/toolkit)
 
     add_executable(scene_editor examples/scene_editor/main.cpp)
     target_link_libraries(scene_editor PRIVATE drift)
-    drift_web_app(scene_editor ASSETS examples/scene_editor/assets)
+    drift_web_app(scene_editor PROJECT examples/scene_editor)
 
     add_executable(tilemap examples/tilemap/main.cpp)
     target_link_libraries(tilemap PRIVATE drift)
-    drift_web_app(tilemap ASSETS examples/tilemap/assets)
+    drift_web_app(tilemap PROJECT examples/tilemap)
 endif()
 
 # ---------- Tests ----------
@@ -413,7 +423,7 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
         DRIFT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     add_test(NAME audio COMMAND drift_audio_tests)
 
-    add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp)
+    add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp tests/test_settings.cpp)
     target_link_libraries(drift_tests PRIVATE drift)
     add_test(NAME drift_tests COMMAND drift_tests)
 

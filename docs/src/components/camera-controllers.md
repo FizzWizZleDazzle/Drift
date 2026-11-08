@@ -258,7 +258,7 @@ void shakeOnSpace(Res<InputResource> input,
 
 int main() {
     App app;
-    app.setConfig({.title = "Camera Controllers", .width = 1280, .height = 720});
+    app.config().window.title = "Camera Controllers";
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>();

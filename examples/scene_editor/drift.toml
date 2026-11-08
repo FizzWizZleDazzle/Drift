@@ -1,0 +1,8 @@
+[project]
+name = "Scene Editor"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - Scene Editor"
+width = 1280
+height = 720

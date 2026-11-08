@@ -211,9 +211,9 @@ static void drawWorld(ResMut<RendererResource> r) {
     }
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - text", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
     app.addResource<Demo>();
     app.startup<setup>();

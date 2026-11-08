@@ -1,0 +1,9 @@
+[project]
+name = "Asteroid Field"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - Asteroid Field (Stress Test)"
+
+[render]
+vsync = false

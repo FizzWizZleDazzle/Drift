@@ -238,7 +238,7 @@ void drawOverlay(ResMut<RendererResource> r, Res<TilemapResource> maps, Res<Game
 
 int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "Drift - Tilemap", .width = 1280, .height = 720});
+    app.args(argc, argv);   // window and project settings: drift.toml
     app.addPlugins<DefaultPlugins>();
     app.initResource<Game>();
     if (argc > 1) app.getResource<Game>()->showColliders = std::atoi(argv[1]) != 0;

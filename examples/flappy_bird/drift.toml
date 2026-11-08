@@ -1,0 +1,7 @@
+[project]
+name = "Flappy Bird"
+organization = "Drift Examples"
+
+[window]
+title = "Flappy Bird - Drift Engine"
+resizable = false

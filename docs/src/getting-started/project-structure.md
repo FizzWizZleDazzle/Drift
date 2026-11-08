@@ -251,6 +251,7 @@ When building your own game with Drift, a clean starting structure looks like th
 ```
 my_game/
   CMakeLists.txt
+  drift.toml
   main.cpp
   assets/
     sprites/
@@ -260,6 +261,20 @@ my_game/
       jump.wav
     fonts/
       main.ttf
+```
+
+### `drift.toml`
+
+The game's settings: its name, the window, and anything the engine, its plugins or your own code read. See [Configuration](../reference/configuration.md).
+
+```toml
+[project]
+name = "My Game"
+organization = "My Studio"
+
+[window]
+width = 1280
+height = 720
 ```
 
 ### `CMakeLists.txt`
@@ -283,6 +298,7 @@ FetchContent_MakeAvailable(drift)
 
 add_executable(my_game main.cpp)
 target_link_libraries(my_game PRIVATE drift)
+drift_web_app(my_game)   # the same game in the browser, with drift.toml and assets/
 ```
 
 Setting `DRIFT_BUILD_EXAMPLES OFF` avoids building the example binaries in your project.
@@ -325,9 +341,9 @@ void update(Res<InputResource> input, Res<Time> time,
     });
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "My Game", .width = 1280, .height = 720});
+    app.args(argc, argv);   // drift.toml holds the window settings
     app.addPlugins<DefaultPlugins>();
     app.startup<setup>();
     app.update<update>();
@@ -355,6 +371,7 @@ As your project grows, consider splitting systems into separate files:
 ```
 my_game/
   CMakeLists.txt
+  drift.toml
   src/
     main.cpp
     systems/
@@ -377,9 +394,9 @@ Each system file defines one or more free functions with typed parameters. Regis
 #include "systems/enemies.hpp"
 #include "systems/ui.hpp"
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "My Game", .width = 1280, .height = 720});
+    app.args(argc, argv);   // drift.toml holds the window settings
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setupGame>();

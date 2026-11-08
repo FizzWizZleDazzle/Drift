@@ -128,7 +128,7 @@ candela runs a script on one thread, so `world.par_each<T>(f)` and `par_each2` c
 
 Components of yours stay on the candela side: the engine cannot see them, and scene files do not save them. Entities a scene spawns come back with their `Transform`, `Velocity`, `Sprite`, `Rectangle` or `Circle`, `Text`, `Camera`, `RigidBody`, colliders, lights, `Lifetime` and `Name`; other engine components on them stay engine-side. Tiled object spawners and C++ systems are not reachable from candela.
 
-One app runs at a time, and its `Config` (including `lighting` and `pipelined`) is fixed when it starts.
+One app runs at a time, and its `Config` (including `lighting` and `pipelined`) is fixed when it starts. The engine reads [drift.toml](../reference/configuration.md) from the working directory, but the script's `Config` sets the window, scale mode, backend, vsync and thread count over it; the other sections, such as `[physics]`, `[audio]` and `[lighting]`, apply.
 
 ## Next
 

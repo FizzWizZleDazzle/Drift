@@ -173,7 +173,7 @@ renderer->draw({.texture = minimap, .position = {1000, 16}, .layer = ScreenLayer
 
 ## Resolution and Scale Modes
 
-The game draws in a logical resolution (`Config::width` / `height`). The scale mode decides how that resolution maps onto the window:
+The game draws in a logical resolution (`width` and `height` in the `[window]` section of [drift.toml](../reference/configuration.md)). The scale mode decides how that resolution maps onto the window:
 
 | `ScaleMode` | Result |
 |-------------|--------|
@@ -182,14 +182,22 @@ The game draws in a logical resolution (`Config::width` / `height`). The scale m
 | `Integer` | Pixel perfect: renders at exactly the logical size and scales by whole numbers. |
 | `Expand` | Keeps pixels square and grows the logical size to fill the window, so wider screens see more of the world. |
 
+```toml
+[window]
+width = 320
+height = 180
+scale_mode = "integer"
+```
+
 ```cpp
-app.setConfig({.width = 320, .height = 180, .scaleMode = ScaleMode::Integer});
 renderer->setScaleMode(ScaleMode::Letterbox);   // change at runtime
 ```
 
 `logicalWidth()` and `logicalHeight()` report the size in effect this frame. Mouse positions from `InputResource` are already in logical coordinates, bars included. `windowToLogical` performs the same conversion for your own window coordinates.
 
 ## Clear Color
+
+Every frame starts from `clear_color` in the `[render]` section of drift.toml, black by default. Change it while running with:
 
 ```cpp
 renderer->setClearColor(ColorF{0.1f, 0.1f, 0.15f, 1.0f});
@@ -215,15 +223,18 @@ Drift has two renderer backends. Games draw the same way on both, and the output
 
 OpenGL is the default and runs everywhere. Build with WebGPU when you want the modern native graphics APIs on desktop, or WebGPU in browsers that support it.
 
-When a build includes more than one backend, choose with `Config::renderer` or the `DRIFT_RENDERER` environment variable; an empty choice picks OpenGL. If the requested backend cannot start (no WebGPU adapter, a browser without WebGPU), Drift logs why and falls back to the next one, so a WebGPU build still runs on machines and browsers that only have OpenGL or WebGL2.
+When a build includes more than one backend, choose with `backend` in the `[render]` section of drift.toml, or for one run with the `DRIFT_RENDER_BACKEND` environment variable or `--set render.backend=webgpu`; an empty choice picks OpenGL. If the requested backend cannot start (no WebGPU adapter, a browser without WebGPU), Drift logs why and falls back to the next one, so a WebGPU build still runs on machines and browsers that only have OpenGL or WebGL2.
 
-```cpp
-app.setConfig({.title = "My Game", .renderer = "webgpu"});
+```toml
+[render]
+backend = "webgpu"
 ```
 
 ```bash
-DRIFT_RENDERER=webgpu ./build/render_showcase
+DRIFT_RENDER_BACKEND=webgpu ./build/render_showcase
 ```
+
+`DRIFT_RENDER_BACKEND` replaces the `DRIFT_RENDERER` variable of earlier versions.
 
 The WebGPU backend runs WGSL shaders only; see [Shaders and Effects](shaders-and-effects.md) for how to write shaders that work on both backends.
 

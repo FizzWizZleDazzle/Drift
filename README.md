@@ -42,16 +42,27 @@ void setup(ResMut<AssetServer> assets, Commands& cmd) {
     cmd.spawn().insert(Transform2D{}, Sprite{.texture = tex});
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.setConfig({.title = "My Game", .width = 1280, .height = 720});
+    app.args(argc, argv);   // settings come from drift.toml beside the game
     app.addPlugins<DefaultPlugins>();
     app.startup<setup>();
     return app.run();
 }
 ```
 
-To use Drift from your own project, pull it in with `FetchContent` and link `drift`; call `drift_web_app(my_game ASSETS assets)` to make the same target build for the web. See [Installation](docs/src/getting-started/installation.md).
+with a `drift.toml` next to it:
+
+```toml
+[project]
+name = "My Game"
+
+[window]
+width = 1280
+height = 720
+```
+
+To use Drift from your own project, pull it in with `FetchContent` and link `drift`; call `drift_web_app(my_game)` to make the same target build for the web. See [Installation](docs/src/getting-started/installation.md).
 
 ## What You Get
 
@@ -64,6 +75,7 @@ To use Drift from your own project, pull it in with `FetchContent` and link `dri
 - **Sprites and particles**: spritesheet and Aseprite animation, configurable particle emitters, trails.
 - **Gameplay toolkit**: tweens, timers, behavior components (lifetime, oscillation, follow), rebindable input actions for keyboard, mouse and gamepad, save data, A* pathfinding, spatial queries, Y-sorting, random numbers and noise.
 - **Candela scripting**: write a game as a [candela](https://candela.lumenfx.dev) program instead of C++: entities, components and systems in the style of Bevy, with the engine simulating each frame beside the script (desktop only).
+- **One settings file**: `drift.toml` holds the window, graphics backend, physics, audio, lighting and sections of your own game. Environment variables and `--set` flags override it for one run, and dev builds apply edits while the game runs.
 - **Scenes and dev tools**: JSON scenes and prefabs through component reflection, hot reload, and an in-game inspector, performance panel and physics debug view.
 
 ## Examples

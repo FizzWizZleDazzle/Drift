@@ -223,7 +223,7 @@ void update(Res<InputResource> input, Res<Time> time,
 
 int main() {
     App app;
-    app.setConfig({.title = "Camera Example", .width = 1280, .height = 720});
+    app.config().window.title = "Camera Example";
     app.addPlugins<DefaultPlugins>();
     app.initResource<GameState>();
     app.startup<setup>();
