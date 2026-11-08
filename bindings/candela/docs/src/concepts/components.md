@@ -30,10 +30,10 @@ Entities are made with a bundle: a list of components, through [Commands](comman
 
 ```rust
 @drift::system(schedule: drift::Schedule::Startup)
-fn spawn_enemy(cmd: drift::Commands) {
+fn spawn_enemy(cmd: drift::Commands, assets: drift::Assets) {
     cmd.spawn([
         at(400.0, 120.0),
-        Sprite { image: "assets/slime.png", .. },
+        Sprite { image: assets.texture("assets/slime.png"), .. },
         Health { hp: 30, max: 30 },
         Enemy {},
     ]);

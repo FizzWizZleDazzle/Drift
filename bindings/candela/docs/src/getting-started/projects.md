@@ -75,7 +75,7 @@ The `drift` module comes with `drift` itself; there is nothing to install. Other
 
 ## Assets
 
-Paths in scripts are relative to the project folder: `Sprite { image: "assets/ship.png", .. }`. Keep assets under the folder `[project] assets` names, `assets` by default; that is the folder shipped with the game.
+Paths in scripts are relative to the project folder: `assets.texture("assets/ship.png")`. Keep assets under the folder `[project] assets` names, `assets` by default; that is the folder shipped with the game.
 
 ## Commands
 

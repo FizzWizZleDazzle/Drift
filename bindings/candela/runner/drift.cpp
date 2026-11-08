@@ -208,10 +208,7 @@ const std::vector<Codec>& codecs() {
          [](EntityId e) {
              const Sprite& s = *get<Sprite>(e);
              Vec2 size = s.srcRect.w > 0 ? Vec2{s.srcRect.w, s.srcRect.h} : textureSize(s.texture);
-             auto* assets = res<AssetServer>();
-             const char* path = assets ? assets->pathOf(s.texture) : nullptr;
-             return json{{"image", path ? path : ""},
-                         {"texture", {{"id", s.texture.id}}},
+             return json{{"image", {{"id", s.texture.id}}},
                          {"frame", rectJ(s.srcRect)},
                          {"anchor", vec(Vec2{size.x > 0 ? s.origin.x / size.x : 0.5f, size.y > 0 ? s.origin.y / size.y : 0.5f})},
                          {"color", color(s.tint)},
@@ -225,12 +222,7 @@ const std::vector<Codec>& codecs() {
          [](EntityId e, const json& j) {
              Sprite s;
              if (const Sprite* cur = get<Sprite>(e)) s.material = cur->material;
-             uint32_t id = j.value("texture", json::object()).value("id", 0u);
-             s.texture = TextureHandle{id};
-             std::string image = j.value("image", "");
-             if (!s.texture.valid() && !image.empty()) {
-                 if (auto* assets = res<AssetServer>()) s.texture = assets->loadTexture(image.c_str());
-             }
+             s.texture = TextureHandle{j.value("image", json::object()).value("id", 0u)};
              s.srcRect = rectJ(j.value("frame", json()));
              Vec2 size = s.srcRect.w > 0 ? Vec2{s.srcRect.w, s.srcRect.h} : textureSize(s.texture);
              Vec2 anchor = vec(j.value("anchor", json()), {0.5f, 0.5f});

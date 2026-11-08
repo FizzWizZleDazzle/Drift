@@ -77,7 +77,7 @@ fn spawn_objects(cmd: Commands, level: Level, art: Art) {   // Art holds the tex
         }
         cmd.spawn([
             Transform { position: o.anchor, .. },
-            Sprite { texture: art.coin, .. },
+            Sprite { image: art.coin, .. },
             CircleCollider { radius: 8.0, sensor: true, .. },
             Coin { value: value },
         ]);

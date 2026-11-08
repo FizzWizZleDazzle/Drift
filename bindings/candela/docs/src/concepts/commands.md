@@ -4,7 +4,7 @@
 
 ```rust
 @drift::system
-fn fire(input: drift::Input, guns: (Gun, Transform)[], cmd: drift::Commands) {
+fn fire(input: drift::Input, guns: (Gun, Transform)[], cmd: drift::Commands, assets: drift::Assets) {
     if !input.action_pressed("fire") {
         return;
     }
@@ -12,7 +12,7 @@ fn fire(input: drift::Input, guns: (Gun, Transform)[], cmd: drift::Commands) {
         let (_, t) = row;
         cmd.spawn([
             Transform { position: t.position, rotation: t.rotation, .. },
-            Sprite { image: "assets/bullet.png", .. },
+            Sprite { image: assets.texture("assets/bullet.png"), .. },
             Velocity { linear: vec2(600.0, 0.0).rotated(t.rotation), .. },
             Lifetime { seconds: 2.0 },
             Bullet {},

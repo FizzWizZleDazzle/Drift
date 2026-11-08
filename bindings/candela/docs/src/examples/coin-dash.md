@@ -167,7 +167,7 @@ fn spawn_hazards(cmd: Commands, time: Time, game: Game, art: Art, tuning: Tuning
     let angle = random::float_range(0.0, 6.28);
     cmd.spawn([
         Transform { position: pos, .. },
-        Sprite { texture: art.ball, .. },
+        Sprite { image: art.ball, .. },
         RigidBody { .. },
         CircleCollider { radius: 16.0, restitution: 1.0, friction: 0.0, .. },
         Velocity { linear: vec2(math::cos(angle), math::sin(angle)).mul(tuning.hazard_speed), .. },
@@ -264,7 +264,7 @@ fn show_score(game: Game, scores: (ScoreLabel, Text)[], hints: (HintLabel, Text)
 fn spawn_coin(cmd: Commands, art: Art) {
     cmd.spawn([
         at(random::float_range(80.0, 880.0), random::float_range(90.0, 460.0)),
-        Sprite { texture: art.coin, .. },
+        Sprite { image: art.coin, .. },
         CircleCollider { radius: 12.0, sensor: true, .. },
         tween().scale_to(vec2(1.25, 1.25), 0.5, Ease::InOutSine).yoyo(-1),
         Coin { .. },

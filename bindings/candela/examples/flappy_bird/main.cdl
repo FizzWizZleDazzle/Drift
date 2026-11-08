@@ -83,14 +83,14 @@ fn setup(cmd: Commands, assets: drift::Assets, input: Input, tuning: Tuning, gam
     };
     cmd.insert_resource(art);
 
-    cmd.spawn([at(144.0, 256.0), Sprite { image: "assets/background.png", z: -10.0, .. }]);
+    cmd.spawn([at(144.0, 256.0), Sprite { image: assets.texture("assets/background.png"), z: -10.0, .. }]);
     // Two ground strips side by side; scroll_ground moves them.
-    cmd.spawn([at(168.0, 456.0), Sprite { image: "assets/base.png", z: 5.0, .. }, Ground {}]);
-    cmd.spawn([at(504.0, 456.0), Sprite { image: "assets/base.png", z: 5.0, .. }, Ground {}]);
+    cmd.spawn([at(168.0, 456.0), Sprite { image: assets.texture("assets/base.png"), z: 5.0, .. }, Ground {}]);
+    cmd.spawn([at(504.0, 456.0), Sprite { image: assets.texture("assets/base.png"), z: 5.0, .. }, Ground {}]);
 
     cmd.spawn([
         at(80.0, 240.0),
-        Sprite { texture: art.bird[1], z: 3.0, .. },
+        Sprite { image: art.bird[1], z: 3.0, .. },
         RigidBody { kind: BodyKind::Dynamic, fixed_rotation: true, gravity_scale: 0.0, .. },
         BoxCollider { half_size: vec2(12.0, 9.0), sensor: true, .. },
         Velocity { .. },
@@ -102,8 +102,8 @@ fn setup(cmd: Commands, assets: drift::Assets, input: Input, tuning: Tuning, gam
         Text { size: 40.0, align: Align::Center, outline: 3.0, layer: hud_layer(), .. },
         ScoreLabel {},
     ]);
-    cmd.spawn([at(144.0, 230.0), Sprite { image: "assets/message.png", z: 10.0, .. }, Banner { shown_when: Phase::Ready }]);
-    cmd.spawn([at(144.0, 200.0), Sprite { image: "assets/gameover.png", z: 10.0, visible: false, .. },
+    cmd.spawn([at(144.0, 230.0), Sprite { image: assets.texture("assets/message.png"), z: 10.0, .. }, Banner { shown_when: Phase::Ready }]);
+    cmd.spawn([at(144.0, 200.0), Sprite { image: assets.texture("assets/gameover.png"), z: 10.0, visible: false, .. },
                Banner { shown_when: Phase::Over }]);
 }
 
@@ -188,7 +188,7 @@ fn animate_bird(time: Time, game: Game, art: Art, birds: (Bird, Sprite)[]) {
         let (bird, sprite) = row;
         bird.frame_time += time.dt;
         let frame = int(bird.frame_time * 10.0) % 3;
-        sprite.texture = art.bird[frame];
+        sprite.image = art.bird[frame];
     }
 }
 
@@ -209,7 +209,7 @@ fn spawn_pipes(time: Time, tuning: Tuning, game: Game, art: Art, cmd: Commands) 
 fn pipe(cmd: Commands, art: Art, pos: drift::Vec2, flipped: bool, speed: float, seconds: float) {
     cmd.spawn([
         Transform { position: pos, .. },
-        Sprite { texture: art.pipe, flip_y: flipped, z: 1.0, .. },
+        Sprite { image: art.pipe, flip_y: flipped, z: 1.0, .. },
         RigidBody { kind: BodyKind::Kinematic, .. },
         BoxCollider { half_size: vec2(26.0, 160.0), .. },
         Velocity { linear: vec2(-speed, 0.0), .. },

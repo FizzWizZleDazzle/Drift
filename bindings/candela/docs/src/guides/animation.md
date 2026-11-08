@@ -7,8 +7,8 @@ Motion that follows a rule belongs in a component, not a system: the engine runs
 `Velocity` moves an entity every frame: `linear` in pixels per second and `angular` in radians per second. A spinning coin or a drifting cloud needs no system at all:
 
 ```rust
-cmd.spawn([at(100.0, 80.0), Sprite { image: "assets/cloud.png", .. }, Velocity { linear: vec2(12.0, 0.0), .. }]);
-cmd.spawn([at(300.0, 200.0), Sprite { image: "assets/gem.png", .. }, Velocity { angular: 2.0, .. }]);
+cmd.spawn([at(100.0, 80.0), Sprite { image: assets.texture("assets/cloud.png"), .. }, Velocity { linear: vec2(12.0, 0.0), .. }]);
+cmd.spawn([at(300.0, 200.0), Sprite { image: assets.texture("assets/gem.png"), .. }, Velocity { angular: 2.0, .. }]);
 ```
 
 On an entity with a dynamic `RigidBody`, `Velocity` is the body's velocity; see [Physics](physics.md).
@@ -23,7 +23,7 @@ fn spawn_hero(cmd: Commands, assets: drift::Assets) {
     let sheet = assets.aseprite("assets/hero.aseprite");
     cmd.spawn([
         at(200.0, 200.0),
-        Sprite { texture: sheet.texture, .. },
+        Sprite { image: sheet.texture, .. },
         Animator { clips: [
             AnimationClip { frames: sheet.tag("idle"), frame_seconds: 0.15, looping: true },
             AnimationClip { frames: sheet.tag("run"), frame_seconds: 0.08, looping: true },
@@ -67,7 +67,7 @@ A `Tween` animates an entity from where it is now to a target, over time, along 
 // Pop, then fade out and vanish.
 cmd.spawn([
     at(x, y),
-    Sprite { image: "assets/star.png", .. },
+    Sprite { image: assets.texture("assets/star.png"), .. },
     tween().scale_to(vec2(1.4, 1.4), 0.1, Ease::OutQuad)
            .scale_to(vec2(1.0, 1.0), 0.3, Ease::OutBack)
            .delay(0.5)
@@ -101,7 +101,7 @@ Three components cover common motion:
 
 ```rust
 // A drone that trails the player and hovers as it goes.
-cmd.spawn([at(0.0, 0.0), Sprite { image: "assets/drone.png", .. },
+cmd.spawn([at(0.0, 0.0), Sprite { image: assets.texture("assets/drone.png"), .. },
            Follow { target: player, speed: 120.0, distance: 40.0, .. },
            Oscillate { amplitude: vec2(0.0, 3.0), frequency: 2.0, .. }]);
 ```
