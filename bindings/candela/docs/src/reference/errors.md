@@ -6,11 +6,12 @@ The candela compiler checks the game before it runs: types, attributes and their
 
 | Error | Meaning |
 |-------|---------|
-| `drift_unknown_parameter` | A system parameter's type is not a query row, tuple list, lookup, resource, message list, contact list, `Commands` or engine resource |
-| `drift_not_a_component` | A query row, tuple or lookup names a struct that is not a `@drift::component` or engine component |
-| `drift_write_not_read` | `writes:` names a type the system has no parameter for |
+| `drift_unknown_parameter` | A system parameter's type is not a component, query row, tuple list, lookup, resource, state, message, contact, `Commands` or engine resource |
+| `drift_unknown_condition` | `run_if:` names a function Drift cannot call |
+| `drift_condition_parameter` | A condition takes something other than resources, engine resources and queries |
+| `drift_not_a_component` | A query row, tuple or lookup names a struct that is not a `@component` or engine component |
 | `drift_order_cycle` | `after:` and `before:` make a loop; the message lists it |
-| `drift_settings_without_defaults` | A `@drift::settings` struct has a field without a default |
+| `drift_settings_without_defaults` | A `@settings` struct has a field without a default |
 
 ## Errors while running
 

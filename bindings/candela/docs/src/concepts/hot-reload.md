@@ -19,7 +19,7 @@ If the change does not compile, the error is printed and the game keeps running 
 
 ## Settings
 
-Saving `drift.toml` applies the keys whose value changed, to the engine's sections and to your `@drift::settings` structs. A few engine keys, such as the window size and the graphics backend, take effect on restart; the log says so.
+Saving `drift.toml` applies the keys whose value changed, to the engine's sections and to your `@settings` structs. A few engine keys, such as the window size and the graphics backend, take effect on restart; the log says so.
 
 ## Assets
 

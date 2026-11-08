@@ -7,10 +7,10 @@ Timers count down game time for spawn waves, cooldowns and delays; save data kee
 A `Timer` is a plain value. Keep it in a resource or a component, and tick it from a system with the frame time:
 
 ```rust
-@drift::resource
+@resource
 struct Waves { timer: Timer = repeating_timer(1.5) }
 
-@drift::system(writes: [Waves])
+@system
 fn spawn_enemies(cmd: Commands, time: Time, waves: Waves) {
     for i in range(waves.timer.tick(time.dt)) {
         cmd.spawn([at(640.0, 0.0), Enemy { .. }]);
@@ -29,20 +29,19 @@ fn spawn_enemies(cmd: Commands, time: Time, waves: Waves) {
 | `reset()` | Start the period again |
 | `paused` | A paused timer does not advance |
 
-Ticking a timer changes it, so the system names the resource or component that holds it in `writes:`.
+Ticking a timer changes it, and Drift keeps the change like any other.
 
 ### Timers on entities
 
 To give every enemy its own fire rate, put the timer in a component:
 
 ```rust
-@drift::component
+@component
 struct Gun { reload: Timer = repeating_timer(0.8) }
 
-@drift::system(writes: [Gun])
+@system
 fn fire(guns: (Gun, Transform)[], time: Time, cmd: Commands) {
-    for row in guns {
-        let (gun, t) = row;
+    for (gun, t) in guns {
         if gun.reload.tick(time.dt) > 0 {
             cmd.spawn([Transform { position: t.position, .. }, Velocity { linear: vec2(0.0, 300.0), .. },
                        Lifetime { seconds: 2.0 }, Bullet {}]);
@@ -58,17 +57,14 @@ For something that only needs to happen once after a delay, such as removing an 
 A `Cooldown` gates an action: it is ready, you use it, and it is not ready again until its time has passed.
 
 ```rust
-@drift::component
+@component
 struct Dash { cooldown: Cooldown = cooldown(0.8) }
 
-@drift::system(writes: [Dash, Velocity])
-fn dash(players: (Dash, Velocity)[], input: Input, time: Time) {
-    for row in players {
-        let (d, v) = row;
-        d.cooldown.tick(time.dt);
-        if input.action_pressed("dash") && d.cooldown.try_use() {
-            v.linear = v.linear.mul(3.0);
-        }
+@system
+fn dash(d: Dash, v: Velocity, input: Input, time: Time) {
+    d.cooldown.tick(time.dt);
+    if input.action_pressed("dash") && d.cooldown.try_use() {
+        v.linear = v.linear * 3.0;
     }
 }
 ```
@@ -83,7 +79,7 @@ fn dash(players: (Dash, Velocity)[], input: Input, time: Time) {
 
 ## Save data
 
-`drift::Save` is a key-value store kept as one JSON file per slot in the per-user data directory, named after `organization` and `name` in the `[project]` section of `drift.toml`:
+`Save` is a key-value store kept as one JSON file per slot in the per-user data directory, named after `organization` and `name` in the `[project]` section of `drift.toml`:
 
 | Platform | Directory |
 |----------|-----------|
@@ -92,11 +88,8 @@ fn dash(players: (Dash, Velocity)[], input: Input, time: Time) {
 | macOS | `~/Library/Application Support/<organization>/<name>/` |
 
 ```rust
-@drift::system(writes: [Game])
-fn game_over(hits: drift::Contact<Player, Hazard>[], save: drift::Save, game: Game) {
-    if hits.len() == 0 {
-        return;
-    }
+@system
+fn game_over(_: Contact<Player, Hazard>, save: Save, game: Game) {
     if game.score > save.get_int("best", 0) {
         save.set_int("best", game.score);
         save.flush();
@@ -117,4 +110,4 @@ slot.set_int("level", progress.level);
 slot.flush();
 ```
 
-Save data methods act at once, so a system that saves needs no `writes:` for it.
+Save data methods act at once.

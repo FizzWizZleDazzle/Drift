@@ -39,7 +39,10 @@ music_volume = 0.7
 [lighting]                   # its presence turns lighting on
 ambient = [0.1, 0.1, 0.15]
 
-[my_game]                    # your own section, read by a @drift::settings struct
+[input]                      # actions and their bindings
+jump = ["key:Space", "button:South"]
+
+[my_game]                    # your own section, read by a @settings struct
 lives = 3
 ```
 
@@ -53,6 +56,7 @@ lives = 3
 | `[audio]` | `master_volume`, `music_volume`, `sfx_volume` |
 | `[lighting]` | `enabled`, `ambient`, `layer_mask`, `resolution_scale` |
 | `[hot_reload]` | `enabled`, `interval` |
+| `[input]` | One key per action, a list of bindings: `key:<name>`, `mouse:Left`, `button:South` |
 
 Values apply in order: the default, then `drift.toml`, then your systems, then `DRIFT_<SECTION>_<KEY>` environment variables, then `--set section.key=value` on the command line. So `DRIFT_RENDER_BACKEND=webgpu drift run` tries the WebGPU backend for one run, and `drift run --set window.width=640` checks a smaller window.
 
@@ -64,25 +68,25 @@ A key a section does not have, or a value of the wrong type, is logged with its 
 
 ```rust
 // main.cdl
-import "drift";
+import "drift" { * };
 import "./src/player.cdl";
 import "./src/enemies.cdl";
 ```
 
-Systems, components and resources are found in every imported file, not only the entry script. A system's name is its function name, so two files may not both declare a system called `setup`.
+`import "drift" { * };` brings in every engine name and attribute. A name you declare yourself shadows the imported one, so a game can have its own `Timer` or `log`. Systems, components and resources are found in every imported file, not only the entry script. A system's name is its function name, so two files may not both declare a system called `setup`.
 
 The `drift` module comes with `drift` itself; there is nothing to install. Other candela packages import as usual.
 
 ## Assets
 
-Paths in scripts are relative to the project folder: `assets.texture("assets/ship.png")`. Keep assets under the folder `[project] assets` names, `assets` by default; that is the folder shipped with the game.
+Paths in scripts are relative to the project folder: `texture("assets/ship.png")`. Keep assets under the folder `[project] assets` names, `assets` by default; that is the folder shipped with the game.
 
 ## Commands
 
 | Command | Does |
 |---------|------|
 | `drift run` | Compiles and runs the game, reloading scripts and assets as they change |
-| `drift check` | Compiles without running and lists the systems with their reads, writes and order |
+| `drift check` | Compiles without running and lists the systems with their parameters and order |
 | `drift build` | Compiles the game into one `.cdlb` file to ship |
 | `drift new <name>` | Makes a project folder |
 

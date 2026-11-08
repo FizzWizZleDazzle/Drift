@@ -7,7 +7,7 @@ Drift simulates rigid bodies with Box2D. Give an entity a body and a collider, a
 A `RigidBody` makes an entity simulated; a collider gives it a shape. Spawn both together:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
+@system(schedule: Schedule::Startup)
 fn setup(cmd: Commands) {
     // A crate that falls and tumbles.
     cmd.spawn([
@@ -40,16 +40,15 @@ The body is created at the end of the frame its components are added, from the s
 On a dynamic body, `Velocity` is the body's velocity: read it to see how fast the body moves, and write it to set the speed directly, as a character controller does:
 
 ```rust
-@drift::system(writes: [Velocity])
+@system
 fn run(input: Input, players: (Player, Velocity)[]) {
-    for row in players {
-        let (_, v) = row;
+    for (_, v) in players {
         v.linear = vec2(input.axis("run") * 220.0, v.linear.y);
     }
 }
 ```
 
-For pushes, use `drift::Physics`: `apply_impulse(e, i)` changes velocity at once (a jump, a hit), and `apply_force(e, f)` acts over the frame (thrust, wind). Physics moves the `Transform`; writing a dynamic body's `Transform` yourself teleports it.
+For pushes, use `Physics`: `apply_impulse(e, i)` changes velocity at once (a jump, a hit), and `apply_force(e, f)` acts over the frame (thrust, wind). Physics moves the `Transform`; writing a dynamic body's `Transform` yourself teleports it.
 
 ## Gravity
 
@@ -60,24 +59,24 @@ Gravity starts from `[physics]` in `drift.toml`, in pixels per second squared. T
 gravity = [0, 900]
 ```
 
-A top-down game sets `[0, 0]`. `drift::Physics` changes it while running with `set_gravity`, and `RigidBody.gravity_scale` scales it for one body.
+A top-down game sets `[0, 0]`. `Physics` changes it while running with `set_gravity`, and `RigidBody.gravity_scale` scales it for one body.
 
 ## Collisions and sensors
 
-Collisions arrive as messages, filtered by the components on the two entities. `drift::Contact<A, B>[]` holds the collisions that started this frame between an entity with `A` and one with `B`, with `a` and `b` in that order:
+Collisions arrive as events, filtered by the components on the two entities. A system that takes one `Contact<A, B>` runs once for each collision that started this frame between an entity with `A` and one with `B`, with `a` and `b` in that order:
 
 ```rust
-@drift::system(writes: [Health])
-fn take_hits(hits: drift::Contact<Player, Spike>[], health: drift::Lookup<Health>) {
-    for hit in hits {
-        if health.get(hit.a) is Some(h) {
-            h.hp -= 1;
-        }
+@system
+fn take_hits(hit: Contact<Player, Spike>, health: Lookup<Health>) {
+    if health.get(hit.a) is Some(h) {
+        h.hp -= 1;
     }
 }
 ```
 
-A collider with `sensor: true` detects overlap without pushing anything: pickups, trigger zones, checkpoints. `drift::Overlap<A, B>[]` holds the sensor overlaps that started this frame, whichever of the two is the sensor. `ContactEnd` and `OverlapEnd` report the ends, for "standing on" and "inside the zone" logic.
+Take a list, `Contact<Player, Spike>[]`, to see the frame's collisions at once.
+
+A collider with `sensor: true` detects overlap without pushing anything: pickups, trigger zones, checkpoints. `Overlap<A, B>` is a sensor overlap that started this frame, whichever of the two is the sensor. `ContactEnd` and `OverlapEnd` report the ends, for "standing on" and "inside the zone" logic.
 
 `Contact` also carries `point` and `normal`, the first contact point and the direction from `a` to `b`.
 
@@ -94,25 +93,23 @@ The default category is 1 and the default mask is every bit.
 
 ## Queries
 
-`drift::Physics` asks the world about shapes without spawning anything:
+`Physics` asks the world about shapes without spawning anything:
 
 - `raycast(origin, direction, distance)` returns the first hit as a `RayHit` with `hit`, `entity`, `point`, `normal` and `fraction`. Sensors count as hits.
 - `overlap_point(p)` and `overlap_rect(r)` return the entities whose colliders cover a point or touch a rect.
 
 ```rust
-@drift::system
-fn line_of_sight(physics: drift::Physics, guards: (Guard, Transform)[],
+@system
+fn line_of_sight(_: Guard, eye: Transform, physics: Physics,
                  players: (Entity, Player, Transform)[]) {
-    for g in guards {
-        for p in players {
-            let to = p.2.position.sub(g.1.position);
-            let ray = physics.raycast(g.1.position, to.normalized(), to.length());
-            if ray.hit && ray.entity == p.0 {
-                log("spotted");
-            }
+    for (player, _, t) in players {
+        let to = t.position - eye.position;
+        let ray = physics.raycast(eye.position, to.normalized(), to.length());
+        if ray.hit && ray.entity == player {
+            log("spotted");
         }
     }
 }
 ```
 
-See [Engine Components](../reference/components.md#physics) and [Engine Resources](../reference/resources.md#driftphysics) for every field and method.
+See [Engine Components](../reference/components.md#physics) and [Engine Resources](../reference/resources.md#physics) for every field and method.

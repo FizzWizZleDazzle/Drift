@@ -1,8 +1,8 @@
 # Engine Resources
 
-The engine's resources reach a system as parameters, like your own. Their fields are this frame's values; their methods act on the engine at once and do not need `writes:`. The engine runs a system that takes one of these on its own, apart from engine work that uses the same resource.
+The engine's resources reach a system as parameters, like your own. Their fields are this frame's values; their methods act on the engine at once. The engine runs a system that takes one of these on its own, apart from engine work that uses the same resource.
 
-## drift::Time
+## Time
 
 | Field | Meaning |
 |-------|---------|
@@ -10,7 +10,7 @@ The engine's resources reach a system as parameters, like your own. Their fields
 | `elapsed` | Seconds since the game started |
 | `frame` | Frames so far |
 
-## drift::Input
+## Input
 
 Device state and [input actions](../guides/input.md#actions).
 
@@ -34,7 +34,7 @@ Device state and [input actions](../guides/input.md#actions).
 | `bindings_json()`, `load_bindings_json(text)` | Save and restore every binding |
 | `send_key(k, down)`, `send_mouse_move(pos)`, `send_mouse_button(pos, b, down)` | Queue input as if from the device, for tests and demo playback; it arrives next frame |
 
-## drift::Window
+## Window
 
 | Member | Meaning |
 |--------|---------|
@@ -43,17 +43,16 @@ Device state and [input actions](../guides/input.md#actions).
 | `quit()` | Ends the game after this frame |
 | `screenshot(path)` | Saves the next presented frame as a PNG |
 
-## drift::Assets
+## Assets
 
-Loading the same path again returns the same asset. A file that does not load raises `drift_load_failed`.
+Images and sounds load with the free functions `texture(path)` and `sound(path)` (see [Values](values.md)), which work anywhere, field defaults included. `Assets` makes textures and sounds from data and loads everything else. Loading the same path again returns the same asset. A file that does not load raises `drift_load_failed`.
 
 | Method | Returns |
 |--------|---------|
-| `texture(path)` | A `Texture`: PNG, JPG, BMP, TGA or GIF |
 | `create_texture(w, h, pixels: Color[])` | A `Texture` from colors, row by row from the top-left |
 | `render_target(w, h)` | A `Texture` a `Camera` can draw into |
 | `spritesheet(texture, frame_w, frame_h)`, `aseprite(path)` | A `Spritesheet`: `frame(col, row)`, `frame_at(i)`, `frames(first, count)`, `frame_count()`, `tag(name)` (the frames of an Aseprite tag), `texture` |
-| `sound(path)`, `music(path)` | A `Sound`: WAV, OGG or MP3. Music decodes while it plays |
+| `music(path)` | A `Sound` that decodes while it plays, for long tracks |
 | `create_sound(samples: float[], rate)` | A mono `Sound` from samples in -1 to 1 |
 | `font(path, size)` | A `Font`: TrueType, OpenType or BMFont. `Font {}` is the built-in font |
 | `tilemap(path)`, `ldtk_level(path, level)` | A `Map` from Tiled or LDtk |
@@ -92,7 +91,7 @@ A loaded scene or prefab file. Spawn it through `Commands`:
 
 A `SceneInstance` has `entities` and `roots` (`Entity[]`, in file order) and `find(name)`, which returns `Some(entity)` for the first with that `Name`. The entities exist for the systems that run after this one.
 
-## drift::Audio
+## Audio
 
 | Method | Does |
 |--------|------|
@@ -102,7 +101,7 @@ A `SceneInstance` has `entities` and `roots` (`Entity[]`, in file order) and `fi
 
 A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` and `stop(fade)`. A `Voice` from `Sound.play` has `stop(fade)`, `pause(fade)`, `resume(fade)`, `set_volume(v, fade)`, `set_pan(p)`, `set_pitch(p)` and `playing()`.
 
-## drift::Physics
+## Physics
 
 | Method | Does |
 |--------|------|
@@ -111,7 +110,7 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` a
 | `overlap_point(p)`, `overlap_rect(r)` | Entities whose colliders cover the point or touch the rect |
 | `apply_impulse(e, i)`, `apply_force(e, f)` | On dynamic bodies |
 
-## drift::Effects
+## Effects
 
 | Method | Does |
 |--------|------|
@@ -122,14 +121,14 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` a
 | `set_ambient(color)` | Light everywhere, when lighting is on |
 | `set_tween_speed(s)` | Multiplies time for every tween; 0 freezes them |
 
-## drift::Camera2D
+## Camera2D
 
 | Method | Returns |
 |--------|---------|
 | `screen_to_world(p)`, `world_to_screen(p)` | Through the main camera |
 | `visible()` | The world rect the main camera shows |
 
-## drift::Save
+## Save
 
 The save slot `<user data>/<organization>/<name>/save.json`, named after `[project]` in `drift.toml`. A failed read or write raises `drift_save_failed`.
 
@@ -141,7 +140,7 @@ The save slot `<user data>/<organization>/<name>/save.json`, named after `[proje
 | `flush()` | Write the slot to disk |
 | `slot(name)` | Another slot in the same directory |
 
-## drift::Draw
+## Draw
 
 Shapes for this frame only, for debugging. They go on layer 0, or on the HUD after `hud()`.
 
@@ -153,7 +152,7 @@ Shapes for this frame only, for debugging. They go on layer 0, or on the HUD aft
 | `text(s, pos, size, c)` | Built-in font, top-left at `pos` |
 | `hud()`, `world()` | Switch between screen and world coordinates for the draws that follow |
 
-## drift::Systems
+## Systems
 
 | Method | Does |
 |--------|------|

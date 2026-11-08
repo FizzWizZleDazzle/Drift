@@ -18,7 +18,7 @@ Compiles the script and the modules it imports, opens the window and runs the ga
 drift check
 ```
 
-Compiles without running: types, attributes, system parameters and `writes:`. It prints every system with what it reads, what it writes and the order it runs in. Editors and CI run it.
+Compiles without running: types, attributes and system parameters. It prints every system with its parameters, conditions, states and the order it runs in. Editors and CI run it.
 
 ## drift build
 

@@ -4,14 +4,14 @@ Build levels in [Tiled](https://www.mapeditor.org/) or [LDtk](https://ldtk.io/) 
 
 ## Loading and showing a map
 
-Load the map through `drift::Assets`, keep it in a resource, and put it in the world with a `Tilemap` component:
+Load the map through `Assets`, keep it in a resource, and put it in the world with a `Tilemap` component:
 
 ```rust
-@drift::resource
+@resource
 struct Level { map: Map }
 
-@drift::system(schedule: drift::Schedule::Startup)
-fn load_level(cmd: Commands, assets: drift::Assets) {
+@system(schedule: Schedule::Startup)
+fn load_level(cmd: Commands, assets: Assets) {
     let map = assets.tilemap("assets/level1.tmj");
     cmd.insert_resource(Level { map: map });
     cmd.spawn([Transform { .. }, Tilemap { map: map, colliders: true, .. }]);
@@ -39,7 +39,7 @@ level.map.set_layer_visible(level.map.layer("Secrets"), true);
 A cell is `Cell { x, y }`. Tile ids count from 1 across the map's tilesets, as in Tiled; 0 is an empty cell.
 
 ```rust
-@drift::system
+@system
 fn dig(input: Input, level: Level) {
     if !input.mouse_pressed(MouseButton::Left) {
         return;
@@ -60,14 +60,14 @@ fn dig(input: Input, level: Level) {
 | `world_to_tile(pos, layer)`, `tile_to_world(cell, layer)` | Convert between world positions and cells; `tile_to_world` gives the top-left |
 | `size()`, `tile_size()`, `bounds()` | The map's size in cells, a cell's size in pixels, and its world rect |
 
-Map methods act on the map at once, so a system that changes tiles needs no `writes:`.
+Map methods act on the map at once.
 
 ## Objects
 
 Tiled object layers and LDtk entity layers are data for your systems. `objects(kind)` lists the objects of one Tiled class or LDtk entity identifier, with their world `bounds` and `anchor` (the pivot point); spawn entities for the ones you care about:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup, after: [load_level])
+@system(schedule: Schedule::Startup, after: [load_level])
 fn spawn_objects(cmd: Commands, level: Level, art: Art) {   // Art holds the textures, as in Coin Dash
     for o in level.map.objects("Coin") {
         let value = 1;
@@ -100,6 +100,6 @@ A layer is solid when:
 
 Tiles with collision shapes in Tiled's collision editor are solid on any layer.
 
-With `colliders: true` on the `Tilemap`, the engine merges the solid cells into a few static boxes. Contacts with them name the map entity, so a `drift::Contact<Player, Tilemap>[]` parameter receives the player's landings. A solid layer does not have to be visible: a hidden IntGrid layer keeps collision apart from the art.
+With `colliders: true` on the `Tilemap`, the engine merges the solid cells into a few static boxes. Contacts with them name the map entity, so a system taking a `Contact<Player, Tilemap>` runs for each of the player's landings. A solid layer does not have to be visible: a hidden IntGrid layer keeps collision apart from the art.
 
 Changing a tile or IntGrid value on a solid layer rebuilds the colliders on the next frame.

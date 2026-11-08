@@ -3,69 +3,76 @@
 A system is a function that runs every frame and works on the data its parameters ask for. All of a game's behavior lives in systems; there is no main loop to write.
 
 ```rust
-@drift::system(writes: [Health])
-fn regenerate(living: (Health, Regen)[], time: drift::Time) {
-    for row in living {
-        let (health, regen) = row;
-        health.hp = min(health.max, health.hp + int(regen.per_second * time.dt));
-    }
+@system
+fn regenerate(stamina: Stamina, regen: Regen, time: Time) {
+    stamina.value = min(stamina.max, stamina.value + regen.per_second * time.dt);
 }
 ```
 
-Drift finds every function marked `@drift::system`, reads its parameter types, and calls it with the matching data: here every entity that has both `Health` and `Regen`, and the frame time. [System Parameters](../reference/system-parameters.md) lists every kind of parameter.
+Drift finds every function marked `@system`, reads its parameter types, and calls it with the matching data. [System Parameters](../reference/system-parameters.md) lists every kind of parameter.
 
-## Reads and writes
+## Once per entity, or once for all
 
-A system's parameters are what it reads. `writes:` lists the components and resources it changes:
+A parameter that is one component, like `stamina: Stamina`, makes the system run once for each entity that has every such component. `regenerate` above runs once per entity with both a `Stamina` and a `Regen`.
+
+A parameter that is a list, like `(Stamina, Regen)[]` or a [query row](queries.md) list, receives every match at once, which a system needs to compare entities, count them or join two sets:
 
 ```rust
-@drift::system(writes: [Transform])
-fn bob(things: (Transform, Bob)[], time: drift::Time) { ... }
+@system
+fn count_enemies(enemies: (Entity, Enemy)[], hud: Hud) {
+    hud.enemies = enemies.len();
+}
 ```
 
-Drift keeps changes only to the types in `writes:`. A change to anything else is discarded when the system returns, and dev builds log it, naming the system and the type, so a missing entry is found the first time it matters. `drift check` lists what each system reads and writes.
+Name a component parameter `_` to require it without reading it: `fn drift_left(_: Cloud, t: Transform, time: Time)` runs for every entity with a `Cloud` and a `Transform`. An `Entity` parameter next to component parameters receives the entity the call is for.
 
-Declaring writes is what lets the engine run its own work beside your systems: physics, animation, particles and rendering preparation run on worker threads while your systems run, whenever they do not touch the same data. See [The Frame](frame.md).
+A parameter that is one collision or message, such as `hit: Overlap<Player, Coin>`, makes the system run once per event; see [Messages and Collisions](messages.md).
+
+## Changes are kept
+
+A system changes components and resources by assigning to its parameters, and Drift keeps every change when the system returns. There is nothing to declare: a parameter's type is what the system reads and may write.
+
+The engine's own work (physics, animation, particles, rendering preparation) runs on worker threads beside your systems wherever they do not use the same types. See [The Frame](frame.md).
 
 ## Order
 
 Systems run in the order they appear in the source, unless the attribute says otherwise:
 
 ```rust
-@drift::system(writes: [Velocity])
-fn steer(...) { ... }
-
-@drift::system(writes: [Text], after: [steer, score])
+@system(after: [steer, score])
 fn hud(...) { ... }
 ```
 
-`after: [a, b]` runs this system once `a` and `b` have run this frame; `before: [c]` runs it before `c`. A loop between them is an error when the game compiles.
+`after: [a, b]` runs this system once `a` and `b` have run this frame; `before: [c]` runs it before `c`. A loop between them is an error when the game loads.
 
 ## Startup systems
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
-fn setup(cmd: drift::Commands, assets: drift::Assets) { ... }
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) { ... }
 ```
 
 A `Startup` system runs once, before the first frame. Commands a system issues apply when it returns, so a startup system ordered `after:` another sees what that one spawned and inserted.
 
 ## Running some of the time
 
-A system runs every frame. To run it only in some situations, return early:
+`run_if:` names conditions: functions that return `bool`. The system runs only in frames where every one of them holds.
 
 ```rust
-@drift::system(writes: [Velocity])
-fn steer(players: (Player, Velocity)[], game: Game, input: drift::Input) {
-    if game.paused {
-        return;
-    }
-    ...
+fn flapped(input: Input) -> bool => input.action_pressed("flap");
+
+@system(run_if: [flapped])
+fn flap(bird: Bird, tuning: Tuning) {
+    bird.vy = -tuning.flap_speed;
 }
 ```
 
-A system that takes a resource does not run while that resource does not exist, so a resource also works as a switch: insert `Boss` when the boss fight starts, remove it when it ends, and every system that takes `Boss` runs only during the fight. `drift::Systems` turns individual systems on and off by name.
+A condition takes parameters the way a system does: resources, settings, `Input`, `Time` and queries. It is evaluated once per frame however many systems name it, and what it changes is discarded.
+
+For game phases such as a menu, play and game over, use [states](states.md): `in_state:` runs a system only in some phases, and `on_enter:` and `on_exit:` run one when a phase begins or ends.
+
+A system that takes a resource does not run while that resource does not exist, so a resource also works as a switch. `Systems` turns individual systems on and off by name.
 
 ## Functions that are not systems
 
-Only functions marked `@drift::system` are systems. Write helpers as plain functions and call them from systems; they take whatever arguments you pass, including a `Commands`, a resource or a single component.
+Only functions marked `@system` are systems. Write helpers as plain functions and call them from systems; they take whatever arguments you pass, including `Commands`, a resource or a single component.

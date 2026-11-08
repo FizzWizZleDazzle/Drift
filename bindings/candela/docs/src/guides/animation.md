@@ -7,19 +7,19 @@ Motion that follows a rule belongs in a component, not a system: the engine runs
 `Velocity` moves an entity every frame: `linear` in pixels per second and `angular` in radians per second. A spinning coin or a drifting cloud needs no system at all:
 
 ```rust
-cmd.spawn([at(100.0, 80.0), Sprite { image: assets.texture("assets/cloud.png"), .. }, Velocity { linear: vec2(12.0, 0.0), .. }]);
-cmd.spawn([at(300.0, 200.0), Sprite { image: assets.texture("assets/gem.png"), .. }, Velocity { angular: 2.0, .. }]);
+cmd.spawn([at(100.0, 80.0), Sprite { image: texture("assets/cloud.png"), .. }, Velocity { linear: vec2(12.0, 0.0), .. }]);
+cmd.spawn([at(300.0, 200.0), Sprite { image: texture("assets/gem.png"), .. }, Velocity { angular: 2.0, .. }]);
 ```
 
 On an entity with a dynamic `RigidBody`, `Velocity` is the body's velocity; see [Physics](physics.md).
 
 ## Sprite animation
 
-A spritesheet cuts a texture into frames. `drift::Assets` makes one from a grid with `spritesheet(texture, frame_w, frame_h)`, or loads an Aseprite file with `aseprite(path)`, which brings its frames and tags:
+A spritesheet cuts a texture into frames. `Assets` makes one from a grid with `spritesheet(texture, frame_w, frame_h)`, or loads an Aseprite file with `aseprite(path)`, which brings its frames and tags:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
-fn spawn_hero(cmd: Commands, assets: drift::Assets) {
+@system(schedule: Schedule::Startup)
+fn spawn_hero(cmd: Commands, assets: Assets) {
     let sheet = assets.aseprite("assets/hero.aseprite");
     cmd.spawn([
         at(200.0, 200.0),
@@ -38,10 +38,9 @@ For a grid sheet, take frames with `frames(first, count)`, `frame(col, row)` or 
 The `Animator` sets the sprite's `frame` as time passes. Switch clips by writing `clip`, the index into `clips`; the new clip starts from its first frame:
 
 ```rust
-@drift::system(writes: [Animator, Sprite])
+@system
 fn hero_anim(heroes: (Hero, Velocity, Animator, Sprite)[]) {
-    for row in heroes {
-        let (_, v, anim, sprite) = row;
+    for (_, v, anim, sprite) in heroes {
         let running = v.linear.x != 0.0;
         let want = 0;
         if running {
@@ -67,7 +66,7 @@ A `Tween` animates an entity from where it is now to a target, over time, along 
 // Pop, then fade out and vanish.
 cmd.spawn([
     at(x, y),
-    Sprite { image: assets.texture("assets/star.png"), .. },
+    Sprite { image: texture("assets/star.png"), .. },
     tween().scale_to(vec2(1.4, 1.4), 0.1, Ease::OutQuad)
            .scale_to(vec2(1.0, 1.0), 0.3, Ease::OutBack)
            .delay(0.5)
@@ -87,7 +86,7 @@ cmd.spawn([
 
 `repeat(times)` plays the whole chain again from the start; `yoyo(times)` plays it forward, then backward. `-1` repeats forever, so `tween().move_by(vec2(0.0, -6.0), 0.5, Ease::InOutSine).yoyo(-1)` bobs a pickup up and down for good.
 
-An entity holds one `Tween`. Inserting a changed tween restarts it from the entity's current values. `finished` turns true when a tween that does not repeat has played. `drift::Effects.set_tween_speed(s)` scales time for every tween, and 0 freezes them for a pause menu.
+An entity holds one `Tween`. Inserting a changed tween restarts it from the entity's current values. `finished` turns true when a tween that does not repeat has played. `Effects.set_tween_speed(s)` scales time for every tween, and 0 freezes them for a pause menu.
 
 `ease(e, t)` gives the same curves for your own calculations; see [Values and Enums](../reference/values.md) for the list.
 
@@ -101,7 +100,7 @@ Three components cover common motion:
 
 ```rust
 // A drone that trails the player and hovers as it goes.
-cmd.spawn([at(0.0, 0.0), Sprite { image: assets.texture("assets/drone.png"), .. },
+cmd.spawn([at(0.0, 0.0), Sprite { image: texture("assets/drone.png"), .. },
            Follow { target: player, speed: 120.0, distance: 40.0, .. },
            Oscillate { amplitude: vec2(0.0, 3.0), frequency: 2.0, .. }]);
 ```

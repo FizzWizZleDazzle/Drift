@@ -1,36 +1,48 @@
 # System Parameters
 
-Drift reads a system's parameter types and passes each one the matching data. The parameters say what the system reads; `writes:` on the attribute says what it may change. Parameters may come in any order, and every parameter needs its type written out.
+Drift reads a system's parameter types and passes each one the matching data. Parameters may come in any order, and every parameter needs its type written out. Drift keeps every change a system makes to the components and resources it receives.
 
-| Parameter type | Receives | Changes kept when |
-|----------------|----------|-------------------|
-| `Row[]`, where `Row` is a `@drift::query` struct | One row per matching entity | The component's type is in `writes:` |
-| `(A, B, ...)[]`, a list of tuples of components | One tuple per entity with every component; `drift::Entity` in a position gives the entity | The component's type is in `writes:` |
-| `drift::Lookup<T>` | Every `T`, found by entity with `get(e)` | `T` is in `writes:` |
-| A `@drift::resource` or `@drift::settings` struct | The resource. A system whose resource does not exist yet is skipped that frame | The type is in `writes:` |
-| `M[]`, where `M` is a `@drift::message` struct | Every `M` sent since this system last ran | Never: messages are read-only |
-| `drift::Contact<A, B>[]` | Collisions that started this frame between an entity with `A` and one with `B` | Never |
-| `drift::ContactEnd<A, B>[]` | Collisions between them that ended this frame | Never |
-| `drift::Overlap<A, B>[]` | Sensor overlaps that started this frame, either entity being the sensor | Never |
-| `drift::OverlapEnd<A, B>[]` | Sensor overlaps that ended this frame | Never |
-| `drift::Commands` | A buffer of spawns, inserts, removals, despawns and messages, applied when the system returns | Always |
-| An engine resource such as `drift::Time`, `drift::Input` or `drift::Audio` | That resource; see [Engine Resources](resources.md) | Its methods act at once |
+## Calls per frame
+
+A system runs once per frame, except:
+
+- When a parameter is a single component (`bird: Bird`), it runs once for each entity that has every such component. An `Entity` parameter then receives that entity, and a component named `_` is required without being read.
+- When a parameter is a single collision or message (`hit: Overlap<Bird, Pipe>`, `died: Died`), it runs once for each such event this frame.
+
+A system may not take both a single component and a single event.
+
+## Kinds
+
+| Parameter type | Receives |
+|----------------|----------|
+| A component, `@component` or engine | That component of the entity this call is for |
+| `Entity` | The entity this call is for |
+| `Row[]`, where `Row` is a `@query` struct | One row per matching entity |
+| `(A, B, ...)[]`, a list of tuples of components | One tuple per entity with every component; `Entity` in a position gives the entity |
+| `Lookup<T>` | Every `T`, found by entity with `get(e)` |
+| A `@resource` or `@settings` struct | The resource. A system whose resource does not exist yet is skipped that frame |
+| `State<S>`, where `S` is a `@state` enum | The current state, to read and to change with `set` |
+| `M`, or `M[]`, where `M` is a `@message` struct | One message per call, or every one sent since this system last ran |
+| `Contact<A, B>`, or `Contact<A, B>[]` | Collisions that started this frame between an entity with `A` and one with `B` |
+| `ContactEnd<A, B>`, or `[]` | Collisions between them that ended this frame |
+| `Overlap<A, B>`, or `[]` | Sensor overlaps that started this frame, either entity being the sensor |
+| `OverlapEnd<A, B>`, or `[]` | Sensor overlaps that ended this frame |
+| `Commands` | A buffer of spawns, inserts, removals, despawns and messages, applied when the call returns |
+| An engine resource such as `Time`, `Input` or `Audio` | That resource; see [Engine Resources](resources.md) |
 
 ## Rows and tuples
 
-A row or tuple holds the stored component, not a copy, while the system runs: assigning `row.velocity.linear` or `t.1.value` changes it, and Drift keeps the change when the system returns, if the type is in `writes:`. Spawning and despawning through `Commands` during the loop is safe, because the list was built before the system started.
+A row or tuple holds the stored component, not a copy, while the call runs: assigning `row.velocity.linear` or `t.1.value` changes it, and Drift keeps the change. Spawning and despawning through `Commands` during the loop is safe, because the list was built before the call started.
 
 The order of rows is the order entities were spawned in, and it is the same every run.
 
 ## Lookup
 
 ```rust
-@drift::system(writes: [Health])
-fn apply_damage(hits: Damage[], health: drift::Lookup<Health>) {
-    for hit in hits {
-        if health.get(hit.target) is Some(h) {
-            h.hp -= hit.amount;
-        }
+@system
+fn apply_damage(hit: Damage, health: Lookup<Health>) {
+    if health.get(hit.target) is Some(h) {
+        h.hp -= hit.amount;
     }
 }
 ```
@@ -43,22 +55,22 @@ fn apply_damage(hits: Damage[], health: drift::Lookup<Health>) {
 
 ## Contacts and overlaps
 
-Each element has `a` and `b`, the two entities, in the order the type names them: in `drift::Contact<Player, Hazard>`, `a` has the `Player` and `b` the `Hazard`. `Contact` also has `point` and `normal` (from `a` towards `b`), the first contact point.
+Each element has `a` and `b`, the two entities, in the order the type names them: in `Contact<Player, Hazard>`, `a` has the `Player` and `b` the `Hazard`. `Contact` also has `point` and `normal` (from `a` towards `b`), the first contact point.
 
 ## Engine resources
 
 | Type | What it is |
 |------|------------|
-| `drift::Time` | `dt`, `elapsed`, `frame` |
-| `drift::Input` | Keys, mouse, gamepads and input actions |
-| `drift::Window` | Logical size, scale mode, title, clear color, quitting |
-| `drift::Assets` | Loading and making textures, sounds, fonts, spritesheets, tilemaps and scenes |
-| `drift::Audio` | Music, buses and the output device |
-| `drift::Physics` | Gravity, raycasts, impulses and forces |
-| `drift::Effects` | Particle bursts, screen shake, flashes, fades and post effects |
-| `drift::Camera2D` | Converting between screen and world positions through the main camera |
-| `drift::Save` | The save slot named after `[project]` in `drift.toml` |
-| `drift::Draw` | Immediate debug shapes for this frame |
-| `drift::Systems` | Turning systems on and off |
+| `Time` | `dt`, `elapsed`, `frame` |
+| `Input` | Keys, mouse, gamepads and input actions |
+| `Window` | Logical size, scale mode, title, clear color, quitting |
+| `Assets` | Making textures and sounds, and loading fonts, spritesheets, tilemaps and scenes |
+| `Audio` | Music, buses and the output device |
+| `Physics` | Gravity, raycasts, impulses and forces |
+| `Effects` | Particle bursts, screen shake, flashes, fades and post effects |
+| `Camera2D` | Converting between screen and world positions through the main camera |
+| `Save` | The save slot named after `[project]` in `drift.toml` |
+| `Draw` | Immediate debug shapes for this frame |
+| `Systems` | Turning systems on and off |
 
 Their fields and methods are in [Engine Resources](resources.md).

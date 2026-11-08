@@ -4,13 +4,12 @@ Drift gives you several ways to see what a game is doing: shapes drawn from syst
 
 ## Drawing shapes
 
-`drift::Draw` draws shapes for the current frame only. Use it to see hitboxes, paths, aim lines and anything else that has no sprite:
+`Draw` draws shapes for the current frame only. Use it to see hitboxes, paths, aim lines and anything else that has no sprite:
 
 ```rust
-@drift::system
-fn show_aim(players: (Player, Transform)[], input: Input, draw: drift::Draw) {
-    for row in players {
-        let (_, t) = row;
+@system
+fn show_aim(players: (Player, Transform)[], input: Input, draw: Draw) {
+    for (_, t) in players {
         draw.line(t.position, input.mouse_world(), rgb(255, 80, 80), 2.0);
         draw.circle_lines(t.position, 48.0, rgba(255, 255, 255, 80), 1.0);
     }
@@ -54,18 +53,18 @@ Wrap a call you expect to fail, such as loading a file a player picked, in `try`
 drift check
 ```
 
-Compiles the game without running it and lists every system with its schedule, what it reads, what it writes, and the order it runs in. Use it to answer "why does this system run before that one" and "why is my change discarded": a change to a type missing from `writes:` is discarded, and dev builds log the first one.
+Compiles the game without running it and lists every system with its schedule, its parameters, its conditions and states, and the order it runs in. Use it to answer "why does this system run before that one" and "why does this system not run".
 
 ## Scripted input
 
-`drift::Input` can queue input as if a player gave it: `send_key(k, down)`, `send_mouse_move(pos)` and `send_mouse_button(pos, b, down)`. The input arrives next frame. Use it for automated tests and demo playback:
+`Input` can queue input as if a player gave it: `send_key(k, down)`, `send_mouse_move(pos)` and `send_mouse_button(pos, b, down)`. The input arrives next frame. Use it for automated tests and demo playback:
 
 ```rust
-@drift::resource
+@resource
 struct Demo { frame: int = 0 }
 
-@drift::system(writes: [Demo])
-fn play_demo(demo: Demo, input: Input, window: drift::Window) {
+@system
+fn play_demo(demo: Demo, input: Input, window: Window) {
     demo.frame += 1;
     if demo.frame == 30 {
         input.send_key(Key::Right, true);

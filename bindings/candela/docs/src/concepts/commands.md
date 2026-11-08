@@ -1,27 +1,28 @@
 # Commands
 
-`drift::Commands` changes the world's shape: making and removing entities, adding and removing components, inserting resources and sending messages. A system takes it as a parameter, and Drift applies what it recorded when the system returns, in the order recorded.
+`Commands` changes the world's shape: making and removing entities, adding and removing components, inserting resources and sending messages. A system takes it as a parameter, and Drift applies what it recorded when the system returns, in the order recorded.
 
 ```rust
-@drift::system
-fn fire(input: drift::Input, guns: (Gun, Transform)[], cmd: drift::Commands, assets: drift::Assets) {
-    if !input.action_pressed("fire") {
-        return;
-    }
-    for row in guns {
-        let (_, t) = row;
-        cmd.spawn([
-            Transform { position: t.position, rotation: t.rotation, .. },
-            Sprite { image: assets.texture("assets/bullet.png"), .. },
-            Velocity { linear: vec2(600.0, 0.0).rotated(t.rotation), .. },
-            Lifetime { seconds: 2.0 },
-            Bullet {},
-        ]);
-    }
+fn fired(input: Input) -> bool => input.action_pressed("fire");
+
+@system(run_if: [fired])
+fn fire(_: Gun, t: Transform, cmd: Commands) {
+    cmd.spawn(bullet(t));
+}
+
+// A bundle is a list of components, so a function can build one.
+fn bullet(t: Transform) -> any[] {
+    return [
+        Transform { position: t.position, rotation: t.rotation, .. },
+        Sprite { image: texture("assets/bullet.png"), .. },
+        Velocity { linear: vec2(600.0, 0.0).rotated(t.rotation), .. },
+        Lifetime { seconds: 2.0 },
+        Bullet {},
+    ];
 }
 ```
 
-A system that only spawns needs no `writes:`; `writes:` is for changing components and resources the system received.
+Commands change the world's shape; assigning to a parameter changes the data the system received.
 
 ## Methods
 

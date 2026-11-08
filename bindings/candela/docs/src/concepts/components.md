@@ -4,17 +4,19 @@ A component is a piece of data attached to an entity: where it is, what it looks
 
 ## Your own components
 
-Mark a struct with `@drift::component`:
+Mark a struct with `@component`:
 
 ```rust
-@drift::component
+@component
 struct Health { hp: int = 100, max: int = 100 }
 
-@drift::component
+@component
 struct Enemy {}
 ```
 
 A component with no fields, like `Enemy`, is a tag: it marks entities so queries can find them.
+
+A component can bring others with it. `@component(requires: [Velocity])` on a `Bird` adds a `Velocity` with its defaults to any entity that gets a `Bird` without one. The engine's drawn and simulated components bring a `Transform` the same way.
 
 Give fields defaults where you can. A spawn bundle written as `Health { .. }` then takes them all, and the scene editor creates the component with them.
 
@@ -29,11 +31,11 @@ The engine provides components it draws and simulates: `Transform`, `Sprite`, `T
 Entities are made with a bundle: a list of components, through [Commands](commands.md):
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
-fn spawn_enemy(cmd: drift::Commands, assets: drift::Assets) {
+@system(schedule: Schedule::Startup)
+fn spawn_enemy(cmd: Commands) {
     cmd.spawn([
         at(400.0, 120.0),
-        Sprite { image: assets.texture("assets/slime.png"), .. },
+        Sprite { image: texture("assets/slime.png"), .. },
         Health { hp: 30, max: 30 },
         Enemy {},
     ]);

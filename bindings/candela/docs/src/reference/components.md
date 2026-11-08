@@ -1,6 +1,6 @@
 # Engine Components
 
-Components the engine draws and simulates. Use them like your own: put them in a spawn bundle, query them, look them up, and name them in `writes:` to change them. Build each with the fields you need and `..` for the defaults.
+Components the engine draws and simulates. Use them like your own: put them in a spawn bundle, query them, look them up, and assign to them to change them. `Sprite`, `Rectangle`, `Circle`, `Text`, `Velocity`, `RigidBody`, the colliders and `Lifetime` bring a `Transform` when the entity has none. Build each with the fields you need and `..` for the defaults.
 
 Some fields are changed by the engine as well (marked *engine*). A system sees the value from when it started; the engine's change lands after the system that ran before it.
 
@@ -19,7 +19,7 @@ An entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`.
 
 | Component | Fields |
 |-----------|--------|
-| `Sprite` | `image` (a `Texture`, from `drift::Assets`), `frame` (part of the image as a `Rect`; zero size for all of it), `anchor` (0.5, 0.5: the point placed at the position), `color` (tint), `flip_x`, `flip_y`, `z`, `layer`, `visible`, `blend`, `material`. *Engine*: `frame` under an `Animator`, `color` under a tween |
+| `Sprite` | `image` (a `Texture`, from `Assets`), `frame` (part of the image as a `Rect`; zero size for all of it), `anchor` (0.5, 0.5: the point placed at the position), `color` (tint), `flip_x`, `flip_y`, `z`, `layer`, `visible`, `blend`, `material`. *Engine*: `frame` under an `Animator`, `color` under a tween |
 | `Rectangle` | `size`, `color`, `outline` (0 for filled), `corner_radius`, `anchor`, `z`, `layer`, `visible` |
 | `Circle` | `radius`, `color`, `outline`, `z`, `layer`, `visible` |
 | `Text` | `value`, `size`, `color`, `align`, `valign`, `wrap` (width, 0 for none), `line_spacing`, `outline`, `outline_color`, `shadow_offset` (zero for none), `shadow_color`, `rich_text` (inline color tags), `font`, `z`, `layer`, `visible`. Holds up to 511 bytes |

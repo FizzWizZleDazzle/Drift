@@ -16,6 +16,7 @@
 - [Commands](concepts/commands.md)
 - [Resources and Settings](concepts/resources.md)
 - [Messages and Collisions](concepts/messages.md)
+- [States](concepts/states.md)
 - [The Frame](concepts/frame.md)
 - [Reloading While the Game Runs](concepts/hot-reload.md)
 

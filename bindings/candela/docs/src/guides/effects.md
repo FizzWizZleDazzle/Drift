@@ -1,13 +1,13 @@
 # Particles, Lights and Effects
 
-Particles, trails, 2D lights and screen effects make a game feel alive. All of them are components or calls on `drift::Effects`, and the engine runs them; your systems only start and stop them.
+Particles, trails, 2D lights and screen effects make a game feel alive. All of them are components or calls on `Effects`, and the engine runs them; your systems only start and stop them.
 
 ## Particle emitters
 
 A `ParticleEmitter` component emits particles from its entity for as long as it is `playing`:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
+@system(schedule: Schedule::Startup)
 fn torch(cmd: Commands) {
     cmd.spawn([
         at(200.0, 300.0),
@@ -34,29 +34,24 @@ fn torch(cmd: Commands) {
 Turn an emitter on and off by writing `playing`:
 
 ```rust
-@drift::system(writes: [ParticleEmitter])
-fn thrusters(ships: (Ship, ParticleEmitter)[], input: Input) {
-    for row in ships {
-        row.1.playing = input.action_held("thrust");
-    }
+@system
+fn thrusters(_: Ship, emitter: ParticleEmitter, input: Input) {
+    emitter.playing = input.action_held("thrust");
 }
 ```
 
 ## Bursts
 
-For a one-off puff, an explosion or a pickup sparkle, call `burst` on `drift::Effects`. It spawns an emitter, fires `count` particles at once and removes it when the last one dies:
+For a one-off puff, an explosion or a pickup sparkle, call `burst` on `Effects`. It spawns an emitter, fires `count` particles at once and removes it when the last one dies:
 
 ```rust
-@drift::system
-fn explode(hits: drift::Contact<Bullet, Rock>[], places: drift::Lookup<Transform>,
-           effects: drift::Effects) {
-    for hit in hits {
-        if places.get(hit.b) is Some(t) {
-            effects.burst(t.position, ParticleEmitter {
-                speed_min: 80.0, speed_max: 220.0, lifetime_max: 0.6,
-                color_start: rgb(255, 240, 200), color_end: rgba(255, 80, 0, 0), ..
-            }, 40);
-        }
+@system
+fn explode(hit: Contact<Bullet, Rock>, places: Lookup<Transform>, effects: Effects) {
+    if places.get(hit.b) is Some(t) {
+        effects.burst(t.position, ParticleEmitter {
+            speed_min: 80.0, speed_max: 220.0, lifetime_max: 0.6,
+            color_start: rgb(255, 240, 200), color_end: rgba(255, 80, 0, 0), ..
+        }, 40);
     }
 }
 ```
@@ -100,20 +95,20 @@ Light only darkens the scene or leaves it as it is: a sprite under full white li
 
 ## Post effects
 
-Post effects run on the whole picture after every camera has drawn, before the HUD. Each call on `drift::Effects` adds one and returns an `Effect`:
+Post effects run on the whole picture after every camera has drawn, before the HUD. Each call on `Effects` adds one and returns an `Effect`:
 
 ```rust
-@drift::resource
+@resource
 struct Looks { crt: drift::Effect }
 
-@drift::system(schedule: drift::Schedule::Startup)
-fn looks(cmd: Commands, effects: drift::Effects) {
+@system(schedule: Schedule::Startup)
+fn looks(cmd: Commands, effects: Effects) {
     effects.bloom(0.7, 1.0);
     effects.vignette(0.5, 0.75);
     cmd.insert_resource(Looks { crt: effects.crt(0.15, 0.35) });
 }
 
-@drift::system
+@system
 fn toggle_crt(input: Input, looks: Looks) {
     if input.key_pressed(Key::F2) {
         looks.crt.set_enabled(!looks.crt.enabled());

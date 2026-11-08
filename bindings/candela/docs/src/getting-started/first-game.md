@@ -29,10 +29,9 @@ clear_color = [0.05, 0.05, 0.1]
 ## 2. Something on screen
 
 ```rust
-import "drift";
-import "drift" { Commands, Rectangle, at, vec2, rgb };
+import "drift" { * };
 
-@drift::system(schedule: drift::Schedule::Startup)
+@system(schedule: Schedule::Startup)
 fn setup(cmd: Commands) {
     cmd.spawn([at(480.0, 270.0), Rectangle { size: vec2(32.0, 32.0), color: rgb(90, 170, 255), .. }]);
 }
@@ -42,39 +41,37 @@ fn setup(cmd: Commands) {
 
 ## 3. Moving
 
-Add a component of your own to mark the ship, bind the arrow keys, and steer it:
+Add a component of your own to mark the ship, bind the arrow keys to a `move` axis, and steer it. Single-button actions can be bound in `drift.toml` instead (see [Input](../guides/input.md#actions)); an axis is bound in code:
 
 ```rust
-import "drift";
-import "drift" { Commands, Rectangle, Velocity, Input, Key, at, vec2, rgb };
+import "drift" { * };
 
-@drift::component
+@component(requires: [Velocity])
 struct Ship { speed: float = 300.0 }
 
-@drift::system(schedule: drift::Schedule::Startup)
+@system(schedule: Schedule::Startup)
 fn setup(cmd: Commands, input: Input) {
     input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
     cmd.spawn([at(480.0, 270.0), Rectangle { size: vec2(32.0, 32.0), color: rgb(90, 170, 255), .. },
-               Velocity { .. }, Ship { .. }]);
+               Ship { .. }]);
 }
 
-@drift::system(writes: [Velocity])
-fn steer(ships: (Ship, Velocity)[], input: Input) {
-    for row in ships {
-        let (ship, velocity) = row;
-        velocity.linear = input.axis2d("move").mul(ship.speed);
-    }
+@system
+fn steer(ship: Ship, velocity: Velocity, input: Input) {
+    velocity.linear = input.axis2d("move") * ship.speed;
 }
 ```
 
-`steer` runs every frame. Its first parameter is a query: every entity with a `Ship` and a `Velocity`. It sets the velocity from the `move` action, and the engine moves the entity by its velocity. `writes: [Velocity]` says the system changes velocities; without it the change would be discarded.
+`steer` runs every frame, once for each entity with a `Ship` and a `Velocity`. It sets the velocity from the `move` action, and the engine moves the entity by its velocity. `requires: [Velocity]` gives every ship a `Velocity`, so the bundle does not list one.
 
 ## 4. Stars to collect
 
 Stars are sensors: they detect the ship touching them without pushing it.
 
 ```rust
-@drift::component
+import "std/random" as random;
+
+@component
 struct Star {}
 
 fn spawn_star(cmd: Commands) {
@@ -92,37 +89,33 @@ The ship needs a body and a collider to touch anything. Add them to its bundle i
 ```rust
     cmd.spawn([at(480.0, 270.0), Rectangle { size: vec2(32.0, 32.0), color: rgb(90, 170, 255), .. },
                RigidBody { kind: BodyKind::Kinematic, .. }, BoxCollider { half_size: vec2(16.0, 16.0), .. },
-               Velocity { .. }, Ship { .. }]);
+               Ship { .. }]);
     for i in range(5) {
         spawn_star(cmd);
     }
 ```
 
-Add `Circle`, `CircleCollider`, `RigidBody`, `BodyKind` and `BoxCollider` to the import list, and `import "std/random" as random;`.
-
 ## 5. Picking them up
 
 ```rust
-@drift::system
-fn collect(hits: drift::Overlap<Ship, Star>[], cmd: Commands) {
-    for hit in hits {
-        cmd.despawn(hit.b);
-        spawn_star(cmd);
-    }
+@system
+fn collect(hit: Overlap<Ship, Star>, cmd: Commands) {
+    cmd.despawn(hit.b);
+    spawn_star(cmd);
 }
 ```
 
-`drift::Overlap<Ship, Star>[]` receives the sensor overlaps that started this frame between a `Ship` and a `Star`; `hit.b` is the star.
+A system that takes one `Overlap<Ship, Star>` runs once for each sensor overlap that started this frame between a `Ship` and a `Star`; `hit.b` is the star.
 
 ## 6. A score
 
 A resource holds the score, and a `Text` entity on the HUD shows it:
 
 ```rust
-@drift::resource
+@resource
 struct Score { value: int = 0 }
 
-@drift::component
+@component
 struct ScoreLabel {}
 ```
 
@@ -135,29 +128,25 @@ In `setup`, spawn the label:
 Count in `collect`, and show it after:
 
 ```rust
-@drift::system(writes: [Score])
-fn collect(hits: drift::Overlap<Ship, Star>[], cmd: Commands, score: Score) {
-    for hit in hits {
-        score.value += 1;
-        cmd.despawn(hit.b);
-        spawn_star(cmd);
-    }
+@system
+fn collect(hit: Overlap<Ship, Star>, cmd: Commands, score: Score) {
+    score.value += 1;
+    cmd.despawn(hit.b);
+    spawn_star(cmd);
 }
 
-@drift::system(writes: [Text], after: [collect])
-fn show_score(score: Score, labels: (ScoreLabel, Text)[]) {
-    for row in labels {
-        row.1.value = "Stars: " + string(score.value);
-    }
+@system(after: [collect])
+fn show_score(_: ScoreLabel, text: Text, score: Score) {
+    text.value = "Stars: " + string(score.value);
 }
 ```
 
-Add `Text` and `hud_layer` to the imports. Run it and collect stars.
+Run it and collect stars.
 
 ## 7. Change it while it runs
 
-Leave the game running. In `steer`, change `mul(ship.speed)` to `mul(ship.speed * 2.0)` and save: the next frame steers with the new code. Changing the `speed` default instead would not affect the ship, because its `Ship` component already holds its value. Change `clear_color` in `drift.toml` and save: the background changes. The ship, the stars and the score stay as they were. See [Reloading While the Game Runs](../concepts/hot-reload.md).
+Leave the game running. In `steer`, change `* ship.speed` to `* ship.speed * 2.0` and save: the next frame steers with the new code. Changing the `speed` default instead would not affect the ship, because its `Ship` component already holds its value. Change `clear_color` in `drift.toml` and save: the background changes. The ship, the stars and the score stay as they were. See [Reloading While the Game Runs](../concepts/hot-reload.md).
 
 ## Next
 
-[Concepts](../concepts/components.md) explains each idea used here in full. [Coin Dash](../examples/coin-dash.md) is a larger game built the same way.
+[Concepts](../concepts/components.md) explains each idea used here in full. [Flappy Bird](../examples/flappy-bird.md) is a complete game built the same way.

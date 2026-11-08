@@ -7,16 +7,13 @@ Drift plays sound effects, music and positional sound through a mixer of buses. 
 Load sounds in startup and keep them in a resource:
 
 ```rust
-@drift::resource
-struct Sfx { jump: Sound, coin: Sound }
-
-@drift::system(schedule: drift::Schedule::Startup)
-fn load_sounds(cmd: Commands, assets: drift::Assets) {
-    cmd.insert_resource(Sfx { jump: assets.sound("assets/jump.wav"),
-                              coin: assets.sound("assets/coin.ogg") });
+@resource
+struct Sfx {
+    jump: Sound = sound("assets/jump.wav"),
+    coin: Sound = sound("assets/coin.ogg"),
 }
 
-@drift::system
+@system
 fn jump_sound(input: Input, sfx: Sfx) {
     if input.action_pressed("jump") {
         sfx.jump.play();
@@ -24,7 +21,7 @@ fn jump_sound(input: Input, sfx: Sfx) {
 }
 ```
 
-`assets.sound` reads WAV, OGG and MP3, and decodes the whole file at load. `assets.create_sound(samples, rate)` makes a sound from samples in -1 to 1, for generated blips.
+`sound(path)` reads WAV, OGG and MP3, and decodes the whole file at load; it works in field defaults, so a resource loads its own sounds. `assets.create_sound(samples, rate)` makes a sound from samples in -1 to 1, for generated blips.
 
 `play()` plays at full volume on the sfx bus. `play_with` takes a `PlayOptions` for the rest:
 
@@ -36,11 +33,11 @@ Both return a `Voice`, one playback you can `stop`, `pause`, `resume`, fade with
 
 ## Music
 
-`assets.music(path)` loads a track that decodes while it plays, so long files cost little memory. `drift::Audio` plays one music track at a time, on the music bus:
+`assets.music(path)` loads a track that decodes while it plays, so long files cost little memory. `Audio` plays one music track at a time, on the music bus:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
-fn start_music(assets: drift::Assets, audio: drift::Audio) {
+@system(schedule: Schedule::Startup)
+fn start_music(assets: Assets, audio: Audio) {
     audio.play_music(assets.music("assets/theme.ogg"), 0.0, true);
 }
 ```
@@ -83,4 +80,4 @@ With `spatial` on, the sound gets quieter with distance from the listener, silen
 
 When no output device opens, `audio.has_device()` is `false` and sounds advance silently, so the game runs the same on a machine with no sound card.
 
-See [Engine Resources](../reference/resources.md#driftaudio) for every method.
+See [Engine Resources](../reference/resources.md#audio) for every method.

@@ -5,40 +5,50 @@ A resource is one value for the whole game, not attached to any entity: the scor
 ## Your own resources
 
 ```rust
-@drift::resource
+@resource
 struct Score { value: int = 0, best: int = 0 }
 
-@drift::system(writes: [Score])
-fn count(hits: drift::Overlap<Player, Coin>[], score: Score) {
-    score.value += hits.len();
+@system
+fn count(_: Overlap<Player, Coin>, score: Score) {
+    score.value += 1;
 }
 ```
 
-A resource whose fields all have defaults exists from the start. One with fields that need values, such as textures made at startup, exists once a system inserts it:
+A resource whose fields all have defaults exists from the start. Defaults may call functions, so a resource can load its own assets with `texture(path)` and `sound(path)`:
 
 ```rust
-@drift::resource
-struct Art { coin: Texture, hit: Sound }
-
-@drift::system(schedule: drift::Schedule::Startup)
-fn load(cmd: drift::Commands, assets: drift::Assets) {
-    cmd.insert_resource(Art { coin: assets.texture("assets/coin.png"), hit: assets.sound("assets/hit.wav") });
+@resource
+struct Art {
+    coin: Texture = texture("assets/coin.png"),
+    hit: Sound = sound("assets/hit.wav"),
 }
 ```
 
-A system that takes a resource that does not exist yet is skipped that frame. Inserting and removing a resource is how you switch a group of systems on and off.
+A file that does not load stops the game at load with the path and the error.
+
+A resource with a field that has no default exists once a system inserts it with `cmd.insert_resource(...)`. A system that takes a resource that does not exist yet is skipped that frame, so inserting and removing a resource switches a group of systems on and off.
 
 ## Asset handles
 
-A `Texture`, `Sound`, `Map`, `Effect` or other asset handle names something the engine owns. Its methods act on the engine at once, so a system that calls `map.set_tile(...)` or `effect.set_enabled(false)` on a handle it holds in a resource does not list that resource in `writes:`. `writes:` is for changing the struct's own fields.
+A `Texture`, `Sound`, `Map`, `Effect` or other asset handle names something the engine owns. Its methods act on the engine at once: `art.hit.play()` plays the sound, `effect.set_enabled(false)` turns the effect off.
+
+## Constants
+
+Numbers that never change, such as the size of a sprite or the height of the ground, are constants:
+
+```rust
+const GROUND_Y: float = 400.0;
+```
+
+Values you tune while playing belong in settings instead.
 
 ## Engine resources
 
-The engine's resources are parameters too: `drift::Time`, `drift::Input`, `drift::Window`, `drift::Assets`, `drift::Audio`, `drift::Physics`, `drift::Effects`, `drift::Camera2D`, `drift::Save`, `drift::Draw` and `drift::Systems`. Their methods act on the engine at once. See [Engine Resources](../reference/resources.md).
+The engine's resources are parameters too: `Time`, `Input`, `Window`, `Assets`, `Audio`, `Physics`, `Effects`, `Camera2D`, `Save`, `Draw` and `Systems`. Their methods act on the engine at once. See [Engine Resources](../reference/resources.md).
 
 ## Settings
 
-Tuning values belong in `drift.toml`, where you change them without touching code. A `@drift::settings` struct is a resource filled from one section of it:
+Tuning values belong in `drift.toml`, where you change them without touching code. A `@settings` struct is a resource filled from one section of it:
 
 ```toml
 [enemies]
@@ -48,10 +58,10 @@ max_alive = 12
 ```
 
 ```rust
-@drift::settings(section: "enemies")
+@settings(section: "enemies")
 struct EnemySettings { speed: float = 120.0, spawn_every: float = 3.0, max_alive: int = 10 }
 
-@drift::system
+@system
 fn spawn(cfg: EnemySettings, ...) { ... cfg.max_alive ... }
 ```
 

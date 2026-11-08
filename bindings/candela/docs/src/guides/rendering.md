@@ -4,16 +4,16 @@ Everything you see is a component: put a `Sprite`, `Rectangle` or `Circle` on an
 
 ## Sprites
 
-A sprite draws a texture at its entity's position. `image` holds the `Texture`; `drift::Assets` loads one from a file once and hands back the same texture for the same path:
+A sprite draws a texture at its entity's position. `image` holds the `Texture`; `texture(path)` loads one from a file once and hands back the same texture for the same path:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
-fn setup(cmd: Commands, assets: drift::Assets) {
-    cmd.spawn([at(320.0, 180.0), Sprite { image: assets.texture("assets/ship.png"), .. }]);
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(320.0, 180.0), Sprite { image: texture("assets/ship.png"), .. }]);
 }
 ```
 
-`create_texture(w, h, pixels)` makes a texture from colors instead, and a render target is a texture too. Textures sample with `Filter::Nearest` by default, which keeps pixel art crisp; call `set_filter(Filter::Linear)` for smooth scaling.
+`Assets.create_texture(w, h, pixels)` makes a texture from colors instead, and a render target is a texture too. Textures sample with `Filter::Nearest` by default, which keeps pixel art crisp; call `set_filter(Filter::Linear)` for smooth scaling.
 
 - `frame` draws part of the image, as a `Rect` in pixels. A zero-size rect draws all of it. Spritesheets hand out these rects; see [Animation](animation.md).
 - `anchor` is the point of the image placed at the position, from (0, 0) top-left to (1, 1) bottom-right. The default (0.5, 0.5) centers it.
@@ -54,11 +54,11 @@ cmd.spawn([at(0.0, 0.0), Camera { zoom: 2.0, .. }]);
 `CameraFollow` keeps a camera on another entity. `smoothing` sets how quickly it catches up, and the camera stays still while the target is inside `dead_zone`:
 
 ```rust
-let player = cmd.spawn([at(0.0, 0.0), Sprite { image: assets.texture("assets/hero.png"), .. }]);
+let player = cmd.spawn([at(0.0, 0.0), Sprite { image: texture("assets/hero.png"), .. }]);
 cmd.spawn([at(0.0, 0.0), Camera { .. }, CameraFollow { target: player, smoothing: 5.0, .. }]);
 ```
 
-`drift::Camera2D` converts between screen and world positions through the main camera, for example to aim at the mouse. `drift::Effects` shakes a camera with `shake(camera, intensity)`.
+`Camera2D` converts between screen and world positions through the main camera, for example to aim at the mouse. `Effects` shakes a camera with `shake(camera, intensity)`.
 
 ### Split screen
 
@@ -76,8 +76,8 @@ The first active camera that draws to the window is the main camera.
 A camera can draw into a texture instead of the window. Make the texture with `assets.render_target(w, h)`, set it as the camera's `target`, then show it with a sprite, for example as a minimap on the HUD:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
-fn minimap(cmd: Commands, assets: drift::Assets) {
+@system(schedule: Schedule::Startup)
+fn minimap(cmd: Commands, assets: Assets) {
     let map = assets.render_target(256, 160);
     cmd.spawn([at(0.0, 0.0), Camera { zoom: 0.2, order: -1, target: map, clear: true, .. }]);
     cmd.spawn([at(1140.0, 100.0), Sprite { image: map, layer: hud_layer(), .. }]);
@@ -104,6 +104,6 @@ scale_mode = "integer"
 | `Integer` | Pixel perfect: scales by whole numbers |
 | `Expand` | Keeps pixels square and grows the logical size, so wider screens see more |
 
-`drift::Window` changes the mode and size while the game runs, and its `width` and `height` report the size in effect. The background color is `clear_color` in `[render]`.
+`Window` changes the mode and size while the game runs, and its `width` and `height` report the size in effect. The background color is `clear_color` in `[render]`.
 
 See [Engine Components](../reference/components.md#drawing) for every field.

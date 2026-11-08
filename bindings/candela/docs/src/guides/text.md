@@ -5,7 +5,7 @@ The `Text` component draws a string at its entity's position, so labels, damage 
 ## Showing text
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
+@system(schedule: Schedule::Startup)
 fn setup(cmd: Commands) {
     // A title on the HUD, centered at the top.
     cmd.spawn([at(640.0, 20.0), Text { value: "Level 1", size: 40.0, align: Align::Center,
@@ -22,17 +22,15 @@ A `Text` holds up to 511 bytes. For a longer page of dialog, split it across sev
 
 ## Changing the string
 
-Query the text and assign `value`, with `Text` in `writes:`:
+Take the text as a parameter and assign `value`:
 
 ```rust
-@drift::component
+@component
 struct ScoreLabel {}
 
-@drift::system(writes: [Text])
-fn show_score(score: Score, labels: (ScoreLabel, Text)[]) {
-    for row in labels {
-        row.1.value = "Score " + string(score.value);
-    }
+@system
+fn show_score(_: ScoreLabel, text: Text, score: Score) {
+    text.value = "Score " + string(score.value);
 }
 ```
 
@@ -58,14 +56,14 @@ Text { value: "Press [color=#ffd060]E[/color] to open", rich_text: true, layer: 
 
 ## Fonts
 
-Text uses the built-in font unless `font` names another. `drift::Assets` loads TrueType, OpenType and BMFont files:
+Text uses the built-in font unless `font` names another. `Assets` loads TrueType, OpenType and BMFont files:
 
 ```rust
-@drift::resource
+@resource
 struct Fonts { title: Font }
 
-@drift::system(schedule: drift::Schedule::Startup)
-fn load_fonts(cmd: Commands, assets: drift::Assets) {
+@system(schedule: Schedule::Startup)
+fn load_fonts(cmd: Commands, assets: Assets) {
     cmd.insert_resource(Fonts { title: assets.font("assets/fonts/title.ttf", 48) });
 }
 ```

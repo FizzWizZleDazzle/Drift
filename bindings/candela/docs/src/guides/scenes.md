@@ -29,7 +29,7 @@ A scene file holds entities and their components as JSON. Build levels and reusa
 }
 ```
 
-- Components are keyed by name. Engine components use the names in [Engine Components](../reference/components.md); yours use their struct name, so `Player` above is the game's `@drift::component struct Player`.
+- Components are keyed by name. Engine components use the names in [Engine Components](../reference/components.md); yours use their struct name, so `Player` above is the game's `@component struct Player`.
 - Fields you leave out keep their defaults, so hand-written files stay short.
 - `id` names an entity inside the file. `Entity` fields (`Parent`, `Follow.target`, and `Entity` fields of your own components) hold these ids, and spawning points them at the new entities.
 - Asset fields such as `Sprite.image` hold the file path, loaded once however many entities use it.
@@ -38,11 +38,11 @@ Your own components are saved and loaded like the engine's, because Drift stores
 
 ## Spawning a scene
 
-Load the file through `drift::Assets` and spawn it through `Commands`:
+Load the file through `Assets` and spawn it through `Commands`:
 
 ```rust
-@drift::system(schedule: drift::Schedule::Startup)
-fn load_level(cmd: Commands, assets: drift::Assets) {
+@system(schedule: Schedule::Startup)
+fn load_level(cmd: Commands, assets: Assets) {
     let level = cmd.spawn_scene(assets.scene("assets/level1.json"), SceneOptions { .. });
     if level.find("Player") is Some(player) {
         cmd.insert(player, CameraFollow { target: player, .. });
@@ -63,8 +63,8 @@ A prefab is a scene file you spawn many times. `SceneOptions` changes each copy:
 | `overrides` | Per entity, by `Name`: a JSON patch of its components |
 
 ```rust
-@drift::system
-fn spawn_waves(cmd: Commands, time: Time, waves: Waves, assets: drift::Assets) {
+@system
+fn spawn_waves(cmd: Commands, time: Time, waves: Waves, assets: Assets) {
     if waves.timer.tick(time.dt) == 0 {
         return;
     }
@@ -80,7 +80,7 @@ An override replaces the fields it lists and keeps the rest. Setting a component
 ## Saving
 
 ```rust
-@drift::system
+@system
 fn save_level(input: Input, cmd: Commands) {
     if input.key_pressed(Key::F5) {
         cmd.save_scene("level.json");
