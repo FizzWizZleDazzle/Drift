@@ -1,0 +1,7 @@
+[book]
+title = "Drift for Candela"
+authors = ["Drift contributors"]
+language = "en"
+src = "src"
+
+[output.html]

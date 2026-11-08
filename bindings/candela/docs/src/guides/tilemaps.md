@@ -1,0 +1,105 @@
+# Tilemaps
+
+Build levels in [Tiled](https://www.mapeditor.org/) or [LDtk](https://ldtk.io/) and load them as maps: the engine draws them, builds colliders from their solid layers, and answers tile queries, while your systems turn their objects into game entities.
+
+## Loading and showing a map
+
+Load the map through `drift::Assets`, keep it in a resource, and put it in the world with a `Tilemap` component:
+
+```rust
+@drift::resource
+struct Level { map: Map }
+
+@drift::system(schedule: drift::Schedule::Startup)
+fn load_level(cmd: Commands, assets: drift::Assets) {
+    let map = assets.tilemap("assets/level1.tmj");
+    cmd.insert_resource(Level { map: map });
+    cmd.spawn([Transform { .. }, Tilemap { map: map, colliders: true, .. }]);
+}
+```
+
+- Tiled maps load from `.tmj` or `.json` files. Several tilesets, flipped and animated tiles, infinite maps, group layers, layer opacity, tint, offset and parallax all carry over. Only orthogonal maps draw correctly.
+- LDtk levels load one at a time: `assets.ldtk_level("world.ldtk", "Level_2")`. IntGrid, auto-layer and tile layers draw; entity layers become map objects.
+
+The map draws at its entity's `Transform`, with `z` and `layer` from the `Tilemap` component. Parallax comes from each layer's settings in the editor.
+
+## Layers
+
+Layers are numbered from 0 at the bottom, in both formats. Find one by name:
+
+```rust
+let ground = level.map.layer("Ground");
+level.map.set_layer_visible(level.map.layer("Secrets"), true);
+```
+
+`layer` raises `drift_no_such_layer` for a name the map does not have.
+
+## Tiles and cells
+
+A cell is `Cell { x, y }`. Tile ids count from 1 across the map's tilesets, as in Tiled; 0 is an empty cell.
+
+```rust
+@drift::system
+fn dig(input: Input, level: Level) {
+    if !input.mouse_pressed(MouseButton::Left) {
+        return;
+    }
+    let ground = level.map.layer("Ground");
+    let cell = level.map.world_to_tile(input.mouse_world(), ground);
+    if level.map.tile(ground, cell) != 0 {
+        level.map.set_tile(ground, cell, 0);   // colliders follow next frame
+    }
+}
+```
+
+| Call | Use |
+|------|-----|
+| `tile(layer, cell)`, `set_tile(layer, cell, id)` | Read and change tiles |
+| `int_grid(layer, cell)`, `set_int_grid(layer, cell, value)` | LDtk IntGrid values. Changing a value does not re-run LDtk's auto-layer rules |
+| `tile_at(layer, world_pos)` | The tile under a world position |
+| `world_to_tile(pos, layer)`, `tile_to_world(cell, layer)` | Convert between world positions and cells; `tile_to_world` gives the top-left |
+| `size()`, `tile_size()`, `bounds()` | The map's size in cells, a cell's size in pixels, and its world rect |
+
+Map methods act on the map at once, so a system that changes tiles needs no `writes:`.
+
+## Objects
+
+Tiled object layers and LDtk entity layers are data for your systems. `objects(kind)` lists the objects of one Tiled class or LDtk entity identifier, with their world `bounds` and `anchor` (the pivot point); spawn entities for the ones you care about:
+
+```rust
+@drift::system(schedule: drift::Schedule::Startup, after: [load_level])
+fn spawn_objects(cmd: Commands, level: Level, art: Art) {   // Art holds the textures, as in Coin Dash
+    for o in level.map.objects("Coin") {
+        let value = 1;
+        let text = level.map.object_property(o, "value");
+        if text != "" {
+            value = int(text);
+        }
+        cmd.spawn([
+            Transform { position: o.anchor, .. },
+            Sprite { texture: art.coin, .. },
+            CircleCollider { radius: 8.0, sensor: true, .. },
+            Coin { value: value },
+        ]);
+    }
+    for o in level.map.objects("PlayerSpawn") {
+        cmd.spawn([Transform { position: o.anchor, .. }, Player { .. }]);
+    }
+}
+```
+
+`property(name)` reads a property of the Tiled map or the LDtk level. Properties come back as strings, `""` when missing; convert numbers with `int(...)` or `float(...)`.
+
+## Collision
+
+A layer is solid when:
+
+- it is a Tiled tile layer with the boolean property `collision`, or a name containing "collision";
+- it is an LDtk IntGrid or tile layer whose identifier contains "collision";
+- you mark it with `set_layer_solid(layer, true, values)`, where `values` lists the tile ids or IntGrid values that count, or is empty for any.
+
+Tiles with collision shapes in Tiled's collision editor are solid on any layer.
+
+With `colliders: true` on the `Tilemap`, the engine merges the solid cells into a few static boxes. Contacts with them name the map entity, so a `drift::Contact<Player, Tilemap>[]` parameter receives the player's landings. A solid layer does not have to be visible: a hidden IntGrid layer keeps collision apart from the art.
+
+Changing a tile or IntGrid value on a solid layer rebuilds the colliders on the next frame.
