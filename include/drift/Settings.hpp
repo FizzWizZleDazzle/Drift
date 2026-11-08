@@ -75,7 +75,8 @@ public:
     // Applies environment and command-line overrides to every bound section
     // again, so they win over values code set after binding.
     void applyOverrides();
-    // Called after a reload changed keys of `section` (their names).
+    // Called after a reload changed keys of `section` (their names). Works
+    // for sections bound to a struct and for sections read raw.
     void onChange(const char* section, std::function<void(const std::vector<std::string>&)> fn);
     // Logs keys in bound sections that no field reads (typos).
     void warnUnknownKeys() const;

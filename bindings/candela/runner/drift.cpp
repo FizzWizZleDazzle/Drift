@@ -591,6 +591,14 @@ const char* drift_bridge_list(const char* component) {
     return keep(out.dump());
 }
 
+// Engine components that need another to work: everything drawn or
+// simulated needs a Transform.
+const char* drift_bridge_requires(const char* component) {
+    const Codec* c = codec(component);
+    if (!c || std::string(c->name) == "Transform" || std::string(c->name) == "Name") return "[]";
+    return "[\"Transform\"]";
+}
+
 const char* drift_bridge_call(const char* function, const char* args) {
     json a = json::parse(args ? args : "[]", nullptr, false);
     if (a.is_discarded()) a = json::array();

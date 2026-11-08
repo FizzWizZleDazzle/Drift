@@ -6,8 +6,8 @@
 //! collisions and engine resources. Components and resources of the script
 //! live here, as candela values; engine components live in the engine and
 //! cross through the C++ bridge as JSON whose shape matches the `drift`
-//! module's structs. What a system wrote comes back with `call_in_out`, and
-//! only the types its `writes:` names are kept.
+//! module's structs. What a system changed comes back with `call_in_out` and
+//! is kept.
 
 use candela::{
     AttributeTable, AttributeTarget, AttributeValue, DataType, Diagnostic, Engine, HostError, Program,
@@ -32,6 +32,7 @@ extern "C" {
     fn drift_bridge_remove(e: u64, component: *const c_char);
     fn drift_bridge_list(component: *const c_char) -> *const c_char;
     fn drift_bridge_call(function: *const c_char, args: *const c_char) -> *const c_char;
+    fn drift_bridge_requires(component: *const c_char) -> *const c_char;
 }
 
 fn cstr(s: &str) -> CString {
@@ -203,19 +204,42 @@ enum Param {
     Commands(u16),
     Time(u16),
     Engine(u16),
+    /// One component of the entity this call is for.
+    One(String),
+    /// The entity this call is for.
+    OneEntity,
+    /// The contact or overlap this call is for.
+    OneContact { name: u16, kind: i32, a: String, b: String },
+    /// The message this call is for.
+    OneMessage(String),
+    /// The current state of a @drift::state enum, as `State<E>`.
+    State { name: u16, of: String },
 }
 
 #[derive(Clone, Debug)]
 struct System {
     name: String,
     params: Vec<Param>,
-    writes: HashSet<String>,
+    run_if: Vec<String>,
+    /// Runs only while a state is one of these: (enum, variant).
+    in_state: Vec<(String, String)>,
+    /// Runs once when a state becomes, or stops being, this variant.
+    on_enter: Option<(String, String)>,
+    on_exit: Option<(String, String)>,
     startup: bool,
     enabled: bool,
     after: Vec<String>,
     before: Vec<String>,
     /// Messages up to this sequence number have been delivered.
     seen: u64,
+}
+
+/// What one call of a system is about.
+enum Focus {
+    None,
+    Entity(u64),
+    Contact(u64, u64),
+    Message(Value),
 }
 
 enum Command {
@@ -253,6 +277,22 @@ struct Host {
     contacts: Vec<(i32, u64, u64)>,
     started: bool,
     reported: HashSet<String>,
+    /// run_if conditions by function name, as systems with parameters.
+    conditions: HashMap<String, System>,
+    condition_cache: HashMap<String, bool>,
+    /// Components a component brings with it: type -> required types.
+    requires: HashMap<String, Vec<String>>,
+    /// Script components built from their defaults, for requires.
+    component_defaults: HashMap<String, Value>,
+    /// @drift::state enums by name.
+    states: HashMap<String, StateNow>,
+}
+
+struct StateNow {
+    now: String,
+    since: f64,
+    /// Asked for with `state.set(...)`; applied after the Update systems.
+    next: Option<String>,
 }
 
 /// The names of the structs a list of attribute type values names.
@@ -272,7 +312,7 @@ fn fn_list(v: Option<&AttributeValue>) -> Vec<String> {
         .unwrap_or(&[])
         .iter()
         .filter_map(|t| match t {
-            AttributeValue::Fn(name) => Some(name.clone()),
+            AttributeValue::Fn { name, .. } => Some(name.clone()),
             _ => None,
         })
         .collect()
@@ -363,6 +403,34 @@ impl Host {
                     if base == "Lookup" && args.len() == 1 {
                         return Ok(Param::Lookup { name: *id, component: args[0].clone() });
                     }
+                    if base == "State" && args.len() == 1 {
+                        let of = args[0].clone();
+                        if !self.states.contains_key(bare(&of)) {
+                            return Err(format!("{of} is not a @drift::state enum"));
+                        }
+                        return Ok(Param::State { name: *id, of: bare(&of).to_owned() });
+                    }
+                }
+                if let Some((base, args)) = generic(&name) {
+                    let kind = match base {
+                        "Contact" => 0,
+                        "ContactEnd" => 1,
+                        "Overlap" => 2,
+                        "OverlapEnd" => 3,
+                        _ => -1,
+                    };
+                    if kind >= 0 && args.len() == 2 {
+                        return Ok(Param::OneContact { name: *id, kind, a: args[0].clone(), b: args[1].clone() });
+                    }
+                }
+                if self.messages_kinds.contains(&name) {
+                    return Ok(Param::OneMessage(name));
+                }
+                if bare(&name) == "Entity" {
+                    return Ok(Param::OneEntity);
+                }
+                if self.is_component(&name) {
+                    return Ok(Param::One(name));
                 }
                 match bare(&name) {
                     "Commands" => Ok(Param::Commands(*id)),
@@ -406,6 +474,39 @@ impl Host {
     fn set_component(&mut self, e: u64, value: Value) {
         let Value::Struct { name, .. } = &value else { return };
         let name = name.clone();
+        self.insert_component(e, &name, value);
+        self.add_required(e, &name);
+    }
+
+    /// Adds the components `name` requires that `e` lacks, from their defaults.
+    fn add_required(&mut self, e: u64, name: &str) {
+        let mut required = self.requires.get(name).cloned().unwrap_or_default();
+        if is_engine(name) {
+            let c = cstr(name);
+            if let Some(list) = from_c(unsafe { drift_bridge_requires(c.as_ptr()) })
+                .and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok())
+            {
+                required.extend(list);
+            }
+        }
+        for r in required {
+            let r = self.types.table.structs.iter().find(|s| bare(&s.name) == bare(&r)).map_or(r.clone(), |s| s.name.clone());
+            if self.has(e, &r) {
+                continue;
+            }
+            if let Some(v) = self.component_defaults.get(&r).cloned() {
+                self.insert_component(e, &r, v);
+            } else if is_engine(&r) {
+                engine_set(e, &r, &json!({}));
+            } else {
+                continue;
+            }
+            self.add_required(e, &r);
+        }
+    }
+
+    fn insert_component(&mut self, e: u64, name: &str, value: Value) {
+        let name = name.to_owned();
         if self.components.contains(&name) {
             self.stores.entry(name).or_default().insert(e, value);
         } else if is_engine(&name) {
@@ -451,7 +552,7 @@ impl Host {
     }
 
     /// Builds the arguments of one system and what each row came from.
-    fn arguments(&self, sys: &System, time: (f64, f64, i64)) -> Option<(Vec<Value>, Vec<Vec<u64>>)> {
+    fn arguments(&self, sys: &System, time: (f64, f64, i64), focus: &Focus) -> Option<(Vec<Value>, Vec<Vec<u64>>)> {
         let mut args = Vec::new();
         let mut entities = Vec::new();
         for p in &sys.params {
@@ -528,6 +629,39 @@ impl Host {
                     ],
                 },
                 Param::Engine(id) => self.engine_resource(*id),
+                Param::One(c) => {
+                    let Focus::Entity(e) = focus else { return None };
+                    ids.push(*e);
+                    self.component(*e, c)?
+                }
+                Param::OneEntity => {
+                    let Focus::Entity(e) = focus else { return None };
+                    self.entity_value(*e)
+                }
+                Param::OneContact { name, .. } => {
+                    let Focus::Contact(a, b) = focus else { return None };
+                    Value::Struct {
+                        name: self.types.struct_name(*name).to_owned(),
+                        fields: vec![("a".into(), self.entity_value(*a)), ("b".into(), self.entity_value(*b))],
+                    }
+                }
+                Param::OneMessage(_) => {
+                    let Focus::Message(v) = focus else { return None };
+                    v.clone()
+                }
+                Param::State { name, of } => {
+                    let st = self.states.get(of)?;
+                    let now = Value::Enum { variant: st.now.clone(), payload: Vec::new() };
+                    Value::Struct {
+                        name: self.types.struct_name(*name).to_owned(),
+                        fields: vec![
+                            ("now".into(), now.clone()),
+                            ("since".into(), Value::Float(st.since)),
+                            ("next".into(), now),
+                            ("changing".into(), Value::Bool(false)),
+                        ],
+                    }
+                }
             };
             args.push(v);
             entities.push(ids);
@@ -535,7 +669,7 @@ impl Host {
         Some((args, entities))
     }
 
-    /// Keeps what the system wrote to the types it declared.
+    /// Keeps every change the system made to components and resources.
     fn write_back(&mut self, sys: &System, before: &[Value], after: &[Value], entities: &[Vec<u64>]) {
         for (i, p) in sys.params.iter().enumerate() {
             let (old, new) = (&before[i], &after[i]);
@@ -547,49 +681,40 @@ impl Host {
                     let (Value::Array(o), Value::Array(n)) = (old, new) else { continue };
                     for (r, e) in entities[i].iter().enumerate() {
                         let (Some(Value::Struct { fields: of, .. }), Some(Value::Struct { fields: nf, .. })) = (o.get(r), n.get(r)) else { continue };
-                        for (k, (f, c)) in fields.iter().enumerate() {
-                            let Some(c) = c else { continue };
-                            if of[k].1 == nf[k].1 {
-                                continue;
-                            }
-                            if sys.writes.contains(c) {
+                        for (k, (_, c)) in fields.iter().enumerate() {
+                            if c.is_some() && of[k].1 != nf[k].1 {
                                 self.set_component(*e, nf[k].1.clone());
-                            } else {
-                                self.undeclared(sys, c, f);
                             }
                         }
                     }
                 }
-                Param::Lookup { component, .. } => {
+                Param::Lookup { .. } => {
                     let (Some(Value::Array(o)), Some(Value::Array(n))) = (field(old, "rows"), field(new, "rows")) else { continue };
                     for (r, e) in entities[i].iter().enumerate() {
-                        if o.get(r) == n.get(r) {
-                            continue;
-                        }
-                        if sys.writes.contains(component) {
+                        if o.get(r) != n.get(r) {
                             if let Some(v) = n.get(r) {
                                 self.set_component(*e, v.clone());
                             }
-                        } else {
-                            self.undeclared(sys, component, "lookup");
                         }
                     }
                 }
+                Param::One(_) => {
+                    if let Some(e) = entities[i].first() {
+                        self.set_component(*e, new.clone());
+                    }
+                }
                 Param::Resource(name) => {
-                    if sys.writes.contains(name) {
-                        self.resources.insert(name.clone(), new.clone());
-                    } else {
-                        self.undeclared(sys, name, "resource");
+                    self.resources.insert(name.clone(), new.clone());
+                }
+                Param::State { of, .. } => {
+                    if let (Some(Value::Bool(true)), Some(Value::Enum { variant, .. })) = (field(new, "changing"), field(new, "next")) {
+                        if let Some(st) = self.states.get_mut(of) {
+                            st.next = Some(variant.clone());
+                        }
                     }
                 }
                 _ => {}
             }
-        }
-    }
-
-    fn undeclared(&mut self, sys: &System, ty: &str, _what: &str) {
-        if self.reported.insert(format!("{}:{ty}", sys.name)) {
-            log(1, &format!("{} changed {ty} without writes: [{ty}]; the change is discarded", sys.name));
         }
     }
 
@@ -635,34 +760,141 @@ impl Host {
         }
     }
 
+    /// Whether every run_if condition of the system holds this frame. A
+    /// condition is a function over resources; what it changes is discarded.
+    fn conditions_hold(&mut self, sys: &System, time: (f64, f64, i64)) -> bool {
+        for name in &sys.run_if {
+            if let Some(&v) = self.condition_cache.get(name) {
+                if !v {
+                    return false;
+                }
+                continue;
+            }
+            let Some(cond) = self.conditions.get(name).cloned() else { return false };
+            let ok = match self.arguments(&cond, time, &Focus::None) {
+                Some((mut args, _)) => match self.program.call_in_out(name, &mut args) {
+                    Ok(Value::Bool(b)) => b,
+                    Ok(_) => {
+                        if self.reported.insert(format!("cond:{name}")) {
+                            log(2, &format!("run_if: {name} must return bool"));
+                        }
+                        false
+                    }
+                    Err(d) => {
+                        if self.reported.insert(format!("cond:{name}")) {
+                            log(2, &format!("run_if: {name} raised {}: {}", d.code, d.message));
+                        }
+                        false
+                    }
+                },
+                None => false,
+            };
+            QUEUE.with(|q| q.borrow_mut().clear());
+            self.condition_cache.insert(name.clone(), ok);
+            if !ok {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// The calls a system makes this frame: one, or one per matching entity
+    /// for singular component parameters, or one per event for a singular
+    /// contact or message parameter.
+    fn foci(&self, sys: &System) -> Vec<Focus> {
+        let singular: Vec<String> = sys
+            .params
+            .iter()
+            .filter_map(|p| match p {
+                Param::One(c) => Some(c.clone()),
+                _ => None,
+            })
+            .collect();
+        if !singular.is_empty() {
+            return self.matching(&singular, &[]).into_iter().map(Focus::Entity).collect();
+        }
+        for p in &sys.params {
+            match p {
+                Param::OneContact { kind, a, b, .. } => {
+                    let mut out = Vec::new();
+                    for &(k, x, y) in &self.contacts {
+                        if k != *kind {
+                            continue;
+                        }
+                        if self.has(x, a) && self.has(y, b) {
+                            out.push(Focus::Contact(x, y));
+                        } else if self.has(y, a) && self.has(x, b) {
+                            out.push(Focus::Contact(y, x));
+                        }
+                    }
+                    return out;
+                }
+                Param::OneMessage(name) => {
+                    return self
+                        .messages
+                        .iter()
+                        .filter(|(seq, n, _)| *seq > sys.seen && n == name)
+                        .map(|(_, _, v)| Focus::Message(v.clone()))
+                        .collect();
+                }
+                _ => {}
+            }
+        }
+        vec![Focus::None]
+    }
+
     fn run(&mut self, index: usize, time: (f64, f64, i64)) {
         let sys = self.systems[index].clone();
         if !sys.enabled {
             return;
         }
-        let Some((mut args, entities)) = self.arguments(&sys, time) else { return };
-        let before = args.clone();
+        if !sys.in_state.is_empty()
+            && !sys.in_state.iter().any(|(e, v)| self.states.get(e).is_some_and(|s| &s.now == v))
+        {
+            return;
+        }
+        if !self.conditions_hold(&sys, time) {
+            return;
+        }
         let mark = self.next_seq;
-        match self.program.call_in_out(&sys.name, &mut args) {
-            Ok(_) => {
-                self.write_back(&sys, &before, &args, &entities);
-                self.apply();
-            }
-            Err(d) => {
-                QUEUE.with(|q| q.borrow_mut().clear());
-                log(2, &format!("{} raised {}: {}", sys.name, d.code, d.message));
-                self.systems[index].enabled = false;
+        for focus in self.foci(&sys) {
+            let Some((mut args, entities)) = self.arguments(&sys, time, &focus) else { continue };
+            let before = args.clone();
+            match self.program.call_in_out(&sys.name, &mut args) {
+                Ok(_) => {
+                    self.write_back(&sys, &before, &args, &entities);
+                    self.apply();
+                }
+                Err(d) => {
+                    QUEUE.with(|q| q.borrow_mut().clear());
+                    log(2, &format!("{} raised {}: {}", sys.name, d.code, d.message));
+                    self.systems[index].enabled = false;
+                    break;
+                }
             }
         }
         self.systems[index].seen = self.systems[index].seen.max(mark);
     }
 
+    fn run_transition(&mut self, order: &[usize], time: (f64, f64, i64), matches: impl Fn(&System) -> bool) {
+        for &i in order {
+            if matches(&self.systems[i]) {
+                self.run(i, time);
+            }
+        }
+    }
+
     fn frame(&mut self, time: (f64, f64, i64)) {
+        self.condition_cache.clear();
         // Entities the engine removed (a Lifetime ran out, a parent went).
         for store in self.stores.values_mut() {
             store.retain(|e, _| unsafe { drift_bridge_alive(*e) != 0 });
         }
+        for st in self.states.values_mut() {
+            st.since += time.0;
+        }
         let order: Vec<usize> = (0..self.systems.len()).collect();
+        let is_transition = |s: &System| s.on_enter.is_some() || s.on_exit.is_some();
         if !self.started {
             self.started = true;
             for &i in &order {
@@ -670,11 +902,33 @@ impl Host {
                     self.run(i, time);
                 }
             }
+            // The first state of each enum is entered once Startup has run.
+            let entered: Vec<(String, String)> = self.states.iter().map(|(e, s)| (e.clone(), s.now.clone())).collect();
+            for (e, v) in entered {
+                self.run_transition(&order, time, |s| s.on_enter.as_ref() == Some(&(e.clone(), v.clone())));
+            }
         }
         for &i in &order {
-            if !self.systems[i].startup {
+            if !self.systems[i].startup && !is_transition(&self.systems[i]) {
                 self.run(i, time);
             }
+        }
+        // State changes asked for this frame: exit the old, enter the new.
+        let changes: Vec<(String, String, String)> = self
+            .states
+            .iter_mut()
+            .filter_map(|(e, s)| {
+                let next = s.next.take()?;
+                (next != s.now).then(|| (e.clone(), s.now.clone(), next))
+            })
+            .collect();
+        for (e, old, new) in changes {
+            self.run_transition(&order, time, |s| s.on_exit.as_ref() == Some(&(e.clone(), old.clone())));
+            if let Some(st) = self.states.get_mut(&e) {
+                st.now = new.clone();
+                st.since = 0.0;
+            }
+            self.run_transition(&order, time, |s| s.on_enter.as_ref() == Some(&(e.clone(), new.clone())));
         }
         // Every system has run since these were sent, or will not read them.
         let oldest = self.systems.iter().filter(|s| !s.startup).map(|s| s.seen).min().unwrap_or(self.next_seq);
@@ -875,7 +1129,11 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         }
         g
     };
-    let mut buildable: Vec<&(u16, Option<String>)> = resources_list.iter().collect();
+    // Components too, so a component another one requires can be added from
+    // its defaults.
+    let component_list: Vec<(u16, Option<String>)> = named("component").iter().map(|(id, _)| (*id, None)).collect();
+    let all_defaults: Vec<(u16, Option<String>)> = resources_list.iter().cloned().chain(component_list.iter().cloned()).collect();
+    let mut buildable: Vec<&(u16, Option<String>)> = all_defaults.iter().collect();
     let program = loop {
         match engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&buildable)), entry) {
             Ok(p) => break p,
@@ -905,13 +1163,33 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         contacts: Vec::new(),
         started: false,
         reported: HashSet::new(),
+        conditions: HashMap::new(),
+        condition_cache: HashMap::new(),
+        requires: HashMap::new(),
+        component_defaults: HashMap::new(),
+        states: HashMap::new(),
     };
+    for a in host.types.table.named("drift", "state") {
+        let AttributeTarget::Enum(id) = a.target else { continue };
+        let info = &host.types.table.enums[id as usize];
+        if let Some(first) = info.variants.first() {
+            host.states.insert(bare(&info.name).to_owned(), StateNow { now: first.clone(), since: 0.0, next: None });
+        }
+    }
     for c in &host.components {
         host.stores.insert(c.clone(), BTreeMap::new());
     }
+    let resource_ids: HashSet<u16> = resources_list.iter().map(|r| r.0).collect();
     for (id, section) in buildable.iter().map(|r| (r.0, r.1.clone())) {
         let name = host.types.struct_name(id).to_owned();
-        let mut v = host.program.call(&format!("__drift_default_{id}"), &[]).map_err(|d| d.message)?;
+        let mut v = host
+            .program
+            .call(&format!("__drift_default_{id}"), &[])
+            .map_err(|d| format!("{name}: building its defaults raised {}: {}", d.code, d.message))?;
+        if !resource_ids.contains(&id) {
+            host.component_defaults.insert(name, v);
+            continue;
+        }
         if let Some(section) = section {
             let j = call("settings_section", json!([section]));
             v = host.types.merge(&v, &j, id);
@@ -921,6 +1199,14 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     for (id, section) in &settings {
         if !buildable.iter().any(|r| r.0 == *id) {
             log(2, &format!("drift_settings_without_defaults: {} [{}]", host.types.struct_name(*id), section.clone().unwrap_or_default()));
+        }
+    }
+
+    for a in host.types.table.named("drift", "component") {
+        let AttributeTarget::Struct(id) = a.target else { continue };
+        let required = type_list(&host.types, a.arg("requires"));
+        if !required.is_empty() {
+            host.requires.insert(host.types.struct_name(id).to_owned(), required);
         }
     }
 
@@ -940,7 +1226,17 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         systems.push(System {
             name: name.clone(),
             params: ps,
-            writes: type_list(&host.types, a.arg("writes")).into_iter().collect(),
+            run_if: fn_list(a.arg("run_if")),
+            in_state: a
+                .arg("in_state")
+                .and_then(AttributeValue::as_list)
+                .unwrap_or(&[])
+                .iter()
+                .filter_map(|v| variant(&host.types.table, v))
+                .map(|(e, v)| (bare(&e).to_owned(), v))
+                .collect(),
+            on_enter: a.arg("on_enter").and_then(|v| variant(&host.types.table, v)).map(|(e, v)| (bare(&e).to_owned(), v)),
+            on_exit: a.arg("on_exit").and_then(|v| variant(&host.types.table, v)).map(|(e, v)| (bare(&e).to_owned(), v)),
             startup,
             enabled,
             after: fn_list(a.arg("after")),
@@ -951,8 +1247,68 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     if !errors.is_empty() {
         return Err(errors.join("\n"));
     }
+    // run_if conditions take parameters the way systems do.
+    for sys in &systems {
+        for cond in &sys.run_if {
+            if host.conditions.contains_key(cond) {
+                continue;
+            }
+            let Some(params) = function_params(&host.types.table, cond) else {
+                errors.push(format!("drift_unknown_condition: {cond} in run_if of {}", sys.name));
+                continue;
+            };
+            let mut ps = Vec::new();
+            for (pname, ty) in &params {
+                match host.classify(ty) {
+                    Ok(p @ (Param::Resource(_) | Param::Time(_) | Param::Engine(_) | Param::Rows { .. } | Param::Lookup { .. })) => ps.push(p),
+                    Ok(_) => errors.push(format!("drift_condition_parameter: {cond}({pname}): conditions read resources and queries")),
+                    Err(why) => errors.push(format!("drift_unknown_parameter: {cond}({pname}): {why}")),
+                }
+            }
+            host.conditions.insert(cond.clone(), System {
+                name: cond.clone(),
+                params: ps,
+                run_if: Vec::new(),
+                in_state: Vec::new(),
+                on_enter: None,
+                on_exit: None,
+                startup: false,
+                enabled: true,
+                after: Vec::new(),
+                before: Vec::new(),
+                seen: 0,
+            });
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
     host.systems = order(systems)?;
     Ok(host)
+}
+
+/// The parameters of a function the attribute table describes: an attributed
+/// function, or one an attribute argument names.
+fn function_params(table: &AttributeTable, name: &str) -> Option<Vec<(String, DataType)>> {
+    fn in_value(v: &AttributeValue, name: &str) -> Option<Vec<(String, DataType)>> {
+        match v {
+            AttributeValue::Fn { name: n, params, .. } if n == name => Some(params.clone()),
+            AttributeValue::List(items) => items.iter().find_map(|i| in_value(i, name)),
+            _ => None,
+        }
+    }
+    table.attributes.iter().find_map(|a| match &a.target {
+        AttributeTarget::Fn { name: n, params } if n == name => Some(params.clone()),
+        _ => a.args.iter().find_map(|(_, v)| in_value(v, name)),
+    })
+}
+
+/// (enum name, variant name) of a payload-less variant attribute value.
+fn variant(table: &AttributeTable, v: &AttributeValue) -> Option<(String, String)> {
+    match v {
+        AttributeValue::Variant { enum_id, name } => Some((table.enums[*enum_id as usize].name.clone(), name.clone())),
+        _ => None,
+    }
 }
 
 fn set_error(message: &str) {

@@ -3,34 +3,27 @@
 // Space, Up, a click or the gamepad's A button flaps. After a crash, flap to
 // play again.
 
-import "drift";
-import "drift" { Entity, Commands, Transform, Velocity, Sprite, Text, RigidBody, BodyKind,
-                 BoxCollider, Lifetime, Align, Key, MouseButton, GamepadButton, Texture, Sound,
-                 Timer, Input, Time, at, vec2, rgb, hud_layer, repeating_timer };
+import "drift" { * };
 import "std/random" as random;
+
+const GROUND_Y: float = 400.0;
+
+@state
+enum Phase { Ready, Playing, Over }
 
 // ---- Components ----
 
-@drift::component
+@component(requires: [Velocity])
 struct Bird { vy: float = 0.0, frame_time: float = 0.0 }
 
-@drift::component
-struct Pipe { scored: bool = false }
-
-@drift::component
-struct Ground {}
-
-@drift::component
-struct ScoreLabel {}
-
-@drift::component
-struct Banner { shown_when: Phase = Phase::Ready }
+@component struct Pipe { scored: bool = false }
+@component struct Ground {}
+@component struct ScoreLabel {}
+@component struct Banner { shown_in: Phase = Phase::Ready }
 
 // ---- Resources ----
 
-enum Phase { Ready, Playing, Over }
-
-@drift::settings(section: "flappy")
+@settings(section: "flappy")
 struct Tuning {
     gravity: float = 1400.0,
     flap_speed: float = 420.0,
@@ -39,215 +32,74 @@ struct Tuning {
     spawn_every: float = 1.5,
 }
 
-@drift::resource
-struct Game {
-    phase: Phase = Phase::Ready,
-    score: int = 0,
-    best: int = 0,
-    spawn: Timer = repeating_timer(1.5),
-    over_for: float = 0.0,
-}
+@resource
+struct Game { score: int = 0, best: int = 0, spawn: Timer = repeating_timer(1.5) }
 
-// Made in setup; no defaults, so it exists once setup inserts it.
-@drift::resource
+@resource
 struct Art {
-    bird: Texture[],
-    pipe: Texture,
-    wing: Sound,
-    point: Sound,
-    hit: Sound,
-    die: Sound,
+    bird: Texture[] = [texture("assets/bird-up.png"), texture("assets/bird-mid.png"),
+                       texture("assets/bird-down.png")],
+    pipe: Texture = texture("assets/pipe.png"),
+    wing: Sound = sound("assets/wing.wav"),
+    point: Sound = sound("assets/point.wav"),
+    hit: Sound = sound("assets/hit.wav"),
+    die: Sound = sound("assets/die.wav"),
 }
-
-// Where the ground strip starts.
-fn ground_y() -> float { return 400.0; }
 
 // ---- Startup ----
 
-@drift::system(schedule: drift::Schedule::Startup, writes: [Game])
-fn setup(cmd: Commands, assets: drift::Assets, input: Input, tuning: Tuning, game: Game) {
-    input.bind_key("flap", Key::Space);
-    input.bind_key("flap", Key::Up);
-    input.bind_mouse("flap", MouseButton::Left);
-    input.bind_button("flap", GamepadButton::South);
-    game.spawn = repeating_timer(tuning.spawn_every);
-
-    let art = Art {
-        bird: [assets.texture("assets/bird-up.png"), assets.texture("assets/bird-mid.png"),
-               assets.texture("assets/bird-down.png")],
-        pipe: assets.texture("assets/pipe.png"),
-        wing: assets.sound("assets/wing.wav"),
-        point: assets.sound("assets/point.wav"),
-        hit: assets.sound("assets/hit.wav"),
-        die: assets.sound("assets/die.wav"),
-    };
-    cmd.insert_resource(art);
-
-    cmd.spawn([at(144.0, 256.0), Sprite { image: assets.texture("assets/background.png"), z: -10.0, .. }]);
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, art: Art) {
+    cmd.spawn([at(144.0, 256.0), Sprite { image: texture("assets/background.png"), z: -10.0, .. }]);
     // Two ground strips side by side; scroll_ground moves them.
-    cmd.spawn([at(168.0, 456.0), Sprite { image: assets.texture("assets/base.png"), z: 5.0, .. }, Ground {}]);
-    cmd.spawn([at(504.0, 456.0), Sprite { image: assets.texture("assets/base.png"), z: 5.0, .. }, Ground {}]);
-
+    for x in [168.0, 504.0] {
+        cmd.spawn([at(x, 456.0), Sprite { image: texture("assets/base.png"), z: 5.0, .. }, Ground {}]);
+    }
     cmd.spawn([
         at(80.0, 240.0),
         Sprite { image: art.bird[1], z: 3.0, .. },
         RigidBody { kind: BodyKind::Dynamic, fixed_rotation: true, gravity_scale: 0.0, .. },
         BoxCollider { half_size: vec2(12.0, 9.0), sensor: true, .. },
-        Velocity { .. },
         Bird { .. },
     ]);
-
-    cmd.spawn([
-        at(144.0, 40.0),
-        Text { size: 40.0, align: Align::Center, outline: 3.0, layer: hud_layer(), .. },
-        ScoreLabel {},
-    ]);
-    cmd.spawn([at(144.0, 230.0), Sprite { image: assets.texture("assets/message.png"), z: 10.0, .. }, Banner { shown_when: Phase::Ready }]);
-    cmd.spawn([at(144.0, 200.0), Sprite { image: assets.texture("assets/gameover.png"), z: 10.0, visible: false, .. },
-               Banner { shown_when: Phase::Over }]);
+    cmd.spawn([at(144.0, 40.0), Text { size: 40.0, align: Align::Center, outline: 3.0, layer: hud_layer(), .. },
+               ScoreLabel {}]);
+    cmd.spawn([at(144.0, 230.0), Sprite { image: texture("assets/message.png"), z: 10.0, .. },
+               Banner { shown_in: Phase::Ready }]);
+    cmd.spawn([at(144.0, 200.0), Sprite { image: texture("assets/gameover.png"), z: 10.0, .. },
+               Banner { shown_in: Phase::Over }]);
 }
 
-// ---- Every frame ----
+// ---- Rounds ----
 
-// Flapping starts the round, lifts the bird, and after a crash starts over.
-@drift::system(writes: [Game, Bird, Transform])
-fn flap(input: Input, game: Game, tuning: Tuning, art: Art, cmd: Commands,
-        birds: (Bird, Transform)[], pipes: (Entity, Pipe)[]) {
-    if !input.action_pressed("flap") {
-        return;
+fn flapped(input: Input) -> bool => input.action_pressed("flap");
+
+// A new round: the bird back at the start, no pipes, no score.
+@system(on_enter: Phase::Ready)
+fn reset(birds: (Bird, Transform, Velocity)[], pipes: (Entity, Pipe)[], cmd: Commands, game: Game) {
+    for (e, _) in pipes {
+        cmd.despawn(e);
     }
-    if game.phase == Phase::Over {
-        if game.over_for < 0.5 {
-            return;
-        }
-        for row in pipes {
-            cmd.despawn(row.0);
-        }
-        for row in birds {
-            let (bird, t) = row;
-            bird.vy = 0.0;
-            t.position = vec2(80.0, 240.0);
-            t.rotation = 0.0;
-        }
-        game.phase = Phase::Ready;
-        game.score = 0;
-        game.spawn.reset();
-        return;
+    for (bird, t, v) in birds {
+        bird.vy = 0.0;
+        t.position = vec2(80.0, 240.0);
+        t.rotation = 0.0;
+        v.linear = vec2(0.0, 0.0);
     }
-    game.phase = Phase::Playing;
-    for row in birds {
-        row.0.vy = -tuning.flap_speed;
-    }
-    art.wing.play();
+    game.score = 0;
 }
 
-// Gravity, the tilt of the bird, and crashing into the ground.
-@drift::system(writes: [Bird, Velocity, Transform, Game], after: [flap])
-fn fall(time: Time, tuning: Tuning, game: Game, art: Art, effects: drift::Effects,
-        birds: (Bird, Velocity, Transform)[]) {
-    for row in birds {
-        let (bird, velocity, t) = row;
-        if game.phase == Phase::Ready {
-            // Hover until the first flap.
-            velocity.linear = vec2(0.0, 0.0);
-            continue;
-        }
-        if t.position.y >= ground_y() - 12.0 {
-            velocity.linear = vec2(0.0, 0.0);
-            if game.phase == Phase::Playing {
-                crash(game, art, effects);
-            }
-            continue;
-        }
-        bird.vy += tuning.gravity * time.dt;
-        if t.position.y < 0.0 && bird.vy < 0.0 {
-            bird.vy = 0.0;
-        }
-        velocity.linear = vec2(0.0, bird.vy);
-        let tilt = bird.vy / 600.0;
-        if tilt > 1.4 {
-            tilt = 1.4;
-        }
-        if tilt < -0.5 {
-            tilt = -0.5;
-        }
-        t.rotation = tilt;
-    }
-    if game.phase == Phase::Over {
-        game.over_for += time.dt;
-    }
+@system(on_enter: Phase::Playing)
+fn start(game: Game, tuning: Tuning) {
+    game.spawn = repeating_timer(tuning.spawn_every);
 }
 
-// Flaps the wings: three frames, faster while flying.
-@drift::system(writes: [Bird, Sprite])
-fn animate_bird(time: Time, game: Game, art: Art, birds: (Bird, Sprite)[]) {
-    if game.phase == Phase::Over {
-        return;
+@system(on_enter: Phase::Over)
+fn crash(pipes: (Pipe, Velocity, Lifetime)[], game: Game, art: Art, effects: Effects) {
+    for (_, v, life) in pipes {
+        v.linear = vec2(0.0, 0.0);
+        life.seconds = 1000.0;
     }
-    for row in birds {
-        let (bird, sprite) = row;
-        bird.frame_time += time.dt;
-        let frame = int(bird.frame_time * 10.0) % 3;
-        sprite.image = art.bird[frame];
-    }
-}
-
-@drift::system(writes: [Game])
-fn spawn_pipes(time: Time, tuning: Tuning, game: Game, art: Art, cmd: Commands) {
-    if game.phase != Phase::Playing || game.spawn.tick(time.dt) == 0 {
-        return;
-    }
-    let gap_y = random::float_range(120.0, ground_y() - 100.0);
-    let half = tuning.pipe_gap * 0.5;
-    let x = 288.0 + 30.0;
-    // Long enough to cross the screen.
-    let seconds = (x + 60.0) / tuning.pipe_speed;
-    pipe(cmd, art, vec2(x, gap_y + half + 160.0), false, tuning.pipe_speed, seconds);
-    pipe(cmd, art, vec2(x, gap_y - half - 160.0), true, tuning.pipe_speed, seconds);
-}
-
-fn pipe(cmd: Commands, art: Art, pos: drift::Vec2, flipped: bool, speed: float, seconds: float) {
-    cmd.spawn([
-        Transform { position: pos, .. },
-        Sprite { image: art.pipe, flip_y: flipped, z: 1.0, .. },
-        RigidBody { kind: BodyKind::Kinematic, .. },
-        BoxCollider { half_size: vec2(26.0, 160.0), .. },
-        Velocity { linear: vec2(-speed, 0.0), .. },
-        Lifetime { seconds: seconds },
-        Pipe { .. },
-    ]);
-}
-
-// A point for each pair of pipes the bird passes; only the bottom pipe of a
-// pair counts.
-@drift::system(writes: [Game, Pipe])
-fn score(game: Game, art: Art, birds: (Bird, Transform)[], pipes: (Pipe, Transform, Sprite)[]) {
-    if game.phase != Phase::Playing {
-        return;
-    }
-    for b in birds {
-        let bird_x = b.1.position.x;
-        for row in pipes {
-            let (p, t, sprite) = row;
-            if !p.scored && !sprite.flip_y && t.position.x + 26.0 < bird_x {
-                p.scored = true;
-                game.score += 1;
-                art.point.play();
-            }
-        }
-    }
-}
-
-@drift::system(writes: [Game], after: [fall])
-fn hit_pipe(hits: drift::Overlap<Bird, Pipe>[], game: Game, art: Art, effects: drift::Effects) {
-    if hits.len() > 0 && game.phase == Phase::Playing {
-        crash(game, art, effects);
-    }
-}
-
-fn crash(game: Game, art: Art, effects: drift::Effects) {
-    game.phase = Phase::Over;
-    game.over_for = 0.0;
     if game.score > game.best {
         game.best = game.score;
     }
@@ -256,45 +108,112 @@ fn crash(game: Game, art: Art, effects: drift::Effects) {
     effects.flash(rgb(255, 255, 255), 0.25);
 }
 
-// Pipes stop when the bird crashes.
-@drift::system(writes: [Velocity, Lifetime], after: [hit_pipe, fall])
-fn stop_pipes(game: Game, pipes: (Pipe, Velocity, Lifetime)[]) {
-    if game.phase != Phase::Over {
-        return;
+// After a crash, flap to play again.
+@system(in_state: [Phase::Over], run_if: [flapped])
+fn restart(state: State<Phase>) {
+    if state.since >= 0.5 {
+        state.set(Phase::Ready);
     }
-    for row in pipes {
-        let (_, v, life) = row;
+}
+
+// ---- Every frame ----
+
+@system(in_state: [Phase::Ready, Phase::Playing], run_if: [flapped])
+fn flap(bird: Bird, state: State<Phase>, tuning: Tuning, art: Art) {
+    state.set(Phase::Playing);
+    bird.vy = -tuning.flap_speed;
+    art.wing.play();
+}
+
+// Gravity, the tilt of the bird, and crashing into the ground.
+@system(in_state: [Phase::Playing, Phase::Over])
+fn fall(bird: Bird, v: Velocity, t: Transform, time: Time, tuning: Tuning, state: State<Phase>) {
+    if t.position.y >= GROUND_Y - 12.0 {
         v.linear = vec2(0.0, 0.0);
-        life.seconds = 1000.0;
-    }
-}
-
-@drift::system(writes: [Transform])
-fn scroll_ground(time: Time, game: Game, tuning: Tuning, ground: (Ground, Transform)[]) {
-    if game.phase == Phase::Over {
+        if state.now == Phase::Playing {
+            state.set(Phase::Over);
+        }
         return;
     }
-    for row in ground {
-        let (_, t) = row;
-        t.position.x -= tuning.pipe_speed * time.dt;
-        if t.position.x <= -168.0 {
-            t.position.x += 672.0;
+    bird.vy += tuning.gravity * time.dt;
+    if t.position.y < 0.0 && bird.vy < 0.0 {
+        bird.vy = 0.0;
+    }
+    v.linear = vec2(0.0, bird.vy);
+    t.rotation = clamp(bird.vy / 600.0, -0.5, 1.4);
+}
+
+// Flaps the wings: three frames.
+@system(in_state: [Phase::Ready, Phase::Playing])
+fn animate_bird(bird: Bird, sprite: Sprite, time: Time, art: Art) {
+    bird.frame_time += time.dt;
+    sprite.image = art.bird[int(bird.frame_time * 10.0) % 3];
+}
+
+@system(in_state: [Phase::Playing])
+fn spawn_pipes(time: Time, tuning: Tuning, game: Game, art: Art, cmd: Commands) {
+    if game.spawn.tick(time.dt) == 0 {
+        return;
+    }
+    let gap_y = random::float_range(120.0, GROUND_Y - 100.0);
+    let half = tuning.pipe_gap * 0.5;
+    let x = 288.0 + 30.0;
+    // Long enough to cross the screen.
+    let seconds = (x + 60.0) / tuning.pipe_speed;
+    cmd.spawn(pipe(art, vec2(x, gap_y + half + 160.0), false, tuning.pipe_speed, seconds));
+    cmd.spawn(pipe(art, vec2(x, gap_y - half - 160.0), true, tuning.pipe_speed, seconds));
+}
+
+fn pipe(art: Art, pos: Vec2, flipped: bool, speed: float, seconds: float) -> any[] {
+    return [
+        Transform { position: pos, .. },
+        Sprite { image: art.pipe, flip_y: flipped, z: 1.0, .. },
+        RigidBody { kind: BodyKind::Kinematic, .. },
+        BoxCollider { half_size: vec2(26.0, 160.0), .. },
+        Velocity { linear: vec2(-speed, 0.0), .. },
+        Lifetime { seconds: seconds },
+        Pipe { .. },
+    ];
+}
+
+// A point for each pair of pipes the bird passes; only the bottom pipe of a
+// pair counts.
+@system(in_state: [Phase::Playing])
+fn score(game: Game, art: Art, birds: (Bird, Transform)[], pipes: (Pipe, Transform, Sprite)[]) {
+    for (_, bt) in birds {
+        for (p, t, sprite) in pipes {
+            if !p.scored && !sprite.flip_y && t.position.x + 26.0 < bt.position.x {
+                p.scored = true;
+                game.score += 1;
+                art.point.play();
+            }
         }
     }
 }
 
-@drift::system(writes: [Text, Sprite], after: [score, hit_pipe, fall, flap])
-fn hud(game: Game, labels: (ScoreLabel, Text)[], banners: (Banner, Sprite)[]) {
-    for row in labels {
-        let (_, text) = row;
-        text.visible = game.phase != Phase::Ready;
-        text.value = string(game.score);
-        if game.phase == Phase::Over {
-            text.value = string(game.score) + "  best " + string(game.best);
-        }
+@system(in_state: [Phase::Playing])
+fn hit_pipe(_: Overlap<Bird, Pipe>, state: State<Phase>) {
+    state.set(Phase::Over);
+}
+
+@system(in_state: [Phase::Ready, Phase::Playing])
+fn scroll_ground(_: Ground, t: Transform, time: Time, tuning: Tuning) {
+    t.position.x -= tuning.pipe_speed * time.dt;
+    if t.position.x <= -168.0 {
+        t.position.x += 672.0;
     }
-    for row in banners {
-        let (banner, sprite) = row;
-        sprite.visible = banner.shown_when == game.phase;
-    }
+}
+
+// ---- HUD ----
+
+@system
+fn score_label(_: ScoreLabel, text: Text, game: Game, state: State<Phase>) {
+    text.visible = state.now != Phase::Ready;
+    text.value = if state.now == Phase::Over { string(game.score) + "  best " + string(game.best) }
+                 else { string(game.score) };
+}
+
+@system
+fn banner(banner: Banner, sprite: Sprite, state: State<Phase>) {
+    sprite.visible = banner.shown_in == state.now;
 }

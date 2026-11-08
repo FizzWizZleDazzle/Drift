@@ -474,6 +474,25 @@ bool Settings::reload() {
         auto range = s.listeners.equal_range(b.section);
         for (auto it = range.first; it != range.second; ++it) it->second(changed);
     }
+    // Sections no struct is bound to (read raw by a plugin): their listeners
+    // hear about every key whose value changed.
+    for (const auto& [section, fn] : s.listeners) {
+        bool bound = std::any_of(s.bindings.begin(), s.bindings.end(),
+                                 [&](const Impl::Binding& b) { return b.section == section; });
+        if (bound) continue;
+        const json* o = lookup(prev, section);
+        const json* n = lookup(s.data, section);
+        std::set<std::string> keys;
+        if (o && o->is_object()) for (const auto& [k, v] : o->items()) keys.insert(k);
+        if (n && n->is_object()) for (const auto& [k, v] : n->items()) keys.insert(k);
+        std::vector<std::string> changed;
+        for (const auto& k : keys) {
+            const json* ov = o && o->contains(k) ? &(*o)[k] : nullptr;
+            const json* nv = n && n->contains(k) ? &(*n)[k] : nullptr;
+            if (!(ov && nv && *ov == *nv)) changed.push_back(k);
+        }
+        if (!changed.empty()) fn(changed);
+    }
     s.reloading = true;
     warnUnknownKeys();
     s.reloading = false;

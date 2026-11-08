@@ -7,12 +7,14 @@
 // See bindings/candela/docs for the book.
 
 host "drift" {
-    attribute component on struct;
+    attribute component(requires: type[] = []) on struct;
     attribute resource on struct;
     attribute settings(section: string) on struct;
     attribute message on struct;
+    attribute state on enum;
     attribute query(with: type[] = [], without: type[] = []) on struct;
-    attribute system(writes: type[] = [], after: fn[] = [], before: fn[] = [],
+    attribute system(after: fn[] = [], before: fn[] = [], run_if: fn[] = [],
+                     in_state: enum[] = [], on_enter: enum?, on_exit: enum?,
                      schedule: Schedule = Schedule::Update, enabled: bool = true) on fn;
 
     // Commands. The host applies them when the system that issued them returns.
@@ -60,21 +62,22 @@ enum Schedule { Startup, Update }
 struct Vec2 { x: float = 0.0, y: float = 0.0 }
 fn vec2(x: float, y: float) -> Vec2 { return Vec2 { x: x, y: y }; }
 impl Vec2 {
-    fn add(self, o: Vec2) -> Vec2 { return Vec2 { x: self.x + o.x, y: self.y + o.y }; }
-    fn sub(self, o: Vec2) -> Vec2 { return Vec2 { x: self.x - o.x, y: self.y - o.y }; }
-    fn mul(self, s: float) -> Vec2 { return Vec2 { x: self.x * s, y: self.y * s }; }
-    fn div(self, s: float) -> Vec2 { return Vec2 { x: self.x / s, y: self.y / s }; }
+    fn +(self, o: Vec2) -> Vec2 { return Vec2 { x: self.x + o.x, y: self.y + o.y }; }
+    fn -(self, o: Vec2) -> Vec2 { return Vec2 { x: self.x - o.x, y: self.y - o.y }; }
+    fn -(self) -> Vec2 { return Vec2 { x: -self.x, y: -self.y }; }
+    fn *(self, s: float) -> Vec2 { return Vec2 { x: self.x * s, y: self.y * s }; }
+    fn /(self, s: float) -> Vec2 { return Vec2 { x: self.x / s, y: self.y / s }; }
     fn dot(self, o: Vec2) -> float { return self.x * o.x + self.y * o.y; }
     fn length(self) -> float { return (self.x * self.x + self.y * self.y).sqrt(); }
-    fn distance(self, o: Vec2) -> float { return self.sub(o).length(); }
+    fn distance(self, o: Vec2) -> float { return (self - o).length(); }
     fn normalized(self) -> Vec2 {
         let l = self.length();
         if l == 0.0 {
             return Vec2 { .. };
         }
-        return self.div(l);
+        return self / l;
     }
-    fn lerp(self, o: Vec2, t: float) -> Vec2 { return self.add(o.sub(self).mul(t)); }
+    fn lerp(self, o: Vec2, t: float) -> Vec2 { return self + (o - self) * t; }
 }
 
 struct Rect { x: float = 0.0, y: float = 0.0, w: float = 0.0, h: float = 0.0 }
@@ -104,6 +107,29 @@ impl Color {
 struct Entity { id: int = 0 }
 
 fn hud_layer() -> int { return 31; }
+
+// Numbers held between bounds, and the smaller or larger of two.
+fn clamp(x: float, lo: float, hi: float) -> float {
+    if x < lo {
+        return lo;
+    }
+    if x > hi {
+        return hi;
+    }
+    return x;
+}
+fn min(a: float, b: float) -> float {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+fn max(a: float, b: float) -> float {
+    if a > b {
+        return a;
+    }
+    return b;
+}
 fn log(message: string) { drift::log_message(0, message); }
 fn warn(message: string) { drift::log_message(1, message); }
 
@@ -116,6 +142,9 @@ enum BodyKind { Static, Dynamic, Kinematic }
 // ---- Assets ----
 
 struct Texture { id: int = 0 }
+// The texture of an image file, loaded once per path. Works anywhere,
+// field defaults included: `pipe: Texture = texture("assets/pipe.png")`.
+fn texture(path: string) -> Texture { return Texture { id: drift::texture_load(path) }; }
 impl Texture {
     fn size(self) -> Vec2 {
         let s = drift::texture_size(self.id);
@@ -130,6 +159,8 @@ impl Texture {
 struct Font { id: int = 0 }
 
 struct Sound { id: int = 0 }
+// The sound in a WAV, OGG or MP3 file, loaded once per path.
+fn sound(path: string) -> Sound { return Sound { id: drift::sound_load(path) }; }
 impl Sound {
     fn play(self) { drift::sound_play(self.id, 1.0, 1.0, false); }
     fn play_with(self, o: PlayOptions) { drift::sound_play(self.id, o.volume, o.pitch, o.looping); }
@@ -277,6 +308,19 @@ impl Commands {
     fn send(self, message: any) { drift::send_message(message); }
 }
 
+// ---- States ----
+
+// The current variant of a @drift::state enum. `set` asks for a change; the
+// change happens after this frame's Update systems, running the on_exit
+// systems of the old variant and the on_enter systems of the new one.
+struct State<S> { now: S, since: float, next: S, changing: bool }
+impl State<S> {
+    fn set(self, s: S) {
+        self.next = s;
+        self.changing = true;
+    }
+}
+
 // ---- Engine resources ----
 
 struct Time { dt: float = 0.0, elapsed: float = 0.0, frame: int = 0 }
@@ -377,7 +421,6 @@ impl Input {
 
 struct Assets { id: int = 0 }
 impl Assets {
-    fn texture(self, path: string) -> Texture { return Texture { id: drift::texture_load(path) }; }
     fn create_texture(self, w: int, h: int, pixels: Color[]) -> Texture {
         let flat: float[] = [];
         for c in pixels {
@@ -388,7 +431,6 @@ impl Assets {
         }
         return Texture { id: drift::texture_create(w, h, flat) };
     }
-    fn sound(self, path: string) -> Sound { return Sound { id: drift::sound_load(path) }; }
     fn create_sound(self, samples: float[], rate: int) -> Sound { return Sound { id: drift::sound_create(samples, rate) }; }
 }
 

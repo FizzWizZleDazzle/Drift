@@ -3,6 +3,7 @@
 #include <drift/App.hpp>
 #include <drift/Settings.hpp>
 #include <drift/plugins/LightingPlugin.hpp>
+#include <drift/plugins/InputActionsPlugin.hpp>
 
 #include <SDL3/SDL.h>
 
@@ -201,4 +202,38 @@ TEST(settings_without_a_file_use_defaults) {
     Rules& r = app.settings<Rules>("rules");
     CHECK(r.lives == 3);
     CHECK(app.config().window.width == 1280);
+}
+
+TEST(settings_raw_sections_report_changes) {
+    std::string f = writeToml("drift_settings_raw.toml", R"(
+[input]
+jump = ["key:Space"]
+fire = ["mouse:Left"]
+)");
+    Fixture fx(f);
+    std::vector<std::string> seen;
+    fx.app.onSettingsChanged("input", [&](const std::vector<std::string>& keys) { seen = keys; });
+    CHECK(fx.app.settingsStore().valueJson("input").find("key:Space") != std::string::npos);
+    writeToml("drift_settings_raw.toml", R"(
+[input]
+jump = ["key:Up"]
+fire = ["mouse:Left"]
+)");
+    CHECK(fx.app.settingsStore().reload());
+    CHECK(seen.size() == 1);
+    CHECK(!seen.empty() && seen[0] == "jump");
+}
+
+TEST(settings_input_section_binds_actions) {
+    std::string f = writeToml("drift_settings_input.toml", R"(
+[input]
+jump = ["key:Space", "button:South"]
+fire = "mouse:Left"
+)");
+    Fixture fx(f);
+    InputActions actions;
+    InputActionsPlugin::bindFromSettings(actions, fx.app.settingsStore(), {});
+    CHECK(actions.has("jump"));
+    CHECK(actions.has("fire"));
+    CHECK(actions.bindings("jump", 0).size() == 2);
 }
