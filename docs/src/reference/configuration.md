@@ -146,7 +146,7 @@ void setup(Res<Settings> settings) {
 }
 ```
 
-`has`, `getInt`, `getFloat`, `getBool` and `getString` see environment and `--set` values too.
+`has`, `getInt`, `getFloat`, `getBool` and `getString` see environment and `--set` values too. `valueJson(path)` returns a value or a whole table as JSON text, which is how a scripting host reads a section.
 
 ## Live Reload
 

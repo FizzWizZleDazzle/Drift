@@ -1,0 +1,431 @@
+// drift: the engine module of Candela games that `drift` runs.
+//
+// A game marks its structs and functions with the attributes below, and the
+// host reads them: components and resources it stores, systems it calls every
+// frame with the data their parameters ask for. Everything here is either one
+// of those declarations, an engine component or resource, or a value type.
+// See bindings/candela/docs for the book.
+
+host "drift" {
+    attribute component on struct;
+    attribute resource on struct;
+    attribute settings(section: string) on struct;
+    attribute message on struct;
+    attribute query(with: type[] = [], without: type[] = []) on struct;
+    attribute system(writes: type[] = [], after: fn[] = [], before: fn[] = [],
+                     schedule: Schedule = Schedule::Update, enabled: bool = true) on fn;
+
+    // Commands. The host applies them when the system that issued them returns.
+    int entity_new();
+    spawn_bundle(...);
+    insert_component(...);
+    remove_component(int, string);
+    despawn_entity(int);
+    insert_resource(...);
+    remove_resource(string);
+    send_message(...);
+
+    // Input. `state` is 0 held, 1 went down this frame, 2 went up this frame.
+    bool key_state(int, int);
+    bool mouse_state(int, int);
+    bool pad_state(int, int, int);
+    float pad_axis(int, int);
+    float[] mouse_vec(int);
+    bind(string, string);
+    bind_axis2d_keys(string, int, int, int, int);
+    bind_stick(string, int, int);
+    bool action_state(string, int);
+    float action_value(string);
+    float[] action_axis2d(string);
+
+    // Assets, sound, window and effects.
+    int texture_load(string);
+    int texture_create(int, int, float[]);
+    float[] texture_size(int);
+    texture_filter(int, int);
+    int sound_load(string);
+    int sound_create(float[], int);
+    sound_play(int, float, float, bool);
+    quit();
+    float[] window_size();
+    flash(float, float, float, float, float);
+    shake(int, float);
+    log_message(int, string);
+}
+
+enum Schedule { Startup, Update }
+
+// ---- Values ----
+
+struct Vec2 { x: float = 0.0, y: float = 0.0 }
+fn vec2(x: float, y: float) -> Vec2 { return Vec2 { x: x, y: y }; }
+impl Vec2 {
+    fn add(self, o: Vec2) -> Vec2 { return Vec2 { x: self.x + o.x, y: self.y + o.y }; }
+    fn sub(self, o: Vec2) -> Vec2 { return Vec2 { x: self.x - o.x, y: self.y - o.y }; }
+    fn mul(self, s: float) -> Vec2 { return Vec2 { x: self.x * s, y: self.y * s }; }
+    fn div(self, s: float) -> Vec2 { return Vec2 { x: self.x / s, y: self.y / s }; }
+    fn dot(self, o: Vec2) -> float { return self.x * o.x + self.y * o.y; }
+    fn length(self) -> float { return (self.x * self.x + self.y * self.y).sqrt(); }
+    fn distance(self, o: Vec2) -> float { return self.sub(o).length(); }
+    fn normalized(self) -> Vec2 {
+        let l = self.length();
+        if l == 0.0 {
+            return Vec2 { .. };
+        }
+        return self.div(l);
+    }
+    fn lerp(self, o: Vec2, t: float) -> Vec2 { return self.add(o.sub(self).mul(t)); }
+}
+
+struct Rect { x: float = 0.0, y: float = 0.0, w: float = 0.0, h: float = 0.0 }
+fn rect(x: float, y: float, w: float, h: float) -> Rect { return Rect { x: x, y: y, w: w, h: h }; }
+impl Rect {
+    fn contains(self, p: Vec2) -> bool {
+        return p.x >= self.x && p.y >= self.y && p.x < self.x + self.w && p.y < self.y + self.h;
+    }
+    fn overlaps(self, o: Rect) -> bool {
+        return self.x < o.x + o.w && o.x < self.x + self.w && self.y < o.y + o.h && o.y < self.y + self.h;
+    }
+    fn center(self) -> Vec2 { return Vec2 { x: self.x + self.w * 0.5, y: self.y + self.h * 0.5 }; }
+}
+
+struct Color { r: float = 1.0, g: float = 1.0, b: float = 1.0, a: float = 1.0 }
+fn rgb(r: int, g: int, b: int) -> Color {
+    return Color { r: float(r) / 255.0, g: float(g) / 255.0, b: float(b) / 255.0, a: 1.0 };
+}
+fn rgba(r: int, g: int, b: int, a: int) -> Color {
+    return Color { r: float(r) / 255.0, g: float(g) / 255.0, b: float(b) / 255.0, a: float(a) / 255.0 };
+}
+impl Color {
+    fn alpha(self, a: float) -> Color { return Color { r: self.r, g: self.g, b: self.b, a: a }; }
+}
+
+// An entity's id. `Entity {}` is no entity.
+struct Entity { id: int = 0 }
+
+fn hud_layer() -> int { return 31; }
+fn log(message: string) { drift::log_message(0, message); }
+fn warn(message: string) { drift::log_message(1, message); }
+
+enum Align { Left, Center, Right }
+enum VAlign { Top, Middle, Bottom }
+enum Blend { Alpha, Additive, Multiply, Screen, Premultiplied, Opaque }
+enum Filter { Nearest, Linear }
+enum BodyKind { Static, Dynamic, Kinematic }
+
+// ---- Assets ----
+
+struct Texture { id: int = 0 }
+impl Texture {
+    fn size(self) -> Vec2 {
+        let s = drift::texture_size(self.id);
+        return Vec2 { x: s[0], y: s[1] };
+    }
+    fn set_filter(self, f: Filter) {
+        let code = match f { Filter::Nearest => 0, Filter::Linear => 1 };
+        drift::texture_filter(self.id, code);
+    }
+}
+
+struct Font { id: int = 0 }
+
+struct Sound { id: int = 0 }
+impl Sound {
+    fn play(self) { drift::sound_play(self.id, 1.0, 1.0, false); }
+    fn play_with(self, o: PlayOptions) { drift::sound_play(self.id, o.volume, o.pitch, o.looping); }
+}
+struct PlayOptions { volume: float = 1.0, pitch: float = 1.0, looping: bool = false }
+
+// ---- Engine components ----
+
+struct Transform { position: Vec2 = Vec2 { .. }, rotation: float = 0.0, scale: Vec2 = Vec2 { x: 1.0, y: 1.0 } }
+fn at(x: float, y: float) -> Transform { return Transform { position: Vec2 { x: x, y: y }, .. }; }
+
+struct Sprite {
+    image: string = "",
+    texture: Texture = Texture { .. },
+    frame: Rect = Rect { .. },
+    anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },
+    color: Color = Color { .. },
+    flip_x: bool = false,
+    flip_y: bool = false,
+    z: float = 0.0,
+    layer: int = 0,
+    visible: bool = true,
+    blend: Blend = Blend::Alpha,
+}
+
+struct Rectangle {
+    size: Vec2 = Vec2 { x: 32.0, y: 32.0 },
+    color: Color = Color { .. },
+    outline: float = 0.0,
+    corner_radius: float = 0.0,
+    anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },
+    z: float = 0.0,
+    layer: int = 0,
+    visible: bool = true,
+}
+
+struct Circle {
+    radius: float = 16.0,
+    color: Color = Color { .. },
+    outline: float = 0.0,
+    z: float = 0.0,
+    layer: int = 0,
+    visible: bool = true,
+}
+
+struct Text {
+    value: string = "",
+    size: float = 24.0,
+    color: Color = Color { .. },
+    align: Align = Align::Left,
+    valign: VAlign = VAlign::Top,
+    wrap: float = 0.0,
+    line_spacing: float = 1.0,
+    outline: float = 0.0,
+    outline_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+    shadow_offset: Vec2 = Vec2 { .. },
+    shadow_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.6 },
+    rich_text: bool = false,
+    font: Font = Font { .. },
+    z: float = 0.0,
+    layer: int = 0,
+    visible: bool = true,
+}
+
+struct Velocity { linear: Vec2 = Vec2 { .. }, angular: float = 0.0 }
+
+struct RigidBody {
+    kind: BodyKind = BodyKind::Dynamic,
+    fixed_rotation: bool = false,
+    gravity_scale: float = 1.0,
+    linear_damping: float = 0.0,
+    angular_damping: float = 0.0,
+}
+
+struct BoxCollider {
+    half_size: Vec2 = Vec2 { x: 16.0, y: 16.0 },
+    offset: Vec2 = Vec2 { .. },
+    sensor: bool = false,
+    density: float = 1.0,
+    friction: float = 0.3,
+    restitution: float = 0.0,
+}
+
+struct CircleCollider {
+    radius: float = 16.0,
+    offset: Vec2 = Vec2 { .. },
+    sensor: bool = false,
+    density: float = 1.0,
+    friction: float = 0.3,
+    restitution: float = 0.0,
+}
+
+struct Lifetime { seconds: float = 1.0 }
+struct Name { value: string = "" }
+
+// ---- Collisions ----
+
+struct Contact<A, B> { a: Entity, b: Entity }
+struct ContactEnd<A, B> { a: Entity, b: Entity }
+struct Overlap<A, B> { a: Entity, b: Entity }
+struct OverlapEnd<A, B> { a: Entity, b: Entity }
+
+// ---- Lookups ----
+
+struct Lookup<T> { ids: int[], rows: T[] }
+impl Lookup<T> {
+    fn get(self, e: Entity) -> Option<T> {
+        for i in range(self.ids.len()) {
+            if self.ids[i] == e.id {
+                return Some(self.rows[i]);
+            }
+        }
+        return None;
+    }
+    fn has(self, e: Entity) -> bool {
+        for id in self.ids {
+            if id == e.id {
+                return true;
+            }
+        }
+        return false;
+    }
+    fn len(self) -> int { return self.ids.len(); }
+}
+
+// ---- Commands ----
+
+fn drift_type_name<T>() -> string {
+    let probe: T[] = [];
+    let s = type(probe);
+    return s[..s.len() - 2];
+}
+
+struct Commands { id: int = 0 }
+impl Commands {
+    fn spawn(self, bundle: any[]) -> Entity {
+        let id = drift::entity_new();
+        drift::spawn_bundle(id, bundle);
+        return Entity { id: id };
+    }
+    fn insert(self, e: Entity, component: any) { drift::insert_component(e.id, component); }
+    fn remove<T>(self, e: Entity) { drift::remove_component(e.id, drift_type_name<T>()); }
+    fn despawn(self, e: Entity) { drift::despawn_entity(e.id); }
+    fn insert_resource(self, r: any) { drift::insert_resource(r); }
+    fn remove_resource<R>(self) { drift::remove_resource(drift_type_name<R>()); }
+    fn send(self, message: any) { drift::send_message(message); }
+}
+
+// ---- Engine resources ----
+
+struct Time { dt: float = 0.0, elapsed: float = 0.0, frame: int = 0 }
+
+struct Window { width: float = 0.0, height: float = 0.0 }
+impl Window {
+    fn quit(self) { drift::quit(); }
+}
+
+enum Key {
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9, Num0,
+    Return, Escape, Backspace, Tab, Space,
+    F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+    Right, Left, Down, Up,
+    LCtrl, LShift, LAlt, RCtrl, RShift, RAlt,
+}
+
+// The SDL scancode of a key.
+fn key_code(k: Key) -> int {
+    return match k {
+        Key::A => 4, Key::B => 5, Key::C => 6, Key::D => 7, Key::E => 8, Key::F => 9,
+        Key::G => 10, Key::H => 11, Key::I => 12, Key::J => 13, Key::K => 14, Key::L => 15,
+        Key::M => 16, Key::N => 17, Key::O => 18, Key::P => 19, Key::Q => 20, Key::R => 21,
+        Key::S => 22, Key::T => 23, Key::U => 24, Key::V => 25, Key::W => 26, Key::X => 27,
+        Key::Y => 28, Key::Z => 29,
+        Key::Num1 => 30, Key::Num2 => 31, Key::Num3 => 32, Key::Num4 => 33, Key::Num5 => 34,
+        Key::Num6 => 35, Key::Num7 => 36, Key::Num8 => 37, Key::Num9 => 38, Key::Num0 => 39,
+        Key::Return => 40, Key::Escape => 41, Key::Backspace => 42, Key::Tab => 43, Key::Space => 44,
+        Key::F1 => 58, Key::F2 => 59, Key::F3 => 60, Key::F4 => 61, Key::F5 => 62, Key::F6 => 63,
+        Key::F7 => 64, Key::F8 => 65, Key::F9 => 66, Key::F10 => 67, Key::F11 => 68, Key::F12 => 69,
+        Key::Right => 79, Key::Left => 80, Key::Down => 81, Key::Up => 82,
+        Key::LCtrl => 224, Key::LShift => 225, Key::LAlt => 226,
+        Key::RCtrl => 228, Key::RShift => 229, Key::RAlt => 230,
+    };
+}
+
+enum MouseButton { Left, Middle, Right, X1, X2 }
+fn mouse_code(b: MouseButton) -> int {
+    return match b {
+        MouseButton::Left => 1, MouseButton::Middle => 2, MouseButton::Right => 3,
+        MouseButton::X1 => 4, MouseButton::X2 => 5,
+    };
+}
+
+enum GamepadButton {
+    South, East, West, North, Back, Guide, Start, LeftStick, RightStick,
+    LeftShoulder, RightShoulder, DpadUp, DpadDown, DpadLeft, DpadRight,
+}
+fn button_code(b: GamepadButton) -> int {
+    return match b {
+        GamepadButton::South => 0, GamepadButton::East => 1, GamepadButton::West => 2,
+        GamepadButton::North => 3, GamepadButton::Back => 4, GamepadButton::Guide => 5,
+        GamepadButton::Start => 6, GamepadButton::LeftStick => 7, GamepadButton::RightStick => 8,
+        GamepadButton::LeftShoulder => 9, GamepadButton::RightShoulder => 10,
+        GamepadButton::DpadUp => 11, GamepadButton::DpadDown => 12,
+        GamepadButton::DpadLeft => 13, GamepadButton::DpadRight => 14,
+    };
+}
+
+enum GamepadAxis { LeftX, LeftY, RightX, RightY, LeftTrigger, RightTrigger }
+fn axis_code(a: GamepadAxis) -> int {
+    return match a {
+        GamepadAxis::LeftX => 0, GamepadAxis::LeftY => 1, GamepadAxis::RightX => 2,
+        GamepadAxis::RightY => 3, GamepadAxis::LeftTrigger => 4, GamepadAxis::RightTrigger => 5,
+    };
+}
+
+struct Input { id: int = 0 }
+impl Input {
+    fn key_down(self, k: Key) -> bool { return drift::key_state(key_code(k), 0); }
+    fn key_pressed(self, k: Key) -> bool { return drift::key_state(key_code(k), 1); }
+    fn key_released(self, k: Key) -> bool { return drift::key_state(key_code(k), 2); }
+    fn mouse_down(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 0); }
+    fn mouse_pressed(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 1); }
+    fn mouse_released(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 2); }
+    fn mouse_position(self) -> Vec2 { let v = drift::mouse_vec(0); return Vec2 { x: v[0], y: v[1] }; }
+    fn mouse_world(self) -> Vec2 { let v = drift::mouse_vec(1); return Vec2 { x: v[0], y: v[1] }; }
+    fn mouse_delta(self) -> Vec2 { let v = drift::mouse_vec(2); return Vec2 { x: v[0], y: v[1] }; }
+    fn gamepad_down(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 0); }
+    fn gamepad_pressed(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 1); }
+    fn gamepad_released(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 2); }
+    fn gamepad_axis(self, pad: int, a: GamepadAxis) -> float { return drift::pad_axis(pad, axis_code(a)); }
+
+    fn bind_key(self, action: string, k: Key) { drift::bind(action, "key:#" + string(key_code(k))); }
+    fn bind_mouse(self, action: string, b: MouseButton) { drift::bind(action, "mouse:#" + string(mouse_code(b))); }
+    fn bind_button(self, action: string, b: GamepadButton) { drift::bind(action, "button:#" + string(button_code(b))); }
+    fn bind_axis2d(self, name: string, left: Key, right: Key, up: Key, down: Key) {
+        drift::bind_axis2d_keys(name, key_code(left), key_code(right), key_code(up), key_code(down));
+    }
+    fn bind_stick(self, name: string, x: GamepadAxis, y: GamepadAxis) { drift::bind_stick(name, axis_code(x), axis_code(y)); }
+    fn action_pressed(self, name: string) -> bool { return drift::action_state(name, 1); }
+    fn action_held(self, name: string) -> bool { return drift::action_state(name, 0); }
+    fn action_released(self, name: string) -> bool { return drift::action_state(name, 2); }
+    fn action_value(self, name: string) -> float { return drift::action_value(name); }
+    fn axis2d(self, name: string) -> Vec2 { let v = drift::action_axis2d(name); return Vec2 { x: v[0], y: v[1] }; }
+}
+
+struct Assets { id: int = 0 }
+impl Assets {
+    fn texture(self, path: string) -> Texture { return Texture { id: drift::texture_load(path) }; }
+    fn create_texture(self, w: int, h: int, pixels: Color[]) -> Texture {
+        let flat: float[] = [];
+        for c in pixels {
+            flat.push(c.r);
+            flat.push(c.g);
+            flat.push(c.b);
+            flat.push(c.a);
+        }
+        return Texture { id: drift::texture_create(w, h, flat) };
+    }
+    fn sound(self, path: string) -> Sound { return Sound { id: drift::sound_load(path) }; }
+    fn create_sound(self, samples: float[], rate: int) -> Sound { return Sound { id: drift::sound_create(samples, rate) }; }
+}
+
+struct Effects { id: int = 0 }
+impl Effects {
+    fn flash(self, c: Color, seconds: float) { drift::flash(c.r, c.g, c.b, c.a, seconds); }
+    fn shake(self, camera: Entity, intensity: float) { drift::shake(camera.id, intensity); }
+}
+
+// ---- Timers ----
+
+struct Timer { seconds: float = 1.0, left: float = 1.0, repeating: bool = false, paused: bool = false }
+fn timer(seconds: float) -> Timer { return Timer { seconds: seconds, left: seconds, .. }; }
+fn repeating_timer(seconds: float) -> Timer { return Timer { seconds: seconds, left: seconds, repeating: true, .. }; }
+impl Timer {
+    // Advances the timer; returns how many times it finished.
+    fn tick(self, dt: float) -> int {
+        if self.paused || self.seconds <= 0.0 {
+            return 0;
+        }
+        if !self.repeating && self.left <= 0.0 {
+            return 0;
+        }
+        self.left -= dt;
+        let n = 0;
+        while self.left <= 0.0 {
+            n += 1;
+            if !self.repeating {
+                self.left = 0.0;
+                return n;
+            }
+            self.left += self.seconds;
+        }
+        return n;
+    }
+    fn finished(self) -> bool { return !self.repeating && self.left <= 0.0; }
+    fn fraction(self) -> float { return 1.0 - self.left / self.seconds; }
+    fn reset(self) { self.left = self.seconds; }
+}

@@ -213,8 +213,9 @@ inline void physics_sync_ecs_to_box2d(App& app) {
 }
 
 // System 3: Sync Box2D positions/velocities back to ECS components after step.
-// Only syncs dynamic bodies that have Velocity2D (indicating physics-driven movement).
-// Bodies without Velocity2D are assumed to be ECS-driven (game code controls position).
+// Only syncs bodies that have Velocity2D (indicating physics-driven movement):
+// dynamic and kinematic ones. Bodies without Velocity2D are assumed to be
+// ECS-driven (game code controls position).
 inline void physics_sync_from_box2d(App& app) {
     auto* physics = app.getResource<PhysicsResource>();
     auto* bridge = app.getResource<PhysicsBridge>();
@@ -234,13 +235,16 @@ inline void physics_sync_from_box2d(App& app) {
         // Only sync back dynamic bodies that have Velocity2D (physics-driven)
         if (!world.hasComponent(entity, velocity2dComp)) continue;
 
-        bool isDynamic = true;
+        BodyType type = BodyType::Dynamic;
         if (registry.has<RigidBody2D>() && world.hasComponent(entity, registry.get<RigidBody2D>())) {
             auto* rb = world.get<RigidBody2D>(entity, registry.get<RigidBody2D>());
-            if (rb && rb->type != BodyType::Dynamic) isDynamic = false;
+            if (rb) type = rb->type;
         }
 
-        if (isDynamic) {
+        // Box2D moves dynamic bodies, and kinematic ones by their Velocity2D;
+        // either way the entity follows. Only a dynamic body's velocity comes
+        // back: a kinematic one keeps the velocity the game gave it.
+        if (type != BodyType::Static) {
             Vec2 pos = physics->getBodyPosition(body);
             float rot = physics->getBodyRotation(body);
 
@@ -257,9 +261,11 @@ inline void physics_sync_from_box2d(App& app) {
                 t->rotation = rot;
             }
 
-            Vec2 vel = physics->getBodyVelocity(body);
-            auto* v = world.getMut<Velocity2D>(entity, velocity2dComp);
-            if (v) v->linear = vel;
+            if (type == BodyType::Dynamic) {
+                Vec2 vel = physics->getBodyVelocity(body);
+                auto* v = world.getMut<Velocity2D>(entity, velocity2dComp);
+                if (v) v->linear = vel;
+            }
         }
     }
 }

@@ -284,6 +284,24 @@ std::string Settings::getString(const char* path, const std::string& fallback) c
     return impl_->read<std::string>(path, fallback, [](const json& v) { return v.is_string(); });
 }
 
+std::string Settings::valueJson(const char* path) const {
+    const auto& s = *impl_;
+    nlohmann::json out;
+    if (const nlohmann::json* f = lookup(s.data, path)) out = *f;
+    if (const nlohmann::json* c = lookup(s.cli, path)) {
+        if (out.is_object() && c->is_object()) out.merge_patch(*c);
+        else out = *c;
+    }
+    if (out.is_object()) {
+        for (auto& [key, value] : out.items()) {
+            if (auto env = envValue(std::string(path) + "." + key)) value = *env;
+        }
+    } else if (auto env = envValue(path)) {
+        out = *env;
+    }
+    return out.is_null() ? std::string() : out.dump();
+}
+
 const std::string& Settings::file() const { return impl_->file; }
 
 void Settings::parseArgs(int argc, char** argv) {

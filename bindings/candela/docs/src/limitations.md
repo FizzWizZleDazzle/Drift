@@ -1,6 +1,5 @@
 # Limitations
 
-- **Desktop only.** Candela games do not run in the browser yet. Drift's C++ games do; write the game in C++ to ship it on the web.
 - **Tested on Linux.** Windows and macOS builds are not verified yet.
 - **Systems run one at a time.** candela runs scripts on one thread, so your systems never run at the same time as each other. The engine's own work runs beside them.
 - **No callbacks into scripts.** The engine calls systems; it does not call other script functions. Behavior that reacts to the engine reads messages instead.

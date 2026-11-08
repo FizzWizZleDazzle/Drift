@@ -45,6 +45,7 @@
 
 # Examples
 
+- [Flappy Bird](examples/flappy-bird.md)
 - [Coin Dash](examples/coin-dash.md)
 
 [Limitations](limitations.md)

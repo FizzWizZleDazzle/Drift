@@ -1,0 +1,21 @@
+[project]
+name = "Flappy Bird"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 288
+height = 512
+scale_mode = "integer"
+
+# Top-down physics would pull the bird; the game applies its own gravity.
+[physics]
+gravity = [0, 0]
+
+# Tuning, read by the Tuning struct in main.cdl.
+[flappy]
+gravity = 1400.0
+flap_speed = 420.0
+pipe_speed = 120.0
+pipe_gap = 110.0
+spawn_every = 1.5

@@ -175,6 +175,8 @@ cmd.spawn().insert(
 );
 ```
 
+With a `Velocity2D`, physics moves the body and its `Transform2D` follows. Without one, move the `Transform2D` from code and the body follows it.
+
 ### Setting velocity
 
 Apply velocity to make an entity jump or move:

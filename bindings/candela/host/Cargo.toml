@@ -1,0 +1,16 @@
+[package]
+name = "drift-candela-host"
+version = "0.4.0"
+edition = "2021"
+description = "Runs Candela games inside the Drift engine: reads @drift attributes, stores script components and calls systems every frame"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+candela = { package = "candela-lang", version = "0.2.0", default-features = false, features = ["compiler", "embed"] }
+serde_json = "1"
+
+[profile.release]
+panic = "unwind"
