@@ -16,6 +16,10 @@
 #include <drift/components/Behavior.hpp>
 #include <drift/components/CameraController.hpp>
 #include <drift/components/Name.hpp>
+#include <drift/components/ParticleEmitter.hpp>
+#include <drift/gameplay/SaveData.hpp>
+#include <drift/gameplay/Tween.hpp>
+#include <drift/plugins/SavePlugin.hpp>
 #include <drift/components/Physics.hpp>
 #include <drift/components/Shape.hpp>
 #include <drift/components/Sprite.hpp>
@@ -37,6 +41,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 using namespace drift;
@@ -55,6 +60,13 @@ namespace {
 App* g_app = nullptr;
 std::string g_text;          // answers handed to the host stay alive until the next call
 EffectId g_fade;
+// Tweens run by the engine's Tweens resource, keyed by entity, with the
+// candela value they came from.
+struct RunningTween {
+    TweenId id = InvalidTweenId;
+    nlohmann::json value;
+};
+std::unordered_map<EntityId, RunningTween> g_tweens;
 
 World& world() { return g_app->world(); }
 
@@ -180,6 +192,108 @@ void writeShape(EntityId e, const json& j, ShapeKind kind) {
     s.layer = layer(j);
     s.visible = j.value("visible", true);
     put(e, s);
+}
+
+ColorF colorF(const json& j, ColorF fallback) {
+    if (!j.is_object()) return fallback;
+    return {j.value("r", 1.f), j.value("g", 1.f), j.value("b", 1.f), j.value("a", 1.f)};
+}
+json colorF(ColorF c) { return {{"r", c.r}, {"g", c.g}, {"b", c.b}, {"a", c.a}}; }
+
+const char* shapeNames[] = {"Point", "Circle", "Ring", "Box", "Line"};
+
+EmitterConfig emitterConfig(const json& j) {
+    EmitterConfig c;
+    c.spawnRate = j.value("rate", 20.f);
+    c.lifetime = {j.value("lifetime_min", 0.5f), j.value("lifetime_max", 1.5f)};
+    c.speed = {j.value("speed_min", 20.f), j.value("speed_max", 60.f)};
+    c.angle = {j.value("angle_min", 0.f), j.value("angle_max", 6.2831853f)};
+    float s0 = j.value("size_start", 6.f), s1 = j.value("size_end", 1.f);
+    c.sizeStart = {s0, s0};
+    c.sizeEnd = {s1, s1};
+    c.colorStart = colorF(j.value("color_start", json()), {1, 1, 1, 1});
+    c.colorEnd = colorF(j.value("color_end", json()), {1, 1, 1, 0});
+    c.gravity = vec(j.value("gravity", json()));
+    c.drag = j.value("drag", 0.f);
+    c.maxParticles = std::max(1, j.value("max_particles", 256));
+    c.blendMode = blend(j.value("blend", json()));
+    c.texture = TextureHandle{j.value("texture", json::object()).value("id", 0u)};
+    if (!c.texture.valid()) {
+        if (auto* r = res<RendererResource>()) c.texture = r->whiteTexture();
+    }
+    c.shape = pick<EmissionShape>(j.value("shape", json()), {"Point", "Circle", "Ring", "Box", "Line"});
+    c.shapeRadius = j.value("shape_radius", 0.f);
+    c.shapeExtents = vec(j.value("shape_extents", json()));
+    c.duration = j.value("duration", -1.f);
+    c.looping = j.value("looping", true);
+    c.zOrder = j.value("z", 10.f);
+    return c;
+}
+
+json emitterJson(const ParticleEmitter& pe) {
+    const EmitterConfig& c = pe.config;
+    auto* r = res<RendererResource>();
+    uint32_t tex = r && c.texture.id == r->whiteTexture().id ? 0u : c.texture.id;
+    return {{"rate", c.spawnRate}, {"lifetime_min", c.lifetime.min}, {"lifetime_max", c.lifetime.max},
+            {"speed_min", c.speed.min}, {"speed_max", c.speed.max}, {"angle_min", c.angle.min},
+            {"angle_max", c.angle.max}, {"size_start", c.sizeStart.min}, {"size_end", c.sizeEnd.min},
+            {"color_start", colorF(c.colorStart)}, {"color_end", colorF(c.colorEnd)},
+            {"gravity", vec(c.gravity)}, {"drag", c.drag}, {"max_particles", c.maxParticles},
+            {"blend", blendNames[int(c.blendMode)]}, {"texture", {{"id", tex}}},
+            {"shape", shapeNames[int(c.shape)]}, {"shape_radius", c.shapeRadius},
+            {"shape_extents", vec(c.shapeExtents)}, {"duration", c.duration}, {"looping", c.looping},
+            {"z", c.zOrder}, {"playing", pe.playing}};
+}
+
+const char* easeNames[] = {
+    "Linear", "InSine", "OutSine", "InOutSine", "InQuad", "OutQuad", "InOutQuad",
+    "InCubic", "OutCubic", "InOutCubic", "InQuart", "OutQuart", "InOutQuart",
+    "InQuint", "OutQuint", "InOutQuint", "InExpo", "OutExpo", "InOutExpo",
+    "InCirc", "OutCirc", "InOutCirc", "InBack", "OutBack", "InOutBack",
+    "InElastic", "OutElastic", "InOutElastic", "InBounce", "OutBounce", "InOutBounce", "Spring"};
+
+Ease easeOf(const json& j) {
+    std::string n = j.is_string() ? j.get<std::string>() : "Linear";
+    for (int i = 0; i < int(Ease::Count_); ++i) {
+        if (n == easeNames[i]) return static_cast<Ease>(i);
+    }
+    return Ease::Linear;
+}
+
+void stopTween(EntityId e) {
+    auto it = g_tweens.find(e);
+    if (it == g_tweens.end()) return;
+    if (auto* tw = res<Tweens>()) tw->stop(it->second.id, false);
+    g_tweens.erase(it);
+}
+
+// Starts the tween a candela Tween value describes; the same value again
+// leaves the running one alone.
+void startTween(EntityId e, const json& j) {
+    auto it = g_tweens.find(e);
+    if (it != g_tweens.end() && it->second.value == j) return;
+    stopTween(e);
+    auto* tw = res<Tweens>();
+    if (!tw) return;
+    TweenBuilder b = tw->on(e);
+    for (const auto& st : j.value("steps", json::array())) {
+        float a = st.value("a", 0.f), bb = st.value("b", 0.f), secs = st.value("seconds", 0.f);
+        Ease ez = easeOf(st.value("ease", json()));
+        switch (st.value("kind", 0)) {
+            case 0: b.moveTo({a, bb}, secs, ez); break;
+            case 1: b.moveBy({a, bb}, secs, ez); break;
+            case 2: b.scaleTo({a, bb}, secs, ez); break;
+            case 3: b.rotateTo(a, secs, ez); break;
+            case 4: b.rotateBy(a, secs, ez); break;
+            case 5: b.fadeTo(a, secs, ez); break;
+            case 6: b.zoomTo(a, secs, ez); break;
+            case 7: b.tintTo(Color{channel(a), channel(bb), channel(st.value("c", 0.0)), channel(st.value("d", 1.0))}, secs, ez); break;
+            case 8: b.delay(secs); break;
+        }
+    }
+    int loops = j.value("loops", 0);
+    if (loops != 0) b.loop(loops, j.value("mirror", false) ? TweenLoop::Yoyo : TweenLoop::Restart);
+    g_tweens[e] = {b.start(), j};
 }
 
 const char* textAligns[] = {"Left", "Center", "Right"};
@@ -356,6 +470,23 @@ const std::vector<Codec>& codecs() {
          [](EntityId e, const json& j) { put(e, Lifetime{j.value("seconds", 1.f)}); },
          [](EntityId e) { world().removeComponent(e, cid<Lifetime>()); },
          [] { return cid<Lifetime>(); }},
+        {"ParticleEmitter",
+         [](EntityId e) { return get<ParticleEmitter>(e) != nullptr; },
+         [](EntityId e) { return emitterJson(*get<ParticleEmitter>(e)); },
+         [](EntityId e, const json& j) {
+             ParticleEmitter pe;
+             pe.config = emitterConfig(j);
+             pe.playing = j.value("playing", true);
+             put(e, pe);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<ParticleEmitter>()); },
+         [] { return cid<ParticleEmitter>(); }},
+        {"Tween",
+         [](EntityId e) { return g_tweens.count(e) > 0; },
+         [](EntityId e) { return g_tweens.at(e).value; },
+         [](EntityId e, const json& j) { startTween(e, j); },
+         [](EntityId e) { stopTween(e); },
+         [] { return cid<Transform2D>(); }},
         {"Name",
          [](EntityId e) { return get<Name>(e) != nullptr; },
          [](EntityId e) { return json{{"value", std::string(get<Name>(e)->value)}}; },
@@ -522,6 +653,45 @@ json service(const std::string& f, const json& a) {
         }
         return nullptr;
     }
+    if (f == "burst") {
+        // One emitter that fires `count` particles once and despawns itself
+        // through a Lifetime once they are gone.
+        EntityId e = world().createEntity();
+        Transform2D t;
+        t.position = vec(a[0]);
+        put(e, t);
+        int count = a[2].is_number() ? a[2].get<int>() : 10;
+        ParticleEmitter pe;
+        pe.config = emitterConfig(a[1]);
+        pe.config.spawnRate = 0.f;
+        pe.config.looping = false;
+        pe.config.duration = 0.05f;
+        pe.config.maxParticles = std::max(pe.config.maxParticles, count);
+        pe.config.bursts.push_back(BurstEntry{0.f, count, 1, 0.f});
+        put(e, pe);
+        put(e, Lifetime{pe.config.lifetime.max + 0.2f});
+        return nullptr;
+    }
+    if (f.rfind("save_", 0) == 0) {
+        auto* save = res<SaveData>();
+        if (!save) return f == "save_flush" ? json(false) : json(nullptr);
+        if (f == "save_get") {
+            std::string k = a[0].get<std::string>();
+            if (a[1].is_number_integer()) return save->get<int64_t>(k, a[1].get<int64_t>());
+            if (a[1].is_number()) return save->get<double>(k, a[1].get<double>());
+            return save->get<std::string>(k, a[1].get<std::string>());
+        }
+        if (f == "save_set") {
+            std::string k = a[0].get<std::string>();
+            if (a[1].is_number_integer()) save->set(k, a[1].get<int64_t>());
+            else if (a[1].is_number()) save->set(k, a[1].get<double>());
+            else save->set(k, a[1].get<std::string>());
+            return nullptr;
+        }
+        if (f == "save_has") return save->has(a[0].get<std::string>());
+        if (f == "save_erase") { save->erase(a[0].get<std::string>()); return nullptr; }
+        if (f == "save_flush") return save->flush();
+    }
     if (f == "settings_section") {
         std::string text = g_app->settingsStore().valueJson(a[0].get<std::string>().c_str());
         json out = json::parse(text.empty() ? "{}" : text, nullptr, false);
@@ -546,6 +716,7 @@ void drift_bridge_log(int32_t level, const char* message) {
 uint64_t drift_bridge_new() { return world().createEntity(); }
 
 void drift_bridge_despawn(uint64_t e) {
+    stopTween(e);
     if (world().isAlive(e)) world().destroyEntity(e);
 }
 
@@ -595,7 +766,8 @@ const char* drift_bridge_list(const char* component) {
 // simulated needs a Transform.
 const char* drift_bridge_requires(const char* component) {
     const Codec* c = codec(component);
-    if (!c || std::string(c->name) == "Transform" || std::string(c->name) == "Name") return "[]";
+    if (!c || std::string(c->name) == "Transform" || std::string(c->name) == "Name" ||
+        std::string(c->name) == "Tween") return "[]";
     return "[\"Transform\"]";
 }
 
@@ -678,6 +850,7 @@ int main(int argc, char** argv) {
     if (entry.empty()) entry = "main.cdl";
 
     app.addPlugins<DefaultPlugins>();
+    app.addPlugin<SavePlugin>();   // the slot named after [project]
     if (app.settingsStore().has("lighting")) app.addPlugin<LightingPlugin>();
     app.addPlugin(new CandelaPlugin(entry, moduleDir()));
     int code = app.run();

@@ -82,7 +82,7 @@ Drift exposes several CMake options you can toggle at configure time:
 | `DRIFT_BACKEND_GL` | `ON` | Builds the OpenGL 3.3 / WebGL2 renderer backend. |
 | `DRIFT_BUILD_TESTS` | `ON` when Drift is the top-level project | Builds the engine tests in `tests/`. Run them with `ctest --test-dir build`. Off when Drift is pulled in with `FetchContent`. |
 | `DRIFT_BACKEND_WEBGPU` | `OFF` | Builds the WebGPU renderer backend. On desktop the configure step downloads a pinned prebuilt [wgpu-native](https://github.com/gfx-rs/wgpu-native) release (Linux, Windows and macOS on x86_64 or arm64); in the browser it uses Emscripten's `emdawnwebgpu` port. See [Rendering](../subsystems/rendering.md#backends). |
-| `DRIFT_BUILD_CANDELA` | `OFF` | Builds `libdrift_candela`, the native library of the [candela](../candela/overview.md) `drift` package, into `bindings/candela/dist/`. Desktop only. |
+| `DRIFT_BUILD_CANDELA` | `OFF` | Builds `drift`, the program that runs [Candela](../candela/overview.md) games, and with Emscripten the web pages of the Candela examples. Needs a Rust toolchain (and the `wasm32-unknown-emscripten` target for the web); `DRIFT_CANDELA_SOURCE` points the build at a candela checkout. |
 
 To change an option, pass it with `-D` during the configure step:
 

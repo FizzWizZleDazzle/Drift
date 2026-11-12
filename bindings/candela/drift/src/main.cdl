@@ -51,6 +51,16 @@ host "drift" {
     quit();
     float[] window_size();
     flash(float, float, float, float, float);
+    burst(...);
+    int save_get_int(string, int);
+    save_set_int(string, int);
+    float save_get_float(string, float);
+    save_set_float(string, float);
+    string save_get_string(string, string);
+    save_set_string(string, string);
+    bool save_has(string);
+    save_erase(string);
+    save_flush();
     shake(int, float);
     log_message(int, string);
 }
@@ -253,6 +263,92 @@ struct CircleCollider {
 }
 
 struct Lifetime { seconds: float = 1.0 }
+
+enum Ease {
+    Linear,
+    InSine, OutSine, InOutSine,
+    InQuad, OutQuad, InOutQuad,
+    InCubic, OutCubic, InOutCubic,
+    InQuart, OutQuart, InOutQuart,
+    InQuint, OutQuint, InOutQuint,
+    InExpo, OutExpo, InOutExpo,
+    InCirc, OutCirc, InOutCirc,
+    InBack, OutBack, InOutBack,
+    InElastic, OutElastic, InOutElastic,
+    InBounce, OutBounce, InOutBounce,
+    Spring,
+}
+
+enum EmitShape { Point, Circle, Ring, Box, Line }
+
+// Particles from the entity's position. `rate` per second; `duration` -1.0
+// emits forever.
+struct ParticleEmitter {
+    rate: float = 20.0,
+    lifetime_min: float = 0.5,
+    lifetime_max: float = 1.5,
+    speed_min: float = 20.0,
+    speed_max: float = 60.0,
+    angle_min: float = 0.0,
+    angle_max: float = 6.2831853,
+    size_start: float = 6.0,
+    size_end: float = 1.0,
+    color_start: Color = Color { .. },
+    color_end: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.0 },
+    gravity: Vec2 = Vec2 { .. },
+    drag: float = 0.0,
+    max_particles: int = 256,
+    blend: Blend = Blend::Alpha,
+    texture: Texture = Texture { .. },
+    shape: EmitShape = EmitShape::Point,
+    shape_radius: float = 0.0,
+    shape_extents: Vec2 = Vec2 { .. },
+    duration: float = -1.0,
+    looping: bool = true,
+    z: float = 10.0,
+    playing: bool = true,
+}
+
+// One step of a Tween; build them with tween() and its methods.
+struct TweenStep { kind: int, a: float, b: float, c: float = 0.0, d: float = 0.0, seconds: float, ease: Ease = Ease::Linear }
+
+// Animates the entity in the engine: the steps in order, repeated `loops`
+// times (-1 forever), forward and back when `mirror` is set. Inserting a
+// changed Tween starts it again.
+struct Tween { steps: TweenStep[] = [], loops: int = 0, mirror: bool = false }
+
+fn tween() -> Tween { return Tween { .. }; }
+
+impl Tween {
+    fn add_step(self, kind: int, a: float, b: float, seconds: float, e: Ease) -> Tween {
+        self.steps.push(TweenStep { kind: kind, a: a, b: b, seconds: seconds, ease: e, .. });
+        return self;
+    }
+    fn move_to(self, to: Vec2, seconds: float, e: Ease) -> Tween { return self.add_step(0, to.x, to.y, seconds, e); }
+    fn move_by(self, by: Vec2, seconds: float, e: Ease) -> Tween { return self.add_step(1, by.x, by.y, seconds, e); }
+    fn scale_to(self, to: Vec2, seconds: float, e: Ease) -> Tween { return self.add_step(2, to.x, to.y, seconds, e); }
+    fn rotate_to(self, radians: float, seconds: float, e: Ease) -> Tween { return self.add_step(3, radians, 0.0, seconds, e); }
+    fn rotate_by(self, radians: float, seconds: float, e: Ease) -> Tween { return self.add_step(4, radians, 0.0, seconds, e); }
+    // Sprite alpha, 0.0 to 1.0.
+    fn fade_to(self, alpha: float, seconds: float, e: Ease) -> Tween { return self.add_step(5, alpha, 0.0, seconds, e); }
+    // Camera zoom.
+    fn zoom_to(self, zoom: float, seconds: float, e: Ease) -> Tween { return self.add_step(6, zoom, 0.0, seconds, e); }
+    fn tint_to(self, c: Color, seconds: float, e: Ease) -> Tween {
+        self.steps.push(TweenStep { kind: 7, a: c.r, b: c.g, c: c.b, d: c.a, seconds: seconds, ease: e });
+        return self;
+    }
+    fn delay(self, seconds: float) -> Tween { return self.add_step(8, 0.0, 0.0, seconds, Ease::Linear); }
+    fn repeat(self, times: int) -> Tween {
+        self.loops = times;
+        self.mirror = false;
+        return self;
+    }
+    fn yoyo(self, times: int) -> Tween {
+        self.loops = times;
+        self.mirror = true;
+        return self;
+    }
+}
 struct Name { value: string = "" }
 
 // ---- Collisions ----
@@ -438,6 +534,23 @@ struct Effects { id: int = 0 }
 impl Effects {
     fn flash(self, c: Color, seconds: float) { drift::flash(c.r, c.g, c.b, c.a, seconds); }
     fn shake(self, camera: Entity, intensity: float) { drift::shake(camera.id, intensity); }
+    // A one-off burst of `count` particles that cleans itself up.
+    fn burst(self, pos: Vec2, emitter: ParticleEmitter, count: int) { drift::burst(pos, emitter, count); }
+}
+
+// The save slot named after [project] in drift.toml.
+struct Save { id: int = 0 }
+impl Save {
+    fn get_int(self, key: string, fallback: int) -> int { return drift::save_get_int(key, fallback); }
+    fn set_int(self, key: string, v: int) { drift::save_set_int(key, v); }
+    fn get_float(self, key: string, fallback: float) -> float { return drift::save_get_float(key, fallback); }
+    fn set_float(self, key: string, v: float) { drift::save_set_float(key, v); }
+    fn get_string(self, key: string, fallback: string) -> string { return drift::save_get_string(key, fallback); }
+    fn set_string(self, key: string, v: string) { drift::save_set_string(key, v); }
+    fn has(self, key: string) -> bool { return drift::save_has(key); }
+    fn erase(self, key: string) { drift::save_erase(key); }
+    // Writes the slot to disk.
+    fn flush(self) { drift::save_flush(); }
 }
 
 // ---- Timers ----

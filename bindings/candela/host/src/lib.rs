@@ -435,7 +435,7 @@ impl Host {
                 match bare(&name) {
                     "Commands" => Ok(Param::Commands(*id)),
                     "Time" => Ok(Param::Time(*id)),
-                    "Input" | "Assets" | "Window" | "Effects" => Ok(Param::Engine(*id)),
+                    "Input" | "Assets" | "Window" | "Effects" | "Save" => Ok(Param::Engine(*id)),
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
                 }
             }
@@ -1081,6 +1081,31 @@ fn engine(module_dir: &str) -> Engine {
     e.register_host_fn("drift", "window_size", move || fv(call("window_size", json!([]))));
     e.register_host_fn("drift", "flash", |r: f64, g: f64, bl: f64, a: f64, s: f64| {
         call("flash", json!([r, g, bl, a, s]));
+    });
+    e.register_host_fn_variadic("drift", "burst", move |a| {
+        call("burst", json!([to_json(&v(a, 0)), to_json(&v(a, 1)), to_json(&v(a, 2))]));
+        Ok(Value::Null)
+    });
+    e.register_host_fn("drift", "save_get_int", move |k: String, d: i64| i(call("save_get", json!([k, d]))));
+    e.register_host_fn("drift", "save_set_int", |k: String, val: i64| {
+        call("save_set", json!([k, val]));
+    });
+    e.register_host_fn("drift", "save_get_float", move |k: String, d: f64| f(call("save_get", json!([k, d]))));
+    e.register_host_fn("drift", "save_set_float", |k: String, val: f64| {
+        call("save_set", json!([k, val]));
+    });
+    e.register_host_fn("drift", "save_get_string", |k: String, d: String| {
+        call("save_get", json!([k, d])).as_str().unwrap_or("").to_owned()
+    });
+    e.register_host_fn("drift", "save_set_string", |k: String, val: String| {
+        call("save_set", json!([k, val]));
+    });
+    e.register_host_fn("drift", "save_has", move |k: &str| b(call("save_has", json!([k]))));
+    e.register_host_fn("drift", "save_erase", |k: &str| {
+        call("save_erase", json!([k]));
+    });
+    e.register_host_fn("drift", "save_flush", || -> Result<(), HostError> {
+        if call("save_flush", json!([])).as_bool().unwrap_or(false) { Ok(()) } else { Err(host_error("drift_save_failed")) }
     });
     e.register_host_fn("drift", "shake", |c: i64, s: f64| {
         call("shake", json!([c, s]));

@@ -63,7 +63,6 @@
 # Candela
 
 - [Candela](candela/overview.md)
-- [API Reference](candela/api.md)
 
 # Math
 
@@ -85,7 +84,6 @@
 - [Gameplay Toolkit](examples/toolkit.md)
 - [Scene Editor](examples/scene-editor.md)
 - [Tilemap](examples/tilemap.md)
-- [Coin Dash (candela)](examples/coin-dash.md)
 
 # Reference
 

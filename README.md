@@ -74,7 +74,7 @@ To use Drift from your own project, pull it in with `FetchContent` and link `dri
 - **Audio**: WAV, OGG and MP3, mixer buses, music crossfades and playlists, positional sound.
 - **Sprites and particles**: spritesheet and Aseprite animation, configurable particle emitters, trails.
 - **Gameplay toolkit**: tweens, timers, behavior components (lifetime, oscillation, follow), rebindable input actions for keyboard, mouse and gamepad, save data, A* pathfinding, spatial queries, Y-sorting, random numbers and noise.
-- **Candela scripting**: write a game as a [candela](https://candela.lumenfx.dev) program instead of C++: entities, components and systems in the style of Bevy, with the engine simulating each frame beside the script (desktop only).
+- **Candela scripting**: write a game in [candela](https://candela.lumenfx.dev) instead of C++, as components and systems declared with attributes, on the desktop and in the browser.
 - **One settings file**: `drift.toml` holds the window, graphics backend, physics, audio, lighting and sections of your own game. Environment variables and `--set` flags override it for one run, and dev builds apply edits while the game runs.
 - **Scenes and dev tools**: JSON scenes and prefabs through component reflection, hot reload, and an in-game inspector, performance panel and physics debug view.
 
@@ -96,7 +96,7 @@ Each example runs from its own folder (`cd examples/<name> && ../../build/<name>
 | `audio` | Positional sound sources, bus volume controls, music crossfades and playlists |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, save data |
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
-| `coin_dash` (candela) | A complete game in candela: input actions, physics, sensors, text, sound, save data. Run with `candela run examples/coin_dash/main.cdl` from `bindings/candela` |
+| `flappy_bird`, `coin_dash` (candela) | Complete games in candela. Run with `drift run` from `bindings/candela/examples/<name>`; see `bindings/candela/README.md` |
 
 Run the engine tests with `ctest --test-dir build`.
 

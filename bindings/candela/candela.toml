@@ -1,6 +1,0 @@
-[package]
-name = "drift"
-version = "0.3.0"
-description = "Write 2D games for the Drift engine in candela: windows, input, sprites, physics, text, audio, tilemaps and more"
-
-[dependencies]
