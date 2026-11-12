@@ -1,305 +1,249 @@
 // Coin Dash: collect coins, dodge the bouncing hazards.
-//
-// Arrow keys, WASD or a gamepad stick move. R restarts after a hit, Escape
-// quits. Every asset is made in code, so the example runs from anywhere:
-//
-//     candela run bindings/candela/examples/coin_dash/main.cdl
 
-import "../../src/main.cdl" { App, Align, Binding, Blend, BodyKind, BoxCollider, CircleCollider, Color, Ease, Entity, Filter, GamepadAxis, GamepadButton, Key, Lifetime, ParticleEmitter, Rectangle, RigidBody, Save, Sound, Sprite, Text, Texture, Timer, Transform, VAlign, Vec2, Velocity, World, app, at, config, hud_layer, repeating_timer, rgb, rgba, tween, vec2 };
+import "drift" { * };
 import "std/math" as math;
 import "std/random" as random;
 
-// ---- Components of this game ----
+const SPAWN_POINT: Vec2 = Vec2 { x: 480.0, y: 270.0 };
 
-struct Player {
-    speed: float = 320.0,
+@state
+enum Round { Playing, Over }
+
+// ---- Components ----
+
+@component(requires: [Velocity])
+struct Player { speed: float = 320.0 }
+
+@component struct Coin { value: int = 1 }
+@component struct Hazard {}
+@component struct ScoreLabel {}
+@component struct HintLabel {}
+
+// ---- Resources ----
+
+@settings(section: "coin_dash")
+struct Tuning {
+    hazard_speed: float = 220.0,
+    spawn_every: float = 4.0,
 }
 
-struct Coin {
-    value: int = 1,
+@resource
+struct Game { score: int = 0, best: int = 0, spawn: Timer = repeating_timer(4.0) }
+
+// Made from code at load: two textures from pixels and two tones.
+@resource
+struct Art {
+    coin: Texture = disc(24, rgb(255, 210, 60)),
+    ball: Texture = disc(32, rgb(240, 80, 90)),
+    pickup: Sound = tone(880.0, 0.12),
+    crash: Sound = tone(110.0, 0.35),
 }
 
-struct Hazard {
-    speed: float = 220.0,
-}
+// ---- Startup ----
 
-struct ScoreLabel {
-    shown: int,
-}
-
-struct HintLabel {
-    shown: bool,
-}
-
-// ---- Game state, one per game ----
-
-struct Game {
-    score: int,
-    best: int,
-    over: bool,
-    spawn: Timer,
-    player: Entity,
-    coin_tex: Texture,
-    ball_tex: Texture,
-    pickup: Sound,
-    crash: Sound,
-    save: Save,
-}
-
-/// Where the best score is kept; the default is the per-user save slot.
-struct SaveFile {
-    path: string,
-}
-
-fn main() {
-    coin_dash(app(config("Coin Dash", 960, 540))).run();
-}
-
-/// Adds the game's systems to an app.
-fn coin_dash(a: App) -> App {
-    return a.startup(setup)
-        .update(play)
-        .update(show_score)
-        .on_sensor<Player, Coin>(pick_up)
-        .on_collision<Player, Hazard>(hit);
-}
-
-fn setup(world: World) {
-    world.set_clear_color(rgb(18, 20, 32));
-    world.set_gravity(vec2(0.0, 0.0));
-
-    let input = world.input();
-    input.bind_axis2d("move",
-        Binding::Key(Key::Left), Binding::Key(Key::Right),
-        Binding::Key(Key::Up), Binding::Key(Key::Down));
-    input.bind_axis2d("move",
-        Binding::Key(Key::A), Binding::Key(Key::D),
-        Binding::Key(Key::W), Binding::Key(Key::S));
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input, save: Save, game: Game) {
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
     input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
-    input.bind_action("restart", Binding::Key(Key::R));
-    input.bind_action("restart", Binding::Button(GamepadButton::South));
+    game.best = save.get_int("best", 0);
 
-    arena(world);
-
-    let player = world.spawn()
-        .insert(at(480.0, 270.0))
-        .insert(Rectangle { size: vec2(28.0, 28.0), color: rgb(90, 170, 255), .. })
-        .insert(RigidBody { kind: BodyKind::Dynamic, fixed_rotation: true, .. })
-        .insert(BoxCollider { half_size: vec2(14.0, 14.0), .. })
-        .insert(Velocity { .. })
-        .insert(Player { .. })
-        .id();
-
-    world.spawn()
-        .insert(at(20.0, 14.0))
-        .insert(Text { value: "", size: 28.0, layer: hud_layer(), .. })
-        .insert(ScoreLabel { shown: -1 });
-    world.spawn()
-        .insert(at(480.0, 270.0))
-        .insert(Text { value: "Hit!  Press R to play again", size: 32.0, align: Align::Center,
-                       valign: VAlign::Middle, outline: 2.0, layer: hud_layer(), visible: false, .. })
-        .insert(HintLabel { shown: false });
-
-    let save = Save { id: 0 };
-    if world.has_resource<SaveFile>() {
-        save = world.open_save_file(world.resource<SaveFile>().path);
-    } else {
-        save = world.open_save("Drift Examples", "Coin Dash", "save");
-    }
-    let game = Game {
-        score: 0,
-        best: save.get_int("best", 0),
-        over: false,
-        spawn: repeating_timer(4.0),
-        player: player,
-        coin_tex: disc(world, 24, rgb(255, 210, 60)),
-        ball_tex: disc(world, 32, rgb(240, 80, 90)),
-        pickup: tone(world, 880.0, 0.12),
-        crash: tone(world, 110.0, 0.35),
-        save: save,
-    };
-    world.insert_resource(game);
-    reset(world, game);
+    arena(cmd);
+    cmd.spawn([
+        Transform { position: SPAWN_POINT, .. },
+        Rectangle { size: vec2(28.0, 28.0), color: rgb(90, 170, 255), .. },
+        RigidBody { kind: BodyKind::Dynamic, fixed_rotation: true, .. },
+        BoxCollider { half_size: vec2(14.0, 14.0), .. },
+        Player { .. },
+    ]);
+    cmd.spawn([at(20.0, 14.0), Text { size: 28.0, layer: hud_layer(), .. }, ScoreLabel {}]);
+    cmd.spawn([
+        Transform { position: SPAWN_POINT, .. },
+        Text { value: "Hit!  Press R to play again", size: 32.0, align: Align::Center,
+               valign: VAlign::Middle, outline: 2.0, layer: hud_layer(), visible: false, .. },
+        HintLabel {},
+    ]);
 }
 
-// Moves the player, spawns hazards, restarts after a hit.
-fn play(world: World, dt: float) {
-    let input = world.input();
-    if input.key_pressed(Key::Escape) {
-        world.quit();
+// ---- Rounds ----
+
+// A new round: no coins or hazards left over, the player at the start.
+@system(on_enter: Round::Playing)
+fn new_round(cmd: Commands, game: Game, tuning: Tuning, art: Art,
+             players: (Player, Transform, Velocity)[],
+             coins: (Entity, Coin)[], hazards: (Entity, Hazard)[]) {
+    for (e, _) in coins {
+        cmd.despawn(e);
     }
-    let game = world.resource<Game>();
-    if game.over {
-        if input.action_pressed("restart") {
-            reset(world, game);
-        }
-        return;
+    for (e, _) in hazards {
+        cmd.despawn(e);
     }
-    let dir = input.axis2d("move");
-    for r in world.query2<Player, Velocity>() {
-        r.b.linear = dir.mul(r.a.speed);
+    for (_, t, v) in players {
+        t.position = SPAWN_POINT;
+        v.linear = vec2(0.0, 0.0);
     }
-    if game.spawn.tick(dt) > 0 {
-        spawn_hazard(world, game);
+    game.score = 0;
+    game.spawn = repeating_timer(tuning.spawn_every);
+    for i in range(3) {
+        cmd.spawn(coin(art));
     }
 }
 
-fn show_score(world: World, dt: float) {
-    let game = world.resource<Game>();
-    let value = game.score * 1000 + game.best;
-    for r in world.query2<ScoreLabel, Text>() {
-        if r.a.shown != value {
-            r.a.shown = value;
-            r.b.value = "Score " + string(game.score) + "    Best " + string(game.best);
-        }
+@system(on_enter: Round::Over)
+fn crash(game: Game, art: Art, effects: Effects, save: Save,
+         players: (Player, Velocity)[]) {
+    for (_, v) in players {
+        v.linear = vec2(0.0, 0.0);
     }
-    for r in world.query2<HintLabel, Text>() {
-        if r.a.shown != game.over {
-            r.a.shown = game.over;
-            r.b.visible = game.over;
-        }
-    }
-}
-
-fn pick_up(world: World, player: Entity, coin: Entity) {
-    let game = world.resource<Game>();
-    if game.over {
-        return;
-    }
-    let pos = world.get<Transform>(coin).position;
-    game.score += world.get<Coin>(coin).value;
-    world.burst(pos, ParticleEmitter {
-        color_start: rgb(255, 230, 120), color_end: rgba(255, 120, 40, 0),
-        speed_min: 60.0, speed_max: 180.0, lifetime_min: 0.2, lifetime_max: 0.5,
-        size_start: 5.0, blend: Blend::Additive, ..
-    }, 24);
-    // A "+1" that floats up and goes away by itself.
-    world.spawn()
-        .insert(Transform { position: pos.add(vec2(0.0, -16.0)), .. })
-        .insert(Text { value: "+1", size: 20.0, color: rgb(255, 230, 120), align: Align::Center, .. })
-        .insert(Velocity { linear: vec2(0.0, -60.0), .. })
-        .insert(Lifetime { seconds: 0.6 });
-    game.pickup.play();
-    world.despawn(coin);
-    spawn_coin(world, game);
-}
-
-fn hit(world: World, player: Entity, hazard: Entity) {
-    let game = world.resource<Game>();
-    if game.over {
-        return;
-    }
-    game.over = true;
-    game.crash.play();
-    world.get<Velocity>(player).linear = vec2(0.0, 0.0);
-    world.flash(rgb(255, 60, 60), 0.4);
+    art.crash.play();
+    effects.flash(rgb(255, 60, 60), 0.4);
     if game.score > game.best {
         game.best = game.score;
-        game.save.set_int("best", game.best);
-        game.save.flush();
+        save.set_int("best", game.best);
+        save.flush();
     }
 }
 
-fn reset(world: World, game: Game) {
-    for e in world.entities<Hazard>() {
-        world.despawn(e);
-    }
-    for e in world.entities<Coin>() {
-        world.despawn(e);
-    }
-    world.get<Transform>(game.player).position = vec2(480.0, 270.0);
-    world.get<Velocity>(game.player).linear = vec2(0.0, 0.0);
-    game.score = 0;
-    game.over = false;
-    game.spawn.reset();
-    for i in range(3) {
-        spawn_coin(world, game);
-    }
-    spawn_hazard(world, game);
+fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
+
+@system(in_state: [Round::Over], run_if: [restart_pressed])
+fn restart(round: State<Round>) {
+    round.set(Round::Playing);
 }
 
-fn spawn_coin(world: World, game: Game) {
-    world.spawn()
-        .insert(at(random::float_range(80.0, 880.0), random::float_range(90.0, 460.0)))
-        .insert(Sprite { texture: game.coin_tex, .. })
-        .insert(CircleCollider { radius: 12.0, sensor: true, .. })
-        .insert(tween().scale_to(vec2(1.25, 1.25), 0.5, Ease::InOutSine).yoyo(-1))
-        .insert(Coin { .. });
+// ---- Every frame ----
+
+@system(in_state: [Round::Playing])
+fn steer(player: Player, velocity: Velocity, input: Input) {
+    velocity.linear = input.axis2d("move") * player.speed;
 }
 
-fn spawn_hazard(world: World, game: Game) {
+@system(in_state: [Round::Playing])
+fn spawn_hazards(cmd: Commands, time: Time, game: Game, art: Art, tuning: Tuning,
+                 players: (Player, Transform)[]) {
+    if game.spawn.tick(time.dt) == 0 {
+        return;
+    }
     let pos = vec2(random::float_range(80.0, 880.0), 90.0);
-    if world.get<Transform>(game.player).position.distance(pos) < 160.0 {
-        pos = vec2(960.0 - pos.x, 460.0);
+    for (_, t) in players {
+        if t.position.distance(pos) < 160.0 {
+            pos = vec2(960.0 - pos.x, 460.0);
+        }
     }
     let angle = random::float_range(0.0, 6.28);
-    let speed = Hazard { .. }.speed;
-    world.spawn()
-        .insert(Transform { position: pos, .. })
-        .insert(Sprite { texture: game.ball_tex, .. })
-        .insert(RigidBody { .. })
-        .insert(CircleCollider { radius: 16.0, restitution: 1.0, friction: 0.0, .. })
-        .insert(Velocity { linear: vec2(math::cos(angle), math::sin(angle)).mul(speed), .. })
-        .insert(Hazard { .. });
+    cmd.spawn([
+        Transform { position: pos, .. },
+        Sprite { image: art.ball, .. },
+        RigidBody { .. },
+        CircleCollider { radius: 16.0, restitution: 1.0, friction: 0.0, .. },
+        Velocity { linear: vec2(math::cos(angle), math::sin(angle)) * tuning.hazard_speed, .. },
+        Hazard {},
+    ]);
+}
+
+// Called once for each coin the player touches.
+@system(in_state: [Round::Playing])
+fn pick_up(hit: Overlap<Player, Coin>, coins: Lookup<Coin>, places: Lookup<Transform>,
+           cmd: Commands, effects: Effects, game: Game, art: Art) {
+    if coins.get(hit.b) is Some(c) {
+        game.score += c.value;
+    }
+    if places.get(hit.b) is Some(t) {
+        effects.burst(t.position, ParticleEmitter {
+            color_start: rgb(255, 230, 120), color_end: rgba(255, 120, 40, 0),
+            speed_min: 60.0, speed_max: 180.0, lifetime_min: 0.2, lifetime_max: 0.5,
+            size_start: 5.0, blend: Blend::Additive, ..
+        }, 24);
+        // A "+1" that floats up and goes away by itself.
+        cmd.spawn([
+            Transform { position: t.position + vec2(0.0, -16.0), .. },
+            Text { value: "+1", size: 20.0, color: rgb(255, 230, 120), align: Align::Center, .. },
+            Velocity { linear: vec2(0.0, -60.0), .. },
+            Lifetime { seconds: 0.6 },
+        ]);
+    }
+    art.pickup.play();
+    cmd.despawn(hit.b);
+    cmd.spawn(coin(art));
+}
+
+@system(in_state: [Round::Playing])
+fn hit(_: Contact<Player, Hazard>, round: State<Round>) {
+    round.set(Round::Over);
+}
+
+// ---- HUD ----
+
+@system
+fn score_label(_: ScoreLabel, text: Text, game: Game) {
+    text.value = "Score " + string(game.score) + "    Best " + string(game.best);
+}
+
+@system
+fn hint_label(_: HintLabel, text: Text, round: State<Round>) {
+    text.visible = round.now == Round::Over;
+}
+
+// ---- Helpers ----
+
+fn coin(art: Art) -> any[] {
+    return [
+        at(random::float_range(80.0, 880.0), random::float_range(90.0, 460.0)),
+        Sprite { image: art.coin, .. },
+        CircleCollider { radius: 12.0, sensor: true, .. },
+        tween().scale_to(vec2(1.25, 1.25), 0.5, Ease::InOutSine).yoyo(-1),
+        Coin { .. },
+    ];
 }
 
 // Static walls around the arena and a faint grid.
-fn arena(world: World) {
+fn arena(cmd: Commands) {
     let color = rgb(60, 66, 96);
-    wall(world, vec2(480.0, 62.0), vec2(960.0, 12.0), color);
-    wall(world, vec2(480.0, 534.0), vec2(960.0, 12.0), color);
-    wall(world, vec2(6.0, 298.0), vec2(12.0, 480.0), color);
-    wall(world, vec2(954.0, 298.0), vec2(12.0, 480.0), color);
+    wall(cmd, vec2(480.0, 62.0), vec2(960.0, 12.0), color);
+    wall(cmd, vec2(480.0, 534.0), vec2(960.0, 12.0), color);
+    wall(cmd, vec2(6.0, 298.0), vec2(12.0, 480.0), color);
+    wall(cmd, vec2(954.0, 298.0), vec2(12.0, 480.0), color);
     let y = 80.0;
     while y < 530.0 {
-        world.spawn()
-            .insert(at(480.0, y))
-            .insert(Rectangle { size: vec2(936.0, 1.0), color: rgba(255, 255, 255, 12), z: -10.0, .. });
+        cmd.spawn([at(480.0, y), Rectangle { size: vec2(936.0, 1.0), color: rgba(255, 255, 255, 12), z: -10.0, .. }]);
         y += 40.0;
     }
 }
 
-fn wall(world: World, pos: Vec2, size: Vec2, c: Color) {
-    world.spawn()
-        .insert(Transform { position: pos, .. })
-        .insert(Rectangle { size: size, color: c, .. })
-        .insert(BoxCollider { half_size: size.mul(0.5), friction: 0.0, .. });
+fn wall(cmd: Commands, pos: Vec2, size: Vec2, c: Color) {
+    cmd.spawn([
+        Transform { position: pos, .. },
+        Rectangle { size: size, color: c, .. },
+        BoxCollider { half_size: size * 0.5, friction: 0.0, .. },
+    ]);
 }
 
 // A filled circle texture with a soft edge.
-fn disc(world: World, size: int, c: Color) -> Texture {
+fn disc(size: int, c: Color) -> Texture {
     let pixels: Color[] = [];
     let r = float(size) * 0.5;
     for y in range(size) {
         for x in range(size) {
             let dx = float(x) + 0.5 - r;
             let dy = float(y) + 0.5 - r;
-            let a = r - (dx * dx + dy * dy).sqrt();
-            if a > 1.0 {
-                a = 1.0;
-            }
-            if a < 0.0 {
-                a = 0.0;
-            }
-            pixels.push(c.alpha(a));
+            pixels.push(c.alpha(clamp(r - (dx * dx + dy * dy).sqrt(), 0.0, 1.0)));
         }
     }
-    let tex = world.create_texture(size, size, pixels);
-    tex.set_filter(Filter::Linear);
-    return tex;
+    let assets = Assets { .. };
+    return assets.create_texture(size, size, pixels);
 }
 
 // A short sine blip that falls in pitch.
-fn tone(world: World, freq: float, seconds: float) -> Sound {
+fn tone(freq: float, seconds: float) -> Sound {
     let rate = 22050;
     let n = int(seconds * float(rate));
     let samples: float[] = [];
     let phase = 0.0;
     for i in range(n) {
         let t = float(i) / float(n);
-        let f = freq * (1.0 - 0.4 * t);
-        phase += 6.2831853 * f / float(rate);
+        phase += 6.2831853 * freq * (1.0 - 0.4 * t) / float(rate);
         samples.push(math::sin(phase) * 0.4 * (1.0 - t));
     }
-    return world.create_sound(samples, rate);
+    let assets = Assets { .. };
+    return assets.create_sound(samples, rate);
 }

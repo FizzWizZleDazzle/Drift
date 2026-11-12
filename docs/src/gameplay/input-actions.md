@@ -40,6 +40,18 @@ A binding is one physical input:
 
 Every binding reads as 0..1, so a trigger can drive a button action and a key can drive an axis.
 
+### In drift.toml
+
+Actions can also be bound in the `[input]` section of [drift.toml](../reference/configuration.md), one key per action with its bindings in their text form (`key:<name>`, `mouse:Left`, `button:South`, and `#<code>` for a numeric code):
+
+```toml
+[input]
+jump = ["key:Space", "button:South"]
+fire = "mouse:Left"
+```
+
+`InputActionsPlugin` binds them when it builds. Saving drift.toml while the game runs replaces the bindings of the actions whose line changed. Axes are bound in code.
+
 ## Reading them
 
 ```cpp

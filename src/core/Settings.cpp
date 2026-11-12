@@ -284,6 +284,24 @@ std::string Settings::getString(const char* path, const std::string& fallback) c
     return impl_->read<std::string>(path, fallback, [](const json& v) { return v.is_string(); });
 }
 
+std::string Settings::valueJson(const char* path) const {
+    const auto& s = *impl_;
+    nlohmann::json out;
+    if (const nlohmann::json* f = lookup(s.data, path)) out = *f;
+    if (const nlohmann::json* c = lookup(s.cli, path)) {
+        if (out.is_object() && c->is_object()) out.merge_patch(*c);
+        else out = *c;
+    }
+    if (out.is_object()) {
+        for (auto& [key, value] : out.items()) {
+            if (auto env = envValue(std::string(path) + "." + key)) value = *env;
+        }
+    } else if (auto env = envValue(path)) {
+        out = *env;
+    }
+    return out.is_null() ? std::string() : out.dump();
+}
+
 const std::string& Settings::file() const { return impl_->file; }
 
 void Settings::parseArgs(int argc, char** argv) {
@@ -455,6 +473,25 @@ bool Settings::reload() {
         DRIFT_LOG_INFO("Settings: applied %s", list.c_str());
         auto range = s.listeners.equal_range(b.section);
         for (auto it = range.first; it != range.second; ++it) it->second(changed);
+    }
+    // Sections no struct is bound to (read raw by a plugin): their listeners
+    // hear about every key whose value changed.
+    for (const auto& [section, fn] : s.listeners) {
+        bool bound = std::any_of(s.bindings.begin(), s.bindings.end(),
+                                 [&](const Impl::Binding& b) { return b.section == section; });
+        if (bound) continue;
+        const json* o = lookup(prev, section);
+        const json* n = lookup(s.data, section);
+        std::set<std::string> keys;
+        if (o && o->is_object()) for (const auto& [k, v] : o->items()) keys.insert(k);
+        if (n && n->is_object()) for (const auto& [k, v] : n->items()) keys.insert(k);
+        std::vector<std::string> changed;
+        for (const auto& k : keys) {
+            const json* ov = o && o->contains(k) ? &(*o)[k] : nullptr;
+            const json* nv = n && n->contains(k) ? &(*n)[k] : nullptr;
+            if (!(ov && nv && *ov == *nv)) changed.push_back(k);
+        }
+        if (!changed.empty()) fn(changed);
     }
     s.reloading = true;
     warnUnknownKeys();

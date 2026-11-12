@@ -46,7 +46,7 @@ drift/
     text/
     toolkit/
   bindings/
-    candela/               <-- the candela drift package: C shim, candela sources, tests, Coin Dash example
+    candela/               <-- Candela games: the drift program (host/, runner/), the drift module, the book, examples
   tests/                   <-- engine tests (ctest)
   cmake/                   <-- drift_add_shaders, drift_web_app, web page template
   docs/                    <-- this documentation (mdBook)
@@ -242,7 +242,7 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
 | `tilemap` | Tiled and LDtk levels, parallax, animated tiles, autotiling, merged colliders, object spawners |
 
-Games written in candela have their own example, Coin Dash, in `bindings/candela/examples/coin_dash/`; see [Candela](../candela/overview.md).
+Games written in candela have their own examples, Flappy Bird and Coin Dash, in `bindings/candela/examples/`; see [Candela](../candela/overview.md).
 
 ## Typical user project structure
 

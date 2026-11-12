@@ -1,0 +1,21 @@
+[project]
+name = "Coin Dash"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 960
+height = 540
+
+[render]
+clear_color = [0.07, 0.08, 0.12]
+
+[physics]
+gravity = [0, 0]
+
+[input]
+restart = ["key:R", "button:South"]
+
+[coin_dash]
+hazard_speed = 220.0
+spawn_every = 4.0

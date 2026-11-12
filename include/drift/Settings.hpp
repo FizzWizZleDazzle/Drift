@@ -46,6 +46,10 @@ public:
     double getFloat(const char* path, double fallback = 0.0) const;
     bool getBool(const char* path, bool fallback = false) const;
     std::string getString(const char* path, const std::string& fallback = {}) const;
+    // A value or a whole table as JSON text, with --set and environment
+    // values applied; an empty string when nothing is there. Scripting hosts
+    // read sections this way.
+    std::string valueJson(const char* path) const;
 
     // The file that was read, or an empty string when there was none.
     const std::string& file() const;
@@ -71,7 +75,8 @@ public:
     // Applies environment and command-line overrides to every bound section
     // again, so they win over values code set after binding.
     void applyOverrides();
-    // Called after a reload changed keys of `section` (their names).
+    // Called after a reload changed keys of `section` (their names). Works
+    // for sections bound to a struct and for sections read raw.
     void onChange(const char* section, std::function<void(const std::vector<std::string>&)> fn);
     // Logs keys in bound sections that no field reads (typos).
     void warnUnknownKeys() const;

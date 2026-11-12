@@ -102,6 +102,7 @@ Plugins read their own sections:
 | `[audio]` | `master_volume`, `music_volume`, `sfx_volume`, 0 to 1, default 1 | [Audio](../subsystems/audio.md) |
 | `[lighting]` | `enabled`, `ambient`, `layer_mask`, `resolution_scale` | [Lighting](../components/lighting.md) |
 | `[hot_reload]` | `enabled`, `interval` (seconds between checks) | [Asset Server](../subsystems/asset-server.md#hot-reload) |
+| `[input]` | One key per action, a list of bindings: `jump = ["key:Space", "button:South"]` | [Input Actions](../gameplay/input-actions.md) |
 
 Physics and audio settings are where the world and the mixer start; change them while the game runs through `PhysicsResource` and `AudioResource`. Lighting and hot reload read theirs every frame.
 
@@ -146,7 +147,7 @@ void setup(Res<Settings> settings) {
 }
 ```
 
-`has`, `getInt`, `getFloat`, `getBool` and `getString` see environment and `--set` values too.
+`has`, `getInt`, `getFloat`, `getBool` and `getString` see environment and `--set` values too. `valueJson(path)` returns a value or a whole table as JSON text, which is how a scripting host reads a section.
 
 ## Live Reload
 
