@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   # Every asset is built from the tag, and the engine, the source archive's
-  # folder and the candela package all report the version CMakeLists.txt
+  # folder and the Candela module and host all report the version CMakeLists.txt
   # names. A tag that disagrees would publish a release whose files call
   # themselves something else, so this gates the build rather than running
   # inside it, and a disagreement costs one runner instead of every leg.

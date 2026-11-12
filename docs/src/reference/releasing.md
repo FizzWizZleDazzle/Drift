@@ -32,11 +32,11 @@ cd drift-examples-web && python3 -m http.server 8000   # open http://localhost:8
 
 Check a download against the published digests with `sha256sum -c --ignore-missing sha256sums.txt` in the folder holding both.
 
-The examples use the default GL / WebGL2 backend and keep the dev overlay on. The macOS programs are not signed, so macOS asks before opening them; clear the quarantine flag with `xattr -dr com.apple.quarantine drift-examples-macos-aarch64`. The Linux programs are built on Ubuntu 24.04 and need a C library at least that new. The candela package is not part of a release yet.
+The examples use the default GL / WebGL2 backend and keep the dev overlay on. The macOS programs are not signed, so macOS asks before opening them; clear the quarantine flag with `xattr -dr com.apple.quarantine drift-examples-macos-aarch64`. The Linux programs are built on Ubuntu 24.04 and need a C library at least that new. The `drift` program for Candela games is not part of a release yet.
 
 ## Versions
 
-`project(drift VERSION ...)` in `CMakeLists.txt` is the version of the tree. The candela package in `bindings/candela/candela.toml` releases with the engine and carries the same number. `scripts/bump-version.py` moves both together:
+`project(drift VERSION ...)` in `CMakeLists.txt` is the version of the tree. The Candela parts, the `drift` module (`bindings/candela/drift/candela.toml`) and the host crate (`bindings/candela/host/Cargo.toml`), release with the engine and carry the same number. `scripts/bump-version.py` moves them together:
 
 ```bash
 scripts/bump-version.py 0.4.0       # set every copy

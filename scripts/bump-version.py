@@ -9,9 +9,10 @@ Usage:
                                            copies disagree
 
 The `project(drift VERSION ...)` call in CMakeLists.txt is where the version is
-decided. The candela package in bindings/candela releases with the engine and
-carries the same number in its candela.toml. A copy that lags behind ships a
-package claiming a version the engine does not, so this moves them together.
+decided. The Candela parts in bindings/candela (the drift module's
+candela.toml and the host crate's Cargo.toml) release with the engine and
+carry the same number. A copy that lags behind ships a package claiming a
+version the engine does not, so this moves them together.
 
 Versions are plain X.Y.Z: CMake's project(VERSION) takes numeric components
 only, so a prerelease suffix has nowhere to live.
@@ -64,7 +65,10 @@ COPIES = [
     Copy("CMakeLists.txt",
          r"^(project\(drift\s+VERSION\s+)(\d+\.\d+\.\d+)(\b)",
          "project(drift VERSION ...) call"),
-    Copy("bindings/candela/candela.toml",
+    Copy("bindings/candela/drift/candela.toml",
+         r'(\[package\][^\[]*?^version\s*=\s*")([^"]*)(")',
+         "[package] version"),
+    Copy("bindings/candela/host/Cargo.toml",
          r'(\[package\][^\[]*?^version\s*=\s*")([^"]*)(")',
          "[package] version"),
 ]

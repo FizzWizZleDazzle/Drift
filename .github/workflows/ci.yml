@@ -8,9 +8,8 @@ name: ci
 # been built before this workflow, so the first thing to learn there is whether
 # it compiles. Turn ctest on for them once they build.
 #
-# The candela package (DRIFT_BUILD_CANDELA) stays out. It needs the candela
-# toolchain, and the embedded host needs a candela branch that is not public
-# yet.
+# The drift program for Candela games (DRIFT_BUILD_CANDELA) stays out until
+# the candela changes it builds on (lumen-fx/candela#246) are released.
 
 on:
   push:
