@@ -794,6 +794,59 @@ const std::vector<Codec>& codecs() {
          [](EntityId e, const json& j) { put(e, Lifetime{j.value("seconds", 1.f)}); },
          [](EntityId e) { world().removeComponent(e, cid<Lifetime>()); },
          [] { return cid<Lifetime>(); }},
+        {"Oscillate",
+         [](EntityId e) { return get<Oscillate>(e) != nullptr; },
+         [](EntityId e) {
+             const Oscillate& o = *get<Oscillate>(e);
+             return json{{"amplitude", vec(o.amplitude)}, {"frequency", o.frequency}, {"phase", o.phase}};
+         },
+         [](EntityId e, const json& j) {
+             Oscillate o;
+             if (const Oscillate* cur = get<Oscillate>(e)) o = *cur;
+             o.amplitude = vec(j.value("amplitude", json()), {0, 8});
+             o.frequency = j.value("frequency", 1.f);
+             o.phase = j.value("phase", 0.f);
+             put(e, o);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<Oscillate>()); },
+         [] { return cid<Oscillate>(); }},
+        {"Follow",
+         [](EntityId e) { return get<Follow>(e) != nullptr; },
+         [](EntityId e) {
+             const Follow& f = *get<Follow>(e);
+             return json{{"target", {{"id", f.target == InvalidEntityId ? 0 : f.target}}}, {"speed", f.speed},
+                         {"distance", f.distance}, {"offset", vec(f.offset)}};
+         },
+         [](EntityId e, const json& j) {
+             Follow f;
+             EntityId t = j.value("target", json::object()).value("id", EntityId(0));
+             f.target = t == 0 ? InvalidEntityId : t;
+             f.speed = j.value("speed", 100.f);
+             f.distance = j.value("distance", 0.f);
+             f.offset = vec(j.value("offset", json()));
+             put(e, f);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<Follow>()); },
+         [] { return cid<Follow>(); }},
+        {"Orbit",
+         [](EntityId e) { return get<Orbit>(e) != nullptr; },
+         [](EntityId e) {
+             const Orbit& o = *get<Orbit>(e);
+             return json{{"center", {{"id", o.center == InvalidEntityId ? 0 : o.center}}}, {"point", vec(o.point)},
+                         {"radius", o.radius}, {"speed", o.speed}, {"angle", o.angle}};
+         },
+         [](EntityId e, const json& j) {
+             Orbit o;
+             EntityId c = j.value("center", json::object()).value("id", EntityId(0));
+             o.center = c == 0 ? InvalidEntityId : c;
+             o.point = vec(j.value("point", json()));
+             o.radius = j.value("radius", 64.f);
+             o.speed = j.value("speed", 1.f);
+             o.angle = j.value("angle", 0.f);
+             put(e, o);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<Orbit>()); },
+         [] { return cid<Orbit>(); }},
         {"ParticleEmitter",
          [](EntityId e) { return get<ParticleEmitter>(e) != nullptr; },
          [](EntityId e) { return emitterJson(*get<ParticleEmitter>(e)); },
@@ -2390,9 +2443,9 @@ bool gameplayInput(const std::string& f, const json& a, json& out) {
 // The entity a shape belongs to; 0 for shapes the engine made itself.
 EntityId shapeEntity(uint64_t packed) {
     auto* physics = res<PhysicsResource>();
-    if (!physics || packed == 0) return 0;
-    void* data = physics->getShapeUserData(u64_to_shape(packed));
-    return static_cast<EntityId>(reinterpret_cast<uintptr_t>(data));
+    auto* bridge = res<PhysicsBridge>();
+    if (!physics || !bridge || packed == 0) return 0;
+    return entityOfShape(*bridge, *physics, packed);
 }
 
 CollisionFilter queryFilter(const json& mask) {

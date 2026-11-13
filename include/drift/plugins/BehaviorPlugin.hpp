@@ -15,7 +15,7 @@
 namespace drift {
 
 // Small declarative behaviors that run as ordinary systems in PostUpdate:
-// Lifetime, Oscillate and Follow. Velocity2D (moving without a physics
+// Lifetime, Oscillate, Follow and Orbit. Velocity2D (moving without a physics
 // body) lives in PhysicsPlugin. Each system declares its access, so the
 // scheduler runs them on worker threads beside other systems.
 
@@ -62,6 +62,30 @@ inline void followSystem(Res<Time> time, QueryMut<Transform2D, Follow> followers
     });
 }
 
+inline void orbitSystem(Res<Time> time, QueryMut<Transform2D, Orbit> orbiters, Query<Transform2D> centers) {
+    float dt = time->delta;
+    std::unordered_map<EntityId, Vec2> found;
+    orbiters.iter([&](Transform2D&, Orbit& o) {
+        if (o.center != InvalidEntityId) found.emplace(o.center, Vec2{});
+    });
+    std::unordered_map<EntityId, bool> alive;
+    if (!found.empty()) {
+        centers.iterWithEntity([&](EntityId e, const Transform2D& t) {
+            auto it = found.find(e);
+            if (it != found.end()) {
+                it->second = t.position;
+                alive[e] = true;
+            }
+        });
+    }
+    orbiters.iter([&](Transform2D& t, Orbit& o) {
+        o.angle += o.speed * dt;
+        Vec2 c = o.point;
+        if (o.center != InvalidEntityId && alive.count(o.center)) c = found[o.center];
+        t.position = c + Vec2{std::cos(o.angle), std::sin(o.angle)} * o.radius;
+    });
+}
+
 class BehaviorPlugin : public Plugin {
 public:
     void build(App& app) override {
@@ -78,9 +102,16 @@ public:
             .field("speed", &Follow::speed)
             .field("distance", &Follow::distance)
             .field("offset", &Follow::offset);
+        reflect::component<Orbit>(app.world(), "Orbit")
+            .entity("center", &Orbit::center)
+            .field("point", &Orbit::point)
+            .field("radius", &Orbit::radius)
+            .field("speed", &Orbit::speed)
+            .field("angle", &Orbit::angle);
         app.addSystem<lifetimeSystem>("lifetime", Phase::PostUpdate);
         app.addSystem<oscillateSystem>("oscillate", Phase::PostUpdate);
         app.addSystem<followSystem>("follow", Phase::PostUpdate);
+        app.addSystem<orbitSystem>("orbit", Phase::PostUpdate);
     }
     DRIFT_PLUGIN(BehaviorPlugin)
 };

@@ -38,6 +38,7 @@ These run inside the engine, on its worker threads, so a game with many moving t
 | `Lifetime` | `seconds`. The entity despawns when it runs out. *Engine*: counts down |
 | `Oscillate` | `amplitude` (`Vec2`), `frequency`, `phase`. Swings the entity around its position |
 | `Follow` | `target`, `speed`, `distance`, `offset`. Moves toward another entity |
+| `Orbit` | `center`, `point`, `radius`, `speed` (radians per second), `angle`. Circles another entity, or `point` while `center` is unset or gone |
 | `Tween` | Built with `tween()`: `move_to`, `move_by`, `scale_to`, `rotate_to`, `rotate_by`, `fade_to`, `tint_to`, `zoom_to` (each `(target, seconds, Ease)`), `delay(seconds)`, `repeat(times)` or `yoyo(times)` (-1 forever). Inserting a changed tween restarts it. *Engine*: `finished` |
 | `Animator` | `clips` (`AnimationClip { frames: Rect[], frame_seconds, looping }`), `clip` (set it to switch), `playing`. *Engine*: `frame`, `finished` |
 

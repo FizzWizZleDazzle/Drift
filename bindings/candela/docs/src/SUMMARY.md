@@ -35,6 +35,7 @@
 - [Scenes and Prefabs](guides/scenes.md)
 - [Timers and Save Data](guides/timers-and-saves.md)
 - [HUD and Menus](guides/hud.md)
+- [Building Blocks](guides/building-blocks.md)
 - [Debugging](guides/debugging.md)
 - [Web Games](guides/web.md)
 
@@ -46,6 +47,7 @@
 - [Engine Resources](reference/resources.md)
 - [Values and Enums](reference/values.md)
 - [drift/ui](reference/ui.md)
+- [drift/gameplay](reference/gameplay.md)
 - [The drift Command](reference/cli.md)
 - [Errors](reference/errors.md)
 

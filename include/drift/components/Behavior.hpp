@@ -31,4 +31,15 @@ struct Follow {
     Vec2 offset = {};
 };
 
+// Circles the entity around another one, or around `point` while
+// `center` is unset or gone: `radius` pixels out, `speed` radians per
+// second (negative turns the other way), starting at `angle`.
+struct Orbit {
+    EntityId center = InvalidEntityId;
+    Vec2 point = {};
+    float radius = 64.f;
+    float speed = 1.f;
+    float angle = 0.f;
+};
+
 } // namespace drift

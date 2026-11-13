@@ -92,11 +92,12 @@ An entity holds one `Tween`. Inserting a changed tween restarts it from the enti
 
 ## Behaviors
 
-Three components cover common motion:
+Four components cover common motion:
 
 - `Lifetime { seconds }` despawns the entity when the time runs out, with its children. Use it for bullets, floating labels and debris.
 - `Oscillate { amplitude, frequency, phase }` swings the entity around where it is, on top of any other motion. `amplitude` is a `Vec2`, so `vec2(0.0, 4.0)` bobs and `vec2(30.0, 0.0)` patrols.
 - `Follow { target, speed, distance, offset }` moves straight toward another entity's position plus `offset`, stopping `distance` short. Nothing happens while the target is gone.
+- `Orbit { center, point, radius, speed, angle }` circles another entity, or `point` while `center` is unset or gone, `radius` pixels out at `speed` radians per second. Spread the `angle`s of several orbiters to make a ring of shields.
 
 ```rust
 // A drone that trails the player and hovers as it goes.

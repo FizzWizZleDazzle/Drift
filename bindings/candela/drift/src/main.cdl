@@ -471,6 +471,20 @@ struct CircleCollider {
 
 struct Lifetime { seconds: float = 1.0 }
 
+// Swings the entity back and forth around where it is: `amplitude` pixels
+// each way, `frequency` times a second. Adds to whatever else moves it.
+struct Oscillate { amplitude: Vec2 = Vec2 { x: 0.0, y: 8.0 }, frequency: float = 1.0, phase: float = 0.0 }
+
+// Moves the entity toward `target` plus `offset` at `speed` pixels per
+// second, stopping `distance` short. Nothing happens while the target is
+// missing.
+struct Follow { target: Entity = Entity { .. }, speed: float = 100.0, distance: float = 0.0, offset: Vec2 = Vec2 { .. } }
+
+// Circles the entity around `center`, or around `point` while `center` is
+// unset or gone: `radius` pixels out, `speed` radians per second (negative
+// turns the other way), from `angle`.
+struct Orbit { center: Entity = Entity { .. }, point: Vec2 = Vec2 { .. }, radius: float = 64.0, speed: float = 1.0, angle: float = 0.0 }
+
 enum Ease {
     Linear,
     InSine, OutSine, InOutSine,

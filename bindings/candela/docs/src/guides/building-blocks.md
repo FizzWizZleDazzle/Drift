@@ -1,0 +1,141 @@
+# Building Blocks
+
+Most action games write the same pieces: health and damage, bullets that leave the screen, enemies that come in waves, a high score. `drift/gameplay` has them as components with their systems, so a game adds a component instead of writing the system:
+
+```rust
+import "drift" { * };
+import "drift/gameplay" { * };
+```
+
+Each part only runs for entities that have its components; the ones a game does not use cost nothing. For HUD widgets, see [HUD and Menus](hud.md).
+
+## Prefabs
+
+A prefab is a function that returns a bundle. Give it parameters for what changes between copies, and add or replace components with `plus`:
+
+```rust
+fn enemy(pos: Vec2) -> any[] {
+    return [
+        Transform { position: pos, .. },
+        Sprite { image: texture("assets/bat.png"), .. },
+        RigidBody { kind: BodyKind::Kinematic, .. },
+        CircleCollider { radius: 10.0, sensor: true, .. },
+        health(30.0), Hurtbox { team: 1 }, Hitbox { damage: 10.0, team: 1, .. }, HitFlash { .. },
+    ];
+}
+
+cmd.spawn(enemy(vec2(100.0, 40.0)));
+cmd.spawn(plus(enemy(vec2(300.0, 40.0)), [Boss {}, health(500.0)]));   // a later Health replaces the first
+```
+
+## Health and damage
+
+`Health` holds hit points. A `Hitbox` hurts the `Hurtbox` entities it touches on another `team`, through a sensor overlap or a contact; at least one of the two needs a dynamic body, as for any collision. Damage from code goes through `damage(cmd, target, amount, source)`, and `heal(cmd, target, amount)` heals up to `max`.
+
+```rust
+cmd.spawn([at(480.0, 270.0), Rectangle { .. },
+           RigidBody { kind: BodyKind::Dynamic, fixed_rotation: true, .. }, BoxCollider { .. },
+           Player {}, Health { hp: 5.0, max: 5.0, invulnerable_for: 1.0, .. }, Hurtbox { team: 0 }]);
+
+// A bullet: gone after its first hit.
+cmd.spawn([Transform { position: muzzle, .. }, Circle { radius: 3.0, .. }, Velocity { linear: dir * 600.0, .. },
+           RigidBody { kind: BodyKind::Kinematic, .. }, CircleCollider { radius: 3.0, sensor: true, .. },
+           Hitbox { damage: 1.0, team: 0, pierce: false, .. }, DespawnOffscreen { .. }]);
+```
+
+- After a hit, `Health` ignores damage for `invulnerable_for` seconds: invulnerability frames.
+- A hit sends `Damaged { entity, amount, hp, source }`. At 0 hp it sends `Died { entity, source }`, and despawns the entity unless `despawn_on_death` is off.
+- `knockback` on a `Hitbox` pushes the target's body away from it.
+- `HealthBar` draws a small bar over the entity's head from its `Health`; `hide_when_full` hides it at full health.
+
+```rust
+@system
+fn on_death(d: Died, score: Score) {
+    score.add(100);
+}
+```
+
+## Hit effects
+
+- `HitFlash { color, seconds }` tints the entity's `Sprite`, `Rectangle` or `Circle` each time its `Health` takes a hit. `flash(cmd, e, HitFlash { .. })` starts one from code.
+- `cmd.send(HitStop { seconds: 0.06 })` freezes the game for that long: physics, tweens, particles and `dt` stop, then carry on. It uses `Time.set_scale`.
+- `cmd.send(Shake { intensity: 0.5 })` shakes every camera.
+- `popup(cmd, pos, "-12", rgb(255, 90, 90))` puts a number or word at a world position that pops in, floats up and fades: damage numbers and pickups.
+- `FadeOut { seconds }` fades the entity's `Sprite`, `Text`, `Rectangle` or `Circle` and then despawns it.
+- `Trail` (see [Particles, Lights and Effects](effects.md)) draws a ribbon behind a fast object.
+
+```rust
+@system
+fn juice(d: Damaged, places: Lookup<Transform>, cmd: Commands) {
+    if places.get(d.entity) is Some(t) {
+        popup(cmd, t.position, "-" + string(int(d.amount)), rgb(255, 90, 90));
+    }
+    cmd.send(Shake { intensity: 0.3 });
+    cmd.send(HitStop { seconds: 0.05 });
+}
+```
+
+## Screen bounds
+
+The area is the main camera's view unless the component sets one.
+
+- `KeepInBounds { margin }` keeps the entity inside the area.
+- `WrapAround { margin }` moves it to the other side when it leaves: asteroids-style.
+- `DespawnOffscreen { margin }` despawns it once it is `margin` pixels outside: bullets, debris, enemies the player scrolled past.
+
+## Following and orbiting
+
+`Follow` and `Orbit` are engine behaviors in `drift` itself; see [Animation, Tweens and Behaviors](animation.md).
+
+```rust
+cmd.spawn([at(0.0, 0.0), Circle { radius: 6.0, .. }, Orbit { center: player, radius: 50.0, speed: 3.0, .. }]);
+```
+
+## Spawners and waves
+
+A `Spawner` sends `SpawnTick { spawner, id, position, index }` every `every` seconds from its entity's position plus up to `spread` pixels, `count` times (-1 forever). Spawn what you want in a system that takes the message:
+
+```rust
+cmd.spawn([at(900.0, 100.0), spawner("bat", 0.8)]);
+
+@system
+fn spawn_bats(s: SpawnTick, cmd: Commands) {
+    cmd.spawn(enemy(s.position));
+}
+```
+
+A `WaveSpawner` runs a list of `Wave`s in order: each spawns `count` times, `every` seconds apart, `delay` seconds after the one before. It sends `WaveStarted { wave }`, `WaveSpawn { wave, id, index }` for every spawn and `WavesDone` after the last wave; `looping` starts over instead.
+
+```rust
+cmd.spawn([WaveSpawner { waves: [wave("bat", 5, 0.6, 1.0), wave("bat", 10, 0.4, 3.0), wave("boss", 1, 0.0, 4.0)], .. }]);
+```
+
+## Score and high score
+
+`Score` is a resource with the score and the best one. The best is read from the save when the game starts and written whenever it is beaten, under `key` (`"best"`).
+
+```rust
+score.add(10);      // value and, when beaten, best
+score.reset();      // a new run
+score.is_record()   // this run is the best so far
+```
+
+Show them with `bind("Score.value", "Score {}")` and `bind("Score.best", "Best {}")` from [HUD and Menus](hud.md).
+
+## Finding entities
+
+`nearest(rows, from)` returns the entity nearest a point among query rows that start with an `Entity` and a `Transform`, and `within(rows, from, radius)` the ones within a radius, nearest first. For the rest, query lists have `len()`, `first()`, `any(f)`, `all(f)`, `find(f)` and `filter(f)`.
+
+```rust
+@system
+fn aim(turrets: (Turret, Transform)[], enemies: (Entity, Transform, Enemy)[], places: Lookup<Transform>) {
+    for (turret, t) in turrets {
+        let target = nearest(enemies, t.position);
+        if target.alive() {
+            ...
+        }
+    }
+}
+```
+
+For colliders, `Physics.overlap_circle` asks the physics world instead; see [Physics](physics.md).

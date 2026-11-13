@@ -7,6 +7,7 @@ Small components that make an entity move or expire on its own, so a game declar
 | `Lifetime` | Despawns the entity when its time runs out |
 | `Oscillate` | Swings the entity back and forth around where it is |
 | `Follow` | Moves the entity toward another entity |
+| `Orbit` | Circles the entity around another entity or a point |
 | `Velocity2D` | Moves an entity without a `RigidBody2D` every frame (from `PhysicsPlugin`; see [Physics](physics.md)) |
 
 [Tweens](../gameplay/tweening.md) and [sprite animation](sprite-animation.md) are the other declarative motions.
@@ -57,4 +58,18 @@ struct Follow {
 
 Moves the entity straight toward the target's `Transform2D` position plus `offset` at `speed`, stopping `distance` short. Nothing happens while the target is missing. For cameras, `CameraFollow` smooths the motion instead (see [Camera Controllers](camera-controllers.md)).
 
-All three are reflected, so they save and load in [scenes](../subsystems/scenes.md).
+## Orbit
+
+```cpp
+struct Orbit {
+    EntityId center = InvalidEntityId;
+    Vec2 point = {};       // the center while `center` is unset or gone
+    float radius = 64.f;   // pixels
+    float speed = 1.f;     // radians per second; negative turns the other way
+    float angle = 0.f;     // where on the circle it is now
+};
+```
+
+Puts the entity on a circle around the center entity's `Transform2D` position each frame and moves it along by `speed`. Shields, moons, circling pickups and enemies that strafe around the player are an `Orbit` each; give several the same center and spread their `angle`s to make a ring.
+
+All four are reflected, so they save and load in [scenes](../subsystems/scenes.md).
