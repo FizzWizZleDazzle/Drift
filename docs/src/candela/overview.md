@@ -14,7 +14,7 @@ fn steer(ship: Ship, velocity: Velocity, input: Input) {
 }
 ```
 
-Build `drift` with `-DDRIFT_BUILD_CANDELA=ON` (it needs a Rust toolchain; see [Installation](../getting-started/installation.md)) and run a game from its folder with `drift run`. For the browser, `drift_candela_web_game(<target> PROJECT <folder>)` makes a page per game.
+Install `drift` with `curl -fsSL https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.sh | sh` (on Windows, `install.ps1`), run a game with `drift run <folder>`, and make a web page of it with `drift build --web <folder>`. To build `drift` from source, configure with `-DDRIFT_BUILD_CANDELA=ON`; it needs a Rust toolchain (see [Installation](../getting-started/installation.md)).
 
 The Candela book, in `bindings/candela/docs`, covers the API in full: components, systems, queries, states, messages, the engine components and resources, and the examples. The examples are in `bindings/candela/examples`: Flappy Bird, Coin Dash and Cave Walk.
 

@@ -1,15 +1,16 @@
 name: ci
 
 # Builds Drift on every push to main and every pull request: the engine, the
-# examples and the tests on Linux with each graphics backend, the same build on
-# Windows and macOS, the browser build of the examples, and the docs.
+# examples, the drift program for Candela games and the tests on Linux with
+# each graphics backend, the same build on Windows and macOS, the browser build
+# of the examples and the web runtime, and the docs.
 #
 # Linux runs the tests. Windows and macOS build only, for now: neither has
 # been built before this workflow, so the first thing to learn there is whether
 # it compiles. Turn ctest on for them once they build.
 #
-# The drift program for Candela games (DRIFT_BUILD_CANDELA) stays out until
-# the candela changes it builds on (lumen-fx/candela#246) are released.
+# The drift program builds against the candela source .github/actions/candela
+# picks.
 
 on:
   push:
@@ -50,12 +51,16 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: linux-${{ matrix.backend }}
+      - uses: ./.github/actions/candela
+        id: candela
       - name: Configure
         run: >
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DDRIFT_BUILD_CANDELA=ON
+          "-DDRIFT_CANDELA_SOURCE=${{ steps.candela.outputs.source }}"
           ${{ matrix.flags }}
       - name: Build
         run: cmake --build build
@@ -79,6 +84,8 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: ${{ matrix.name }}
+      - uses: ./.github/actions/candela
+        id: candela
       # The runner's default shell: PowerShell on Windows, where Git Bash
       # would put its own link ahead of MSVC's.
       - name: Configure
@@ -87,6 +94,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DDRIFT_BUILD_CANDELA=ON
+          "-DDRIFT_CANDELA_SOURCE=${{ steps.candela.outputs.source }}"
       - name: Build
         run: cmake --build build
 
@@ -112,12 +121,18 @@ jobs:
         with:
           version: 6.0.13
           actions-cache-folder: emsdk-cache-${{ matrix.backend }}
+      - uses: ./.github/actions/candela
+        id: candela
+        with:
+          web: "true"
       - name: Configure
         run: >
           emcmake cmake -S . -B build-web -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DDRIFT_BUILD_CANDELA=ON
+          "-DDRIFT_CANDELA_SOURCE=${{ steps.candela.outputs.source }}"
           ${{ matrix.flags }}
       - name: Build
         run: cmake --build build-web

@@ -92,6 +92,7 @@ Paths in scripts are relative to the project folder: `texture("assets/ship.png")
 | Command | Does |
 |---------|------|
 | `drift run` | Compiles and runs the game, reloading scripts and assets as they change |
+| `drift build --web` | Writes the game as a web page to serve |
 | `drift check` | Compiles without running and lists the systems with their parameters and order |
 | `drift build` | Compiles the game into one `.cdlb` file to ship |
 | `drift new <name>` | Makes a project folder |
@@ -99,5 +100,7 @@ Paths in scripts are relative to the project folder: `texture("assets/ship.png")
 See [The drift Command](../reference/cli.md) for every option.
 
 ## Shipping
+
+For the browser, `drift build --web` writes `build/web/`, a page with the game packed beside the web runtime. Upload the folder to any static web host.
 
 `drift build` writes `build/<name>.cdlb`. Ship it with the `drift` program, `drift.toml` and the assets folder; `drift run build/<name>.cdlb` starts it without compiling anything.

@@ -1,6 +1,7 @@
 // drift: runs Candela games.
 //
-//     drift run [script] [--config <path>] [--set section.key=value]...
+//     drift run [folder | script] [--config <path>] [--set section.key=value]...
+//     drift build --web [folder] [-o <out folder>]
 //
 // The engine runs as usual; one exclusive system hands each frame to the
 // Candela host (bindings/candela/host), which calls the game's systems. The
@@ -42,6 +43,10 @@
 #include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
 
+#ifndef __EMSCRIPTEN__
+#include "web_pack.hpp"
+#endif
+
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
@@ -50,6 +55,7 @@
 #include <span>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -68,6 +74,7 @@ void drift_host_unload();
 namespace {
 
 App* g_app = nullptr;
+bool g_loadFailed = false;   // the game did not compile; drift exits with 1
 std::string g_text;          // answers handed to the host stay alive until the next call
 EffectId g_fade;
 // Tweens run by the engine's Tweens resource, keyed by entity, with the
@@ -1173,6 +1180,7 @@ private:
             if (!drift_host_load(entry_.c_str(), moduleDir_.c_str())) {
                 DRIFT_LOG_ERROR("%s", drift_host_error());
                 failed_ = true;
+                g_loadFailed = true;
                 a.quit();
                 return;
             }
@@ -1194,28 +1202,167 @@ private:
     bool failed_ = false;
 };
 
+// Where the installed toolchain keeps what `drift` reads at run time:
+// <prefix>/bin/drift beside <prefix>/lib/drift/<what>. Empty when the folder
+// is not there, as in a build tree.
+std::string installed(const char* what) {
+#ifdef __EMSCRIPTEN__
+    (void)what;
+    return {};
+#else
+    const char* base = SDL_GetBasePath();
+    if (!base) return {};
+    std::filesystem::path p = (std::filesystem::path(base) / ".." / "lib" / "drift" / what).lexically_normal();
+    std::error_code ec;
+    return std::filesystem::is_directory(p, ec) ? p.string() : std::string();
+#endif
+}
+
+// The `drift` module: DRIFT_CANDELA_MODULE, the installed copy, or the
+// source tree this program was built from.
 std::string moduleDir() {
     if (const char* env = SDL_getenv("DRIFT_CANDELA_MODULE")) return env;
 #ifdef __EMSCRIPTEN__
-    return "/drift-module";
+    return "/drift-module";   // embedded in drift.wasm
 #else
-    return DRIFT_CANDELA_MODULE_DIR;
+    std::string dir = installed("module");
+    return dir.empty() ? DRIFT_CANDELA_MODULE_DIR : dir;
 #endif
 }
+
+// The candela standard library this program was built with: the installed
+// copy, or libs/ beside the program in a build tree. Exported as
+// CANDELA_LIB_PATH, which candela reads for imports and native libraries, so
+// a separately installed candela of another version is not used. A
+// CANDELA_LIB_PATH already set wins. The browser build has the library built
+// in.
+void useStdLib() {
+#ifndef __EMSCRIPTEN__
+    if (SDL_getenv("CANDELA_LIB_PATH")) return;
+    std::string dir = installed("libs");
+    if (dir.empty()) {
+        const char* base = SDL_GetBasePath();
+        std::error_code ec;
+        if (base && std::filesystem::is_directory(std::filesystem::path(base) / "libs" / "std", ec)) {
+            dir = (std::filesystem::path(base) / "libs").string();
+        }
+    }
+    if (!dir.empty()) SDL_setenv_unsafe("CANDELA_LIB_PATH", dir.c_str(), 1);
+#endif
+}
+
+const char* usage =
+    "drift: runs Candela games and builds them for the web.\n"
+    "\n"
+    "Usage:\n"
+    "  drift run [folder | script] [--config <path>] [--set section.key=value]...\n"
+    "  drift build --web [folder] [-o <out folder>]\n"
+    "  drift --version\n"
+    "  drift --help\n"
+    "\n"
+    "run plays the game in a folder (default: this one) or starts at a script.\n"
+    "build --web writes a page to serve over HTTP (default: <folder>/build/web).\n";
+
+#ifndef __EMSCRIPTEN__
+// The web runtime `drift build --web` copies: DRIFT_WEB_RUNTIME, or the
+// installed copy.
+std::string webRuntimeDir() {
+    if (const char* env = SDL_getenv("DRIFT_WEB_RUNTIME")) return env;
+    return installed("web");
+}
+
+// drift build --web [folder] [-o <out>]
+int buildCommand(int argc, char** argv, int first) {
+    bool web = false;
+    std::string folder, out;
+    for (int i = first; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--web") web = true;
+        else if (arg == "-o" && i + 1 < argc) out = argv[++i];
+        else if (arg.rfind("-", 0) == 0) {
+            std::fprintf(stderr, "drift build: unknown option %s\n\n%s", arg.c_str(), usage);
+            return 2;
+        } else if (folder.empty()) folder = arg;
+        else {
+            std::fprintf(stderr, "drift build: one game folder at a time\n\n%s", usage);
+            return 2;
+        }
+    }
+    if (!web) {
+        std::fprintf(stderr, "drift build: only --web is supported so far; it writes a web page for the game\n");
+        return 2;
+    }
+    if (folder.empty()) folder = ".";
+    if (out.empty()) out = (std::filesystem::path(folder) / "build" / "web").string();
+    std::string runtime = webRuntimeDir();
+    if (runtime.empty()) {
+        std::fprintf(stderr, "drift build: no web runtime installed beside this drift; "
+                             "set DRIFT_WEB_RUNTIME to a folder holding drift.html, drift.js and drift.wasm\n");
+        return 1;
+    }
+    std::string error, summary;
+    if (!drift::web::buildWebPage(folder, out, runtime, error, summary)) {
+        std::fprintf(stderr, "drift build: %s\n", error.c_str());
+        return 1;
+    }
+    std::printf("%s\nServe the folder over HTTP and open index.html; browsers do not run it from file://.\n",
+                summary.c_str());
+    return 0;
+}
+#endif
 
 } // namespace
 
 int main(int argc, char** argv) {
-    // drift run [script]: the first argument after `run` that is not an option.
+    // drift [run] [folder | script] [options], drift build --web ...
+    int first = 1;
+    std::string command = "run";
+    if (argc > 1) {
+        std::string arg = argv[1];
+        if (arg == "--help" || arg == "-h" || arg == "help") {
+            std::printf("%s", usage);
+            return 0;
+        }
+        if (arg == "--version" || arg == "-V") {
+            std::printf("drift %s\n", DRIFT_VERSION);
+            return 0;
+        }
+        if (arg == "run" || arg == "build") {
+            command = arg;
+            first = 2;
+        }
+    }
+#ifndef __EMSCRIPTEN__
+    if (command == "build") return buildCommand(argc, argv, first);
+#endif
+
+    // The first argument that is not an option is the game: a folder to play
+    // from, or the script to start at.
     std::string entry;
-    for (int i = 1; i < argc; ++i) {
+    for (int i = first; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "run") continue;
         if (arg == "--config" || arg == "--set") { ++i; continue; }
         if (arg.rfind("--", 0) == 0) continue;
         entry = arg;
         break;
     }
+#ifndef __EMSCRIPTEN__
+    if (!entry.empty()) {
+        std::error_code ec;
+        if (std::filesystem::is_directory(entry, ec)) {
+            std::filesystem::current_path(entry, ec);
+            if (ec) {
+                std::fprintf(stderr, "drift run: %s: %s\n", entry.c_str(), ec.message().c_str());
+                return 1;
+            }
+            entry.clear();
+        } else if (!std::filesystem::is_regular_file(entry, ec)) {
+            std::fprintf(stderr, "drift run: %s: no such game folder or script\n\n%s", entry.c_str(), usage);
+            return 1;
+        }
+    }
+#endif
+    useStdLib();
 
     App app;
     g_app = &app;
@@ -1230,5 +1377,5 @@ int main(int argc, char** argv) {
     int code = app.run();
     drift_host_unload();
     g_app = nullptr;
-    return code;
+    return g_loadFailed ? 1 : code;
 }

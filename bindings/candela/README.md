@@ -7,9 +7,19 @@ A game declares its components, resources and systems with attributes, and `drif
 ## Quick start
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.sh | sh
+drift run path/to/game              # play it
+drift build --web path/to/game      # write it as a web page, in path/to/game/build/web
+```
+
+On Windows, install with `irm https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.ps1 | iex`.
+
+To build `drift` from source instead:
+
+```sh
 cmake -B build -DDRIFT_BUILD_CANDELA=ON -DDRIFT_CANDELA_SOURCE=<candela checkout>
 cmake --build build --target drift_run
-cd bindings/candela/examples/flappy_bird && ../../../../build/bindings/candela/drift run
+build/bindings/candela/drift run bindings/candela/examples/flappy_bird
 ```
 
 `DRIFT_CANDELA_SOURCE` points at a candela checkout with the changes of lumen-fx/candela#246 until they are released. Building needs a Rust toolchain.
@@ -40,7 +50,7 @@ fn steer(ship: Ship, velocity: Velocity, input: Input) {
 
 ## Limitations
 
-Scripts are not reloaded while the game runs yet, and the `drift check`, `drift build` and `drift new` commands are not built. Several engine resources the book describes (Audio, Physics, Draw, Camera2D) are not in the `drift` module yet, and maps do not list their objects (`Map.objects`, `object_property`).
+Scripts are not reloaded while the game runs yet, and the `drift check` and `drift new` commands and `drift build` without `--web` are not built. Several engine resources the book describes (Audio, Physics, Draw, Camera2D) are not in the `drift` module yet, and maps do not list their objects (`Map.objects`, `object_property`).
 
 ## Documentation
 

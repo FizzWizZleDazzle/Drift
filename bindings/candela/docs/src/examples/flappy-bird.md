@@ -8,6 +8,7 @@ It shows a game state with `on_enter` and `in_state`, per-entity systems and a c
 cd bindings/candela/examples/flappy_bird
 drift run
 drift run --set flappy.pipe_gap=200   # an easier game for one run
+drift build --web                     # the page, in build/web
 ```
 
 ## drift.toml

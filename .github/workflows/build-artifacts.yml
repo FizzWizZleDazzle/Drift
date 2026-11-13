@@ -10,14 +10,18 @@ name: build-artifacts
 # to releases/latest/download/<name> keeps working from one release to the
 # next. Each archive unpacks into one folder named after itself.
 #
+#   drift-<os>-<arch>.tar.gz            the drift toolchain install.sh installs
+#                                       (.zip on Windows, for install.ps1)
 #   drift-src.tar.gz                    the source tree, for FetchContent URL
 #   drift-examples-<os>-<arch>.tar.gz   example programs (.zip on Windows)
 #   drift-examples-web.zip              example pages for the browser
 #   drift-docs.tar.gz                   the built mdBook
 #   sha256sums.txt                      the digest of every file above
 #
-# The examples use the default GL / WebGL2 backend and keep DRIFT_DEV on, so
-# the inspector and the scene editor's panels are there.
+# The examples and the drift program use the default GL / WebGL2 backend and
+# keep DRIFT_DEV on, so the inspector and the scene editor's panels are there.
+# The toolchain archive carries the web runtime, built once on Linux, so
+# `drift build --web` works on every platform.
 
 on:
   workflow_call:
@@ -51,8 +55,47 @@ jobs:
           path: dist/drift-src.tar.gz
           if-no-files-found: error
 
-  examples:
-    name: examples (${{ matrix.platform }})
+  # The page every Candela game shares in the browser: drift.html, drift.js
+  # and drift.wasm. The desktop jobs pack it into the toolchain archives.
+  web-runtime:
+    name: web runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: release-web-runtime
+          desktop: "false"
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.13
+          actions-cache-folder: emsdk-cache-release-runtime
+      - uses: ./.github/actions/candela
+        id: candela
+        with:
+          web: "true"
+      - name: Configure
+        run: >
+          emcmake cmake -S . -B build-web -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DDRIFT_BUILD_EXAMPLES=OFF
+          -DDRIFT_BUILD_TESTS=OFF
+          -DDRIFT_BUILD_CANDELA=ON
+          "-DDRIFT_CANDELA_SOURCE=${{ steps.candela.outputs.source }}"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build
+        run: cmake --build build-web --target drift_web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-runtime
+          path: build-web/bindings/candela/web/
+          if-no-files-found: error
+
+  desktop:
+    name: desktop (${{ matrix.platform }})
+    needs: web-runtime
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -73,6 +116,8 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: release-${{ matrix.platform }}
+      - uses: ./.github/actions/candela
+        id: candela
       # The runner's default shell: PowerShell on Windows, where Git Bash
       # would put its own link ahead of MSVC's.
       - name: Configure
@@ -80,10 +125,16 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DDRIFT_BUILD_TESTS=OFF
+          -DDRIFT_BUILD_CANDELA=ON
+          "-DDRIFT_CANDELA_SOURCE=${{ steps.candela.outputs.source }}"
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Build
         run: cmake --build build
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-runtime
+          path: web-runtime
       - name: Package
         shell: bash
         # Windows runners name the interpreter python, the others python3.
@@ -91,10 +142,16 @@ jobs:
           python=python3
           if [ "$RUNNER_OS" = Windows ]; then python=python; fi
           "$python" scripts/package.py examples build "dist/drift-examples-${{ matrix.platform }}.${{ matrix.ext }}"
+          "$python" scripts/package.py toolchain build web-runtime "dist/drift-${{ matrix.platform }}.${{ matrix.ext }}"
       - uses: actions/upload-artifact@v4
         with:
           name: drift-examples-${{ matrix.platform }}
           path: dist/drift-examples-${{ matrix.platform }}.${{ matrix.ext }}
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-${{ matrix.platform }}
+          path: dist/drift-${{ matrix.platform }}.${{ matrix.ext }}
           if-no-files-found: error
 
   web:
@@ -150,13 +207,14 @@ jobs:
   # downloaded beside it.
   sums:
     name: checksum the assets
-    needs: [source, examples, web, docs]
+    needs: [source, desktop, web, docs]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: drift-*
           merge-multiple: true
       - name: Write sha256sums.txt
         working-directory: dist

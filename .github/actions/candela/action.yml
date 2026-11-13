@@ -1,0 +1,65 @@
+name: set up the candela source
+description: >
+  What a build of the drift program (DRIFT_BUILD_CANDELA) needs beyond the
+  engine's own setup: the candela source its host compiles against, and the
+  Rust toolchain and targets Cargo builds it with. Every job that builds
+  `drift` uses this, so the candela version is decided here and only here.
+
+inputs:
+  web:
+    description: Whether this job builds for the browser, which needs the wasm32-unknown-emscripten Rust target.
+    default: "false"
+
+outputs:
+  source:
+    description: >
+      The candela checkout to pass as -DDRIFT_CANDELA_SOURCE, or empty to
+      build against the candela release on crates.io that
+      bindings/candela/host/Cargo.toml names.
+    value: ${{ steps.source.outputs.source }}
+
+runs:
+  using: composite
+  steps:
+    # The candela the drift program is built with. Drift needs changes that
+    # are not released yet (lumen-fx/candela#246, branch
+    # feat/embedded-game-hosts), so builds check out this commit. Once they
+    # are released, empty this line and set the release in
+    # bindings/candela/host/Cargo.toml.
+    - name: Pick the candela commit
+      id: pin
+      shell: bash
+      env:
+        CANDELA_COMMIT: 7dcac9e254f6d4e7d325b6955fd5be323cf64db7
+      run: echo "commit=${CANDELA_COMMIT}" >> "$GITHUB_OUTPUT"
+
+    - name: Check out candela
+      if: steps.pin.outputs.commit != ''
+      uses: actions/checkout@v6
+      with:
+        repository: lumen-fx/candela
+        ref: ${{ steps.pin.outputs.commit }}
+        path: .candela
+        persist-credentials: false
+
+    # Forward slashes on Windows too: Cargo reads the path inside a TOML
+    # string, where a backslash starts an escape.
+    - name: Name the source for CMake
+      id: source
+      shell: bash
+      run: |
+        if [ -n "${{ steps.pin.outputs.commit }}" ]; then
+          echo "source=${GITHUB_WORKSPACE//\\//}/.candela" >> "$GITHUB_OUTPUT"
+        else
+          echo "source=" >> "$GITHUB_OUTPUT"
+        fi
+
+    # candela tracks the newest stable Rust, which a runner image can lag.
+    - name: Update Rust
+      shell: bash
+      run: rustup update stable --no-self-update && rustup default stable
+
+    - name: Add the Emscripten Rust target
+      if: inputs.web == 'true'
+      shell: bash
+      run: rustup target add wasm32-unknown-emscripten

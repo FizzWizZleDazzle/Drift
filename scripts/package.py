@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Pack built examples and docs into the archives a release publishes.
+"""Pack the toolchain, built examples and docs into the archives a release publishes.
 
 Usage:
 
+    scripts/package.py toolchain <build-dir> <web-runtime-dir> <out>
+                                                    the drift command, as install.sh installs it
     scripts/package.py examples <build-dir> <out>   desktop example programs
     scripts/package.py web <build-dir> <out>        browser builds of the examples
     scripts/package.py dir <dir> <out>              any directory, such as the docs
@@ -16,6 +18,12 @@ beside the executable, so each one lands in a folder of its own with its
 drift.toml, its assets and its translated shaders: `cd hello_sprites &&
 ./hello_sprites` runs it. The web archive holds every example's page with its
 .js, .wasm and .data files and an index.html that links them.
+
+The toolchain archive is the tree install.sh and install.ps1 unpack under
+~/.drift: bin/drift from a desktop build with DRIFT_BUILD_CANDELA, and beside
+it lib/drift/module (the drift Candela module), lib/drift/libs (the candela
+standard library that build used) and lib/drift/web (the web runtime of an
+Emscripten build, bindings/candela/web in its build directory).
 
 An example is whatever folder under examples/ has a matching program in the
 build directory, so a new example ships without this file changing.
@@ -127,7 +135,39 @@ def stage_web(build: Path, stage: Path) -> None:
         encoding="utf-8")
 
 
+WEB_RUNTIME = ("drift.html", "drift.js", "drift.wasm")
+
+
+def stage_toolchain(build: Path, runtime: Path, stage: Path) -> None:
+    candela = build / "bindings" / "candela"
+    exe = program(candela, "drift")
+    if exe is None:
+        fail(f"{candela}: no drift program; configure with -DDRIFT_BUILD_CANDELA=ON and build drift_run")
+    libs = candela / "libs"
+    if not (libs / "std").is_dir():
+        fail(f"{libs}: no candela standard library")
+    missing = [n for n in WEB_RUNTIME if not (runtime / n).is_file()]
+    if missing:
+        fail(f"{runtime}: no {', '.join(missing)}; build drift_web in an Emscripten build")
+    (stage / "bin").mkdir(parents=True)
+    shutil.copy2(exe, stage / "bin" / exe.name)
+    lib = stage / "lib" / "drift"
+    shutil.copytree(ROOT / "bindings" / "candela" / "drift", lib / "module")
+    shutil.copytree(libs, lib / "libs", ignore=shutil.ignore_patterns("*.stamp"))
+    (lib / "web").mkdir(parents=True)
+    for name in WEB_RUNTIME:
+        shutil.copy2(runtime / name, lib / "web" / name)
+
+
 def main(args: list[str]) -> None:
+    if args[:1] == ["toolchain"] and len(args) == 4:
+        build, runtime, out = (Path(a).resolve() for a in args[1:])
+        archive_stem(out)
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp) / "stage"
+            stage_toolchain(build, runtime, stage)
+            write_archive(stage, out)
+        return
     if len(args) != 3 or args[0] not in ("examples", "web", "dir"):
         print(__doc__.strip(), file=sys.stderr)
         raise SystemExit(2)

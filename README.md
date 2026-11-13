@@ -24,7 +24,17 @@ cmake --build build-web
 cd build-web && python3 -m http.server 8000   # open http://localhost:8000/hello_sprites.html
 ```
 
-A minimal game:
+To write games in [candela](https://candela.lumenfx.dev) instead, install the `drift` command, which runs a game folder and builds it as a web page with nothing else to install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.sh | sh
+drift run path/to/game
+drift build --web path/to/game
+```
+
+On Windows, install with `irm https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.ps1 | iex`. See [`bindings/candela/README.md`](bindings/candela/README.md).
+
+A minimal C++ game:
 
 ```cpp
 #include <drift/App.hpp>
@@ -64,7 +74,7 @@ height = 720
 
 To use Drift from your own project, pull it in with `FetchContent` and link `drift`; call `drift_web_app(my_game)` to make the same target build for the web. See [Installation](docs/src/getting-started/installation.md).
 
-[Releases](https://github.com/FizzWizZleDazzle/Drift/releases) carry a source archive to pin your build to, and the examples ready to run on Linux, macOS, Windows and in the browser.
+[Releases](https://github.com/FizzWizZleDazzle/Drift/releases) carry the `drift` command the installer fetches, a source archive to pin your build to, and the examples ready to run on Linux, macOS, Windows and in the browser.
 
 ## What You Get
 
@@ -100,7 +110,7 @@ Each example runs from its own folder (`cd examples/<name> && ../../build/<name>
 | `audio` | Positional sound sources, bus volume controls, music crossfades and playlists |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, save data |
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
-| `flappy_bird`, `coin_dash`, `cave_walk` (candela) | Complete games in candela. Run with `drift run` from `bindings/candela/examples/<name>`; see `bindings/candela/README.md` |
+| `flappy_bird`, `coin_dash`, `cave_walk` (candela) | Complete games in candela. Run with `drift run bindings/candela/examples/<name>`; see `bindings/candela/README.md` |
 
 Run the engine tests with `ctest --test-dir build`.
 

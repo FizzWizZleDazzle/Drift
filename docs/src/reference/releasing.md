@@ -1,11 +1,14 @@
 # Releases
 
-Drift publishes releases on [GitHub](https://github.com/FizzWizZleDazzle/Drift/releases). Each one is a version tag `vX.Y.Z` and carries the source archive to build against plus ready-to-run examples. This page lists what a release contains and how a maintainer cuts one. To build your game against a release, see [Using a release](../getting-started/installation.md#using-a-release).
+Drift publishes releases on [GitHub](https://github.com/FizzWizZleDazzle/Drift/releases). Each one is a version tag `vX.Y.Z` and carries the `drift` command for Candela games, the source archive to build against, and ready-to-run examples. This page lists what a release contains and how a maintainer cuts one. To build your game against a release, see [Using a release](../getting-started/installation.md#using-a-release).
 
 ## What a release contains
 
 | Asset | What it is |
 |-------|------------|
+| `drift-linux-x86_64.tar.gz` | The `drift` command for Linux, which `install.sh` installs |
+| `drift-macos-aarch64.tar.gz` | The `drift` command for Apple silicon Macs, which `install.sh` installs |
+| `drift-windows-x86_64.zip` | The `drift` command for Windows, which `install.ps1` installs |
 | `drift-src.tar.gz` | The source tree at the tag, for `FetchContent` with a `URL` and `URL_HASH` |
 | `drift-examples-linux-x86_64.tar.gz` | The example programs for Linux |
 | `drift-examples-macos-aarch64.tar.gz` | The example programs for Apple silicon Macs |
@@ -16,7 +19,9 @@ Drift publishes releases on [GitHub](https://github.com/FizzWizZleDazzle/Drift/r
 
 Asset names carry no version; the version is in the download URL, `https://github.com/FizzWizZleDazzle/Drift/releases/download/vX.Y.Z/<asset>`. `releases/latest/download/<asset>` always points at the newest release.
 
-Each archive unpacks into one folder named after it. The desktop example archives hold a folder per example with its program, `drift.toml` and assets; examples load assets from the working directory, so run one from its folder:
+Each archive unpacks into one folder named after it. A `drift` archive holds `bin/drift` and, under `lib/drift/`, the `drift` Candela module, the candela standard library and the web runtime `drift build --web` copies; [the Candela book](https://github.com/FizzWizZleDazzle/Drift/blob/main/bindings/candela/docs/src/getting-started/install.md) covers installing it. The installers at the root of the repository, `install.sh` and `install.ps1`, depend on these asset names and on `sha256sums.txt`.
+
+The desktop example archives hold a folder per example with its program, `drift.toml` and assets; examples load assets from the working directory, so run one from its folder:
 
 ```bash
 tar xzf drift-examples-linux-x86_64.tar.gz
@@ -32,7 +37,7 @@ cd drift-examples-web && python3 -m http.server 8000   # open http://localhost:8
 
 Check a download against the published digests with `sha256sum -c --ignore-missing sha256sums.txt` in the folder holding both.
 
-The examples use the default GL / WebGL2 backend and keep the dev overlay on. The macOS programs are not signed, so macOS asks before opening them; clear the quarantine flag with `xattr -dr com.apple.quarantine drift-examples-macos-aarch64`. The Linux programs are built on Ubuntu 24.04 and need a C library at least that new. The `drift` program for Candela games is not part of a release yet.
+The examples use the default GL / WebGL2 backend and keep the dev overlay on. The macOS programs are not signed, so macOS asks before opening them; clear the quarantine flag with `xattr -dr com.apple.quarantine drift-examples-macos-aarch64`. The Linux programs are built on Ubuntu 24.04 and need a C library at least that new.
 
 ## Versions
 
@@ -62,12 +67,16 @@ Main always carries the version the next release will have. After a release goes
 The `release` workflow then:
 
 1. Fails at once if the tag disagrees with the version in the tree.
-2. Builds every asset in the table above, on Linux, macOS, Windows and Emscripten.
+2. Builds every asset in the table above, on Linux, macOS, Windows and Emscripten. The web runtime is built once with Emscripten and packed into each `drift` archive.
 3. Publishes the release. The notes are the tag's message, then the subject of every main commit since the previous release, then a comparison link.
 4. Republishes the docs site from the tag.
 5. Commits `Set the version to X.Y.(Z+1)` to main.
 
 If a build leg fails, fix it on main, delete the tag locally and on GitHub, and tag the fixed commit again. If only the docs or the version bump fail, re-run that job from the workflow run page; the bump job sees when main is already at or past the next version and does nothing.
+
+## The candela version
+
+`drift` embeds candela, built from source by Cargo. Until the candela changes Drift needs are released (lumen-fx/candela#246), CI and release builds check out one pinned candela commit and pass it as `-DDRIFT_CANDELA_SOURCE`. The pin is the `CANDELA_COMMIT` line in `.github/actions/candela/action.yml`, the one place every workflow takes it from. To move to a candela release, empty that line and set the release in `bindings/candela/host/Cargo.toml`.
 
 ## One-time repository setup
 
