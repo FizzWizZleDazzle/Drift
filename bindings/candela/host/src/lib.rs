@@ -18,6 +18,8 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{c_char, CStr, CString};
 
+mod wire;
+
 // ---- The C++ side ----
 
 extern "C" {
@@ -27,11 +29,13 @@ extern "C" {
     fn drift_bridge_alive(e: u64) -> i32;
     fn drift_bridge_is_engine(component: *const c_char) -> i32;
     fn drift_bridge_has(e: u64, component: *const c_char) -> i32;
-    fn drift_bridge_get(e: u64, component: *const c_char) -> *const c_char;
-    fn drift_bridge_set(e: u64, component: *const c_char, json: *const c_char) -> i32;
+    // Values cross as MessagePack (wire.rs). An answer stays valid until
+    // the next call.
+    fn drift_bridge_get(e: u64, component: *const c_char, len: *mut usize) -> *const u8;
+    fn drift_bridge_set(e: u64, component: *const c_char, data: *const u8, len: usize) -> i32;
     fn drift_bridge_remove(e: u64, component: *const c_char);
-    fn drift_bridge_list(component: *const c_char) -> *const c_char;
-    fn drift_bridge_call(function: *const c_char, args: *const c_char) -> *const c_char;
+    fn drift_bridge_list(component: *const c_char, len: *mut usize) -> *const u8;
+    fn drift_bridge_call(function: *const c_char, args: *const u8, args_len: usize, len: *mut usize) -> *const u8;
     fn drift_bridge_requires(component: *const c_char) -> *const c_char;
 }
 
@@ -56,32 +60,64 @@ fn is_engine(component: &str) -> bool {
     unsafe { drift_bridge_is_engine(c.as_ptr()) != 0 }
 }
 
-fn engine_get(e: u64, component: &str) -> Option<Json> {
-    let c = cstr(component);
-    let text = from_c(unsafe { drift_bridge_get(e, c.as_ptr()) })?;
-    serde_json::from_str(&text).ok()
+/// The value an engine answer holds: `len` bytes of MessagePack at `p`.
+fn answer(p: *const u8, len: usize) -> Option<Json> {
+    if p.is_null() {
+        return None;
+    }
+    wire::read_json(unsafe { std::slice::from_raw_parts(p, len) })
 }
 
-fn engine_set(e: u64, component: &str, value: &Json) {
+fn engine_get(e: u64, component: &str) -> Option<Json> {
     let c = cstr(component);
-    let j = cstr(&value.to_string());
-    unsafe { drift_bridge_set(e, c.as_ptr(), j.as_ptr()) };
+    let mut len = 0;
+    let p = unsafe { drift_bridge_get(e, c.as_ptr(), &mut len) };
+    answer(p, len)
+}
+
+fn engine_set(e: u64, component: &str, value: &Value) {
+    let c = cstr(component);
+    let mut bytes = Vec::new();
+    wire::write_value(&mut bytes, value);
+    unsafe { drift_bridge_set(e, c.as_ptr(), bytes.as_ptr(), bytes.len()) };
+}
+
+fn engine_set_json(e: u64, component: &str, value: &Json) {
+    let c = cstr(component);
+    let mut bytes = Vec::new();
+    wire::write_json(&mut bytes, value);
+    unsafe { drift_bridge_set(e, c.as_ptr(), bytes.as_ptr(), bytes.len()) };
 }
 
 fn engine_list(component: &str) -> Vec<u64> {
     let c = cstr(component);
-    from_c(unsafe { drift_bridge_list(c.as_ptr()) })
-        .and_then(|t| serde_json::from_str::<Vec<u64>>(&t).ok())
-        .unwrap_or_default()
+    let mut len = 0;
+    let p = unsafe { drift_bridge_list(c.as_ptr(), &mut len) };
+    match answer(p, len) {
+        Some(Json::Array(ids)) => ids.iter().filter_map(Json::as_u64).collect(),
+        _ => Vec::new(),
+    }
 }
 
-/// Calls a bridge function with JSON arguments and reads its JSON answer.
+/// Calls an engine function with its arguments and reads its answer.
 fn call(function: &str, args: Json) -> Json {
+    let mut bytes = Vec::new();
+    wire::write_json(&mut bytes, &args);
+    call_bytes(function, &bytes)
+}
+
+/// call, with the arguments candela values, as a list.
+fn call_values(function: &str, args: &[Value]) -> Json {
+    let mut bytes = Vec::new();
+    wire::write_values(&mut bytes, args);
+    call_bytes(function, &bytes)
+}
+
+fn call_bytes(function: &str, args: &[u8]) -> Json {
     let f = cstr(function);
-    let a = cstr(&args.to_string());
-    from_c(unsafe { drift_bridge_call(f.as_ptr(), a.as_ptr()) })
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or(Json::Null)
+    let mut len = 0;
+    let p = unsafe { drift_bridge_call(f.as_ptr(), args.as_ptr(), args.len(), &mut len) };
+    answer(p, len).unwrap_or(Json::Null)
 }
 
 // ---- Values and JSON ----
@@ -780,7 +816,7 @@ impl Host {
             if let Some(v) = self.component_defaults.get(&r).cloned() {
                 self.insert_component(e, &r, v);
             } else if is_engine(&r) {
-                engine_set(e, &r, &json!({}));
+                engine_set_json(e, &r, &json!({}));
             } else {
                 continue;
             }
@@ -793,7 +829,7 @@ impl Host {
         if self.components.contains(&name) {
             STORES.with(|s| s.borrow_mut().entry(name).or_default().insert(e, value));
         } else if is_engine(&name) {
-            engine_set(e, &name, &to_json(&value));
+            engine_set(e, &name, &value);
         } else if self.reported.insert(format!("bundle:{name}")) {
             log(1, &format!("{name} is not a component: mark it @drift::component"));
         }
@@ -1845,7 +1881,7 @@ fn forward_values(e: &mut Engine, name: &'static str, ret: HostType) {
 fn forward(e: &mut Engine, name: &'static str, args: Vec<HostType>, ret: HostType) {
     let shape = ret.clone();
     e.register_host_fn_typed("drift", name, args, ret, move |a| {
-        let answer = call(name, Json::Array(a.iter().map(to_json).collect()));
+        let answer = call_values(name, a);
         Ok(host_value(&answer, &shape))
     });
 }

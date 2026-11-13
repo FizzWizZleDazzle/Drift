@@ -99,7 +99,7 @@ namespace {
 
 App* g_app = nullptr;
 bool g_loadFailed = false;   // the game did not compile; drift exits with 1
-std::string g_text;          // answers handed to the host stay alive until the next call
+std::vector<uint8_t> g_answer;   // answers handed to the host stay alive until the next call
 EffectId g_fade;
 // Tweens run by the engine's Tweens resource, keyed by entity, with the
 // candela value they came from.
@@ -126,9 +126,17 @@ template <typename T> const T* get(EntityId e) {
 
 template <typename T> void put(EntityId e, const T& v) { world().set<T>(e, cid<T>(), v); }
 
-const char* keep(std::string s) {
-    g_text = std::move(s);
-    return g_text.c_str();
+// Values cross to and from the host as MessagePack.
+const uint8_t* keep(const json& j, size_t* len) {
+    g_answer.clear();
+    json::to_msgpack(j, g_answer);
+    *len = g_answer.size();
+    return g_answer.data();
+}
+
+json unpack(const uint8_t* data, size_t len) {
+    if (!data || len == 0) return json();
+    return json::from_msgpack(data, data + len, true, false);
 }
 
 // ---- Value shapes of the drift module ----
@@ -3109,17 +3117,18 @@ int32_t drift_bridge_has(uint64_t e, const char* component) {
     return c && world().isAlive(e) && c->has(e) ? 1 : 0;
 }
 
-const char* drift_bridge_get(uint64_t e, const char* component) {
+const uint8_t* drift_bridge_get(uint64_t e, const char* component, size_t* len) {
     const Codec* c = codec(component);
     if (!c || !world().isAlive(e) || !c->has(e)) return nullptr;
-    return keep(c->read(e).dump());
+    return keep(c->read(e), len);
 }
 
-int32_t drift_bridge_set(uint64_t e, const char* component, const char* text) {
+int32_t drift_bridge_set(uint64_t e, const char* component, const uint8_t* data, size_t len) {
     const Codec* c = codec(component);
     if (!c || !world().isAlive(e)) return 0;
-    json j = json::parse(text ? text : "{}", nullptr, false);
+    json j = unpack(data, len);
     if (j.is_discarded()) return 0;
+    if (j.is_null()) j = json::object();
     c->write(e, j);
     return 1;
 }
@@ -3129,7 +3138,7 @@ void drift_bridge_remove(uint64_t e, const char* component) {
     if (c && world().isAlive(e) && c->has(e)) c->remove(e);
 }
 
-const char* drift_bridge_list(const char* component) {
+const uint8_t* drift_bridge_list(const char* component, size_t* len) {
     const Codec* c = codec(component);
     json out = json::array();
     if (c) {
@@ -3139,7 +3148,7 @@ const char* drift_bridge_list(const char* component) {
             if (c->has(e)) out.push_back(e);
         }
     }
-    return keep(out.dump());
+    return keep(out, len);
 }
 
 // Engine components that need another to work: everything drawn or
@@ -3151,10 +3160,10 @@ const char* drift_bridge_requires(const char* component) {
     return "[\"Transform\"]";
 }
 
-const char* drift_bridge_call(const char* function, const char* args) {
-    json a = json::parse(args ? args : "[]", nullptr, false);
-    if (a.is_discarded()) a = json::array();
-    return keep(service(function ? function : "", a).dump());
+const uint8_t* drift_bridge_call(const char* function, const uint8_t* args, size_t argsLen, size_t* len) {
+    json a = unpack(args, argsLen);
+    if (a.is_discarded() || a.is_null()) a = json::array();
+    return keep(service(function ? function : "", a), len);
 }
 
 } // extern "C"
