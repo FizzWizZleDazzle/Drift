@@ -209,6 +209,36 @@ velocity.linear = level.field.direction(cell_of(t.position)) * 55.0;
 
 Build the field again when the goal moves to another cell, not every frame. The grid crosses to the engine on every `find_path` and `flow_field` call, so for large grids, compute paths when something changes rather than per entity per frame.
 
+## Steering
+
+Steering behaviors move agents smoothly toward or away from things: the engine's `steer_*` functions each return a force, a change of velocity per second. Add the ones you want with weights, cap the sum, and integrate into the `Velocity`:
+
+```rust
+@component
+struct Chaser { wander: Wander = Wander { .. } }
+
+@system
+fn chase(c: Chaser, t: Transform, v: Velocity, time: Time, dice: Dice, players: (Player, Transform)[]) {
+    let force = steer_wander(v.linear, c.wander, dice.rng, 90.0) * 0.3;
+    for (_, p) in players {
+        force = force + steer_arrive(t.position, v.linear, p.position, 90.0, 48.0);
+    }
+    v.linear = steer_truncate(v.linear + steer_truncate(force, 300.0) * time.dt, 90.0);
+}
+```
+
+| Function | Steers |
+|----------|--------|
+| `steer_seek(pos, vel, target, max_speed)`, `steer_flee(pos, vel, threat, max_speed, panic_radius)` | Toward a point at full speed; away from one while it is within `panic_radius` (0: always) |
+| `steer_arrive(pos, vel, target, max_speed, slow_radius)` | Toward a point, slowing inside `slow_radius` to stop on it |
+| `steer_pursue(pos, vel, target, target_vel, max_speed)`, `steer_evade(...)` | Toward or away from where a moving target will be |
+| `steer_separation(pos, neighbours, radius, max_speed)`, `steer_cohesion(pos, vel, neighbours, radius, max_speed)`, `steer_alignment(pos, vel, positions, velocities, radius, max_speed)` | Flocking: apart from close neighbours, toward their middle, along their heading |
+| `steer_wander(vel, wander, rng, max_speed)` | Aimless but smooth; `Wander` (`angle`, `distance`, `radius`, `jitter`) is the agent's state, kept in a component |
+| `steer_follow_path(pos, vel, path, follow, max_speed)` | Along a list of points, arriving at the last; `PathFollow` (`index`, `reach_radius`, `slow_radius`) is the agent's place on it. Feed it the cells of `find_path` turned into world positions |
+| `steer_truncate(v, max_length)` | `v` shortened to at most `max_length`, for capping forces and speeds |
+
+The `Spatial` resource finds the neighbours for the flocking behaviors.
+
 ## Seeing
 
 `field_of_view(g, from, radius, opaque)` returns a grid of the same size with 1 on every cell `from` sees within `radius` cells and 0 elsewhere. Cells whose value is in `opaque` block sight and are seen themselves, so the walls of a room show around its floor. The view is symmetric: when the player sees a monster, the monster sees the player.

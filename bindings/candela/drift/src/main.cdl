@@ -232,6 +232,9 @@ host "drift" {
     string[] scene_names();
     scene_save(string, int);
 
+    // Steering: behavior name, numbers, then point lists.
+    float[] steer(string, float[], float[], float[], int[]);
+
     // Systems and restarts.
     system_switch(string, bool);
     bool system_enabled(string);
@@ -3616,4 +3619,87 @@ impl Commands {
     fn save_scene(self, path: string) { drift::scene_save(path, 0); }
     // Writes `root` and its children: a prefab of something built in game.
     fn save_prefab(self, path: string, root: Entity) { drift::scene_save(path, root.id); }
+}
+
+// ---- Steering ----
+//
+// Craig Reynolds' steering behaviors, the engine's own: each returns a
+// steering force, a change of velocity per second, toward one goal. Add
+// the ones you want, weighted, cap the sum and integrate:
+//
+//     let force = steer_arrive(t.position, v.linear, goal, 120.0, 64.0)
+//               + steer_separation(t.position, near, 24.0, 120.0) * 1.5;
+//     v.linear = steer_truncate(v.linear + steer_truncate(force, 400.0) * time.dt, 120.0);
+
+fn flat(points: Vec2[]) -> float[] {
+    let out: float[] = [];
+    for p in points {
+        out.push(p.x);
+        out.push(p.y);
+    }
+    return out;
+}
+fn steer_call(op: string, nums: float[], a: Vec2[], b: Vec2[]) -> float[] { return drift::steer(op, nums, flat(a), flat(b), []); }
+fn steer_vec(r: float[]) -> Vec2 { return Vec2 { x: r[0], y: r[1] }; }
+
+// `v` shortened to at most `max_length`.
+fn steer_truncate(v: Vec2, max_length: float) -> Vec2 { return steer_vec(steer_call("truncate", [v.x, v.y, max_length], [], [])); }
+// Full speed toward the target.
+fn steer_seek(pos: Vec2, vel: Vec2, target: Vec2, max_speed: float) -> Vec2 {
+    return steer_vec(steer_call("seek", [pos.x, pos.y, vel.x, vel.y, target.x, target.y, max_speed], [], []));
+}
+// Full speed away from the threat while it is within `panic_radius` (0:
+// always).
+fn steer_flee(pos: Vec2, vel: Vec2, threat: Vec2, max_speed: float, panic_radius: float) -> Vec2 {
+    return steer_vec(steer_call("flee", [pos.x, pos.y, vel.x, vel.y, threat.x, threat.y, max_speed, panic_radius], [], []));
+}
+// Toward the target, slowing inside `slow_radius` to stop on it.
+fn steer_arrive(pos: Vec2, vel: Vec2, target: Vec2, max_speed: float, slow_radius: float) -> Vec2 {
+    return steer_vec(steer_call("arrive", [pos.x, pos.y, vel.x, vel.y, target.x, target.y, max_speed, slow_radius], [], []));
+}
+// Seek where a moving target will be.
+fn steer_pursue(pos: Vec2, vel: Vec2, target: Vec2, target_vel: Vec2, max_speed: float) -> Vec2 {
+    return steer_vec(steer_call("pursue", [pos.x, pos.y, vel.x, vel.y, target.x, target.y, target_vel.x, target_vel.y,
+                                           max_speed], [], []));
+}
+// Flee from where a moving threat will be.
+fn steer_evade(pos: Vec2, vel: Vec2, threat: Vec2, threat_vel: Vec2, max_speed: float, panic_radius: float) -> Vec2 {
+    return steer_vec(steer_call("evade", [pos.x, pos.y, vel.x, vel.y, threat.x, threat.y, threat_vel.x, threat_vel.y,
+                                          max_speed, panic_radius], [], []));
+}
+// Away from neighbours closer than `radius`, harder the closer they are.
+fn steer_separation(pos: Vec2, neighbours: Vec2[], radius: float, max_speed: float) -> Vec2 {
+    return steer_vec(steer_call("separation", [pos.x, pos.y, radius, max_speed], neighbours, []));
+}
+// Toward the middle of the neighbours within `radius`.
+fn steer_cohesion(pos: Vec2, vel: Vec2, neighbours: Vec2[], radius: float, max_speed: float) -> Vec2 {
+    return steer_vec(steer_call("cohesion", [pos.x, pos.y, vel.x, vel.y, radius, max_speed], neighbours, []));
+}
+// Toward the average heading of the neighbours within `radius`.
+fn steer_alignment(pos: Vec2, vel: Vec2, positions: Vec2[], velocities: Vec2[], radius: float, max_speed: float) -> Vec2 {
+    return steer_vec(steer_call("alignment", [pos.x, pos.y, vel.x, vel.y, radius, max_speed], positions, velocities));
+}
+
+// An agent's wandering: keep one per agent, in a component.
+struct Wander { angle: float = 0.0, distance: float = 40.0, radius: float = 20.0, jitter: float = 0.5 }
+// Aimless but smooth: each call turns the wander angle by up to `jitter`
+// radians and steers toward a point on a circle ahead.
+fn steer_wander(vel: Vec2, w: Wander, rng: Rng, max_speed: float) -> Vec2 {
+    let r = drift::steer("wander", [vel.x, vel.y, w.angle, max_speed, w.distance, w.radius, w.jitter], [], [],
+                         [rng.hi, rng.lo, rng.inc]);
+    w.angle = r[2];
+    rng.hi = int(r[3]);
+    rng.lo = int(r[4]);
+    return steer_vec(r);
+}
+
+// An agent's place along a path: keep one per agent, starting at 0.
+struct PathFollow { index: int = 0, reach_radius: float = 8.0, slow_radius: float = 0.0 }
+// Seeks each point in turn, moving on within `reach_radius`, and arrives
+// at the last one.
+fn steer_follow_path(pos: Vec2, vel: Vec2, path: Vec2[], f: PathFollow, max_speed: float) -> Vec2 {
+    let r = steer_call("follow_path", [pos.x, pos.y, vel.x, vel.y, float(f.index), max_speed, f.reach_radius,
+                                       f.slow_radius], path, []);
+    f.index = int(r[2]);
+    return steer_vec(r);
 }

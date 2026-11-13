@@ -1620,6 +1620,8 @@ fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("grid_fov", vec![I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, I, I], HostType::Array(Box::new(I))),
         ("grid_los", vec![I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, I, I, I], B),
         ("grid_line", vec![I, I, I, I], HostType::Array(Box::new(I))),
+        // Steering.
+        ("steer", vec![S, af(), af(), af(), HostType::Array(Box::new(I))], af()),
         // Scenes.
         ("scene_load", vec![S], I),
         ("scene_spawn", vec![I, F, F, I, as_(), as_()], HostType::Array(Box::new(I))),

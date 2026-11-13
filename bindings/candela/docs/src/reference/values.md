@@ -97,6 +97,7 @@ The structs `Effects.add` takes; every field has a default.
 | `poisson_disk(rng, area, min_distance)`, `poisson_on_grid(rng, g, value, min_distance)` | Evenly spread points |
 | `find_path(g, start, goal, blocked, diagonal)`, `flow_field(g, goals, blocked, diagonal)` | Pathfinding over a grid |
 | `field_of_view(g, from, radius, opaque)`, `line_of_sight(g, a, b, opaque)`, `grid_line(a, b)` | Sight on a grid; see [Procedural Generation](../guides/procedural-generation.md#seeing) |
+| `steer_seek`, `steer_flee`, `steer_arrive`, `steer_pursue`, `steer_evade`, `steer_separation`, `steer_cohesion`, `steer_alignment`, `steer_wander`, `steer_follow_path`, `steer_truncate` | Steering forces; see [Procedural Generation](../guides/procedural-generation.md#steering) |
 
 ## Constants
 

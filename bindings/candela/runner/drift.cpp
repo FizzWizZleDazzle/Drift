@@ -40,6 +40,7 @@
 #include <drift/components/Text.hpp>
 #include <drift/components/Tilemap.hpp>
 #include <drift/gameplay/Pathfinding.hpp>
+#include <drift/gameplay/Steering.hpp>
 #include <drift/math/Noise.hpp>
 #include <drift/plugins/RandomPlugin.hpp>
 #include <drift/procgen/Generators.hpp>
@@ -2835,9 +2836,52 @@ void handScriptComponentsToHost() {
     });
 }
 
+bool gameplaySteering(const std::string& f, const json& a, json& out) {
+    if (f != "steer") return false;
+    std::string op = a[0].get<std::string>();
+    std::vector<float> n;
+    for (const auto& x : a[1]) n.push_back(x.get<float>());
+    auto points = [](const json& flat) {
+        std::vector<Vec2> v;
+        for (size_t i = 0; i + 1 < flat.size(); i += 2) v.push_back({flat[i].get<float>(), flat[i + 1].get<float>()});
+        return v;
+    };
+    std::vector<Vec2> pa = points(a[2]), pb = points(a[3]);
+    auto at = [&](size_t i) { return i < n.size() ? n[i] : 0.f; };
+    Vec2 pos{at(0), at(1)}, vel{at(2), at(3)}, r{};
+    out = json::array();
+    if (op == "truncate") r = steer::truncate(pos, at(2));
+    else if (op == "seek") r = steer::seek(pos, vel, {at(4), at(5)}, at(6));
+    else if (op == "flee") r = steer::flee(pos, vel, {at(4), at(5)}, at(6), at(7));
+    else if (op == "arrive") r = steer::arrive(pos, vel, {at(4), at(5)}, at(6), at(7));
+    else if (op == "pursue") r = steer::pursue(pos, vel, {at(4), at(5)}, {at(6), at(7)}, at(8));
+    else if (op == "evade") r = steer::evade(pos, vel, {at(4), at(5)}, {at(6), at(7)}, at(8), at(9));
+    else if (op == "separation") r = steer::separation(pos, pa, at(2), at(3));
+    else if (op == "cohesion") r = steer::cohesion(pos, vel, pa, at(4), at(5));
+    else if (op == "alignment") r = steer::alignment(pos, vel, pa, pb, at(4), at(5));
+    else if (op == "wander") {
+        // velocity, angle, max speed, distance, radius, jitter, then the
+        // generator (hi, lo, inc); answers the force, angle and (hi, lo).
+        float angle = at(2);
+        if (a[4].size() < 3) return true;
+        Rng rng = rngOf(a[4]);
+        r = steer::wander({at(0), at(1)}, angle, rng, at(3), at(4), at(5), at(6));
+        out = {r.x, r.y, angle, double(rng.state() >> 32), double(rng.state() & 0xffffffffu)};
+        return true;
+    } else if (op == "follow_path") {
+        size_t index = size_t(std::max(0.f, at(4)));
+        r = steer::followPath(pos, vel, pa, index, at(5), at(6), at(7));
+        out = {r.x, r.y, double(index)};
+        return true;
+    }
+    out = {r.x, r.y};
+    return true;
+}
+
 bool gameplay(const std::string& f, const json& a, json& out) {
     return gameplayInput(f, a, out) || gameplayPhysics(f, a, out) || gameplayAudio(f, a, out) ||
-           gameplayTilemap(f, a, out) || gameplaySpatial(f, a, out) || gameplayScenes(f, a, out);
+           gameplayTilemap(f, a, out) || gameplaySpatial(f, a, out) || gameplayScenes(f, a, out) ||
+           gameplaySteering(f, a, out);
 }
 
 json service(const std::string& f, const json& a) {
