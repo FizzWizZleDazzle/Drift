@@ -3,7 +3,7 @@
 
 # API Index
 
-Every name the `drift` module gives a game, in alphabetical order. Search the book for a name to land on its entry, or follow the link.
+Every name the `drift` module gives a game, in alphabetical order. Search the book for a name to land on its entry, or follow the link. Anywhere in the book, Shift-click a name in code to open its entry (Ctrl+Shift-click, or Cmd+Shift-click on a Mac, for a new tab), and hover it to see its signature.
 
 
 ## A
@@ -12,7 +12,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`ALL_CATEGORIES`](values.md#all_categories) constant
 - [`ALL_LAYERS`](values.md#all_layers) constant
 - [`Anchor`](ui.md#anchor) type
-- [`anchor`](ui.md#anchor) function
+- [`anchor`](ui.md#anchor-1) function
 - [`angle_diff`](animation.md#angle_diff) function
 - [`angle_spring`](animation.md#angle_spring) function
 - [`AngleSpring`](animation.md#anglespring) type
@@ -60,7 +60,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 
 - [`Bar`](ui.md#bar) type
 - [`Bind`](ui.md#bind) type
-- [`bind`](ui.md#bind) function
+- [`bind`](ui.md#bind-1) function
 - [`bind_counter`](ui.md#bind_counter) function
 - [`Blend`](enums.md#blend) enum
 - [`Bloom`](resources.md#bloom) type
@@ -98,11 +98,11 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`cave`](procgen.md#cave) function
 - [`CaveOptions`](procgen.md#caveoptions) type
 - [`Cell`](procgen.md#cell) type
-- [`cell`](procgen.md#cell) function
+- [`cell`](procgen.md#cell-1) function
 - [`CENTER`](ui.md#center) constant
 - [`children_of`](values.md#children_of) function
 - [`Choice`](ai.md#choice) type
-- [`choice`](ai.md#choice) function
+- [`choice`](ai.md#choice-1) function
 - [`Choice.best`](ai.md#choicebest) method
 - [`Choice.consider`](ai.md#choiceconsider) method
 - [`Choice.weighted`](ai.md#choiceweighted) method
@@ -146,7 +146,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`ContactEnd`](system-parameters.md#contactend) type
 - [`control_axis`](control.md#control_axis) function
 - [`Cooldown`](values.md#cooldown) type
-- [`cooldown`](values.md#cooldown) function
+- [`cooldown`](values.md#cooldown-1) function
 - [`Cooldown.fraction`](values.md#cooldownfraction) method
 - [`Cooldown.ready`](values.md#cooldownready) method
 - [`Cooldown.reset`](values.md#cooldownreset) method
@@ -180,7 +180,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`DialogBox`](ui.md#dialogbox) type
 - [`DialogClosed`](ui.md#dialogclosed) type
 - [`Dialogue`](rpg.md#dialogue) type
-- [`dialogue`](rpg.md#dialogue) function
+- [`dialogue`](rpg.md#dialogue-1) function
 - [`Dialogue.active`](rpg.md#dialogueactive) method
 - [`Dialogue.advance`](rpg.md#dialogueadvance) method
 - [`Dialogue.choices`](rpg.md#dialoguechoices) method
@@ -220,7 +220,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Draw.triangle`](resources.md#drawtriangle) method
 - [`Draw.world`](resources.md#drawworld) method
 - [`Dungeon`](procgen.md#dungeon) type
-- [`dungeon`](procgen.md#dungeon) function
+- [`dungeon`](procgen.md#dungeon-1) function
 - [`DungeonOptions`](procgen.md#dungeonoptions) type
 
 ## E
@@ -265,7 +265,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`find_path`](procgen.md#find_path) function
 - [`fixed`](data.md#fixed) function
 - [`Flags`](rpg.md#flags) type
-- [`flags`](rpg.md#flags) function
+- [`flags`](rpg.md#flags-1) function
 - [`Flags.add`](rpg.md#flagsadd) method
 - [`Flags.apply`](rpg.md#flagsapply) method
 - [`Flags.check`](rpg.md#flagscheck) method
@@ -290,13 +290,13 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Font.measure`](assets.md#fontmeasure) method
 - [`Font.set_fallback`](assets.md#fontset_fallback) method
 - [`Foot`](animation.md#foot) type
-- [`foot`](animation.md#foot) function
+- [`foot`](animation.md#foot-1) function
 - [`Foot.planted`](animation.md#footplanted) method
 - [`Foot.update`](animation.md#footupdate) method
 - [`format`](data.md#format) function
 - [`from_angle`](values.md#from_angle) function
 - [`Fsm`](ai.md#fsm) type
-- [`fsm`](ai.md#fsm) function
+- [`fsm`](ai.md#fsm-1) function
 - [`Fsm.go`](ai.md#fsmgo) method
 - [`Fsm.in_state`](ai.md#fsmin_state) method
 - [`Fsm.just_entered`](ai.md#fsmjust_entered) method
@@ -335,7 +335,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`gp_wrap_around`](gameplay.md#gp_wrap_around) system
 - [`Grayscale`](resources.md#grayscale) type
 - [`Grid`](procgen.md#grid) type
-- [`grid`](procgen.md#grid) function
+- [`grid`](procgen.md#grid-1) function
 - [`Grid.cells_of`](procgen.md#gridcells_of) method
 - [`Grid.connect_regions`](procgen.md#gridconnect_regions) method
 - [`Grid.count`](procgen.md#gridcount) method
@@ -357,7 +357,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 
 - [`heal`](gameplay.md#heal) function
 - [`Health`](gameplay.md#health) type
-- [`health`](gameplay.md#health) function
+- [`health`](gameplay.md#health-1) function
 - [`Health.fraction`](gameplay.md#healthfraction) method
 - [`HealthBar`](gameplay.md#healthbar) type
 - [`hex`](data.md#hex) function
@@ -366,7 +366,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`HitFlash`](gameplay.md#hitflash) type
 - [`HitStop`](gameplay.md#hitstop) type
 - [`HitStopClock`](gameplay.md#hitstopclock) type
-- [`Hsv`](data.md#hsv) type
+- [`Hsv`](data.md#hsv-1) type
 - [`hsv`](data.md#hsv) function
 - [`http_get`](data.md#http_get) function
 - [`http_post`](data.md#http_post) function
@@ -459,7 +459,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Input.text`](resources.md#inputtext) method
 - [`Input.touches`](resources.md#inputtouches) method
 - [`Inventory`](rpg.md#inventory) type
-- [`inventory`](rpg.md#inventory) function
+- [`inventory`](rpg.md#inventory-1) function
 - [`Inventory.add`](rpg.md#inventoryadd) method
 - [`Inventory.count`](rpg.md#inventorycount) method
 - [`Inventory.has`](rpg.md#inventoryhas) method
@@ -541,7 +541,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`@message`](attributes.md#message) attribute
 - [`min`](values.md#min) function
 - [`Modifier`](rpg.md#modifier) type
-- [`modifier`](rpg.md#modifier) function
+- [`modifier`](rpg.md#modifier-1) function
 - [`ModKind`](rpg.md#modkind) enum
 - [`MouseButton`](enums.md#mousebutton) enum
 - [`move_towards`](animation.md#move_towards) function
@@ -553,7 +553,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`nine_slice_panel`](ui.md#nine_slice_panel) function
 - [`NineSlice`](ui.md#nineslice) type
 - [`Noise`](procgen.md#noise) type
-- [`noise`](procgen.md#noise) function
+- [`noise`](procgen.md#noise-1) function
 - [`Noise.grid`](procgen.md#noisegrid) method
 - [`Noise.sample`](procgen.md#noisesample) method
 - [`Noise.samples`](procgen.md#noisesamples) method
@@ -576,7 +576,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 
 - [`pad`](data.md#pad) function
 - [`Palette`](data.md#palette) type
-- [`palette`](data.md#palette) function
+- [`palette`](data.md#palette-1) function
 - [`Palette.at`](data.md#paletteat) method
 - [`Palette.len`](data.md#palettelen) method
 - [`Palette.random`](data.md#paletterandom) method
@@ -630,7 +630,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 
 - [`@query`](attributes.md#query) attribute
 - [`Quests`](rpg.md#quests) type
-- [`quests`](rpg.md#quests) function
+- [`quests`](rpg.md#quests-1) function
 - [`Quests.complete`](rpg.md#questscomplete) method
 - [`Quests.count`](rpg.md#questscount) method
 - [`Quests.fail`](rpg.md#questsfail) method
@@ -655,7 +655,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`read_data`](data.md#read_data) function
 - [`read_text`](data.md#read_text) function
 - [`Rect`](values.md#rect) type
-- [`rect`](values.md#rect) function
+- [`rect`](values.md#rect-1) function
 - [`Rect.center`](values.md#rectcenter) method
 - [`Rect.centered_at`](values.md#rectcentered_at) method
 - [`Rect.clamp_point`](values.md#rectclamp_point) method
@@ -671,13 +671,13 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`resource_number`](ui.md#resource_number) function
 - [`resource_string`](ui.md#resource_string) function
 - [`Reveal`](ui.md#reveal) type
-- [`reveal`](ui.md#reveal) function
+- [`reveal`](ui.md#reveal-1) function
 - [`rgb`](values.md#rgb) function
 - [`rgba`](values.md#rgba) function
 - [`RIGHT`](ui.md#right) constant
 - [`RigidBody`](components.md#rigidbody) type
 - [`Rng`](procgen.md#rng) type
-- [`rng`](procgen.md#rng) function
+- [`rng`](procgen.md#rng-1) function
 - [`Rng.angle`](procgen.md#rngangle) method
 - [`Rng.below`](procgen.md#rngbelow) method
 - [`Rng.chance`](procgen.md#rngchance) method
@@ -698,7 +698,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`rng_stream`](procgen.md#rng_stream) function
 - [`Rolloff`](enums.md#rolloff) enum
 - [`Rope`](animation.md#rope) type
-- [`rope`](animation.md#rope) function
+- [`rope`](animation.md#rope-1) function
 - [`Rope.angle`](animation.md#ropeangle) method
 - [`Rope.len`](animation.md#ropelen) method
 - [`Rope.pin`](animation.md#ropepin) method
@@ -755,7 +755,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`segments_intersect`](values.md#segments_intersect) function
 - [`Sepia`](resources.md#sepia) type
 - [`Sequence`](data.md#sequence) type
-- [`sequence`](data.md#sequence) function
+- [`sequence`](data.md#sequence-1) function
 - [`Sequence.finished`](data.md#sequencefinished) method
 - [`Sequence.repeat`](data.md#sequencerepeat) method
 - [`Sequence.restart`](data.md#sequencerestart) method
@@ -781,7 +781,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Socket.send`](data.md#socketsend) method
 - [`SocketEvent`](data.md#socketevent) type
 - [`SocketEventKind`](data.md#socketeventkind) enum
-- [`Sound`](assets.md#sound) type
+- [`Sound`](assets.md#sound-1) type
 - [`sound`](assets.md#sound) function
 - [`Sound.duration`](assets.md#soundduration) method
 - [`Sound.play`](assets.md#soundplay) method
@@ -794,16 +794,16 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`SpatialBounds`](procgen.md#spatialbounds) type
 - [`spawn_bar`](ui.md#spawn_bar) function
 - [`Spawner`](gameplay.md#spawner) type
-- [`spawner`](gameplay.md#spawner) function
+- [`spawner`](gameplay.md#spawner-1) function
 - [`SpawnRng`](gameplay.md#spawnrng) type
 - [`SpawnTick`](gameplay.md#spawntick) type
 - [`SpotLight`](components.md#spotlight) type
 - [`Spring`](animation.md#spring) type
-- [`spring`](animation.md#spring) function
+- [`spring`](animation.md#spring-1) function
 - [`Spring.smooth`](animation.md#springsmooth) method
 - [`Spring.update`](animation.md#springupdate) method
 - [`Spring2`](animation.md#spring2) type
-- [`spring2`](animation.md#spring2) function
+- [`spring2`](animation.md#spring2-1) function
 - [`Spring2.run`](animation.md#spring2run) method
 - [`Spring2.smooth`](animation.md#spring2smooth) method
 - [`Spring2.update`](animation.md#spring2update) method
@@ -820,7 +820,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`State`](system-parameters.md#state) type
 - [`State.set`](system-parameters.md#stateset) method
 - [`Stats`](rpg.md#stats) type
-- [`stats`](rpg.md#stats) function
+- [`stats`](rpg.md#stats-1) function
 - [`Stats.add`](rpg.md#statsadd) method
 - [`Stats.base_of`](rpg.md#statsbase_of) method
 - [`Stats.get`](rpg.md#statsget) method
@@ -855,7 +855,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`TAU`](values.md#tau) constant
 - [`Text`](components.md#text) type
 - [`Text.measure`](components.md#textmeasure) method
-- [`Texture`](assets.md#texture) type
+- [`Texture`](assets.md#texture-1) type
 - [`texture`](assets.md#texture) function
 - [`Texture.set_filter`](assets.md#textureset_filter) method
 - [`Texture.size`](assets.md#texturesize) method
@@ -872,7 +872,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Time`](resources.md#time) type
 - [`Time.set_scale`](resources.md#timeset_scale) method
 - [`Timer`](values.md#timer) type
-- [`timer`](values.md#timer) function
+- [`timer`](values.md#timer-1) function
 - [`Timer.finished`](values.md#timerfinished) method
 - [`Timer.fraction`](values.md#timerfraction) method
 - [`Timer.remaining`](values.md#timerremaining) method
@@ -883,7 +883,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`to_local`](values.md#to_local) function
 - [`to_world`](values.md#to_world) function
 - [`Toast`](ui.md#toast) type
-- [`toast`](ui.md#toast) function
+- [`toast`](ui.md#toast-1) function
 - [`toggle`](ui.md#toggle) function
 - [`ToggleChanged`](ui.md#togglechanged) type
 - [`TOP`](ui.md#top) constant
@@ -895,7 +895,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Transform`](components.md#transform) type
 - [`TransitionKind`](screens.md#transitionkind) enum
 - [`Tween`](components.md#tween) type
-- [`tween`](components.md#tween) function
+- [`tween`](components.md#tween-1) function
 - [`Tween.delay`](components.md#tweendelay) method
 - [`Tween.fade_to`](components.md#tweenfade_to) method
 - [`Tween.move_by`](components.md#tweenmove_by) method
@@ -938,7 +938,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 
 - [`VAlign`](enums.md#valign) enum
 - [`Vec2`](values.md#vec2) type
-- [`vec2`](values.md#vec2) function
+- [`vec2`](values.md#vec2-1) function
 - [`Vec2.angle`](values.md#vec2angle) method
 - [`Vec2.clamp_length`](values.md#vec2clamp_length) method
 - [`Vec2.cross`](values.md#vec2cross) method
@@ -972,7 +972,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Wander`](values.md#wander) type
 - [`warn`](values.md#warn) function
 - [`Wave`](gameplay.md#wave) type
-- [`wave`](gameplay.md#wave) function
+- [`wave`](gameplay.md#wave-1) function
 - [`WavesDone`](gameplay.md#wavesdone) type
 - [`WaveSpawn`](gameplay.md#wavespawn) type
 - [`WaveSpawner`](gameplay.md#wavespawner) type

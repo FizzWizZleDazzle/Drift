@@ -13,14 +13,16 @@ which page each type and function belongs on. A note for a name the module
 no longer has is an error, so the notes cannot describe API that is gone.
 
 The pages go to bindings/candela/docs/src/reference/, one per section of
-the notes, plus index.md, an alphabetical list of every name.
+the notes, plus index.md, an alphabetical list of every name, and
+api-index.json, which maps every name to its entry for the book's
+shift-click links (bindings/candela/docs/theme/api-links.js).
 """
 
 import argparse
+import json
 import sys
 sys.dont_write_bytecode = True
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -56,6 +58,7 @@ class Decl:
         self.attrs = []           # attributes written on it, such as @component
         self.page = ""            # the page it goes on without a note
         self.section = ""         # the `// ---- Section ----` it sits under
+        self.module = ""          # the import path of its file: drift, drift/ui, ...
 
 
 def strip_comment(line):
@@ -234,6 +237,11 @@ def fn_end(lines, k, text):
     return block_end(lines, k, head.index("{", head.find(")") if ")" in head else 0)) + 1
 
 
+def module_name(path):
+    """The path a game imports a module file by."""
+    return "drift" if path.stem == "main" else "drift/" + path.stem
+
+
 def read_module(path, page):
     lines = path.read_text().split("\n")
     decls = []
@@ -298,6 +306,8 @@ def read_module(path, page):
             i = fn_end(lines, k, text)
             continue
         i += 1
+    for d in decls:
+        d.module = module_name(path)
     return decls
 
 
@@ -380,6 +390,49 @@ def field_notes(text):
 def anchor(name):
     """The id mdBook gives a heading: lower case, punctuation dropped."""
     return re.sub(r"[^a-z0-9_ -]", "", name.lower()).replace(" ", "-")
+
+
+def heading_ids(text):
+    """The (text, id) of each heading of a page, in order. mdBook numbers a
+    repeated id, so `Fsm` is #fsm and a later `fsm` is #fsm-1."""
+    out, seen, in_code = [], {}, False
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            in_code = not in_code
+        m = None if in_code else re.match(r"^#{1,6} (.+?)\s*$", line)
+        if not m:
+            continue
+        title = m.group(1)
+        plain = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", re.sub(r"<[^>]+>", "", title)).replace("`", "")
+        base = anchor(plain)
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        out.append((title, base if n == 0 else f"{base}-{n}"))
+    return out
+
+
+def short(text, limit=160):
+    return text if len(text) <= limit else text[:limit - 4].rstrip(" ,") + " ..."
+
+
+def signature_of(d):
+    """The one-line signature the shift-click tooltip shows."""
+    if d.kind == "struct":
+        return " ".join(d.attrs + [f"struct {d.name}{d.generics}"])
+    if d.kind == "enum":
+        return short(f"enum {d.name} {{ {', '.join(d.variants)} }}")
+    if d.kind == "attribute":
+        return f"{d.signature} on {'an' if d.target[0] in 'aeiou' else 'a'} {d.target}"
+    return " ".join(d.attrs + [d.signature])
+
+
+def api_entry(d, slug, anc, kind=None):
+    entry = {"module": d.module, "kind": kind or d.kind, "url": f"reference/{slug}.html#{anc}",
+             "sig": signature_of(d)}
+    if d.kind == "struct" and kind is None and d.fields:
+        # Field types let the links follow `t.position.normalized()`.
+        entry["fields"] = {name: typ for name, typ, _, _ in d.fields}
+    return entry
 
 
 def cell(text):
@@ -542,10 +595,12 @@ def generate():
 
     files = {}
     index = []                    # (name, page slug, anchor)
+    api = {}                      # name -> entries, one per module that has it
     for p in pages:
         out = [GENERATED, f"# {p.title}", ""]
         if p.intro:
             out += [p.intro, ""]
+        placed_here = []
         for name in p.entries:
             d = by_name.get(name)
             if d is None:
@@ -559,19 +614,29 @@ def generate():
                 out += write_attribute(d, notes)
             else:
                 out += write_simple(d, notes)
-            index.append((d.name, p.slug, anchor(d.name), d.kind))
-            for m in ms:
-                index.append((m.name, p.slug, anchor(m.name), "method"))
+            placed_here += [d] + ms
         # The examples of each entry sit in its note; nothing else follows.
-        text = "\n".join(out).rstrip() + "\n"
-        files[p.slug + ".md"] = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", "\n".join(out).rstrip() + "\n")
+        files[p.slug + ".md"] = text
+        # Each entry's heading comes after the one before it; a note's own
+        # headings sit in between.
+        ids = iter(heading_ids(text))
+        for d in placed_here:
+            anc = next(i for title, i in ids if title == d.name)
+            index.append((d.name, p.slug, anc, d.kind))
+            api.setdefault(d.name, []).append(api_entry(d, p.slug, anc))
+            if d.kind == "enum":
+                for v in d.variants:
+                    vname = d.name + "::" + re.match(r"\w+", v).group(0)
+                    api.setdefault(vname, []).append(api_entry(d, p.slug, anc, "variant"))
 
     kinds = {"struct": "type", "enum": "enum", "fn": "function", "const": "constant",
              "attribute": "attribute", "method": "method", "system": "system"}
     rows = sorted(index, key=lambda r: (r[0].lstrip("@").lower(), r[0]))
     out = [GENERATED, "# API Index", "",
            "Every name the `drift` module gives a game, in alphabetical order. Search the book for a name to "
-           "land on its entry, or follow the link.", ""]
+           "land on its entry, or follow the link. Anywhere in the book, Shift-click a name in code to open its entry "
+           "(Ctrl+Shift-click, or Cmd+Shift-click on a Mac, for a new tab), and hover it to see its signature.", ""]
     letter = None
     for name, slug, anc, kind in rows:
         first = name.lstrip("@")[0].upper()
@@ -580,6 +645,9 @@ def generate():
             out += ["", f"## {letter}", ""]
         out.append(f"- [`{name}`]({slug}.md#{anc}) {kinds[kind]}")
     files["index.md"] = "\n".join(out).rstrip() + "\n"
+    # One name per line, so a change to the module is a readable diff.
+    body = ",\n".join(f"{json.dumps(k)}: {json.dumps(v, sort_keys=True)}" for k, v in sorted(api.items()))
+    files["api-index.json"] = "{\n" + body + "\n}\n"
     return files
 
 

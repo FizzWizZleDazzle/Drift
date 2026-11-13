@@ -7,6 +7,10 @@ src = "src"
 [output.html]
 git-repository-url = "https://github.com/FizzWizZleDazzle/Drift"
 site-url = "/Drift/candela-book/"
+# Shift-click a name in code to open its reference entry. The names come
+# from src/reference/api-index.json, written by scripts/candela-reference.py.
+additional-js = ["theme/api-links.js"]
+additional-css = ["theme/api-links.css"]
 
 # Search indexes every heading down to ### on its own, so a method such as
 # `Texture.size` is a result of its own, and favors titles and headings.
