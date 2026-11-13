@@ -1,0 +1,151 @@
+// Star Catcher: the game the tutorial builds.
+//
+// Fly with the arrow keys or WASD and catch as many stars as you can in 30
+// seconds. Space starts another round.
+
+import "drift" { * };
+
+const ROUND_SECONDS: float = 30.0;
+
+// ---- Components ----
+
+// The ship. `requires` gives every Ship a Velocity, so bundles skip it.
+@component(requires: [Velocity])
+struct Ship { speed: float = 320.0 }
+
+@component struct Star {}
+@component struct ScoreLabel {}
+
+// ---- Resources ----
+
+@resource
+struct Game {
+    score: int = 0,
+    left: Timer = timer(ROUND_SECONDS),
+    rng: Rng = rng(1),
+}
+
+// A sound made from samples when the game loads, so the game needs no
+// files: a short blip that rises in pitch.
+@resource
+struct Sfx { pickup: Sound = blip() }
+
+// ---- States ----
+
+@state
+enum Round { Playing, Over }
+
+// ---- Startup ----
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input, game: Game, random: Random) {
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+    game.rng = random.stream("stars");
+
+    cmd.spawn([
+        at(480.0, 270.0),
+        Rectangle { size: vec2(32.0, 32.0), color: rgb(90, 170, 255), corner_radius: 6.0, .. },
+        RigidBody { fixed_rotation: true, .. },
+        BoxCollider { half_size: vec2(16.0, 16.0), .. },
+        Ship { .. },
+    ]);
+    cmd.spawn([at(16.0, 12.0), Text { size: 28.0, layer: hud_layer(), .. }, ScoreLabel {}]);
+}
+
+// ---- A round ----
+
+@system(on_enter: Round::Playing)
+fn new_round(cmd: Commands, game: Game, stars: (Entity, Star)[]) {
+    for (e, _) in stars {
+        cmd.despawn(e);
+    }
+    game.score = 0;
+    game.left = timer(ROUND_SECONDS);
+    for i in range(5) {
+        spawn_star(cmd, game);
+    }
+}
+
+@system(in_state: [Round::Playing])
+fn steer(ship: Ship, t: Transform, velocity: Velocity, input: Input) {
+    let v = input.axis2d("move") * ship.speed;
+    // Stay on the screen.
+    if (v.x < 0.0 && t.position.x < 16.0) || (v.x > 0.0 && t.position.x > 944.0) {
+        v = vec2(0.0, v.y);
+    }
+    if (v.y < 0.0 && t.position.y < 16.0) || (v.y > 0.0 && t.position.y > 524.0) {
+        v = vec2(v.x, 0.0);
+    }
+    velocity.linear = v;
+}
+
+// Runs once for each star the ship touches.
+@system(in_state: [Round::Playing])
+fn collect(hit: Overlap<Ship, Star>, places: Lookup<Transform>, cmd: Commands, game: Game,
+           effects: Effects, sfx: Sfx) {
+    game.score += 1;
+    if places.get(hit.b) is Some(t) {
+        effects.burst(t.position, ParticleEmitter {
+            speed_min: 60.0, speed_max: 160.0, lifetime_min: 0.2, lifetime_max: 0.5,
+            color_start: rgb(255, 230, 120), color_end: rgba(255, 140, 40, 0), blend: Blend::Additive, ..
+        }, 20);
+    }
+    sfx.pickup.play();
+    cmd.despawn(hit.b);
+    spawn_star(cmd, game);
+}
+
+@system(in_state: [Round::Playing])
+fn countdown(game: Game, time: Time, round: State<Round>) {
+    if game.left.tick(time.dt) > 0 {
+        round.set(Round::Over);
+    }
+}
+
+@system(on_enter: Round::Over)
+fn stop(_: Ship, velocity: Velocity) {
+    velocity.linear = vec2(0.0, 0.0);
+}
+
+fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
+
+@system(in_state: [Round::Over], run_if: [restart_pressed])
+fn restart(round: State<Round>) {
+    round.set(Round::Playing);
+}
+
+// ---- HUD ----
+
+@system
+fn show_score(_: ScoreLabel, text: Text, game: Game, round: State<Round>) {
+    if round.now == Round::Playing {
+        text.value = "Stars " + string(game.score) + "    Time " + string(int(game.left.remaining()) + 1);
+    } else {
+        text.value = "Time's up: " + string(game.score) + " stars. Space to play again.";
+    }
+}
+
+// ---- Helpers ----
+
+fn spawn_star(cmd: Commands, game: Game) {
+    cmd.spawn([
+        at(game.rng.range_float(40.0, 920.0), game.rng.range_float(60.0, 500.0)),
+        Circle { radius: 10.0, color: rgb(255, 220, 80), .. },
+        CircleCollider { radius: 10.0, sensor: true, .. },
+        tween().scale_to(vec2(1.3, 1.3), 0.5, Ease::InOutSine).yoyo(-1),
+        Star {},
+    ]);
+}
+
+fn blip() -> Sound {
+    let samples: float[] = [];
+    let phase = 0.0;
+    for i in range(3000) {
+        let t = float(i) / 3000.0;
+        phase += TAU * (600.0 + 600.0 * t) / 22050.0;
+        samples.push(sin(phase) * 0.3 * (1.0 - t));
+    }
+    let assets = Assets { .. };
+    return assets.create_sound(samples, 22050);
+}

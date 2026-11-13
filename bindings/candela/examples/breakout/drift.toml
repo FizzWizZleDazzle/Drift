@@ -1,0 +1,25 @@
+[project]
+name = "Breakout"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 640
+height = 480
+
+[render]
+clear_color = [0.04, 0.04, 0.09]
+
+# The ball flies in straight lines: no gravity.
+[physics]
+gravity = [0, 0]
+
+[input]
+launch = ["key:Space", "key:Up", "mouse:Left", "button:South"]
+restart = ["key:R", "button:Start"]
+
+[breakout]
+paddle_speed = 520.0
+ball_speed = 340.0
+speedup = 6.0        # added to the ball's speed for each brick
+lives = 3

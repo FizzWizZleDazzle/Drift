@@ -1,0 +1,26 @@
+[project]
+name = "Top-Down Shooter"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 800
+height = 480
+
+[render]
+clear_color = [0.06, 0.07, 0.09]
+
+# Seen from above: nothing falls.
+[physics]
+gravity = [0, 0]
+
+[input]
+fire = ["mouse:Left", "key:Space", "button:RightShoulder"]
+restart = ["key:R", "button:Start"]
+
+[shooter]
+player_speed = 220.0
+bullet_speed = 390.0   # bodies move at most 400 pixels per second
+fire_every = 0.12
+enemy_speed = 90.0
+spawn_every = 1.2      # seconds between enemies at the start

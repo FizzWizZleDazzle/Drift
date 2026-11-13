@@ -1,0 +1,25 @@
+[project]
+name = "Menus and States"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 640
+height = 480
+
+[render]
+clear_color = [0.08, 0.07, 0.12]
+
+[input]
+up = ["key:Up", "key:W", "button:DPadUp"]
+down = ["key:Down", "key:S", "button:DPadDown"]
+left = ["key:Left", "key:A", "button:DPadLeft"]
+right = ["key:Right", "key:D", "button:DPadRight"]
+select = ["key:Return", "key:Space", "button:South"]
+back = ["key:Escape", "key:Backspace", "button:East"]
+
+# The options a new player starts with. Changes made in the Options screen
+# are kept in save data and win over these.
+[menu]
+difficulty = 1     # 0 easy, 1 normal, 2 hard
+volume = 8         # 0 to 10

@@ -1,0 +1,251 @@
+// Effects Showcase: particles, bursts, tweens and screen flashes.
+//
+// Keys 1 to 5 switch the five emitters on and off. Click anywhere for a
+// burst of fireworks; Space flashes the screen. B, V, C and P switch the
+// bloom, vignette, CRT and pixelate post effects. The bottom half shows the
+// easing curves side by side, a chain of tween steps and a comet with a
+// trail.
+//
+// Shows: ParticleEmitter settings (rate, lifetime, speed, angle, size,
+// color, gravity, drag, blend, emit shapes), turning an emitter on and off
+// by writing `playing`, Effects.burst and Effects.flash, post effects kept
+// in a resource and switched with set_enabled, a Trail, Tween chains with
+// delay, repeat and yoyo, and every family of Ease curves. The engine runs
+// every effect; the systems only switch them.
+
+import "drift" { * };
+
+const W: float = 960.0;
+
+// ---- Components and resources ----
+
+// Which number key toggles this emitter.
+@component struct Toggle { key: int = 1, name: string = "" }
+@component struct Legend {}
+
+@resource
+struct Show { rng: Rng = rng(7), white: Texture = white_texture() }
+
+// The post effects, made at startup and kept to switch on and off.
+@resource
+struct Looks { bloom: Effect, vignette: Effect, crt: Effect, pixelate: Effect }
+
+// ---- Emitters ----
+
+// ANCHOR: fire
+@system(schedule: Schedule::Startup)
+fn emitters(cmd: Commands) {
+    let y = 210.0;
+
+    // 1. Fire: additive blending makes overlapping particles glow; they
+    // rise against a little negative gravity and shrink as they fade.
+    cmd.spawn([at(110.0, y), Toggle { key: 1, name: "fire" }, ParticleEmitter {
+        rate: 90.0, lifetime_min: 0.4, lifetime_max: 0.9,
+        speed_min: 30.0, speed_max: 80.0,
+        angle_min: -2.0, angle_max: -1.15,          // radians; -Y is up
+        size_start: 10.0, size_end: 1.0,
+        color_start: rgb(255, 200, 80), color_end: rgba(255, 40, 10, 0),
+        gravity: vec2(0.0, -60.0),
+        shape: EmitShape::Circle, shape_radius: 8.0,
+        blend: Blend::Additive, ..
+    }]);
+
+    // 2. Smoke: slow, large, normal blending, slowed by drag.
+    cmd.spawn([at(290.0, y), Toggle { key: 2, name: "smoke" }, ParticleEmitter {
+        rate: 18.0, lifetime_min: 1.5, lifetime_max: 2.5,
+        speed_min: 20.0, speed_max: 40.0,
+        angle_min: -1.9, angle_max: -1.25,
+        size_start: 8.0, size_end: 26.0,
+        color_start: rgba(150, 150, 160, 160), color_end: rgba(90, 90, 100, 0),
+        drag: 0.6, gravity: vec2(8.0, -10.0), ..
+    }]);
+
+    // 3. Fountain: fast and upward, then pulled down by gravity.
+    cmd.spawn([at(470.0, y + 40.0), Toggle { key: 3, name: "fountain" }, ParticleEmitter {
+        rate: 120.0, lifetime_min: 1.0, lifetime_max: 1.4,
+        speed_min: 170.0, speed_max: 220.0,
+        angle_min: -1.75, angle_max: -1.39,
+        size_start: 4.0, size_end: 2.0,
+        color_start: rgb(120, 200, 255), color_end: rgba(40, 90, 255, 0),
+        gravity: vec2(0.0, 320.0), max_particles: 400, ..
+    }]);
+
+    // 4. Snow: a Box shape spreads the start points along a line.
+    cmd.spawn([at(650.0, 70.0), Toggle { key: 4, name: "snow" }, ParticleEmitter {
+        rate: 30.0, lifetime_min: 3.0, lifetime_max: 4.0,
+        speed_min: 15.0, speed_max: 30.0,
+        angle_min: 1.3, angle_max: 1.85,
+        size_start: 3.0, size_end: 3.0,
+        color_start: rgb(255, 255, 255), color_end: rgba(255, 255, 255, 0),
+        shape: EmitShape::Box, shape_extents: vec2(80.0, 4.0), ..
+    }]);
+
+    // 5. A ring: particles start on a circle and fly outward.
+    cmd.spawn([at(850.0, y), Toggle { key: 5, name: "ring" }, ParticleEmitter {
+        rate: 70.0, lifetime_min: 0.6, lifetime_max: 0.8,
+        speed_min: 10.0, speed_max: 25.0,
+        size_start: 4.0, size_end: 0.0,
+        color_start: rgb(200, 120, 255), color_end: rgba(255, 120, 200, 0),
+        shape: EmitShape::Ring, shape_radius: 40.0,
+        blend: Blend::Additive, ..
+    }]);
+
+    let labels = ["1 fire", "2 smoke", "3 fountain", "4 snow", "5 ring"];
+    let xs = [110.0, 290.0, 470.0, 650.0, 850.0];
+    for i in range(5) {
+        cmd.spawn([at(xs[i], 260.0), Text { value: labels[i], size: 18.0, color: rgb(180, 180, 200),
+                   align: Align::Center, .. }]);
+    }
+    cmd.spawn([at(12.0, 10.0), Text { size: 18.0, layer: hud_layer(), .. }, Legend {}]);
+}
+// ANCHOR_END: fire
+
+// Number keys flip `playing`. The emitter keeps its particles alive until
+// they fade; it only stops making new ones.
+@system
+fn toggle(t: Toggle, emitter: ParticleEmitter, input: Input) {
+    let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5];
+    if input.key_pressed(keys[t.key - 1]) {
+        emitter.playing = !emitter.playing;
+    }
+}
+
+@system
+fn legend(_: Legend, text: Text, emitters: (Toggle, ParticleEmitter)[]) {
+    let on: string[] = [];
+    for (t, e) in emitters {
+        if e.playing {
+            on.push(t.name);
+        }
+    }
+    text.value = "1-5 emitters (on: " + on.join(", ") + ")   click: fireworks   Space: flash   B V C P: post effects";
+}
+
+// ---- Bursts and flashes ----
+
+// Effects.burst makes a one-off emitter that fires `count` particles at
+// once and removes itself when they are gone.
+@system
+fn fireworks(input: Input, effects: Effects, show: Show) {
+    if !input.action_pressed("burst") {
+        return;
+    }
+    let hue = show.rng.pick<Color>([rgb(255, 90, 90), rgb(255, 210, 80), rgb(110, 230, 140),
+                                    rgb(110, 180, 255), rgb(220, 120, 255)]);
+    effects.burst(input.mouse_world(), ParticleEmitter {
+        speed_min: 60.0, speed_max: 260.0, lifetime_min: 0.6, lifetime_max: 1.2,
+        size_start: 5.0, size_end: 0.0, color_start: hue, color_end: hue.alpha(0.0),
+        gravity: vec2(0.0, 120.0), drag: 0.8, blend: Blend::Additive, ..
+    }, 80);
+}
+
+fn flash_pressed(input: Input) -> bool => input.action_pressed("flash");
+
+// ---- Post effects ----
+
+// ANCHOR: post
+// Each call adds an effect that runs on the whole picture after the world
+// is drawn and before the HUD. They start switched off here.
+@system(schedule: Schedule::Startup)
+fn post_effects(cmd: Commands, effects: Effects) {
+    let looks = Looks {
+        bloom: effects.bloom(0.6, 1.2),
+        vignette: effects.vignette(0.7, 0.7),
+        crt: effects.crt(0.15, 0.35),
+        pixelate: effects.pixelate(4.0),
+    };
+    looks.bloom.set_enabled(false);
+    looks.vignette.set_enabled(false);
+    looks.crt.set_enabled(false);
+    looks.pixelate.set_enabled(false);
+    cmd.insert_resource(looks);
+}
+
+@system
+fn switch_looks(input: Input, looks: Looks) {
+    if input.key_pressed(Key::B) {
+        looks.bloom.set_enabled(!looks.bloom.enabled());
+    }
+    if input.key_pressed(Key::V) {
+        looks.vignette.set_enabled(!looks.vignette.enabled());
+    }
+    if input.key_pressed(Key::C) {
+        looks.crt.set_enabled(!looks.crt.enabled());
+    }
+    if input.key_pressed(Key::P) {
+        looks.pixelate.set_enabled(!looks.pixelate.enabled());
+    }
+}
+// ANCHOR_END: post
+
+@system(run_if: [flash_pressed])
+fn flash(effects: Effects) {
+    effects.flash(rgb(255, 255, 255), 0.3);
+}
+
+// ---- Tweens ----
+
+// ANCHOR: easing
+@system(schedule: Schedule::Startup)
+fn easing(cmd: Commands, show: Show) {
+    // Each square travels the same distance in the same time; only the
+    // curve differs. yoyo(-1) plays forward, then back, forever.
+    let eases = [Ease::Linear, Ease::InOutSine, Ease::OutQuad, Ease::InOutCubic, Ease::OutExpo,
+                 Ease::OutBack, Ease::OutElastic, Ease::OutBounce, Ease::Spring];
+    let names = ["Linear", "InOutSine", "OutQuad", "InOutCubic", "OutExpo", "OutBack", "OutElastic",
+                 "OutBounce", "Spring"];
+    for i in range(eases.len()) {
+        let y = 310.0 + float(i) * 24.0;
+        cmd.spawn([at(130.0, y), Text { value: names[i], size: 15.0, color: rgb(150, 150, 170),
+                   align: Align::Right, valign: VAlign::Middle, .. }]);
+        cmd.spawn([
+            at(150.0, y),
+            Rectangle { size: vec2(14.0, 14.0), color: rgb(255, 200, 90), corner_radius: 3.0, .. },
+            tween().move_to(vec2(560.0, y), 1.6, eases[i]).delay(0.4).yoyo(-1),
+        ]);
+    }
+
+    // A chain: steps run one after another, and repeat(-1) starts the
+    // whole chain over. fade_to and tint_to change a Sprite's color.
+    cmd.spawn([
+        at(780.0, 420.0),
+        Sprite { image: show.white, color: rgb(90, 200, 255), .. },
+        tween()
+            .scale_to(vec2(4.0, 4.0), 0.5, Ease::OutBack)
+            .rotate_by(3.1415927, 0.6, Ease::InOutCubic)
+            .tint_to(rgb(255, 120, 90), 0.4, Ease::Linear)
+            .move_by(vec2(0.0, -60.0), 0.5, Ease::OutQuad)
+            .fade_to(0.0, 0.5, Ease::InQuad)
+            .delay(0.3)
+            .repeat(-1),
+    ]);
+    cmd.spawn([at(780.0, 500.0), Text { value: "a chain of steps", size: 15.0, color: rgb(150, 150, 170),
+               align: Align::Center, .. }]);
+
+    // A comet: a Trail leaves a fading ribbon wherever the entity goes, and
+    // a looping tween sends it around a square.
+    cmd.spawn([
+        at(640.0, 330.0),
+        Circle { radius: 5.0, color: rgb(255, 250, 220), .. },
+        Trail { width: 6.0, lifetime: 0.6, color_start: rgb(120, 200, 255), color_end: rgba(120, 80, 255, 0), .. },
+        tween()
+            .move_to(vec2(900.0, 330.0), 0.8, Ease::InOutSine)
+            .move_to(vec2(900.0, 470.0), 0.5, Ease::InOutSine)
+            .move_to(vec2(640.0, 470.0), 0.8, Ease::InOutSine)
+            .move_to(vec2(640.0, 330.0), 0.5, Ease::InOutSine)
+            .repeat(-1),
+    ]);
+}
+// ANCHOR_END: easing
+
+// ---- Helpers ----
+
+// An 8x8 white texture: a Sprite tints it with its color.
+fn white_texture() -> Texture {
+    let pixels: Color[] = [];
+    for i in range(64) {
+        pixels.push(rgb(255, 255, 255));
+    }
+    let assets = Assets { .. };
+    return assets.create_texture(8, 8, pixels);
+}

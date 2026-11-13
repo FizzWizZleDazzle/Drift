@@ -1,0 +1,360 @@
+// Roguelike: go down the stairs as deep as you can.
+//
+// The arrow keys, WASD or HJKL move one cell; walking into a monster
+// attacks it, and Space waits a turn. Pick up gold ($) and potions (!), and
+// take the stairs (>) to a new, deeper dungeon. R starts a new run.
+//
+// Shows the procedural generation API in a turn-based game: a dungeon from
+// the game's seed, rooms filled from a weighted table, items scattered on
+// Poisson-disk points, a tilemap made in code and filled from the grid, and
+// monsters that walk toward you along find_path.
+
+import "drift" { * };
+
+const CELL: float = 16.0;
+const MAP_W: int = 40;
+const MAP_H: int = 25;
+const TOP: float = 28.0;      // the status line above the map
+const SIGHT: int = 9;         // how far monsters notice you, in steps
+
+// Tile ids in the tileset made by `tileset()`.
+const TILE_FLOOR: int = 1;
+const TILE_WALL: int = 2;
+const TILE_DOOR: int = 3;
+const TILE_STAIRS: int = 4;
+
+// ---- State, components and resources ----
+
+@state
+enum Phase { Playing, Dead }
+
+// Everything on the grid has a Pos; `place` keeps its Transform on the cell.
+@component struct Pos { cell: Cell = Cell { .. } }
+
+@component struct Player { hp: int = 12, max_hp: int = 12, gold: int = 0 }
+@component struct Monster { name: string = "rat", hp: int = 2, damage: int = 1 }
+@component struct Item { gold: int = 0, heal: int = 0 }
+@component struct Stairs {}
+@component struct LevelThing {}     // removed when the level is rebuilt
+@component struct Status {}
+@component struct Messages {}
+
+@resource
+struct Level {
+    rng: Rng = Rng { .. },
+    grid: Grid = Grid { .. },
+    map: Map = Map { .. },
+    map_entity: Entity = Entity { .. },
+    depth: int = 0,
+    rebuild: bool = false,
+    log: string[] = [],
+}
+
+// The tileset, drawn in code when the game loads.
+@resource
+struct Art { tiles: Texture = tileset() }
+
+// ---- Startup and new runs ----
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, level: Level, random: Random) {
+    // One generator from the game's seed for everything in the dungeon.
+    level.rng = random.stream("dungeon");
+    cmd.spawn([at(8.0, 4.0), Text { size: 18.0, layer: hud_layer(), .. }, Status {}]);
+    cmd.spawn([at(8.0, TOP + float(MAP_H) * CELL + 4.0), Text { size: 15.0, color: rgb(200, 200, 210),
+               layer: hud_layer(), .. }, Messages {}]);
+}
+
+@system(on_enter: Phase::Playing)
+fn new_run(cmd: Commands, level: Level, players: (Entity, Player)[]) {
+    for (e, _) in players {
+        cmd.despawn(e);
+    }
+    cmd.spawn([at(0.0, 0.0), glyph("@", rgb(255, 255, 255)), Pos { .. }, Player { .. }]);
+    level.depth = 0;
+    level.log = [];
+    level.rebuild = true;
+    say(level, "You enter the dungeon.");
+}
+
+fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
+
+@system(in_state: [Phase::Dead], run_if: [restart_pressed])
+fn restart(phase: State<Phase>) {
+    phase.set(Phase::Playing);
+}
+
+// ---- Building a level ----
+
+// ANCHOR: build
+// Runs every frame, but does its work only when a level is wanted.
+@system
+fn build(cmd: Commands, assets: Assets, level: Level, art: Art, things: (Entity, LevelThing)[],
+         players: (Player, Pos)[]) {
+    if !level.rebuild {
+        return;
+    }
+    level.rebuild = false;
+    level.depth += 1;
+    for (e, _) in things {
+        cmd.despawn(e);
+    }
+    if level.map_entity.id != 0 {
+        cmd.despawn(level.map_entity);
+        level.map.destroy();
+    }
+
+    // Rooms joined by corridors; every room can be reached.
+    let d = dungeon(level.rng, MAP_W, MAP_H, DungeonOptions { min_room: 4, max_room: 8, extra_corridors: 3, .. });
+    level.grid = d.grid;
+
+    // The grid becomes a tile layer: FLOOR (0), WALL (1) and DOOR (2)
+    // become tiles 1, 2 and 3.
+    level.map = assets.create_tilemap(MAP_W, MAP_H, 16, art.tiles, ["Dungeon"]);
+    level.map.fill(0, level.grid, [TILE_FLOOR, TILE_WALL, TILE_DOOR], cell(0, 0));
+    let last = d.rooms[d.rooms.len() - 1].center();
+    level.map.set_tile(0, last, TILE_STAIRS);
+    level.map_entity = cmd.spawn([at(0.0, TOP), Tilemap { map: level.map, colliders: false, .. }]);
+    cmd.spawn([at(0.0, 0.0), Pos { cell: last }, Stairs {}, LevelThing {}]);
+
+    // You start in the middle of the first room.
+    let start = d.rooms[0].center();
+    for (_, pos) in players {
+        pos.cell = start;
+    }
+
+    // Each other room rolls what lives in it. Goblins get likelier deeper.
+    let spawns = weighted_table<string>()
+        .add("nothing", 30.0)
+        .add("rat", 40.0)
+        .add("goblin", 10.0 + 8.0 * float(level.depth))
+        .add("two rats", 15.0);
+    for i in range(1, d.rooms.len()) {
+        let room = d.rooms[i];
+        if spawns.roll(level.rng) is Some(what) {
+            if what == "rat" || what == "two rats" {
+                spawn_monster(cmd, level, room, "rat", 2, 1);
+            }
+            if what == "two rats" {
+                spawn_monster(cmd, level, room, "rat", 2, 1);
+            }
+            if what == "goblin" {
+                spawn_monster(cmd, level, room, "goblin", 5, 2);
+            }
+        }
+    }
+
+    // Items on Poisson-disk points over the floor: spread out, no clumps.
+    let loot = weighted_table<string>().add("gold", 70.0).add("potion", 30.0);
+    for p in poisson_on_grid(level.rng, level.grid, FLOOR, 7.0) {
+        let c = cell(int(p.x), int(p.y));
+        if c.x == start.x && c.y == start.y {
+            continue;
+        }
+        if loot.roll(level.rng) is Some(kind) {
+            if kind == "gold" {
+                cmd.spawn([at(0.0, 0.0), glyph("$", rgb(255, 210, 60)), Pos { cell: c },
+                           Item { gold: level.rng.range(3, 10), .. }, LevelThing {}]);
+            } else {
+                cmd.spawn([at(0.0, 0.0), glyph("!", rgb(255, 90, 160)), Pos { cell: c },
+                           Item { heal: 4, .. }, LevelThing {}]);
+            }
+        }
+    }
+    if level.depth > 1 {
+        say(level, "You go down to depth " + string(level.depth) + ".");
+    }
+}
+// ANCHOR_END: build
+
+fn spawn_monster(cmd: Commands, level: Level, room: GridRect, name: string, hp: int, damage: int) {
+    let c = cell(room.x + level.rng.below(room.w), room.y + level.rng.below(room.h));
+    let color = rgb(170, 140, 110);
+    if name == "goblin" {
+        color = rgb(110, 220, 90);
+    }
+    cmd.spawn([at(0.0, 0.0), glyph(name[0..1], color), Pos { cell: c },
+               Monster { name: name, hp: hp, damage: damage }, LevelThing {}]);
+}
+
+// ---- Turns ----
+
+// ANCHOR: turn
+// One turn per key press: the player acts, then every monster does.
+@system(in_state: [Phase::Playing], after: [build])
+fn take_turn(input: Input, level: Level, cmd: Commands, phase: State<Phase>,
+             players: (Player, Pos)[], monsters: (Entity, Monster, Pos)[],
+             items: (Entity, Item, Pos)[], stairs: (Stairs, Pos)[]) {
+    let step = cell(0, 0);
+    if input.action_pressed("up") {
+        step = cell(0, -1);
+    } else if input.action_pressed("down") {
+        step = cell(0, 1);
+    } else if input.action_pressed("left") {
+        step = cell(-1, 0);
+    } else if input.action_pressed("right") {
+        step = cell(1, 0);
+    } else if !input.action_pressed("wait") {
+        return;
+    }
+
+    for (player, pos) in players {
+        // The player's move: attack a monster in the way, or walk.
+        let to = cell(pos.cell.x + step.x, pos.cell.y + step.y);
+        let attacked = false;
+        if step.x != 0 || step.y != 0 {
+            for (e, m, mpos) in monsters {
+                if same(mpos.cell, to) && m.hp > 0 {
+                    attacked = true;
+                    let dmg = level.rng.range(1, 3);
+                    m.hp -= dmg;
+                    if m.hp <= 0 {
+                        say(level, "You kill the " + m.name + ".");
+                        cmd.despawn(e);
+                    } else {
+                        say(level, "You hit the " + m.name + " for " + string(dmg) + ".");
+                    }
+                }
+            }
+            if !attacked && level.grid.get(to) != WALL {
+                pos.cell = to;
+            }
+        }
+
+        // Items and stairs under the player's feet.
+        for (e, item, ipos) in items {
+            if same(ipos.cell, pos.cell) {
+                if item.gold > 0 {
+                    player.gold += item.gold;
+                    say(level, "You pick up " + string(item.gold) + " gold.");
+                } else {
+                    player.hp = int(min(float(player.max_hp), float(player.hp + item.heal)));
+                    say(level, "You drink a potion. You feel better.");
+                }
+                cmd.despawn(e);
+            }
+        }
+        for (_, spos) in stairs {
+            if same(spos.cell, pos.cell) {
+                level.rebuild = true;
+                return;
+            }
+        }
+
+        // The monsters' moves: those that can see a way to the player
+        // within SIGHT steps walk one step along it, or attack when next
+        // to the player.
+        for (_, m, mpos) in monsters {
+            if m.hp <= 0 {
+                continue;
+            }
+            let path = find_path(level.grid, mpos.cell, pos.cell, [WALL], false);
+            if path.len() == 0 || path.len() - 1 > SIGHT {
+                continue;
+            }
+            if path.len() == 2 {
+                player.hp -= m.damage;
+                say(level, "The " + m.name + " bites you.");
+            } else if !occupied(monsters, path[1]) {
+                mpos.cell = path[1];
+            }
+        }
+        if player.hp <= 0 {
+            say(level, "You die on depth " + string(level.depth) + " with " + string(player.gold)
+                + " gold. R to try again.");
+            phase.set(Phase::Dead);
+        }
+    }
+}
+// ANCHOR_END: turn
+
+// Puts every grid entity on its cell. Runs once per entity with a Pos.
+@system(after: [take_turn])
+fn place(pos: Pos, t: Transform) {
+    t.position = vec2((float(pos.cell.x) + 0.5) * CELL, TOP + (float(pos.cell.y) + 0.5) * CELL);
+}
+
+// ---- HUD ----
+
+@system
+fn status(_: Status, text: Text, level: Level, players: (Player, Pos)[]) {
+    for (p, _) in players {
+        text.value = "Depth " + string(level.depth) + "    HP " + string(p.hp) + "/" + string(p.max_hp)
+            + "    Gold " + string(p.gold);
+    }
+}
+
+@system
+fn messages(_: Messages, text: Text, level: Level) {
+    text.value = level.log.join("\n");
+}
+
+// ---- Helpers ----
+
+// A character drawn centered on its cell: the classic roguelike look.
+fn glyph(s: string, c: Color) -> Text {
+    return Text { value: s, size: 17.0, color: c, align: Align::Center, valign: VAlign::Middle, z: 5.0, .. };
+}
+
+fn same(a: Cell, b: Cell) -> bool => a.x == b.x && a.y == b.y;
+
+fn occupied(monsters: (Entity, Monster, Pos)[], c: Cell) -> bool {
+    for (_, m, p) in monsters {
+        if m.hp > 0 && same(p.cell, c) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Adds a line to the message log, keeping the last three.
+fn say(level: Level, line: string) {
+    level.log.push(line);
+    while level.log.len() > 3 {
+        level.log.remove(0);
+    }
+}
+
+// Four 16x16 tiles side by side: floor, wall, door and stairs.
+fn tileset() -> Texture {
+    let pixels: Color[] = [];
+    for y in range(16) {
+        for x in range(64) {
+            let tile = x / 16;
+            let lx = x % 16;
+            if tile == 0 {
+                // Floor: dark stone with a dot in the middle.
+                if lx == 8 && y == 8 {
+                    pixels.push(rgb(70, 70, 86));
+                } else {
+                    pixels.push(rgb(28, 28, 36));
+                }
+            } else if tile == 1 {
+                // Wall: bricks.
+                let mortar = y % 8 == 7 || (lx + (y / 8) * 8) % 16 == 0;
+                if mortar {
+                    pixels.push(rgb(40, 38, 52));
+                } else {
+                    pixels.push(rgb(92, 86, 120));
+                }
+            } else if tile == 2 {
+                // Door: planks.
+                if lx % 5 == 0 {
+                    pixels.push(rgb(70, 44, 24));
+                } else {
+                    pixels.push(rgb(150, 100, 50));
+                }
+            } else {
+                // Stairs: steps going down.
+                let step = (lx / 4 + y / 4) % 2 == 0;
+                if step {
+                    pixels.push(rgb(200, 200, 220));
+                } else {
+                    pixels.push(rgb(60, 60, 80));
+                }
+            }
+        }
+    }
+    let assets = Assets { .. };
+    return assets.create_texture(64, 16, pixels);
+}

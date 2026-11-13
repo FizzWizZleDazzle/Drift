@@ -1,0 +1,26 @@
+[project]
+name = "Roguelike"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+# 40 x 25 cells of 16 pixels, a status line above and messages below.
+[window]
+width = 640
+height = 480
+
+[render]
+clear_color = [0.02, 0.02, 0.03]
+
+# Each move is one action, so held keys do not repeat.
+[input]
+up = ["key:Up", "key:W", "key:K", "button:DPadUp"]
+down = ["key:Down", "key:S", "key:J", "button:DPadDown"]
+left = ["key:Left", "key:A", "key:H", "button:DPadLeft"]
+right = ["key:Right", "key:D", "key:L", "button:DPadRight"]
+wait = ["key:Space", "button:West"]
+restart = ["key:R", "button:Start"]
+
+# 0 picks a new seed each run and logs it; put that number here to play the
+# same dungeons again.
+[random]
+seed = 0

@@ -1,0 +1,301 @@
+// Breakout: bounce the ball off the paddle and clear every brick.
+//
+// Left and Right (or A and D, or the gamepad stick) move the paddle. Space,
+// Up or a click launches the ball. Where the ball lands on the paddle
+// decides where it goes. Three balls per game; R starts over.
+//
+// Shows: physics bodies and colliders with bounce and no gravity, contact
+// handlers that run once per collision, a sensor that catches lost balls,
+// a kinematic paddle, game states, settings from drift.toml, tweens that
+// drop the bricks in, particle bursts and sounds made from samples.
+
+import "drift" { * };
+
+const W: float = 640.0;
+const H: float = 480.0;
+const PADDLE_Y: float = 440.0;
+const PADDLE_HALF: Vec2 = Vec2 { x: 44.0, y: 7.0 };
+const BALL_RADIUS: float = 7.0;
+
+// ---- State, components and resources ----
+
+@state
+enum Phase { Serve, Playing, Won, Lost }
+
+@component(requires: [Velocity])
+struct Paddle {}
+
+@component(requires: [Velocity])
+struct Ball {}
+
+@component struct Brick { points: int = 1, color: Color = Color { .. } }
+@component struct Pit {}           // the sensor below the paddle
+@component struct ScoreLabel {}
+@component struct Banner {}
+
+@settings(section: "breakout")
+struct Tuning { paddle_speed: float = 520.0, ball_speed: float = 340.0, speedup: float = 6.0, lives: int = 3 }
+
+@resource
+struct Game { score: int = 0, lives: int = 3, bricks_left: int = 0, speed: float = 340.0 }
+
+// Sounds made from samples when the game loads; see `tone` below.
+@resource
+struct Sfx {
+    paddle: Sound = tone(440.0, 0.06),
+    brick: Sound = tone(660.0, 0.08),
+    lost: Sound = tone(120.0, 0.4),
+}
+
+// ---- Startup ----
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input) {
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+    input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+
+    // Walls on three sides. A collider with no RigidBody never moves.
+    let wall_color = rgb(70, 74, 110);
+    wall(cmd, vec2(W * 0.5, 34.0), vec2(W, 8.0), wall_color);
+    wall(cmd, vec2(4.0, H * 0.5 + 15.0), vec2(8.0, H - 30.0), wall_color);
+    wall(cmd, vec2(W - 4.0, H * 0.5 + 15.0), vec2(8.0, H - 30.0), wall_color);
+
+    // Below the paddle: a sensor. It reports the ball passing through it
+    // without bouncing it.
+    cmd.spawn([at(W * 0.5, H + 30.0), BoxCollider { half_size: vec2(W, 20.0), sensor: true, .. }, Pit {}]);
+
+    // The paddle is kinematic: it moves only by its Velocity and pushes
+    // the ball without being pushed back.
+    cmd.spawn([
+        at(W * 0.5, PADDLE_Y),
+        Rectangle { size: PADDLE_HALF * 2.0, color: rgb(230, 230, 250), corner_radius: 6.0, .. },
+        RigidBody { kind: BodyKind::Kinematic, .. },
+        BoxCollider { half_size: PADDLE_HALF, friction: 0.0, .. },
+        Paddle {},
+    ]);
+
+    // The ball is dynamic, with full bounce and no friction, so it keeps
+    // its energy.
+    cmd.spawn([
+        at(W * 0.5, PADDLE_Y - 20.0),
+        Circle { radius: BALL_RADIUS, color: rgb(255, 240, 200), .. },
+        RigidBody { fixed_rotation: true, .. },
+        CircleCollider { radius: BALL_RADIUS, restitution: 1.0, friction: 0.0, .. },
+        Ball {},
+    ]);
+
+    cmd.spawn([at(12.0, 6.0), Text { size: 20.0, layer: hud_layer(), .. }, ScoreLabel {}]);
+    cmd.spawn([
+        at(W * 0.5, 300.0),
+        Text { size: 26.0, align: Align::Center, valign: VAlign::Middle, outline: 2.0, layer: hud_layer(), .. },
+        Banner {},
+    ]);
+}
+
+// A new game: fresh bricks, score and lives. Runs on the first frame too,
+// because Serve is the first state, and again whenever R is pressed.
+@system(schedule: Schedule::Startup, after: [setup])
+fn first_game(cmd: Commands, game: Game, tuning: Tuning, bricks: (Entity, Brick)[]) {
+    new_game(cmd, game, tuning, bricks);
+}
+
+fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
+
+@system(run_if: [restart_pressed])
+fn restart(cmd: Commands, game: Game, tuning: Tuning, bricks: (Entity, Brick)[], phase: State<Phase>) {
+    new_game(cmd, game, tuning, bricks);
+    phase.set(Phase::Serve);
+}
+
+fn new_game(cmd: Commands, game: Game, tuning: Tuning, bricks: (Entity, Brick)[]) {
+    for (e, _) in bricks {
+        cmd.despawn(e);
+    }
+    game.score = 0;
+    game.lives = tuning.lives;
+    game.speed = tuning.ball_speed;
+    game.bricks_left = 0;
+    let colors = [rgb(240, 90, 90), rgb(245, 160, 70), rgb(240, 220, 90), rgb(110, 210, 120), rgb(90, 170, 240)];
+    for row in range(5) {
+        for col in range(10) {
+            let pos = vec2(56.0 + float(col) * 58.0, 80.0 + float(row) * 24.0);
+            cmd.spawn([
+                // Each brick starts at zero size and pops in, one after another.
+                Transform { position: pos, scale: vec2(0.0, 0.0), .. },
+                tween().delay(float(row * 10 + col) * 0.015).scale_to(vec2(1.0, 1.0), 0.25, Ease::OutBack),
+                Rectangle { size: vec2(54.0, 20.0), color: colors[row], corner_radius: 3.0, .. },
+                BoxCollider { half_size: vec2(27.0, 10.0), friction: 0.0, .. },
+                Brick { points: 5 - row, color: colors[row] },
+            ]);
+            game.bricks_left += 1;
+        }
+    }
+}
+
+// ---- The paddle ----
+
+@system
+fn move_paddle(_: Paddle, t: Transform, v: Velocity, input: Input, tuning: Tuning) {
+    let x = input.axis2d("move").x * tuning.paddle_speed;
+    // Stop at the walls. The paddle is kinematic, so walls do not stop it.
+    if (x < 0.0 && t.position.x < PADDLE_HALF.x + 8.0) || (x > 0.0 && t.position.x > W - PADDLE_HALF.x - 8.0) {
+        x = 0.0;
+    }
+    v.linear = vec2(x, 0.0);
+}
+
+// ---- Serving ----
+
+// While serving, the ball rides on the paddle.
+@system(in_state: [Phase::Serve])
+fn hold_ball(balls: (Ball, Transform, Velocity)[], paddles: (Paddle, Transform)[]) {
+    for (_, p) in paddles {
+        for (_, t, v) in balls {
+            t.position = p.position + vec2(0.0, -PADDLE_HALF.y - BALL_RADIUS - 2.0);
+            v.linear = vec2(0.0, 0.0);
+        }
+    }
+}
+
+fn launch_pressed(input: Input) -> bool => input.action_pressed("launch");
+
+@system(in_state: [Phase::Serve], run_if: [launch_pressed], after: [hold_ball])
+fn launch(_: Ball, v: Velocity, game: Game, phase: State<Phase>) {
+    v.linear = vec2(0.35, -1.0).normalized() * game.speed;
+    phase.set(Phase::Playing);
+}
+
+// ---- Playing ----
+
+// ANCHOR: speed
+// Physics keeps the bounces; this keeps the speed steady and stops the
+// ball from settling into a flat, endless side-to-side path.
+@system(in_state: [Phase::Playing])
+fn keep_speed(_: Ball, v: Velocity, game: Game) {
+    let dir = v.linear.normalized();
+    if dir.length() == 0.0 {
+        dir = vec2(0.0, -1.0);
+    }
+    if dir.y.abs() < 0.3 {
+        let sign = 1.0;
+        if dir.y < 0.0 {
+            sign = -1.0;
+        }
+        dir = vec2(dir.x, 0.3 * sign).normalized();
+    }
+    v.linear = dir * game.speed;
+}
+// ANCHOR_END: speed
+
+// ANCHOR: paddle
+// A contact handler: runs once for each collision between a Ball and a
+// Paddle that started this frame. `hit.a` is the ball, `hit.b` the paddle.
+// Where the ball lands on the paddle sets its new direction.
+@system(in_state: [Phase::Playing])
+fn bounce_off_paddle(hit: Contact<Ball, Paddle>, places: Lookup<Transform>, velocities: Lookup<Velocity>,
+                     game: Game, sfx: Sfx) {
+    if places.get(hit.a) is Some(ball) {
+        if places.get(hit.b) is Some(paddle) {
+            let offset = clamp((ball.position.x - paddle.position.x) / PADDLE_HALF.x, -1.0, 1.0);
+            if velocities.get(hit.a) is Some(v) {
+                v.linear = vec2(offset * 0.9, -1.0).normalized() * game.speed;
+            }
+        }
+    }
+    sfx.paddle.play();
+}
+// ANCHOR_END: paddle
+
+@system(in_state: [Phase::Playing])
+fn break_brick(hit: Contact<Ball, Brick>, bricks: Lookup<Brick>, places: Lookup<Transform>,
+               cmd: Commands, effects: Effects, game: Game, tuning: Tuning, sfx: Sfx, phase: State<Phase>) {
+    if bricks.get(hit.b) is Some(b) {
+        game.score += b.points;
+        if places.get(hit.b) is Some(t) {
+            effects.burst(t.position, ParticleEmitter {
+                color_start: b.color, color_end: b.color.alpha(0.0),
+                speed_min: 40.0, speed_max: 160.0, lifetime_min: 0.2, lifetime_max: 0.5,
+                size_start: 5.0, size_end: 1.0, ..
+            }, 16);
+        }
+    }
+    sfx.brick.play_with(PlayOptions { pitch: 0.9 + 0.05 * float(game.score % 5), .. });
+    cmd.despawn(hit.b);
+    game.speed += tuning.speedup;
+    game.bricks_left -= 1;
+    if game.bricks_left == 0 {
+        phase.set(Phase::Won);
+    }
+}
+
+// ANCHOR: lose
+// The ball passed the paddle and entered the pit sensor.
+@system(in_state: [Phase::Playing])
+fn lose_ball(_: Overlap<Ball, Pit>, game: Game, effects: Effects, sfx: Sfx, phase: State<Phase>) {
+    sfx.lost.play();
+    effects.flash(rgb(255, 40, 40), 0.3);
+    game.lives -= 1;
+    if game.lives <= 0 {
+        phase.set(Phase::Lost);
+    } else {
+        phase.set(Phase::Serve);
+    }
+}
+// ANCHOR_END: lose
+
+// When the game ends, the ball stops where it is.
+@system(on_enter: Phase::Won)
+fn won(_: Ball, v: Velocity) {
+    v.linear = vec2(0.0, 0.0);
+}
+
+@system(on_enter: Phase::Lost)
+fn lost(_: Ball, v: Velocity) {
+    v.linear = vec2(0.0, 0.0);
+}
+
+// ---- HUD ----
+
+@system
+fn score_label(_: ScoreLabel, text: Text, game: Game) {
+    text.value = "Score " + string(game.score) + "    Balls " + string(game.lives);
+}
+
+@system
+fn banner(_: Banner, text: Text, phase: State<Phase>) {
+    text.value = match phase.now {
+        Phase::Serve => "Space or click to launch",
+        Phase::Playing => "",
+        Phase::Won => "Cleared!  R to play again",
+        Phase::Lost => "Out of balls.  R to play again",
+    };
+}
+
+// ---- Helpers ----
+
+fn wall(cmd: Commands, pos: Vec2, size: Vec2, c: Color) {
+    cmd.spawn([
+        Transform { position: pos, .. },
+        Rectangle { size: size, color: c, .. },
+        BoxCollider { half_size: size * 0.5, friction: 0.0, .. },
+    ]);
+}
+
+// A short square-wave blip. Assets builds a Sound from samples between -1
+// and 1, so a game can have sound without any files.
+fn tone(freq: float, seconds: float) -> Sound {
+    let rate = 22050;
+    let n = int(seconds * float(rate));
+    let samples: float[] = [];
+    for i in range(n) {
+        let t = float(i) / float(rate);
+        let wave = 0.25;
+        if sin(TAU * freq * t) < 0.0 {
+            wave = -0.25;
+        }
+        samples.push(wave * (1.0 - float(i) / float(n)));
+    }
+    let assets = Assets { .. };
+    return assets.create_sound(samples, rate);
+}

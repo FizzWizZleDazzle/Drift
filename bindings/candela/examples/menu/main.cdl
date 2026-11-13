@@ -1,0 +1,317 @@
+// Menus and States: a title screen, an options screen, a small game and a
+// pause screen, each one a state.
+//
+// Up and Down pick a menu item, Enter or Space chooses it, Left and Right
+// change an option, and Escape goes back. In the game, dodge the falling
+// blocks with Left and Right; Escape pauses.
+//
+// Shows: a @state enum with on_enter and on_exit systems that build and
+// clear each screen, in_state to run systems only on some screens, a pause
+// that freezes the game by not running its systems, @settings defaults
+// from drift.toml overridden by options kept in save data, and menus made
+// of Text entities.
+
+import "drift" { * };
+
+const W: float = 640.0;
+const H: float = 480.0;
+
+// ---- States ----
+
+@state
+enum Screen { Title, Options, Playing, Paused }
+
+// ---- Components ----
+
+// One line of a menu. `index` is its place in the list.
+@component struct MenuItem { index: int = 0 }
+// Anything that belongs to one screen and goes when it closes.
+@component struct OnScreen {}
+@component struct Dodger {}
+@component struct Block { speed: float = 200.0 }
+@component struct GameThing {}
+@component struct ScoreLabel {}
+
+// ---- Settings and resources ----
+
+// Defaults from [menu] in drift.toml.
+@settings(section: "menu")
+struct Defaults { difficulty: int = 1, volume: int = 8 }
+
+// The options in use: the defaults, then whatever the player chose.
+@resource
+struct Options { difficulty: int = 1, volume: int = 8, loaded: bool = false }
+
+@resource
+struct Menu { selected: int = 0, count: int = 0 }
+
+@resource
+struct Game { score: float = 0.0, last: int = -1, spawn: Timer = repeating_timer(0.6), rng: Rng = rng(1) }
+
+@resource
+struct Sfx { blip: Sound = blip() }
+
+// ---- Startup ----
+
+// Options: start from drift.toml, then take any the player saved.
+@system(schedule: Schedule::Startup)
+fn load_options(defaults: Defaults, options: Options, save: Save, random: Random, game: Game) {
+    options.difficulty = save.get_int("difficulty", defaults.difficulty);
+    options.volume = save.get_int("volume", defaults.volume);
+    game.rng = random.stream("blocks");
+}
+
+// ---- Title ----
+
+// ANCHOR: title
+@system(on_enter: Screen::Title)
+fn open_title(cmd: Commands, menu: Menu, game: Game, things: (Entity, GameThing)[]) {
+    // Coming back from a game: clear it away.
+    for (e, _) in things {
+        cmd.despawn(e);
+    }
+    cmd.spawn([at(W * 0.5, 120.0), Text { value: "DODGE", size: 64.0, align: Align::Center,
+               color: rgb(255, 210, 90), outline: 3.0, .. },
+               tween().scale_to(vec2(1.08, 1.08), 0.8, Ease::InOutSine).yoyo(-1), OnScreen {}]);
+    if game.last >= 0 {
+        cmd.spawn([at(W * 0.5, 190.0), Text { value: "Last run: " + string(game.last), size: 22.0,
+                   align: Align::Center, color: rgb(200, 200, 220), .. }, OnScreen {}]);
+    }
+    open_menu(cmd, menu, ["Play", "Options"]);
+}
+
+@system(in_state: [Screen::Title])
+fn title_menu(input: Input, menu: Menu, screen: State<Screen>, options: Options, sfx: Sfx) {
+    move_selection(input, menu, options, sfx);
+    if input.action_pressed("select") {
+        if menu.selected == 0 {
+            screen.set(Screen::Playing);
+        } else {
+            screen.set(Screen::Options);
+        }
+    }
+}
+
+// Each screen clears its own entities when it closes.
+@system(on_exit: Screen::Title)
+fn close_title(cmd: Commands, things: (Entity, OnScreen)[]) {
+    clear(cmd, things);
+}
+// ANCHOR_END: title
+
+// ---- Options ----
+
+@system(on_enter: Screen::Options)
+fn open_options(cmd: Commands, menu: Menu) {
+    cmd.spawn([at(W * 0.5, 100.0), Text { value: "Options", size: 44.0, align: Align::Center, .. }, OnScreen {}]);
+    cmd.spawn([at(W * 0.5, 400.0), Text { value: "Left and Right change a value", size: 18.0,
+               color: rgb(150, 150, 170), align: Align::Center, .. }, OnScreen {}]);
+    open_menu(cmd, menu, ["", "", "Back"]);
+}
+
+@system(in_state: [Screen::Options])
+fn options_menu(input: Input, menu: Menu, options: Options, save: Save, screen: State<Screen>, sfx: Sfx) {
+    move_selection(input, menu, options, sfx);
+    let change = 0;
+    if input.action_pressed("left") {
+        change = -1;
+    }
+    if input.action_pressed("right") {
+        change = 1;
+    }
+    if change != 0 {
+        if menu.selected == 0 {
+            options.difficulty = (options.difficulty + change + 3) % 3;
+        } else if menu.selected == 1 {
+            options.volume = int(clamp(float(options.volume + change), 0.0, 10.0));
+        }
+        // Kept for next time. Nothing reaches the disk until flush.
+        save.set_int("difficulty", options.difficulty);
+        save.set_int("volume", options.volume);
+        save.flush();
+        play_blip(sfx, options);
+    }
+    if input.action_pressed("back") || (input.action_pressed("select") && menu.selected == 2) {
+        screen.set(Screen::Title);
+    }
+}
+
+// The option lines show their current values.
+@system(in_state: [Screen::Options], after: [options_menu])
+fn option_labels(item: MenuItem, text: Text, options: Options) {
+    let names = ["Easy", "Normal", "Hard"];
+    if item.index == 0 {
+        text.value = "Difficulty   < " + names[options.difficulty] + " >";
+    } else if item.index == 1 {
+        text.value = "Volume   < " + "|".repeat(options.volume) + ".".repeat(10 - options.volume) + " >";
+    }
+}
+
+@system(on_exit: Screen::Options)
+fn close_options(cmd: Commands, things: (Entity, OnScreen)[]) {
+    clear(cmd, things);
+}
+
+// ---- Playing ----
+
+// on_enter runs when coming from the title, and also when coming back
+// from the pause screen. Only a new game sets things up.
+@system(on_enter: Screen::Playing)
+fn start_game(cmd: Commands, game: Game, options: Options, dodgers: (Entity, Dodger)[]) {
+    if dodgers.len() > 0 {
+        return;
+    }
+    game.score = 0.0;
+    game.spawn = repeating_timer(0.7 - 0.2 * float(options.difficulty));
+    cmd.spawn([at(W * 0.5, H - 40.0), Rectangle { size: vec2(36.0, 20.0), color: rgb(110, 200, 255),
+               corner_radius: 4.0, .. }, Dodger {}, GameThing {}]);
+    cmd.spawn([at(12.0, 8.0), Text { size: 22.0, layer: hud_layer(), .. }, ScoreLabel {}, GameThing {}]);
+}
+
+// Everything below runs only in Playing, so the pause screen freezes it.
+// The blocks move in a system rather than by Velocity for that reason:
+// the engine keeps moving a Velocity whatever state the game is in.
+@system(in_state: [Screen::Playing])
+fn steer(_: Dodger, t: Transform, input: Input, time: Time) {
+    let dir = 0.0;
+    if input.action_held("left") {
+        dir = -1.0;
+    }
+    if input.action_held("right") {
+        dir = 1.0;
+    }
+    t.position = vec2(clamp(t.position.x + dir * 320.0 * time.dt, 20.0, W - 20.0), t.position.y);
+}
+
+@system(in_state: [Screen::Playing])
+fn drop_blocks(cmd: Commands, game: Game, time: Time, options: Options) {
+    game.score += time.dt;
+    for i in range(game.spawn.tick(time.dt)) {
+        let speed = game.rng.range_float(160.0, 260.0) * (1.0 + 0.35 * float(options.difficulty));
+        cmd.spawn([at(game.rng.range_float(20.0, W - 20.0), -20.0),
+                   Rectangle { size: vec2(28.0, 28.0), color: rgb(240, 100, 110), corner_radius: 3.0, .. },
+                   Block { speed: speed }, GameThing {}]);
+    }
+}
+
+@system(in_state: [Screen::Playing], after: [drop_blocks])
+fn fall(blocks: (Entity, Block, Transform)[], dodgers: (Dodger, Transform)[], time: Time, cmd: Commands,
+        game: Game, effects: Effects, screen: State<Screen>) {
+    for (e, b, t) in blocks {
+        t.position = t.position + vec2(0.0, b.speed * time.dt);
+        if t.position.y > H + 30.0 {
+            cmd.despawn(e);
+        }
+        for (_, d) in dodgers {
+            if (t.position.x - d.position.x).abs() < 32.0 && (t.position.y - d.position.y).abs() < 24.0 {
+                effects.flash(rgb(255, 60, 60), 0.4);
+                game.last = int(game.score);
+                screen.set(Screen::Title);
+            }
+        }
+    }
+}
+
+@system(in_state: [Screen::Playing])
+fn score_label(_: ScoreLabel, text: Text, game: Game) {
+    text.value = "Time " + string(int(game.score)) + "    Esc: pause";
+}
+
+fn back_pressed(input: Input) -> bool => input.action_pressed("back");
+
+// ANCHOR: pause
+@system(in_state: [Screen::Playing], run_if: [back_pressed])
+fn pause(screen: State<Screen>) {
+    screen.set(Screen::Paused);
+}
+
+// ---- Paused ----
+
+@system(on_enter: Screen::Paused)
+fn open_pause(cmd: Commands, menu: Menu) {
+    cmd.spawn([at(W * 0.5, H * 0.5), Rectangle { size: vec2(W, H), color: rgba(0, 0, 0, 150), layer: hud_layer(), .. },
+               OnScreen {}]);
+    cmd.spawn([at(W * 0.5, 150.0), Text { value: "Paused", size: 44.0, align: Align::Center, layer: hud_layer(), .. },
+               OnScreen {}]);
+    open_menu(cmd, menu, ["Resume", "Quit to title"]);
+}
+
+@system(in_state: [Screen::Paused])
+fn pause_menu(input: Input, menu: Menu, screen: State<Screen>, options: Options, sfx: Sfx) {
+    move_selection(input, menu, options, sfx);
+    if input.action_pressed("back") || (input.action_pressed("select") && menu.selected == 0) {
+        screen.set(Screen::Playing);
+    } else if input.action_pressed("select") && menu.selected == 1 {
+        screen.set(Screen::Title);
+    }
+}
+
+@system(on_exit: Screen::Paused)
+fn close_pause(cmd: Commands, things: (Entity, OnScreen)[]) {
+    clear(cmd, things);
+}
+// ANCHOR_END: pause
+
+// ---- Every menu ----
+
+// The selected line is bright and slightly larger.
+@system
+fn highlight(item: MenuItem, text: Text, t: Transform, menu: Menu) {
+    let on = item.index == menu.selected;
+    if on {
+        text.color = rgb(255, 220, 110);
+        t.scale = vec2(1.1, 1.1);
+    } else {
+        text.color = rgb(170, 170, 190);
+        t.scale = vec2(1.0, 1.0);
+    }
+}
+
+// ---- Helpers ----
+
+// Spawns one Text per line and selects the first.
+fn open_menu(cmd: Commands, menu: Menu, lines: string[]) {
+    menu.selected = 0;
+    menu.count = lines.len();
+    for i in range(lines.len()) {
+        cmd.spawn([at(W * 0.5, 250.0 + float(i) * 44.0),
+                   Text { value: lines[i], size: 30.0, align: Align::Center, valign: VAlign::Middle,
+                          layer: hud_layer(), .. },
+                   MenuItem { index: i }, OnScreen {}]);
+    }
+}
+
+fn move_selection(input: Input, menu: Menu, options: Options, sfx: Sfx) {
+    if input.action_pressed("down") {
+        menu.selected = (menu.selected + 1) % menu.count;
+        play_blip(sfx, options);
+    }
+    if input.action_pressed("up") {
+        menu.selected = (menu.selected + menu.count - 1) % menu.count;
+        play_blip(sfx, options);
+    }
+}
+
+fn clear(cmd: Commands, things: (Entity, OnScreen)[]) {
+    for (e, _) in things {
+        cmd.despawn(e);
+    }
+}
+
+fn play_blip(sfx: Sfx, options: Options) {
+    sfx.blip.play_with(PlayOptions { volume: float(options.volume) / 10.0, .. });
+}
+
+// A short click, made from samples.
+fn blip() -> Sound {
+    let samples: float[] = [];
+    for i in range(600) {
+        let wave = 0.3;
+        if (i / 20) % 2 == 0 {
+            wave = -0.3;
+        }
+        samples.push(wave * (1.0 - float(i) / 600.0));
+    }
+    let assets = Assets { .. };
+    return assets.create_sound(samples, 22050);
+}

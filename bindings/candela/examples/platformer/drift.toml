@@ -1,0 +1,26 @@
+[project]
+name = "Platformer"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+# 32 x 18 tiles of 24 pixels.
+[window]
+width = 768
+height = 432
+
+[render]
+clear_color = [0.36, 0.58, 0.85]
+
+# Pixels per second squared, +Y down.
+[physics]
+gravity = [0, 800]
+
+[input]
+jump = ["key:Space", "key:Up", "key:W", "button:South"]
+restart = ["key:R", "button:Start"]
+
+# Physics bodies move at most 400 pixels per second, so the jump speed
+# stays under that; gravity sets how high it goes (about four tiles).
+[platformer]
+run_speed = 230.0
+jump_speed = 390.0

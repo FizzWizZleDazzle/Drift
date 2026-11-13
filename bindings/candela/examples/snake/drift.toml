@@ -1,0 +1,27 @@
+[project]
+name = "Snake"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+# 24 x 16 cells of 24 pixels, and a strip for the score above them.
+[window]
+width = 576
+height = 424
+
+[render]
+clear_color = [0.05, 0.06, 0.05]
+
+# One action per direction, so keys, the d-pad and rebinding all work the
+# same way. The game only asks "was `up` pressed?".
+[input]
+up = ["key:Up", "key:W", "button:DPadUp"]
+down = ["key:Down", "key:S", "button:DPadDown"]
+left = ["key:Left", "key:A", "button:DPadLeft"]
+right = ["key:Right", "key:D", "button:DPadRight"]
+restart = ["key:Space", "key:Return", "button:South"]
+
+# Tuning, read by the Tuning struct in main.cdl. Change a value here and
+# rebuild the page to try it.
+[snake]
+step_seconds = 0.14   # time between moves at the start
+speedup = 0.96        # each apple multiplies the step time by this

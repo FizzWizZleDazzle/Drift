@@ -1,0 +1,185 @@
+// Save and Load: paint a picture, save it, change it, load it back.
+//
+// Click a cell (or move the cursor with the arrow keys and press Space) to
+// change its color. 1, 2 and 3 pick a save slot. S saves the picture into
+// the slot, L loads it, C clears the canvas and X erases the slot.
+//
+// Shows: Save with ints, floats and strings, keys named per slot, has and
+// erase, flush to write to disk, turning a grid into a string and back,
+// mouse and keyboard input on the same grid, and a status line that tells
+// the player what happened.
+
+import "drift" { * };
+
+const COLS: int = 16;
+const ROWS: int = 10;
+const CELL: float = 32.0;
+const LEFT: float = 64.0;
+const TOP: float = 72.0;
+
+// ---- Components and resources ----
+
+@component struct Pixel { index: int = 0 }
+@component struct Cursor {}
+@component struct Status {}
+
+@resource
+struct Canvas {
+    cells: int[] = [],
+    cursor: Cell = Cell { .. },
+    slot: int = 1,
+    message: string = "",
+    painted: float = 0.0,    // seconds spent painting this picture
+}
+
+// ---- Startup ----
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input, canvas: Canvas, save: Save) {
+    input.bind_axis2d("cursor", Key::Left, Key::Right, Key::Up, Key::Down);
+    for i in range(COLS * ROWS) {
+        canvas.cells.push(0);
+        cmd.spawn([place(i % COLS, i / COLS), Rectangle { size: vec2(CELL - 2.0, CELL - 2.0), color: paint_color(0),
+                   corner_radius: 3.0, .. }, Pixel { index: i }]);
+    }
+    cmd.spawn([place(0, 0), Rectangle { size: vec2(CELL + 2.0, CELL + 2.0), color: rgb(255, 255, 255),
+               outline: 2.0, z: 2.0, .. }, Cursor {}]);
+    cmd.spawn([at(LEFT, 20.0), Text { size: 20.0, layer: hud_layer(), .. }, Status {}]);
+    cmd.spawn([at(LEFT, TOP + float(ROWS) * CELL + 16.0), Text {
+        value: "Click or Space: paint    1 2 3: slot    S save   L load   C clear   X erase slot",
+        size: 16.0, color: rgb(150, 150, 170), layer: hud_layer(), .. }]);
+
+    // How many times this game has started, kept across runs.
+    let runs = save.get_int("runs", 0) + 1;
+    save.set_int("runs", runs);
+    save.flush();
+    canvas.message = "Run " + string(runs) + ". " + describe(save, canvas.slot);
+}
+
+// ---- Painting ----
+
+@system
+fn paint(input: Input, canvas: Canvas, time: Time) {
+    // The arrow keys move the cursor one cell per press.
+    let step = input.axis2d("cursor");
+    if input.key_pressed(Key::Left) || input.key_pressed(Key::Right) || input.key_pressed(Key::Up)
+        || input.key_pressed(Key::Down) {
+        canvas.cursor = cell(int(clamp(float(canvas.cursor.x) + step.x, 0.0, float(COLS - 1))),
+                             int(clamp(float(canvas.cursor.y) + step.y, 0.0, float(ROWS - 1))));
+    }
+    // The mouse moves it too, when it is over the canvas.
+    let m = input.mouse_world();
+    let over = cell(int(((m.x - LEFT) / CELL).floor()), int(((m.y - TOP) / CELL).floor()));
+    let on_canvas = over.x >= 0 && over.y >= 0 && over.x < COLS && over.y < ROWS;
+    if on_canvas && (input.mouse_delta().length() > 0.0 || input.mouse_pressed(MouseButton::Left)) {
+        canvas.cursor = over;
+    }
+    if input.action_pressed("paint") {
+        let i = canvas.cursor.y * COLS + canvas.cursor.x;
+        canvas.cells[i] = (canvas.cells[i] + 1) % 5;
+    }
+    canvas.painted += time.dt;
+}
+
+// Each pixel shows its cell's color. Runs once per Pixel entity.
+@system(after: [paint, files])
+fn show_pixel(p: Pixel, r: Rectangle, canvas: Canvas) {
+    let c = paint_color(canvas.cells[p.index]);
+    if r.color.r != c.r || r.color.g != c.g || r.color.b != c.b {
+        r.color = c;
+    }
+}
+
+@system(after: [paint])
+fn show_cursor(_: Cursor, t: Transform, canvas: Canvas) {
+    t.position = place(canvas.cursor.x, canvas.cursor.y).position;
+}
+
+// ---- Saving and loading ----
+
+// ANCHOR: files
+@system
+fn files(input: Input, canvas: Canvas, save: Save) {
+    let keys = [Key::Num1, Key::Num2, Key::Num3];
+    for i in range(3) {
+        if input.key_pressed(keys[i]) {
+            canvas.slot = i + 1;
+            canvas.message = describe(save, canvas.slot);
+        }
+    }
+    let prefix = "slot" + string(canvas.slot) + ".";
+
+    if input.action_pressed("save") {
+        // A string of digits, one per cell, holds the picture. Keys named
+        // after the slot keep three pictures side by side in one save.
+        let text = "";
+        for v in canvas.cells {
+            text = text + string(v);
+        }
+        save.set_string(prefix + "cells", text);
+        save.set_float(prefix + "seconds", canvas.painted);
+        save.set_int(prefix + "saves", save.get_int(prefix + "saves", 0) + 1);
+        // set_* changes the data in memory; flush writes it to disk.
+        save.flush();
+        canvas.message = "Saved to slot " + string(canvas.slot) + ". " + describe(save, canvas.slot);
+    }
+
+    if input.action_pressed("load") {
+        if !save.has(prefix + "cells") {
+            canvas.message = "Slot " + string(canvas.slot) + " is empty.";
+        } else {
+            let text = save.get_string(prefix + "cells", "");
+            for i in range(int(min(float(text.len()), float(canvas.cells.len())))) {
+                if text[i..i + 1].parse<int>() is Some(v) {
+                    canvas.cells[i] = v;
+                }
+            }
+            canvas.painted = save.get_float(prefix + "seconds", 0.0);
+            canvas.message = "Loaded slot " + string(canvas.slot) + ".";
+        }
+    }
+
+    if input.action_pressed("clear") {
+        for i in range(canvas.cells.len()) {
+            canvas.cells[i] = 0;
+        }
+        canvas.painted = 0.0;
+        canvas.message = "Cleared the canvas. Saved slots are unchanged.";
+    }
+
+    if input.action_pressed("erase") {
+        save.erase(prefix + "cells");
+        save.erase(prefix + "seconds");
+        save.erase(prefix + "saves");
+        save.flush();
+        canvas.message = "Erased slot " + string(canvas.slot) + ".";
+    }
+}
+// ANCHOR_END: files
+
+@system(after: [files])
+fn status(_: Status, text: Text, canvas: Canvas) {
+    text.value = "Slot " + string(canvas.slot) + "    " + canvas.message;
+}
+
+// ---- Helpers ----
+
+fn place(x: int, y: int) -> Transform {
+    return at(LEFT + (float(x) + 0.5) * CELL, TOP + (float(y) + 0.5) * CELL);
+}
+
+fn paint_color(v: int) -> Color {
+    let palette = [rgb(40, 42, 54), rgb(240, 90, 90), rgb(250, 200, 70), rgb(90, 200, 120), rgb(90, 150, 240)];
+    return palette[v];
+}
+
+// What a slot holds, from the keys it has.
+fn describe(save: Save, slot: int) -> string {
+    let prefix = "slot" + string(slot) + ".";
+    if !save.has(prefix + "cells") {
+        return "Slot " + string(slot) + " is empty.";
+    }
+    let seconds = int(save.get_float(prefix + "seconds", 0.0));
+    return "Slot " + string(slot) + ": saved " + string(save.get_int(prefix + "saves", 0)) + " times, "
+        + string(seconds) + " s of painting.";
+}

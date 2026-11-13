@@ -1,0 +1,266 @@
+// Snake: eat the apples and do not run into the walls or yourself.
+//
+// The arrow keys or WASD steer. A repeating timer moves the snake one cell
+// at a time; each apple makes it one cell longer and a little faster. After
+// a crash, Space sets up a new game, and an arrow key starts it.
+//
+// Shows: a game on a grid with no physics, a repeating Timer, a random
+// generator from the game's seed, entities spawned and despawned as the
+// snake moves, a per-entity system that follows a resource, game states,
+// settings from drift.toml and the best score in save data.
+
+import "drift" { * };
+
+const CELL: float = 24.0;   // pixels per grid cell
+const COLS: int = 24;
+const ROWS: int = 16;
+const TOP: float = 40.0;    // the score strip above the board
+
+const HEAD: Color = Color { r: 0.55, g: 0.95, b: 0.45, a: 1.0 };
+const BODY: Color = Color { r: 0.25, g: 0.7, b: 0.3, a: 1.0 };
+
+// ---- State, components and resources ----
+
+// The phases of the game. The first variant is where it starts: the snake
+// waits in Ready until the first arrow key.
+@state
+enum Phase { Ready, Playing, Over }
+
+@component struct Part {}         // one cell of the snake
+@component struct Apple {}
+@component struct ScoreLabel {}
+@component struct Banner {}       // the "game over" text
+
+// Read from [snake] in drift.toml.
+@settings(section: "snake")
+struct Tuning { step_seconds: float = 0.14, speedup: float = 0.96 }
+
+// The whole game lives in one resource: the snake's cells from tail to
+// head, the entity that draws each cell, and the score.
+@resource
+struct Snake {
+    cells: Cell[] = [],
+    parts: Entity[] = [],
+    dir: Cell = Cell { x: 1, y: 0 },
+    next_dir: Cell = Cell { x: 1, y: 0 },
+    grow: int = 0,
+    step: Timer = repeating_timer(0.14),
+    apple: Cell = Cell { .. },
+    score: int = 0,
+    best: int = 0,
+    rng: Rng = Rng { .. },
+}
+
+// ---- Startup ----
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, snake: Snake, random: Random, save: Save) {
+    // A generator from the game's seed ([random] in drift.toml), so a seed
+    // replays the same apples.
+    snake.rng = random.stream("apples");
+    snake.best = save.get_int("best", 0);
+
+    // The board, and a checker pattern so the cells are easy to see.
+    let w = float(COLS) * CELL;
+    let h = float(ROWS) * CELL;
+    cmd.spawn([at(w * 0.5, TOP + h * 0.5), Rectangle { size: vec2(w, h), color: rgb(20, 28, 20), z: -2.0, .. }]);
+    for y in range(ROWS) {
+        for x in range(COLS) {
+            if (x + y) % 2 == 0 {
+                cmd.spawn([place(cell(x, y)), Rectangle { size: vec2(CELL, CELL), color: rgb(24, 34, 24), z: -1.0, .. }]);
+            }
+        }
+    }
+
+    // The apple. Its position follows Snake.apple; see `show_apple`.
+    cmd.spawn([
+        place(snake.apple),
+        Circle { radius: CELL * 0.38, color: rgb(235, 70, 60), .. },
+        tween().scale_to(vec2(1.15, 1.15), 0.4, Ease::InOutSine).yoyo(-1),
+        Apple {},
+    ]);
+
+    // The HUD: hud_layer() draws in screen pixels, on top of everything.
+    cmd.spawn([at(12.0, 8.0), Text { size: 24.0, layer: hud_layer(), .. }, ScoreLabel {}]);
+    cmd.spawn([
+        at(w * 0.5, TOP + h * 0.5),
+        Text { size: 32.0, align: Align::Center,
+               valign: VAlign::Middle, outline: 2.0, layer: hud_layer(), .. },
+        Banner {},
+    ]);
+}
+
+// ---- A new game ----
+
+// Runs every time the state becomes Ready, including the first frame.
+@system(on_enter: Phase::Ready)
+fn new_game(cmd: Commands, snake: Snake, tuning: Tuning) {
+    for e in snake.parts {
+        cmd.despawn(e);
+    }
+    snake.cells = [];
+    snake.parts = [];
+    snake.dir = cell(1, 0);
+    snake.next_dir = cell(1, 0);
+    snake.grow = 0;
+    snake.score = 0;
+    snake.step = repeating_timer(tuning.step_seconds);
+    for i in range(3) {
+        add_head(cmd, snake, cell(6 + i, ROWS / 2));
+    }
+    move_apple(snake);
+}
+
+// ---- Playing ----
+
+// ANCHOR: steer
+// Remembers the last direction pressed. The snake turns on its next step,
+// and never straight back into itself. The first press starts the game.
+@system(in_state: [Phase::Ready, Phase::Playing])
+fn steer(input: Input, snake: Snake, phase: State<Phase>) {
+    let want = snake.next_dir;
+    if input.action_pressed("up") {
+        want = cell(0, -1);
+    } else if input.action_pressed("down") {
+        want = cell(0, 1);
+    } else if input.action_pressed("left") {
+        want = cell(-1, 0);
+    } else if input.action_pressed("right") {
+        want = cell(1, 0);
+    }
+    if want.x != -snake.dir.x || want.y != -snake.dir.y {
+        snake.next_dir = want;
+    }
+    if phase.now == Phase::Ready && (want.x != snake.dir.x || want.y != snake.dir.y || input.action_pressed("right")) {
+        phase.set(Phase::Playing);
+    }
+}
+// ANCHOR_END: steer
+
+// ANCHOR: advance
+// One step of the snake each time the timer finishes.
+@system(in_state: [Phase::Playing], after: [steer])
+fn advance(cmd: Commands, time: Time, snake: Snake, tuning: Tuning, phase: State<Phase>) {
+    if snake.step.tick(time.dt) == 0 {
+        return;
+    }
+    snake.dir = snake.next_dir;
+    let head = snake.cells[snake.cells.len() - 1];
+    let next = cell(head.x + snake.dir.x, head.y + snake.dir.y);
+
+    // The tail moves away this step unless the snake is growing, so the
+    // head may take its cell.
+    let first = 0;
+    if snake.grow == 0 {
+        first = 1;
+    }
+    if next.x < 0 || next.y < 0 || next.x >= COLS || next.y >= ROWS || occupied(snake, next, first) {
+        phase.set(Phase::Over);
+        return;
+    }
+
+    add_head(cmd, snake, next);
+
+    if same(next, snake.apple) {
+        snake.score += 1;
+        snake.grow += 1;
+        snake.step = repeating_timer(snake.step.seconds * tuning.speedup);
+        move_apple(snake);
+    }
+    if snake.grow > 0 {
+        snake.grow -= 1;
+    } else {
+        cmd.despawn(snake.parts[0]);
+        snake.parts.remove(0);
+        snake.cells.remove(0);
+    }
+}
+// ANCHOR_END: advance
+
+// Runs once per Apple entity every frame and puts it on its cell.
+@system
+fn show_apple(_: Apple, t: Transform, snake: Snake) {
+    t.position = place(snake.apple).position;
+}
+
+// ---- Game over ----
+
+@system(on_enter: Phase::Over)
+fn crash(snake: Snake, effects: Effects, save: Save) {
+    effects.flash(rgb(255, 80, 60), 0.3);
+    if snake.score > snake.best {
+        snake.best = snake.score;
+        save.set_int("best", snake.best);
+        save.flush();
+    }
+}
+
+fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
+
+@system(in_state: [Phase::Over], run_if: [restart_pressed])
+fn restart(phase: State<Phase>) {
+    phase.set(Phase::Ready);
+}
+
+// ---- HUD ----
+
+@system
+fn score_label(_: ScoreLabel, text: Text, snake: Snake) {
+    text.value = "Apples " + string(snake.score) + "    Best " + string(snake.best);
+}
+
+@system
+fn banner(_: Banner, text: Text, phase: State<Phase>) {
+    text.value = match phase.now {
+        Phase::Ready => "Arrow keys to start",
+        Phase::Playing => "",
+        Phase::Over => "Game over\nSpace to play again",
+    };
+}
+
+// ---- Helpers ----
+
+// The Transform at the middle of a cell.
+fn place(c: Cell) -> Transform {
+    return at((float(c.x) + 0.5) * CELL, TOP + (float(c.y) + 0.5) * CELL);
+}
+
+fn same(a: Cell, b: Cell) -> bool => a.x == b.x && a.y == b.y;
+
+// Whether the snake covers `c`, skipping its first `from` cells.
+fn occupied(snake: Snake, c: Cell, from: int) -> bool {
+    for i in range(from, snake.cells.len()) {
+        if same(snake.cells[i], c) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn part_shape(c: Color) -> Rectangle {
+    return Rectangle { size: vec2(CELL - 2.0, CELL - 2.0), color: c, corner_radius: 5.0, .. };
+}
+
+// A new head on cell `c`. The old head turns the body's color: inserting
+// a component replaces the one the entity has.
+fn add_head(cmd: Commands, snake: Snake, c: Cell) {
+    if snake.parts.len() > 0 {
+        cmd.insert(snake.parts[snake.parts.len() - 1], part_shape(BODY));
+    }
+    let e = cmd.spawn([
+        place(c),
+        part_shape(HEAD),
+        Part {},
+    ]);
+    snake.cells.push(c);
+    snake.parts.push(e);
+}
+
+// A random free cell for the apple.
+fn move_apple(snake: Snake) {
+    let c = cell(snake.rng.below(COLS), snake.rng.below(ROWS));
+    while occupied(snake, c, 0) {
+        c = cell(snake.rng.below(COLS), snake.rng.below(ROWS));
+    }
+    snake.apple = c;
+}

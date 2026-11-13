@@ -1,0 +1,20 @@
+[project]
+name = "Save and Load"
+# With name, decides where save data lives on the desktop:
+# <user data>/Drift Examples/Save and Load/save.json
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 640
+height = 480
+
+[render]
+clear_color = [0.09, 0.09, 0.11]
+
+[input]
+paint = ["mouse:Left", "key:Space", "button:South"]
+save = ["key:S"]
+load = ["key:L"]
+clear = ["key:C"]
+erase = ["key:Delete", "key:X"]

@@ -1,0 +1,15 @@
+[project]
+name = "Effects Showcase"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 960
+height = 540
+
+[render]
+clear_color = [0.03, 0.03, 0.06]
+
+[input]
+burst = ["mouse:Left"]
+flash = ["key:Space"]

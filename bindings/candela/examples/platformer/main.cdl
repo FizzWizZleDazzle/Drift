@@ -1,0 +1,333 @@
+// Platformer: run, jump, collect the coins and reach the flag.
+//
+// Left and Right (or A and D) run, Space, Up or W jumps; let go early for a
+// short hop. Spikes send you back to the start. R starts over.
+//
+// Shows: a level written as text and built into merged colliders, a
+// dynamic body with fixed rotation as the player, gravity from drift.toml,
+// ground detection from Contact and ContactEnd events, sensors for coins
+// and the goal, game states, a run timer and the best time in save data.
+
+import "drift" { * };
+
+const TILE: float = 24.0;
+const PLAYER_HALF: Vec2 = Vec2 { x: 9.0, y: 11.0 };
+
+// ANCHOR: level
+// The level, one string per row of tiles:
+//   #  ground     ^  spikes     o  coin     F  flag     P  start
+fn level_rows() -> string[] {
+    return [
+        "................................",
+        "................................",
+        "................................",
+        "................................",
+        "...........................o..F.",
+        "........................########",
+        "...o.o.o........................",
+        "..#######.............o.o.......",
+        "....................####........",
+        "............o.o.................",
+        "...........#####....o.o.........",
+        "...................#####........",
+        "......o.o.......................",
+        ".....#####..............o.o.o...",
+        ".......................#######..",
+        "..P.............................",
+        "#############...########...#####",
+        "#############^^^########^^^#####",
+    ];
+}
+// ANCHOR_END: level
+
+// ---- State, components and resources ----
+
+@state
+enum Phase { Playing, Won }
+
+// `standing_on` lists the ground entities under the player's feet; the
+// player may jump while it is not empty.
+@component(requires: [Velocity])
+struct Player { standing_on: Entity[] = [] }
+
+@component struct Ground {}
+@component struct Spike {}
+@component struct Coin {}
+@component struct Goal {}
+@component struct Hud {}
+@component struct Banner {}
+
+@settings(section: "platformer")
+struct Tuning { run_speed: float = 230.0, jump_speed: float = 390.0 }
+
+@resource
+struct Run {
+    start: Vec2 = Vec2 { .. },
+    coins: int = 0,
+    total: int = 0,
+    began: float = 0.0,
+    time: float = 0.0,
+    best: float = 0.0,
+}
+
+// ---- Building the level ----
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input, run: Run, save: Save) {
+    // A horizontal axis from the arrow keys and A/D. Only its x is used.
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+    input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+    run.best = save.get_float("best_time", 0.0);
+
+    let rows = level_rows();
+    for y in range(rows.len()) {
+        let row = rows[y];
+        // Ground: one wide collider per run of '#', instead of one per
+        // tile. Fewer bodies, and nothing for the player to snag on
+        // between tiles.
+        let x = 0;
+        while x < row.len() {
+            if row[x] == "#" {
+                let end = x;
+                while end < row.len() && row[end] == "#" {
+                    end += 1;
+                }
+                // Grass only where nothing is above.
+                let grass = y == 0 || rows[y - 1][x] != "#";
+                ground(cmd, x, end, y, grass);
+                x = end;
+            } else {
+                x += 1;
+            }
+        }
+        for x in range(row.len()) {
+            let c = row[x];
+            let pos = vec2((float(x) + 0.5) * TILE, (float(y) + 0.5) * TILE);
+            if c == "^" {
+                // Solid, so the player lands on them and the Contact
+                // handler below sends it back.
+                cmd.spawn([
+                    Transform { position: pos + vec2(0.0, 4.0), rotation: 0.785, .. },
+                    Rectangle { size: vec2(14.0, 14.0), color: rgb(220, 60, 60), .. },
+                    BoxCollider { half_size: vec2(12.0, 8.0), .. },
+                    Spike {},
+                ]);
+            } else if c == "o" {
+                run.total += 1;
+            } else if c == "F" {
+                cmd.spawn([at(pos.x, pos.y - 12.0), Rectangle { size: vec2(4.0, 48.0), color: rgb(240, 240, 240), .. }]);
+                cmd.spawn([
+                    at(pos.x + 12.0, pos.y - 26.0),
+                    Rectangle { size: vec2(20.0, 14.0), color: rgb(90, 220, 110), .. },
+                    BoxCollider { half_size: vec2(14.0, 24.0), offset: vec2(-12.0, 14.0), sensor: true, .. },
+                    Goal {},
+                ]);
+            } else if c == "P" {
+                run.start = pos;
+            }
+        }
+    }
+
+    cmd.spawn([
+        Transform { position: run.start, .. },
+        Rectangle { size: PLAYER_HALF * 2.0, color: rgb(255, 230, 120), corner_radius: 4.0, z: 5.0, .. },
+        RigidBody { fixed_rotation: true, .. },
+        BoxCollider { half_size: PLAYER_HALF, friction: 0.0, .. },
+        Player { .. },
+    ]);
+    cmd.spawn([at(10.0, 6.0), Text { size: 20.0, outline: 2.0, layer: hud_layer(), .. }, Hud {}]);
+    cmd.spawn([
+        at(384.0, 200.0),
+        Text { size: 30.0, align: Align::Center, valign: VAlign::Middle, outline: 3.0, layer: hud_layer(), .. },
+        Banner {},
+    ]);
+}
+
+// A new run: on entering Playing (the first frame included), and on R.
+@system(on_enter: Phase::Playing)
+fn start_run(cmd: Commands, run: Run, time: Time, coins: (Entity, Coin)[],
+             players: (Player, Transform, Velocity)[]) {
+    new_run(cmd, run, time, coins, players);
+}
+
+fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
+
+@system(in_state: [Phase::Playing], run_if: [restart_pressed])
+fn restart(cmd: Commands, run: Run, time: Time, coins: (Entity, Coin)[],
+           players: (Player, Transform, Velocity)[]) {
+    new_run(cmd, run, time, coins, players);
+}
+
+// Puts the player at the start and the coins back.
+fn new_run(cmd: Commands, run: Run, time: Time, coins: (Entity, Coin)[],
+           players: (Player, Transform, Velocity)[]) {
+    for (e, _) in coins {
+        cmd.despawn(e);
+    }
+    let rows = level_rows();
+    for y in range(rows.len()) {
+        for x in range(rows[y].len()) {
+            if rows[y][x] == "o" {
+                cmd.spawn([
+                    at((float(x) + 0.5) * TILE, (float(y) + 0.5) * TILE),
+                    Circle { radius: 7.0, color: rgb(255, 210, 50), outline: 0.0, .. },
+                    CircleCollider { radius: 8.0, sensor: true, .. },
+                    tween().scale_to(vec2(1.25, 1.25), 0.4, Ease::InOutSine).yoyo(-1),
+                    Coin {},
+                ]);
+            }
+        }
+    }
+    for (_, t, v) in players {
+        t.position = run.start;
+        v.linear = vec2(0.0, 0.0);
+    }
+    run.coins = 0;
+    run.began = time.elapsed;
+}
+
+// ---- Running and jumping ----
+
+// ANCHOR: jump
+@system(in_state: [Phase::Playing])
+fn run_and_jump(player: Player, v: Velocity, input: Input, tuning: Tuning) {
+    // Writing Velocity sets the body's speed directly; gravity still pulls.
+    v.linear = vec2(input.axis2d("move").x * tuning.run_speed, v.linear.y);
+    if input.action_pressed("jump") && player.standing_on.len() > 0 {
+        v.linear = vec2(v.linear.x, -tuning.jump_speed);
+    }
+    // Letting go of jump on the way up cuts the jump short.
+    if input.action_released("jump") && v.linear.y < 0.0 {
+        v.linear = vec2(v.linear.x, v.linear.y * 0.45);
+    }
+}
+// ANCHOR_END: jump
+
+// ANCHOR: ground
+// Runs once for each new contact between the player and ground. The
+// normal points from the player to the ground, so ground under the feet has
+// a normal pointing down; walls and ceilings do not count as standing.
+@system
+fn land(hit: Contact<Player, Ground>, players: Lookup<Player>) {
+    if hit.normal.y > 0.5 {
+        if players.get(hit.a) is Some(p) {
+            p.standing_on.push(hit.b);
+        }
+    }
+}
+
+// The matching end event: the player left that piece of ground.
+@system
+fn leave(hit: ContactEnd<Player, Ground>, players: (Player, Transform)[]) {
+    for (p, _) in players {
+        let kept: Entity[] = [];
+        for e in p.standing_on {
+            if e.id != hit.b.id {
+                kept.push(e);
+            }
+        }
+        p.standing_on = kept;
+    }
+}
+// ANCHOR_END: ground
+
+// ---- Hazards, coins and the goal ----
+
+@system(in_state: [Phase::Playing])
+fn spiked(_: Contact<Player, Spike>, players: (Player, Transform, Velocity)[], run: Run, effects: Effects) {
+    for (_, t, v) in players {
+        t.position = run.start;   // writing a body's Transform teleports it
+        v.linear = vec2(0.0, 0.0);
+    }
+    effects.flash(rgb(255, 50, 50), 0.25);
+}
+
+// Falling off the world counts as a spike too.
+@system(in_state: [Phase::Playing])
+fn fell(_: Player, t: Transform, v: Velocity, run: Run) {
+    if t.position.y > 520.0 {
+        t.position = run.start;
+        v.linear = vec2(0.0, 0.0);
+    }
+}
+
+@system
+fn collect(hit: Overlap<Player, Coin>, places: Lookup<Transform>, cmd: Commands, effects: Effects, run: Run) {
+    if places.get(hit.b) is Some(t) {
+        effects.burst(t.position, ParticleEmitter {
+            color_start: rgb(255, 240, 140), color_end: rgba(255, 180, 40, 0),
+            speed_min: 40.0, speed_max: 120.0, lifetime_min: 0.2, lifetime_max: 0.4, size_start: 4.0, ..
+        }, 12);
+    }
+    cmd.despawn(hit.b);
+    run.coins += 1;
+}
+
+@system(in_state: [Phase::Playing])
+fn reach_goal(_: Overlap<Player, Goal>, run: Run, save: Save, phase: State<Phase>) {
+    if run.best == 0.0 || run.time < run.best {
+        run.best = run.time;
+        save.set_float("best_time", run.best);
+        save.flush();
+    }
+    phase.set(Phase::Won);
+}
+
+@system(on_enter: Phase::Won)
+fn stop(_: Player, v: Velocity, effects: Effects) {
+    v.linear = vec2(0.0, 0.0);
+    effects.flash(rgb(255, 255, 255), 0.4);
+}
+
+@system(in_state: [Phase::Won])
+fn play_again(phase: State<Phase>, input: Input) {
+    if input.action_pressed("restart") || input.action_pressed("jump") {
+        phase.set(Phase::Playing);
+    }
+}
+
+// ---- HUD ----
+
+@system
+fn hud(_: Hud, text: Text, run: Run, time: Time, phase: State<Phase>) {
+    if phase.now == Phase::Playing {
+        run.time = time.elapsed - run.began;
+    }
+    let best = "-";
+    if run.best > 0.0 {
+        best = seconds(run.best);
+    }
+    text.value = "Coins " + string(run.coins) + "/" + string(run.total) + "    Time " + seconds(run.time)
+        + "    Best " + best;
+}
+
+@system
+fn banner(_: Banner, text: Text, phase: State<Phase>) {
+    text.visible = phase.now == Phase::Won;
+    text.value = "You made it!\nJump to run again";
+}
+
+// ---- Helpers ----
+
+// One run of ground tiles, from column `from` up to `to`, in row `y`, with
+// a strip of grass on top when `grass` is set.
+fn ground(cmd: Commands, from: int, to: int, y: int, grass: bool) {
+    let w = float(to - from) * TILE;
+    let center = vec2(float(from) * TILE + w * 0.5, (float(y) + 0.5) * TILE);
+    cmd.spawn([
+        Transform { position: center, .. },
+        Rectangle { size: vec2(w, TILE), color: rgb(110, 72, 50), .. },
+        BoxCollider { half_size: vec2(w * 0.5, TILE * 0.5), friction: 0.0, .. },
+        Ground {},
+    ]);
+    if grass {
+        cmd.spawn([at(center.x, center.y - TILE * 0.5 + 3.0), Rectangle { size: vec2(w, 6.0), color: rgb(90, 190, 80), z: 1.0, .. }]);
+    }
+}
+
+// Seconds with one decimal, such as "12.3".
+fn seconds(s: float) -> string {
+    let tenths = int((s * 10.0).round());
+    return string(tenths / 10) + "." + string(tenths % 10);
+}

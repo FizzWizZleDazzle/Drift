@@ -1,0 +1,274 @@
+// Top-Down Shooter: survive the swarm.
+//
+// WASD or the arrow keys move, the mouse aims, and the left button or Space
+// fires. Enemies come in from the edges, faster as time goes on; big ones
+// take three hits. Five hits and the run is over; R starts again.
+//
+// Shows: aiming at the mouse, a fire-rate Cooldown in a component, bullets
+// as kinematic sensors with a Lifetime, enemies that steer toward the
+// player every frame, sensor overlaps and contacts as events, a particle
+// emitter switched on and off, bursts and flashes, states and settings.
+
+import "drift" { * };
+
+const W: float = 800.0;
+const H: float = 480.0;
+
+// ---- State, components and resources ----
+
+@state
+enum Phase { Playing, Over }
+
+// `gun` limits the fire rate: a Cooldown is ready, used, then ready again.
+@component(requires: [Velocity])
+struct Player { hp: int = 5, gun: Cooldown = cooldown(0.12) }
+
+@component(requires: [Velocity])
+struct Enemy { hp: int = 1, speed: float = 90.0 }
+
+@component struct Bullet {}
+@component struct Hud {}
+@component struct Banner {}
+
+@settings(section: "shooter")
+struct Tuning {
+    player_speed: float = 220.0,
+    bullet_speed: float = 390.0,
+    fire_every: float = 0.12,
+    enemy_speed: float = 90.0,
+    spawn_every: float = 1.2,
+}
+
+@resource
+struct Game {
+    score: int = 0,
+    best: int = 0,
+    spawn: Timer = repeating_timer(1.2),
+    elapsed: float = 0.0,
+    rng: Rng = Rng { .. },
+}
+
+// ---- Startup ----
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input, game: Game, random: Random, save: Save) {
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+    game.rng = random.stream("enemies");
+    game.best = save.get_int("best", 0);
+
+    // A dotted floor, so movement is easy to see.
+    for i in range(80) {
+        let p = game.rng.inside_rect(rect(0.0, 0.0, W, H));
+        cmd.spawn([at(p.x, p.y), Circle { radius: 1.5, color: rgba(255, 255, 255, 40), z: -5.0, .. }]);
+    }
+
+    cmd.spawn([at(12.0, 8.0), Text { size: 20.0, layer: hud_layer(), .. }, Hud {}]);
+    cmd.spawn([
+        at(W * 0.5, H * 0.5),
+        Text { value: "Overrun!\nR to try again", size: 34.0, align: Align::Center, valign: VAlign::Middle,
+               outline: 3.0, layer: hud_layer(), visible: false, .. },
+        Banner {},
+    ]);
+}
+
+// A new run: the first frame (Playing is the first state) and every R.
+@system(on_enter: Phase::Playing)
+fn new_run(cmd: Commands, game: Game, tuning: Tuning, enemies: (Entity, Enemy)[], players: (Entity, Player)[]) {
+    for (e, _) in enemies {
+        cmd.despawn(e);
+    }
+    for (e, _) in players {
+        cmd.despawn(e);
+    }
+    game.score = 0;
+    game.elapsed = 0.0;
+    game.spawn = repeating_timer(tuning.spawn_every);
+    cmd.spawn([
+        at(W * 0.5, H * 0.5),
+        Rectangle { size: vec2(26.0, 16.0), color: rgb(120, 200, 255), corner_radius: 4.0, z: 2.0, .. },
+        RigidBody { fixed_rotation: true, linear_damping: 0.0, .. },
+        CircleCollider { radius: 10.0, friction: 0.0, .. },
+        // Exhaust: on while the player moves; see `fly`.
+        ParticleEmitter {
+            rate: 60.0, lifetime_min: 0.15, lifetime_max: 0.3, speed_min: 10.0, speed_max: 30.0,
+            size_start: 5.0, size_end: 0.0, color_start: rgb(120, 200, 255), color_end: rgba(60, 120, 255, 0),
+            blend: Blend::Additive, z: 1.0, playing: false, ..
+        },
+        Player { gun: cooldown(tuning.fire_every), .. },
+    ]);
+}
+
+fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
+
+@system(in_state: [Phase::Over], run_if: [restart_pressed])
+fn restart(phase: State<Phase>) {
+    phase.set(Phase::Playing);
+}
+
+// ---- The player ----
+
+// Moves, faces the mouse, and turns the exhaust on while moving.
+@system(in_state: [Phase::Playing])
+fn fly(player: Player, t: Transform, v: Velocity, emitter: ParticleEmitter, input: Input, tuning: Tuning) {
+    let dir = input.axis2d("move");
+    // Stay on the screen: no velocity toward an edge the player is at.
+    if (dir.x < 0.0 && t.position.x < 12.0) || (dir.x > 0.0 && t.position.x > W - 12.0) {
+        dir = vec2(0.0, dir.y);
+    }
+    if (dir.y < 0.0 && t.position.y < 12.0) || (dir.y > 0.0 && t.position.y > H - 12.0) {
+        dir = vec2(dir.x, 0.0);
+    }
+    v.linear = dir * tuning.player_speed;
+    emitter.playing = dir.length() > 0.0;
+    t.rotation = (input.mouse_world() - t.position).angle();
+}
+
+// ANCHOR: shoot
+// Fires while the button is held, as often as the cooldown allows.
+@system(in_state: [Phase::Playing])
+fn shoot(player: Player, t: Transform, input: Input, time: Time, tuning: Tuning, cmd: Commands) {
+    player.gun.tick(time.dt);
+    if !input.action_held("fire") || !player.gun.try_use() {
+        return;
+    }
+    let dir = (input.mouse_world() - t.position).normalized();
+    if dir.length() == 0.0 {
+        dir = vec2(1.0, 0.0);
+    }
+    cmd.spawn([
+        Transform { position: t.position + dir * 16.0, .. },
+        Circle { radius: 3.5, color: rgb(255, 240, 160), z: 1.0, .. },
+        // Kinematic: moved by its Velocity, not pushed by anything. As a
+        // sensor it reports overlaps instead of bouncing.
+        RigidBody { kind: BodyKind::Kinematic, .. },
+        CircleCollider { radius: 4.0, sensor: true, .. },
+        Velocity { linear: dir * tuning.bullet_speed, .. },
+        Lifetime { seconds: 1.4 },
+        Bullet {},
+    ]);
+}
+// ANCHOR_END: shoot
+
+// ---- Enemies ----
+
+@system(in_state: [Phase::Playing])
+fn spawn_enemies(cmd: Commands, time: Time, game: Game, tuning: Tuning) {
+    game.elapsed += time.dt;
+    for i in range(game.spawn.tick(time.dt)) {
+        // Somewhere on the edge of the screen.
+        let side = game.rng.below(4);
+        let p = vec2(game.rng.range_float(0.0, W), -20.0);
+        if side == 1 {
+            p = vec2(game.rng.range_float(0.0, W), H + 20.0);
+        } else if side == 2 {
+            p = vec2(-20.0, game.rng.range_float(0.0, H));
+        } else if side == 3 {
+            p = vec2(W + 20.0, game.rng.range_float(0.0, H));
+        }
+        let big = game.rng.chance(0.2);
+        let radius = 11.0;
+        let hp = 1;
+        let color = rgb(240, 90, 90);
+        if big {
+            radius = 18.0;
+            hp = 3;
+            color = rgb(200, 90, 240);
+        }
+        cmd.spawn([
+            Transform { position: p, .. },
+            Circle { radius: radius, color: color, .. },
+            RigidBody { fixed_rotation: true, .. },
+            CircleCollider { radius: radius, friction: 0.0, .. },
+            Enemy { hp: hp, speed: tuning.enemy_speed * game.rng.range_float(0.8, 1.2) },
+        ]);
+    }
+    // Spawns come faster as the run goes on.
+    let every = max(0.25, tuning.spawn_every - game.elapsed * 0.01);
+    if game.spawn.seconds != every {
+        game.spawn.seconds = every;
+    }
+}
+
+// ANCHOR: chase
+// Each enemy heads for the player. A system that takes one component runs
+// once per entity that has them all.
+@system(in_state: [Phase::Playing])
+fn chase(enemy: Enemy, t: Transform, v: Velocity, players: (Player, Transform)[]) {
+    for (_, target) in players {
+        v.linear = (target.position - t.position).normalized() * enemy.speed;
+    }
+}
+// ANCHOR_END: chase
+
+// ---- Hits ----
+
+// ANCHOR: hits
+// A bullet's sensor overlapped an enemy. Runs once per overlap.
+@system(in_state: [Phase::Playing])
+fn bullet_hits(hit: Overlap<Bullet, Enemy>, enemies: Lookup<Enemy>, places: Lookup<Transform>,
+               cmd: Commands, effects: Effects, game: Game) {
+    cmd.despawn(hit.a);
+    if enemies.get(hit.b) is Some(enemy) {
+        enemy.hp -= 1;
+        if enemy.hp <= 0 {
+            if places.get(hit.b) is Some(t) {
+                effects.burst(t.position, ParticleEmitter {
+                    speed_min: 60.0, speed_max: 200.0, lifetime_min: 0.2, lifetime_max: 0.6,
+                    size_start: 6.0, size_end: 0.0, color_start: rgb(255, 200, 120),
+                    color_end: rgba(255, 60, 40, 0), blend: Blend::Additive, ..
+                }, 30);
+            }
+            cmd.despawn(hit.b);
+            game.score += 1;
+        }
+    }
+}
+// ANCHOR_END: hits
+
+// An enemy touched the player.
+@system(in_state: [Phase::Playing])
+fn player_hit(hit: Contact<Player, Enemy>, players: Lookup<Player>, cmd: Commands, effects: Effects,
+              phase: State<Phase>) {
+    effects.flash(rgb(255, 30, 30), 0.25);
+    cmd.despawn(hit.b);
+    if players.get(hit.a) is Some(p) {
+        p.hp -= 1;
+        if p.hp <= 0 {
+            phase.set(Phase::Over);
+        }
+    }
+}
+
+@system(on_enter: Phase::Over)
+fn game_over(game: Game, save: Save, players: (Player, Velocity, ParticleEmitter)[], enemies: (Enemy, Velocity)[]) {
+    for (_, v, emitter) in players {
+        v.linear = vec2(0.0, 0.0);
+        emitter.playing = false;
+    }
+    for (_, v) in enemies {
+        v.linear = vec2(0.0, 0.0);
+    }
+    if game.score > game.best {
+        game.best = game.score;
+        save.set_int("best", game.best);
+        save.flush();
+    }
+}
+
+// ---- HUD ----
+
+@system
+fn hud(_: Hud, text: Text, game: Game, players: (Entity, Player)[]) {
+    let hp = 0;
+    for (_, p) in players {
+        hp = p.hp;
+    }
+    text.value = "Score " + string(game.score) + "    Best " + string(game.best) + "    Hull " + "#".repeat(hp);
+}
+
+@system
+fn banner(_: Banner, text: Text, phase: State<Phase>) {
+    text.visible = phase.now == Phase::Over;
+}
