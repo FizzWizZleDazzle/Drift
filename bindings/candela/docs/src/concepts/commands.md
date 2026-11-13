@@ -30,6 +30,9 @@ Commands change the world's shape; assigning to a parameter changes the data the
 |--------|------|
 | `spawn(bundle) -> Entity` | Makes an entity with the components in the list. The id is valid at once: use it in later commands of the same system |
 | `spawn_child(parent, bundle) -> Entity` | The same, with its `Transform` relative to `parent` |
+| `set_parent(child, parent)` | Moves `child` under `parent`, keeping its `Transform`'s numbers, so they now count from the parent |
+| `set_parent_in_place(child, parent)` | Moves `child` under `parent` where it is on screen: its `Transform` is rewritten to match |
+| `detach(child)` | Makes `child` a root again, where it is on screen |
 | `insert(e, component)` | Adds a component, or replaces the one of its type |
 | `remove<T>(e)` | Takes a component off; nothing happens if `e` has none |
 | `despawn(e)` | Removes the entity and its children |

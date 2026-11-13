@@ -1,7 +1,7 @@
 #include <drift/Commands.hpp>
 #include <drift/EntityAllocator.hpp>
 #include <drift/World.hpp>
-#include <drift/components/Hierarchy.hpp>
+#include <drift/Hierarchy.hpp>
 
 #include <cstring>
 
@@ -69,22 +69,7 @@ void Commands::flush(World& world) {
                 break;
 
             case CommandEntry::Despawn:
-                if (world.isAlive(cmd.entity)) {
-                    // Recursively despawn children
-                    ComponentId childrenId = world.componentRegistry().getByName("Children");
-                    if (childrenId != 0) {
-                        const auto* ch = static_cast<const Children*>(
-                            world.getComponent(cmd.entity, childrenId));
-                        if (ch) {
-                            for (int ci = 0; ci < ch->count; ++ci) {
-                                if (world.isAlive(ch->ids[ci])) {
-                                    world.destroyEntity(ch->ids[ci]);
-                                }
-                            }
-                        }
-                    }
-                    world.destroyEntity(cmd.entity);
-                }
+                despawnRecursive(world, cmd.entity);
                 break;
 
             case CommandEntry::Insert:

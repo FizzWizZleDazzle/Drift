@@ -149,6 +149,7 @@ set(DRIFT_SOURCES
     src/ecs/World.cpp
     src/ecs/ScriptSystem.cpp
     src/ecs/Commands.cpp
+    src/ecs/Hierarchy.cpp
 
     # Render snapshot
     src/renderer/RenderSnapshot.cpp
@@ -441,7 +442,8 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
         DRIFT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     add_test(NAME audio COMMAND drift_audio_tests)
 
-    add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp tests/test_settings.cpp tests/test_procgen.cpp)
+    add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp tests/test_settings.cpp tests/test_procgen.cpp
+        tests/test_procanim.cpp)
     target_link_libraries(drift_tests PRIVATE drift)
     add_test(NAME drift_tests COMMAND drift_tests)
 
@@ -463,6 +465,11 @@ elseif(DRIFT_BUILD_TESTS)
     target_link_libraries(drift_procgen_tests PRIVATE drift)
     target_link_options(drift_procgen_tests PRIVATE -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
     add_test(NAME drift_procgen_tests COMMAND drift_procgen_tests)
+    # The hierarchy and procedural animation math, as the browser runs it.
+    add_executable(drift_procanim_tests tests/main.cpp tests/test_procanim.cpp)
+    target_link_libraries(drift_procanim_tests PRIVATE drift)
+    target_link_options(drift_procanim_tests PRIVATE -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
+    add_test(NAME drift_procanim_tests COMMAND drift_procanim_tests)
 endif()
 
 # ---------- Candela package ----------

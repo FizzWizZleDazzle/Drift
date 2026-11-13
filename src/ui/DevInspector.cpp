@@ -6,6 +6,7 @@
 #include <drift/AssetServer.hpp>
 #include <drift/Reflect.hpp>
 #include <drift/World.hpp>
+#include <drift/Hierarchy.hpp>
 #include <drift/components/GlobalTransform.hpp>
 #include <drift/components/Hierarchy.hpp>
 #include <drift/components/Name.hpp>
@@ -232,24 +233,6 @@ std::vector<EntityId> listEntities(World& world) {
     return out;
 }
 
-void despawnTree(World& world, EntityId e) {
-    ComponentId parentId = world.componentRegistry().get<Parent>();
-    ComponentId childrenId = world.componentRegistry().get<Children>();
-    if (const auto* p = world.get<Parent>(e, parentId)) {
-        if (auto* ch = world.getMut<Children>(p->entity, childrenId)) ch->remove(e);
-    }
-    std::vector<EntityId> stack{e};
-    while (!stack.empty()) {
-        EntityId cur = stack.back();
-        stack.pop_back();
-        if (!world.isAlive(cur)) continue;
-        if (const auto* ch = world.get<Children>(cur, childrenId)) {
-            for (int i = 0; i < ch->count; ++i) stack.push_back(ch->ids[i]);
-        }
-        world.destroyEntity(cur);
-    }
-}
-
 void drawTree(World& world, InspectorState& st, EntityId e,
               const std::unordered_map<EntityId, std::vector<EntityId>>& kids) {
     auto it = kids.find(e);
@@ -363,7 +346,7 @@ void drawInspector(App& app, InspectorState& st) {
     ImGui::SameLine();
     ImGui::BeginDisabled(st.selected == InvalidEntityId);
     if (ImGui::Button("Despawn")) {
-        despawnTree(world, st.selected);
+        despawnRecursive(world, st.selected);
         st.selected = InvalidEntityId;
     }
     ImGui::EndDisabled();

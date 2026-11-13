@@ -1177,6 +1177,13 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("map_read", vec![I, I], ai()),
         ("map_property", vec![I, S], S),
         ("map_destroy", vec![I], U),
+        // Hierarchy and procedural animation.
+        ("hier_parent", vec![I], I),
+        ("hier_children", vec![I], ai()),
+        ("hier_descendants", vec![I], ai()),
+        ("hier_world", vec![I], af()),
+        ("hier_to_world", vec![I, F, F], af()),
+        ("hier_to_local", vec![I, F, F], af()),
     ]
 }
 

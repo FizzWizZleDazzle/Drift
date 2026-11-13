@@ -9,8 +9,8 @@ Some fields are changed by the engine as well (marked *engine*). A system sees t
 | Component | Fields |
 |-----------|--------|
 | `Transform` | `position`, `rotation` (radians), `scale` (1, 1). Relative to the parent when the entity has one. *Engine*: physics, `Velocity`, behaviors and tweens move it. `at(x, y)` builds one at a position |
-| `GlobalTransform` | `position`, `rotation`, `scale` after every parent. Read-only; the engine computes it |
-| `Parent` | `entity`. Makes this entity's `Transform` relative to it; despawning the parent despawns the child |
+| `GlobalTransform` | `position`, `rotation`, `scale` after every parent, from the engine's current transforms. Assign to it to move the entity to that place in world space; the engine rewrites the local `Transform` to match |
+| `Parent` | `entity`, `keep_world` (false). Makes this entity's `Transform` relative to `entity`; despawning the parent despawns the child. With `keep_world`, the `Transform` is rewritten when the link is made so the entity stays where it is on screen. Inserting `Parent { entity: Entity {}, .. }` or removing `Parent` makes the entity a root again, where it is on screen. A parent holds up to 64 children |
 | `Name` | `value`. Shown in the inspector and kept in scene files |
 
 ## Drawing
@@ -19,7 +19,7 @@ An entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`.
 
 | Component | Fields |
 |-----------|--------|
-| `Sprite` | `image` (a `Texture`, from `Assets`), `frame` (part of the image as a `Rect`; zero size for all of it), `anchor` (0.5, 0.5: the point placed at the position), `color` (tint), `flip_x`, `flip_y`, `z`, `layer`, `visible`, `blend`, `material`. *Engine*: `frame` under an `Animator`, `color` under a tween |
+| `Sprite` | `image` (a `Texture`, from `Assets`), `frame` (part of the image as a `Rect`; zero size for all of it), `anchor` (0.5, 0.5: the point placed at the position, and the pivot it rotates and scales around), `color` (tint), `flip_x`, `flip_y`, `z`, `layer`, `visible`, `blend`, `material`. *Engine*: `frame` under an `Animator`, `color` under a tween |
 | `Rectangle` | `size`, `color`, `outline` (0 for filled), `corner_radius`, `anchor`, `z`, `layer`, `visible` |
 | `Circle` | `radius`, `color`, `outline`, `z`, `layer`, `visible` |
 | `Text` | `value`, `size`, `color`, `align`, `valign`, `wrap` (width, 0 for none), `line_spacing`, `outline`, `outline_color`, `shadow_offset` (zero for none), `shadow_color`, `rich_text` (inline color tags), `font`, `z`, `layer`, `visible`. Holds up to 511 bytes |

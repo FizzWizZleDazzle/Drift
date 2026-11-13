@@ -4,7 +4,7 @@
 
 namespace drift {
 
-static constexpr int MaxChildren = 16;
+static constexpr int MaxChildren = 64;
 
 struct Parent {
     EntityId entity = InvalidEntityId;

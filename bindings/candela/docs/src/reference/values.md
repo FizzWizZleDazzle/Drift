@@ -6,7 +6,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 
 | Type | Fields and methods |
 |------|--------------------|
-| `Vec2` | `x`, `y`. `a + b`, `a - b`, `-a`, `a * s`, `a / s` with a float `s`; `dot`, `length`, `distance`, `normalized`, `lerp(o, t)`, `angle()`, `rotated(radians)`. Built with `vec2(x, y)` |
+| `Vec2` | `x`, `y`. `a + b`, `a - b`, `-a`, `a * s`, `a / s` with a float `s`; `dot`, `length`, `length_squared`, `distance`, `normalized`, `lerp(o, t)`, `angle()` (radians from +x toward +y), `rotated(radians)`, `perp()` (a quarter turn), `clamp_length(max)`. Built with `vec2(x, y)`, or `from_angle(radians)` for a unit vector |
 | `Rect` | `x`, `y`, `w`, `h` (top-left and size). `contains(p)`, `overlaps(r)`, `center()`. Built with `rect(x, y, w, h)` |
 | `Color` | `r`, `g`, `b`, `a`, from 0.0 to 1.0. `alpha(a)` returns a copy with a new alpha, `lerp(o, t)` blends. Built with `rgb(r, g, b)` or `rgba(r, g, b, a)` from 0 to 255 |
 | `Entity` | An entity's id. Compare with `==`. `Entity {}` is no entity |
@@ -21,8 +21,10 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `Burst` | `time`, `count`, `cycles` (0 forever), `interval`: particles at once, for `ParticleEmitter.bursts` |
 | `PlayOptions` | `volume` (1), `pan` (-1 left to 1 right), `pitch` (1), `looping`, `bus` (the sfx bus when unset), `fade_in` (seconds), `priority` (higher keeps its voice when all are busy). For `Sound.play_with` |
 | `Timer`, `Cooldown` | See [Timers and Save Data](../guides/timers-and-saves.md) |
-| `Texture`, `Sound`, `Font`, `Spritesheet`, `Map`, `Scene` | Assets from `Assets` |
 | `Image` | Pixels to change from code; see [Image](resources.md#image) |
+| `Spritesheet` | A texture cut into equal frames: `texture`, `frame_w`, `frame_h`, `columns`, `rows`. `frame(col, row)`, `frame_at(i)` (left to right, top to bottom from 0), `frames(first, count)`, `count()`. Built with `assets.spritesheet(texture, frame_w, frame_h)` |
+| `GlobalTransform` | `position`, `rotation`, `scale`: a transform in world space, from `world_transform(e)` |
+| `Texture`, `Sound`, `Font`, `Map`, `Scene` | Assets from `Assets` |
 
 ## Functions
 
@@ -37,6 +39,11 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `hud_layer()` | The screen-space layer, drawn last without a camera |
 | `pixel(c)`, `color_of(px)` | A `Color` as one `int`, 0xRRGGBBAA, and back, for `Image.pixels()` |
 | `layer_mask(layers: int[])` | A `Camera.layer_mask` drawing those world layers: `layer_mask([0, 1])` |
+| `from_angle(radians)` | The unit `Vec2` at that angle |
+| `parent_of(e)` | The entity's parent; `Entity {}` for a root |
+| `children_of(e)`, `descendants_of(e)` | The direct children in the order they were added; everything below, depth first |
+| `world_transform(e)` | The entity's `GlobalTransform`: its place after every parent |
+| `to_world(e, p)`, `to_local(e, p)` | A point in the entity's space (where a child at `p` would be) to the world, and a world point to the entity's space |
 | `timer(seconds)`, `repeating_timer(seconds)`, `cooldown(seconds)` | Timers |
 | `log(message)`, `warn(message)` | Write to the engine log |
 | `rng(seed)`, `rng_stream(seed, stream)`, `seed_from(text)` | Random generators and seeds |
@@ -51,6 +58,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 |----------|-------|
 | `FLOOR`, `WALL`, `DOOR` | 0, 1, 2: the cell values the generators write |
 | `ALL_LAYERS` | Every world layer, 0 to 30: the default `layer_mask` of cameras and lights |
+| `PI`, `TAU` | Half a turn and a whole turn, in radians |
 
 ## Enums
 

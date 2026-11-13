@@ -25,7 +25,7 @@ struct Parent {
 Tracks the child entities of a parent.
 
 ```cpp
-static constexpr int MaxChildren = 16;
+static constexpr int MaxChildren = 64;
 
 struct Children {
     EntityId ids[MaxChildren] = {};
@@ -38,15 +38,15 @@ struct Children {
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `ids` | `EntityId[16]` | all `0` | Fixed-size array of child entity IDs. |
+| `ids` | `EntityId[64]` | all `0` | Fixed-size array of child entity IDs. |
 | `count` | `int` | `0` | Number of active children. |
 
 | Method | Description |
 |--------|-------------|
-| `add(EntityId)` | Appends a child ID. No-op if the array is full (16 children max). |
+| `add(EntityId)` | Appends a child ID. No-op if the array is full (64 children max). |
 | `remove(EntityId)` | Removes a child by swapping with the last entry. |
 
-> **Note:** The fixed array limit of 16 children per entity is intentional for cache-friendly iteration. If you need more than 16 children, consider restructuring your hierarchy with intermediate grouping entities.
+The fixed array keeps `Children` trivially copyable. For more than 64 children, group them under intermediate entities.
 
 ### Name
 
@@ -83,6 +83,8 @@ struct GlobalTransform2D {
     static GlobalTransform2D compose(const GlobalTransform2D& parent,
                                      const Transform2D& local);
     static GlobalTransform2D from(const Transform2D& t);
+    Vec2 toWorld(Vec2 local) const;
+    Vec2 toLocal(Vec2 world) const;
 };
 ```
 
@@ -91,12 +93,13 @@ struct GlobalTransform2D {
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `position` | `Vec2` | `{0, 0}` | World-space position after applying the full parent chain. |
-| `rotation` | `float` | `0.f` | World-space rotation (sum of all parent rotations plus local). |
+| `rotation` | `float` | `0.f` | World-space rotation: the parent rotations plus the local one, with the local one negated under a mirrored parent. |
 | `scale` | `Vec2` | `{1, 1}` | World-space scale (product of all parent scales times local). |
 
 | Static Method | Description |
 |--------------|-------------|
-| `compose(parent, local)` | Computes a child's world transform given the parent's `GlobalTransform2D` and the child's local `Transform2D`. Handles rotation, scale, and position correctly. |
+| `compose(parent, local)` | A child's world transform from the parent's `GlobalTransform2D` and the child's local `Transform2D`: the local position is scaled by the parent's scale, then rotated and moved with the parent. A parent mirrored on one axis (`scale.x * scale.y < 0`) mirrors the child's rotation too, so a rig flipped with `scale.x = -1` flips as one picture. |
+| `toWorld(local)`, `toLocal(world)` | A point in this transform's local space to world space, and back. |
 | `from(transform)` | Creates a `GlobalTransform2D` directly from a `Transform2D` (used for root entities with no parent). |
 
 You do not add or set `GlobalTransform2D` yourself: the `HierarchyPlugin` adds it to every entity in a tree, root included, and keeps it up to date. Sprites, text and lights in a tree render at their `GlobalTransform2D`.
@@ -150,27 +153,26 @@ void setup(ResMut<AssetServer> assets, Commands& cmd) {
 
 In this example, the turrets' `Transform2D` positions are local to the ship. When the ship moves or rotates, the turrets follow automatically.
 
-### Manual hierarchy setup
+### Changing a hierarchy
 
-You can also build hierarchies manually by inserting `Parent` and `Children` components directly:
+`#include <drift/Hierarchy.hpp>` has functions that keep `Parent` and `Children` in agreement. Use them instead of inserting either component by hand:
+
+| Function | Does |
+|----------|------|
+| `setParent(world, child, parent, keepWorld = false)` | Makes `child` a child of `parent`. With `keepWorld`, rewrites the child's `Transform2D` so it stays where it is on screen. `InvalidEntityId` as the parent detaches the child. Returns false and changes nothing when either entity is dead, the parent is the child or below it, or the parent already has `MaxChildren` children |
+| `removeParent(world, child, keepWorld = false)` | Detaches `child`; same as `setParent` with `InvalidEntityId` |
+| `parentOf(world, e)` | The parent, or `InvalidEntityId` for a root |
+| `childrenOf(world, e)`, `descendantsOf(world, e)` | The direct children in the order they were added; everything below `e`, depth first |
+| `despawnRecursive(world, e)` | Destroys `e` and everything below it, and unlinks it from its parent |
+| `worldTransformOf(world, e)` | The entity's world transform composed from the current `Transform2D` values. `GlobalTransform2D` holds the same as of the last propagation; this one is never a frame behind |
+| `localToWorld(world, e, p)`, `worldToLocal(world, e, p)` | A point in the entity's local space (where a child at `p` would be) to world space, and back |
+| `localTransformFor(world, parent, worldT)` | The `Transform2D` an entity under `parent` needs to sit at the world transform `worldT` |
+
+These act on the `World` at once, so call them from an exclusive system or inside `Commands::queue`, not while a query iterates.
 
 ```cpp
-void setup(Commands& cmd) {
-    EntityId parent = cmd.spawn()
-        .insert(Transform2D{.position = {400.f, 300.f}}, Name{"Parent"});
-
-    EntityId child = cmd.spawn()
-        .insert(
-            Transform2D{.position = {50.f, 0.f}},   // 50px to the right of parent
-            Parent{.entity = parent},
-            Name{"Child"}
-        );
-
-    // Update the parent's Children component
-    cmd.entity(parent)
-        .insert<Children>(Children{});
-
-    // Note: withChildren handles this automatically and is preferred
+void grab(App& app, EntityId hand, EntityId item) {
+    setParent(app.world(), item, hand, /*keepWorld=*/true);   // the item stays put, then moves with the hand
 }
 ```
 
@@ -208,7 +210,7 @@ void readWorldPositions(Query<GlobalTransform2D, Name> entities) {
 
 ## Cascading despawn
 
-When you despawn a parent entity, all of its children are automatically despawned as well. The `Commands::flush()` system walks the `Children` component and recursively removes descendants:
+When you despawn a parent entity, all of its descendants are despawned as well, and the entity is removed from its own parent's `Children`. `Commands::despawn` and the dev inspector both use `despawnRecursive`:
 
 ```cpp
 // Despawning the ship also despawns its turrets
@@ -303,8 +305,8 @@ In this example, rotating the sun causes the planets to orbit around it, and moo
 
 ## Notes
 
-- The maximum number of direct children per entity is 16 (`MaxChildren`). This is a compile-time constant.
-- `GlobalTransform2D` is computed in `PostUpdate`. If you read it during `Update`, you are reading the previous frame's value. For most game logic this is fine.
+- The maximum number of direct children per entity is 64 (`MaxChildren`). This is a compile-time constant.
+- `GlobalTransform2D` is computed in `PostUpdate`. If you read it during `Update`, you are reading the previous frame's value; `worldTransformOf` gives the current one.
+- An entity that leaves a tree (no `Parent` and no `Children` any more) loses its `GlobalTransform2D` and draws from its `Transform2D` again.
 - The `Name` component is a 64-character fixed buffer. It is purely for debugging and has no effect on engine behavior.
-- Despawning a parent cascades to all descendants. There is no way to "orphan" children: if you want a child to survive, reparent it first by changing its `Parent` component and updating the old and new parent's `Children` component.
-- `withChildren` is the preferred way to build hierarchies because it correctly sets up both `Parent` and `Children` in a single fluent call.
+- Despawning a parent cascades to all descendants. To keep a child, detach it first with `removeParent(world, child, true)`.

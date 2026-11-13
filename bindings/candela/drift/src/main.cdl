@@ -6,6 +6,8 @@
 // of those declarations, an engine component or resource, or a value type.
 // See bindings/candela/docs for the book.
 
+import "std/math" as math;
+
 host "drift" {
     attribute component(requires: type[] = []) on struct;
     attribute resource on struct;
@@ -141,6 +143,14 @@ host "drift" {
     download(string);
     window_screenshot(string);
     int render_target(int, int);
+
+    // Hierarchy: answers about the engine's current Transforms.
+    int hier_parent(int);
+    int[] hier_children(int);
+    int[] hier_descendants(int);
+    float[] hier_world(int);
+    float[] hier_to_world(int, float, float);
+    float[] hier_to_local(int, float, float);
 }
 
 enum Schedule { Startup, Update }
@@ -1454,4 +1464,139 @@ impl Window {
     fn download(self, path: string) { drift::download(path); }
     // Saves the next presented frame as a PNG.
     fn screenshot(self, path: string) { drift::window_screenshot(path); }
+}
+
+// ==== Transforms, hierarchy and procedural animation ====
+//
+// The engine calls these use are declared at the end of the host block
+// above. See the book's Procedural Animation guide.
+
+const PI: float = 3.14159265358979;
+const TAU: float = 6.28318530717959;
+
+impl Vec2 {
+    // Radians from the +x axis toward +y (down on screen).
+    fn angle(self) -> float { return atan2(self.y, self.x); }
+    // Turned by `radians` about the origin.
+    fn rotated(self, radians: float) -> Vec2 {
+        let c = math::cos(radians);
+        let s = math::sin(radians);
+        return Vec2 { x: self.x * c - self.y * s, y: self.x * s + self.y * c };
+    }
+    // Turned a quarter turn: (x, y) -> (-y, x).
+    fn perp(self) -> Vec2 { return Vec2 { x: -self.y, y: self.x }; }
+    fn length_squared(self) -> float { return self.x * self.x + self.y * self.y; }
+    // The same direction, no longer than `max_length`.
+    fn clamp_length(self, max_length: float) -> Vec2 {
+        let l = self.length();
+        if l > max_length && l > 0.0 {
+            return self * (max_length / l);
+        }
+        return self;
+    }
+}
+
+// Trigonometry in radians, without importing std/math.
+fn sin(x: float) -> float { return math::sin(x); }
+fn cos(x: float) -> float { return math::cos(x); }
+// The angle of the point (x, y) from the +x axis, -PI to PI.
+fn atan2(y: float, x: float) -> float { return math::atan2(y, x); }
+
+// The unit vector at `radians` from the +x axis.
+fn from_angle(radians: float) -> Vec2 { return Vec2 { x: math::cos(radians), y: math::sin(radians) }; }
+
+impl Color {
+    fn lerp(self, o: Color, t: float) -> Color {
+        return Color { r: self.r + (o.r - self.r) * t, g: self.g + (o.g - self.g) * t,
+                       b: self.b + (o.b - self.b) * t, a: self.a + (o.a - self.a) * t };
+    }
+}
+
+// ---- Sprite sheets ----
+
+// A texture cut into a grid of equal frames, counted left to right, top to
+// bottom from 0. Put a frame in `Sprite.frame`.
+struct Spritesheet { texture: Texture = Texture { .. }, frame_w: float = 0.0, frame_h: float = 0.0, columns: int = 1, rows: int = 1 }
+impl Assets {
+    fn spritesheet(self, t: Texture, frame_w: float, frame_h: float) -> Spritesheet {
+        let s = t.size();
+        let cols = int((s.x / frame_w).floor());
+        let rows = int((s.y / frame_h).floor());
+        return Spritesheet { texture: t, frame_w: frame_w, frame_h: frame_h, columns: max_int(cols, 1), rows: max_int(rows, 1) };
+    }
+}
+fn max_int(a: int, b: int) -> int {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+impl Spritesheet {
+    fn frame(self, col: int, row: int) -> Rect {
+        return Rect { x: float(col) * self.frame_w, y: float(row) * self.frame_h, w: self.frame_w, h: self.frame_h };
+    }
+    fn frame_at(self, i: int) -> Rect { return self.frame(i % self.columns, i / self.columns); }
+    fn frames(self, first: int, count: int) -> Rect[] {
+        let out: Rect[] = [];
+        for i in range(count) {
+            out.push(self.frame_at(first + i));
+        }
+        return out;
+    }
+    fn count(self) -> int { return self.columns * self.rows; }
+}
+
+// ---- Hierarchy ----
+
+// Makes the entity's Transform relative to `entity`. With `keep_world`, the
+// child's Transform is rewritten when the link is made so it stays where it
+// is on screen. `Parent { entity: Entity {}, .. }` detaches it.
+struct Parent { entity: Entity = Entity { .. }, keep_world: bool = false }
+
+// The entity's position, rotation and scale after every parent. Assigning
+// one moves the entity there in world space.
+struct GlobalTransform { position: Vec2 = Vec2 { .. }, rotation: float = 0.0, scale: Vec2 = Vec2 { x: 1.0, y: 1.0 } }
+
+impl Commands {
+    // Spawns an entity whose Transform is relative to `parent`.
+    fn spawn_child(self, parent: Entity, bundle: any[]) -> Entity {
+        bundle.push(Parent { entity: parent, keep_world: false });
+        return self.spawn(bundle);
+    }
+    // Moves `child` under `parent`, keeping its Transform's numbers.
+    fn set_parent(self, child: Entity, parent: Entity) { self.insert(child, Parent { entity: parent, keep_world: false }); }
+    // Moves `child` under `parent`, keeping it where it is on screen.
+    fn set_parent_in_place(self, child: Entity, parent: Entity) { self.insert(child, Parent { entity: parent, keep_world: true }); }
+    // Makes `child` a root again, where it is on screen.
+    fn detach(self, child: Entity) { self.remove<Parent>(child); }
+}
+
+// The entity's parent; `Entity {}` for a root.
+fn parent_of(e: Entity) -> Entity { return Entity { id: drift::hier_parent(e.id) }; }
+fn ids_to_entities(ids: int[]) -> Entity[] {
+    let out: Entity[] = [];
+    for id in ids {
+        out.push(Entity { id: id });
+    }
+    return out;
+}
+// The entity's direct children, in the order they were added.
+fn children_of(e: Entity) -> Entity[] { return ids_to_entities(drift::hier_children(e.id)); }
+// Everything below the entity, depth first.
+fn descendants_of(e: Entity) -> Entity[] { return ids_to_entities(drift::hier_descendants(e.id)); }
+// The entity's transform after every parent, from the engine's current
+// Transforms (changes a running system made land when it returns).
+fn world_transform(e: Entity) -> GlobalTransform {
+    let w = drift::hier_world(e.id);
+    return GlobalTransform { position: Vec2 { x: w[0], y: w[1] }, rotation: w[2], scale: Vec2 { x: w[3], y: w[4] } };
+}
+// A point in the entity's space (where a child at `local` would be) to the
+// world, and a world point to the entity's space.
+fn to_world(e: Entity, local: Vec2) -> Vec2 {
+    let p = drift::hier_to_world(e.id, local.x, local.y);
+    return Vec2 { x: p[0], y: p[1] };
+}
+fn to_local(e: Entity, world: Vec2) -> Vec2 {
+    let p = drift::hier_to_local(e.id, world.x, world.y);
+    return Vec2 { x: p[0], y: p[1] };
 }

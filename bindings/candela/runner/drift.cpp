@@ -12,6 +12,7 @@
 #include <drift/App.hpp>
 #include <drift/AssetServer.hpp>
 #include <drift/CollisionBridge.hpp>
+#include <drift/Hierarchy.hpp>
 #include <drift/Log.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
 #include <drift/components/Behavior.hpp>
@@ -174,6 +175,71 @@ void teleport(EntityId e, Vec2 position, float rotation) {
     if (auto* box = get<BoxCollider2D>(e)) offset = box->offset;
     physics->setBodyPosition(it->second, position + offset);
     physics->setBodyRotation(it->second, rotation);
+}
+
+// ---- Hierarchy and procedural animation ----
+//
+// Parent and GlobalTransform components, the hierarchy queries, and the
+// procedural animation solvers (include/drift/math/ProcAnim.hpp) the drift
+// module's animation helpers call.
+
+json transformJ(Vec2 position, float rotation, Vec2 scale) {
+    return json{{"position", vec(position)}, {"rotation", rotation}, {"scale", vec(scale)}};
+}
+json idsJ(const std::vector<EntityId>& ids) {
+    json out = json::array();
+    for (EntityId e : ids) out.push_back(e);
+    return out;
+}
+
+bool hasParent(EntityId e) { return get<Parent>(e) != nullptr; }
+json readParent(EntityId e) { return json{{"entity", {{"id", get<Parent>(e)->entity}}}, {"keep_world", false}}; }
+void writeParent(EntityId e, const json& j) {
+    json pe = j.value("entity", json::object());
+    EntityId p = pe.is_object() ? pe.value("id", EntityId(0)) : InvalidEntityId;
+    if (!setParent(world(), e, p, j.value("keep_world", false))) {
+        DRIFT_LOG_WARN("Candela: cannot parent entity %llu to %llu (dead, a loop, or %d children already)",
+                       (unsigned long long)e, (unsigned long long)p, MaxChildren);
+    }
+}
+void removeParentKeepingPlace(EntityId e) { removeParent(world(), e, true); }
+
+json readGlobal(EntityId e) {
+    GlobalTransform2D g = worldTransformOf(world(), e);
+    return transformJ(g.position, g.rotation, g.scale);
+}
+// Assigning a GlobalTransform moves the entity there in world space.
+void writeGlobal(EntityId e, const json& j) {
+    GlobalTransform2D g{vec(j.value("position", json())), j.value("rotation", 0.f), vec(j.value("scale", json()), {1, 1})};
+    put(e, localTransformFor(world(), parentOf(world(), e), g));
+}
+
+bool hierarchyService(const std::string& f, const json& a, json& out) {
+    if (f == "hier_parent") {
+        out = parentOf(world(), a[0].get<EntityId>());
+        return true;
+    }
+    if (f == "hier_children") {
+        out = idsJ(childrenOf(world(), a[0].get<EntityId>()));
+        return true;
+    }
+    if (f == "hier_descendants") {
+        out = idsJ(descendantsOf(world(), a[0].get<EntityId>()));
+        return true;
+    }
+    if (f == "hier_world") {
+        GlobalTransform2D g = worldTransformOf(world(), a[0].get<EntityId>());
+        out = json::array({g.position.x, g.position.y, g.rotation, g.scale.x, g.scale.y});
+        return true;
+    }
+    if (f == "hier_to_world" || f == "hier_to_local") {
+        EntityId e = a[0].get<EntityId>();
+        Vec2 p{a[1].get<float>(), a[2].get<float>()};
+        Vec2 r = f == "hier_to_world" ? localToWorld(world(), e, p) : worldToLocal(world(), e, p);
+        out = json::array({r.x, r.y});
+        return true;
+    }
+    return false;
 }
 
 // ---- Engine components ----
@@ -582,6 +648,13 @@ const std::vector<Codec>& codecs() {
          },
          [](EntityId e) { world().removeComponent(e, cid<Tilemap>()); },
          [] { return cid<Tilemap>(); }},
+        {"Parent", hasParent, readParent, writeParent, removeParentKeepingPlace, [] { return cid<Parent>(); }},
+        {"GlobalTransform",
+         [](EntityId e) { return get<Transform2D>(e) != nullptr; },
+         readGlobal,
+         writeGlobal,
+         [](EntityId) {},
+         [] { return cid<Transform2D>(); }},
     };
     for (Codec& c : presentationCodecs()) l.push_back(c);
     return l;
@@ -1370,6 +1443,7 @@ json service(const std::string& f, const json& a) {
     if (procgen(f, a, answer)) return answer;
     if (presentation(f, a, answer)) return answer;
     if (images(f, a, answer)) return answer;
+    if (hierarchyService(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {
@@ -1559,8 +1633,10 @@ void drift_bridge_log(int32_t level, const char* message) {
 uint64_t drift_bridge_new() { return world().createEntity(); }
 
 void drift_bridge_despawn(uint64_t e) {
+    if (!world().isAlive(e)) return;
+    for (EntityId d : descendantsOf(world(), e)) stopTween(d);
     stopTween(e);
-    if (world().isAlive(e)) world().destroyEntity(e);
+    despawnRecursive(world(), e);
 }
 
 int32_t drift_bridge_alive(uint64_t e) { return world().isAlive(e) ? 1 : 0; }
