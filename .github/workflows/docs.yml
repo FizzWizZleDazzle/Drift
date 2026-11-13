@@ -1,7 +1,8 @@
 name: Deploy Docs
 
-# Publishes the mdBook in docs/ to GitHub Pages, so the site describes the
-# newest release. release.yml calls this after it publishes a release: the
+# Publishes the mdBooks to GitHub Pages, so the site describes the newest
+# release: the engine book in docs/ at the site root and the Candela book in
+# bindings/candela/docs under candela-book/. release.yml calls this after it publishes a release: the
 # release is created with the workflow token, and a workflow token raises no
 # events, so a `release: published` trigger here would never fire. Run it by
 # hand to republish.
@@ -35,7 +36,9 @@ jobs:
           mdbook-version: 0.5.2
 
       - name: Build docs
-        run: mdbook build docs
+        run: |
+          mdbook build docs
+          mdbook build bindings/candela/docs --dest-dir "$GITHUB_WORKSPACE/docs/book/candela-book"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

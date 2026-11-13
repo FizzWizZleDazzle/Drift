@@ -54,4 +54,4 @@ Scripts are not reloaded while the game runs yet, and the `drift check` and `dri
 
 ## Documentation
 
-The book is in [`docs/`](docs/), an mdBook: `mdbook serve bindings/candela/docs`.
+The book is in [`docs/`](docs/), an mdBook, and is published at https://fizzwizzledazzle.github.io/Drift/candela-book/. Read it locally with `mdbook serve bindings/candela/docs`.
