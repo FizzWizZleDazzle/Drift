@@ -116,7 +116,7 @@ Run the engine tests with `ctest --test-dir build`.
 
 ## Limitations
 
-Drift is developed and tested on Linux; Windows and macOS builds are not yet verified. The web build runs every system on one thread, and web save data does not yet survive a page reload. Physics edits made through the inspector or a scene reload do not rebuild existing Box2D bodies.
+Drift is developed and tested on Linux; Windows and macOS builds are not yet verified. The web build runs every system on one thread. Physics edits made through the inspector or a scene reload do not rebuild existing Box2D bodies.
 
 ## Documentation
 

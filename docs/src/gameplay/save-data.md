@@ -52,4 +52,6 @@ Nothing is written until you call `flush()`. Call it at checkpoints and when set
 
 ## Web
 
-On the web the save directory lives in Emscripten's in-memory filesystem. `flush()` already calls `FS.syncfs` after writing; mounting the directory as IndexedDB storage (IDBFS) and loading it at startup is not wired up yet, so web saves do not survive a page reload.
+In the browser a slot is a `localStorage` entry named `drift:<path>`, where the path is the one the desktop would use (`/libsdl/<org>/<app>/<slot>.json`). It survives reloads and browser restarts, and `flush()` stores it before returning, so a save made just before the tab closes is kept.
+
+`flush()` returns false, and the log says why, when the browser refuses storage: a sandboxed iframe without `allow-same-origin`, storage blocked by the player, or the origin's quota (usually about 5 MB) used up. Games on the same origin with the same `organization` and `name` share a slot, as they would on one desktop. Clearing the site's data in the browser deletes the save.

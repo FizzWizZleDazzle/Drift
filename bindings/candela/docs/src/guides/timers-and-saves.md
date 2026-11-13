@@ -86,6 +86,7 @@ fn dash(d: Dash, v: Velocity, input: Input, time: Time) {
 | Linux | `~/.local/share/<organization>/<name>/` |
 | Windows | `%APPDATA%\<organization>\<name>\` |
 | macOS | `~/Library/Application Support/<organization>/<name>/` |
+| Web | the browser's `localStorage` for the page's site; see [Web Games](web.md#saves) |
 
 ```rust
 @system

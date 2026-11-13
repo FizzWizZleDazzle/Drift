@@ -34,6 +34,7 @@
 - [Scenes and Prefabs](guides/scenes.md)
 - [Timers and Save Data](guides/timers-and-saves.md)
 - [Debugging](guides/debugging.md)
+- [Web Games](guides/web.md)
 
 # Reference
 
