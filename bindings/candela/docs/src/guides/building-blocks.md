@@ -124,21 +124,14 @@ Show them with `bind("Score.value", "Score {}")` and `bind("Score.best", "Best {
 
 ## Finding entities
 
-`nearest(rows, from)` returns the entity nearest a point among query rows that start with an `Entity` and a `Transform`, and `within(rows, from, radius)` the ones within a radius, nearest first. For the rest, query lists have `len()`, `first()`, `any(f)`, `all(f)`, `find(f)` and `filter(f)`.
+Query lists come with the list methods of the prelude: `len()`, `first()`, `any(f)`, `all(f)`, `find(f)` and `filter(f)`. For "the nearest enemy" or "everything within 100 pixels", give the entities a `SpatialBounds` and ask the `Spatial` resource, or ask `Physics` about colliders; see [Physics](physics.md).
 
 ```rust
 @system
-fn aim(turrets: (Turret, Transform)[], enemies: (Entity, Transform, Enemy)[], places: Lookup<Transform>) {
-    for (turret, t) in turrets {
-        let target = nearest(enemies, t.position);
-        if target.alive() {
-            ...
-        }
-    }
+fn alarm(enemies: (Entity, Enemy)[], game: Game) {
+    game.cleared = enemies.len() == 0;
 }
 ```
-
-For colliders, `Physics.overlap_circle` asks the physics world instead; see [Physics](physics.md).
 
 ## Movement controllers
 

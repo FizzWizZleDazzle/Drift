@@ -46,8 +46,6 @@ Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../
 | `popup(cmd, pos, text, color)` | Spawns text that pops, floats up and fades at a world position; returns it |
 | `spawner(id, every)` | A `Spawner` |
 | `wave(id, count, every, delay)` | A `Wave` |
-| `nearest(rows, from)` | The entity nearest `from` among query rows that start with `(Entity, Transform, ...)`; `Entity {}` for none |
-| `within(rows, from, radius)` | The entities of such rows within `radius`, nearest first |
 
 ## drift/control
 

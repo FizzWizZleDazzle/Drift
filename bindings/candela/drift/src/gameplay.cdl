@@ -1,7 +1,7 @@
 // drift/gameplay: components most action games write for themselves.
 //
 // `import "drift/gameplay" { * };` adds health and damage, hit effects,
-// screen bounds, spawners, a saved high score and a few query helpers.
+// screen bounds, spawners and a saved high score.
 // Each part only runs for entities that have its components, so the ones a
 // game does not use cost nothing.
 
@@ -509,52 +509,4 @@ fn gp_score(score: Score, save: Save, time: Time) {
         save.flush();
         score.saved = score.best;
     }
-}
-
-// ---- Queries ----
-
-// The entity nearest `from` among query rows that start with an Entity and
-// a Transform, such as `(Entity, Transform, Enemy)[]`; `Entity {}` when
-// there are none.
-fn nearest(rows, from: Vec2) -> Entity {
-    let best = Entity { .. };
-    let best_d = -1.0;
-    for row in rows {
-        let d = (row.1.position - from).length_squared();
-        if best_d < 0.0 || d < best_d {
-            best_d = d;
-            best = row.0;
-        }
-    }
-    return best;
-}
-
-// The entities of such rows within `radius` of `from`, nearest first.
-fn within(rows, from: Vec2, radius: float) -> Entity[] {
-    let found: Entity[] = [];
-    let dists: float[] = [];
-    for row in rows {
-        let d = (row.1.position - from).length();
-        if d <= radius {
-            let at = found.len();
-            for i in range(found.len()) {
-                if d < dists[i] && at == found.len() {
-                    at = i;
-                }
-            }
-            found.push(row.0);
-            dists.push(d);
-            let i = found.len() - 1;
-            while i > at {
-                let fe = found[i];
-                found[i] = found[i - 1];
-                found[i - 1] = fe;
-                let fd = dists[i];
-                dists[i] = dists[i - 1];
-                dists[i - 1] = fd;
-                i -= 1;
-            }
-        }
-    }
-    return found;
 }
