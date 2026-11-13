@@ -1,0 +1,72 @@
+// Cameras, camera bounds and conversions, post effects, fonts, shaders and
+// the window, through the drift module. ctest runs it with `drift run` and
+// reads the log.
+
+import "drift" { * };
+
+const TINT: string = "void main() {
+    vec4 c = texture(u_texture0, v_uv) * v_color;
+    o_color = vec4(mix(c.rgb, material.params[0].rgb, material.params[0].a), c.a);
+}";
+
+@component
+struct Runner {}
+
+@resource
+struct Checks { failed: int = 0, done: bool = false, camera: Entity = Entity { .. }, bloom: Effect = Effect { .. } }
+
+fn expect(checks: Checks, what: string, ok: bool) {
+    if !ok {
+        checks.failed += 1;
+        warn("FAIL " + what);
+    }
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets, effects: Effects, checks: Checks) {
+    let runner = cmd.spawn([at(100.0, 300.0), Circle { radius: 10.0, .. }, Runner {},
+                            Velocity { linear: vec2(4000.0, 0.0), .. },
+                            ParticleEmitter { bursts: [Burst { count: 20, .. }], spin_max: 2.0, .. }]);
+    checks.camera = cmd.spawn([at(0.0, 0.0), Camera { .. }, CameraFollow { target: runner, smoothing: 60.0, .. },
+                               CameraBounds { area: rect(0.0, 0.0, 3000.0, 600.0) }]);
+    checks.bloom = effects.bloom(0.6, 1.2);
+    let crt = effects.add(Crt { .. });
+    crt.set_enabled(false);
+    expect(checks, "effect switch", !crt.enabled() && checks.bloom.enabled());
+    crt.remove();
+
+    let m = Font { .. }.measure("Hello", 24.0);
+    expect(checks, "font measure", m.x > 30.0 && m.y > 10.0);
+    expect(checks, "text measure", Text { value: "a\nb", size: 20.0, .. }.measure().y > 30.0);
+    let tint = assets.create_material(assets.create_shader("", TINT));
+    tint.set_color(0, rgba(255, 0, 0, 128));
+    cmd.spawn([at(50.0, 50.0), Sprite { image: assets.render_target(16, 16), material: tint, .. }]);
+}
+
+@system
+fn check(time: Time, checks: Checks, cam: Camera2D, places: Lookup<Transform>, window: Window, draw: Draw) {
+    draw.line(vec2(0.0, 0.0), vec2(100.0, 100.0), rgb(255, 0, 0), 2.0);
+    draw.hud();
+    draw.text("presentation", vec2(8.0, 8.0), 16.0, rgb(255, 255, 255));
+    if checks.done || time.elapsed < 2.0 {
+        return;
+    }
+    checks.done = true;
+    let p = vec2(40.0, 30.0);
+    expect(checks, "screen/world round trip", (cam.world_to_screen(cam.screen_to_world(p)) - p).length() < 0.01);
+    let view = cam.visible();
+    expect(checks, "visible size", (view.w - window.width).abs() < 1.0 && (view.h - window.height).abs() < 1.0);
+    if places.get(checks.camera) is Some(t) {
+        // The runner is far right; the bounds hold the camera's view inside.
+        expect(checks, "bounds x", (t.position.x - (3000.0 - window.width * 0.5)).abs() < 1.0);
+    } else {
+        expect(checks, "camera exists", false);
+    }
+    expect(checks, "draw calls", window.draw_calls() > 0);
+    window.set_title("presentation");
+    window.set_logical_size(320, 240);
+    if checks.failed == 0 {
+        log("presentation checks passed");
+    }
+    window.quit();
+}

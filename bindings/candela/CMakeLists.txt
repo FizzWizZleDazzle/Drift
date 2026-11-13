@@ -242,4 +242,10 @@ if(DRIFT_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "image checks passed"
         FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
         TIMEOUT 60)
+    add_test(NAME candela_presentation COMMAND drift_run run ${CMAKE_CURRENT_SOURCE_DIR}/tests/presentation.cdl)
+    set_tests_properties(candela_presentation PROPERTIES
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
+        PASS_REGULAR_EXPRESSION "presentation checks passed"
+        FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
+        TIMEOUT 60)
 endif()
