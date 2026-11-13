@@ -162,6 +162,7 @@ set(DRIFT_SOURCES
 
     # Subsystem resources
     src/renderer/RendererResource.cpp
+    src/renderer/Image.cpp
     src/input/InputResource.cpp
     src/audio/AudioResource.cpp
     src/audio/Decoder.cpp

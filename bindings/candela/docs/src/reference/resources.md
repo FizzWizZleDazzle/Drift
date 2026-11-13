@@ -42,6 +42,14 @@ Device state and [input actions](../guides/input.md#actions).
 | `set_title(s)`, `set_clear_color(c)`, `set_scale_mode(m)`, `set_logical_size(w, h)` | Change the window while running; `drift.toml` sets where they start |
 | `quit()` | Ends the game after this frame |
 | `screenshot(path)` | Saves the next presented frame as a PNG |
+| `download(path)` | Offers a file the game wrote as a download in the browser, such as a screenshot (once it is written) |
+
+```rust
+if input.key_pressed(Key::F12) {
+    window.screenshot("shot.png");
+    window.download("shot.png");
+}
+```
 
 ## Assets
 
@@ -51,6 +59,7 @@ Images and sounds load with the free functions `texture(path)` and `sound(path)`
 |--------|---------|
 | `create_texture(w, h, pixels: Color[])` | A `Texture` from colors, row by row from the top-left |
 | `render_target(w, h)` | A `Texture` a `Camera` can draw into |
+| `create_image(w, h, fill)`, `image(path)` | An `Image` to change from code: blank, or an image file's pixels. See [Image](#image) |
 | `spritesheet(texture, frame_w, frame_h)`, `aseprite(path)` | A `Spritesheet`: `frame(col, row)`, `frame_at(i)`, `frames(first, count)`, `frame_count()`, `tag(name)` (the frames of an Aseprite tag), `texture` |
 | `music(path)` | A `Sound` that decodes while it plays, for long tracks |
 | `create_sound(samples: float[], rate)` | A mono `Sound` from samples in -1 to 1 |
@@ -59,7 +68,49 @@ Images and sounds load with the free functions `texture(path)` and `sound(path)`
 | `create_tilemap(width, height, tile_size, tileset, layers: string[])` | An empty `Map` of tile layers over one tileset image, for levels made in code |
 | `scene(path)` | A `Scene` from a scene or prefab file |
 
-`Texture` has `size()` and `set_filter(Filter)`; `Sound` has `play()`, `play_with(PlayOptions)` and `duration()`.
+`Texture` has `size()`, `set_filter(Filter)`, `update(image)` and `update_rect(image, r)` (write an image's pixels into it, cheap enough for every frame) and `to_image()` (a render target's pixels as its last frame left them); `Sound` has `play()`, `play_with(PlayOptions)` and `duration()`.
+
+### Image
+
+Pixels in memory that a game changes from code and shows through a texture: generated art, paint programs, fog of war, minimaps. The engine holds the pixels; positions outside the image read as transparent and writes there are skipped. Unlike other assets, `assets.image(path)` reads the file again on every call, since each image is yours to change.
+
+| Method | Does |
+|--------|------|
+| `width()`, `height()`, `get(x, y)`, `set(x, y, c)` | Size and single pixels |
+| `fill(c)`, `fill_rect(r, c)`, `gradient(a, b, vertical)`, `noise(n: Noise, low, high)` | Fill areas; `noise` colors each pixel from `low` (noise -1) to `high` (1) |
+| `line(a, b, c, thickness)`, `rect_lines(r, c, thickness)`, `circle(center, radius, c)`, `circle_lines(center, radius, c, thickness)` | Shapes, blended by alpha |
+| `draw(src, x, y)`, `draw_part(src, frame, x, y)`, `paste(src, x, y)` | Another image on top, blended; `paste` copies its pixels as they are |
+| `copy()`, `crop(r)`, `flip_x()`, `flip_y()` | New images, and mirroring in place |
+| `pixels()`, `set_pixels(px)`, `read_rect(r)`, `write_rect(r, px)` | Many pixels at once as `int` 0xRRGGBBAA; `pixel(c)` and `color_of(px)` convert |
+| `to_texture()` | A new texture of the pixels as they are now |
+| `save_png(path)`, `download(path)` | Save; `download` also offers the file in the browser. A failed write raises `drift_save_failed` |
+| `free()` | Lets the pixels go |
+
+```rust
+@resource
+struct Canvas { image: Image = Image { .. }, texture: Texture = Texture { .. } }
+
+@system(schedule: Schedule::Startup)
+fn make(cmd: Commands, assets: Assets, canvas: Canvas) {
+    canvas.image = assets.create_image(256, 256, rgb(20, 20, 30));
+    canvas.image.noise(Noise { seed: 3, frequency: 0.04, octaves: 4, .. }, rgb(10, 30, 10), rgb(120, 200, 90));
+    canvas.texture = canvas.image.to_texture();
+    cmd.spawn([at(320.0, 240.0), Sprite { image: canvas.texture, .. }]);
+}
+
+@system
+fn paint(input: Input, cam: Camera2D, canvas: Canvas) {
+    if input.mouse_down(MouseButton::Left) {
+        // The sprite is centered at (320, 240), so its top-left is (192, 112).
+        let p = cam.screen_to_world(input.mouse_position()) - vec2(192.0, 112.0);
+        canvas.image.circle(p, 6.0, rgb(255, 220, 80));
+        canvas.texture.update_rect(canvas.image, rect(p.x - 7.0, p.y - 7.0, 14.0, 14.0));
+    }
+}
+```
+
+To draw engine shapes and sprites into a texture instead, point a camera at a render target and give it a layer of its own: the camera draws what is on that layer, `Draw.on_layer` adds immediate shapes there, and `to_image()` reads the result back.
+
 
 ### Map
 

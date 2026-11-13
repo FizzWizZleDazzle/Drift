@@ -1,0 +1,109 @@
+// Images and textures from code: gradients, noise, shapes, pixels, a
+// texture updated every frame, a render target read back, and a PNG saved
+// and loaded again. ctest runs it with `drift run` and reads the log.
+
+import "drift" { * };
+
+@resource
+struct Art {
+    paint: Image = Image { .. },
+    canvas: Texture = Texture { .. },
+    target: Texture = Texture { .. },
+    failed: int = 0,
+    stage: int = 0,
+}
+
+fn expect(art: Art, what: string, ok: bool) {
+    if !ok {
+        art.failed += 1;
+        warn("FAIL " + what);
+    }
+}
+
+fn near(a: Color, b: Color) -> bool {
+    let d = (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs() + (a.a - b.a).abs();
+    return d < 0.02;
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets, art: Art) {
+    // A gradient with shapes on it.
+    let g = assets.create_image(64, 64, rgb(0, 0, 0));
+    g.gradient(rgb(255, 0, 0), rgb(0, 0, 255), false);
+    g.line(vec2(0.0, 0.0), vec2(63.0, 63.0), rgb(255, 255, 255), 2.0);
+    g.circle(vec2(32.0, 32.0), 10.0, rgba(0, 255, 0, 255));
+    g.rect_lines(rect(2.0, 2.0, 60.0, 60.0), rgb(255, 255, 0), 2.0);
+    g.set(5, 60, rgb(255, 0, 255));
+    expect(art, "get after set", near(g.get(5, 60), rgb(255, 0, 255)));
+    expect(art, "gradient left", near(g.get(0, 30), rgb(255, 0, 0)));
+    expect(art, "circle", near(g.get(32, 32), rgb(0, 255, 0)));
+    expect(art, "size", g.width() == 64 && g.height() == 64);
+    cmd.spawn([at(120.0, 120.0), Transform { position: vec2(120.0, 120.0), scale: vec2(3.0, 3.0), .. },
+               Sprite { image: g.to_texture(), .. }]);
+
+    // Copy, crop, flip and pixels.
+    let c = g.copy();
+    c.flip_x();
+    expect(art, "flip_x", near(c.get(63, 30), rgb(255, 0, 0)));
+    let part = g.crop(rect(30.0, 30.0, 4.0, 4.0));
+    expect(art, "crop", part.width() == 4 && near(part.get(2, 2), rgb(0, 255, 0)));
+    let px = part.pixels();
+    expect(art, "pixels", px.len() == 16 && px[0] == pixel(part.get(0, 0)));
+    expect(art, "pixel round trip", near(color_of(pixel(rgba(10, 200, 30, 128))), rgba(10, 200, 30, 128)));
+    let blank = assets.create_image(4, 4, rgba(0, 0, 0, 0));
+    blank.set_pixels(px);
+    expect(art, "set_pixels", near(blank.get(2, 2), rgb(0, 255, 0)));
+    part.free();
+    blank.free();
+
+    // Noise.
+    let n = assets.create_image(128, 128, rgb(0, 0, 0));
+    n.noise(Noise { seed: 7, frequency: 0.05, octaves: 3, .. }, rgb(20, 40, 20), rgb(200, 255, 160));
+    cmd.spawn([at(420.0, 120.0), Sprite { image: n.to_texture(), .. }]);
+
+    // A canvas updated every frame.
+    art.paint = assets.create_image(128, 128, rgb(30, 30, 50));
+    art.canvas = art.paint.to_texture();
+    cmd.spawn([at(120.0, 380.0), Sprite { image: art.canvas, .. }]);
+
+    // A render target drawn by its own camera from layer 5.
+    art.target = assets.render_target(128, 128);
+    cmd.spawn([at(1000.0, 1000.0), Camera { target: art.target, layer_mask: layer_mask([5]), clear: true,
+                                            clear_color: rgb(0, 0, 80), order: -1, .. }]);
+    cmd.spawn([at(320.0, 180.0), Camera { layer_mask: layer_mask([0]), .. }]);
+    cmd.spawn([at(420.0, 380.0), Sprite { image: art.target, .. }]);
+    cmd.spawn([at(1000.0, 1000.0), Circle { radius: 30.0, color: rgb(255, 128, 0), layer: 5, .. }]);
+}
+
+@system
+fn paint(time: Time, art: Art, draw: Draw) {
+    let k = int(time.elapsed * 60.0) % 100;
+    let x = 14.0 + float(k);
+    let y = 14.0 + float(k * 7 % 100);
+    art.paint.circle(vec2(x, y), 4.0, rgb(255, 220, 80));
+    art.canvas.update_rect(art.paint, rect(x - 6.0, y - 6.0, 12.0, 12.0));
+    // Shapes into the render target through its layer.
+    draw.on_layer(5);
+    draw.rect(rect(960.0, 940.0, 20.0, 20.0), rgb(0, 255, 255));
+}
+
+@system
+fn check(time: Time, art: Art, assets: Assets, window: Window) {
+    if art.stage == 0 && time.elapsed > 1.0 {
+        art.stage = 1;
+        let back = art.target.to_image();
+        expect(art, "target size", back.width() == 128 && back.height() == 128);
+        expect(art, "target center", near(back.get(64, 64), rgb(255, 128, 0)));
+        expect(art, "target clear", near(back.get(2, 125), rgb(0, 0, 80)));
+        expect(art, "target draw", near(back.get(30, 10), rgb(0, 255, 255)));
+        back.save_png("images_test_target.png");
+        let again = assets.image("images_test_target.png");
+        expect(art, "png round trip", near(again.get(64, 64), rgb(255, 128, 0)));
+        back.free();
+        again.free();
+        if art.failed == 0 {
+            log("image checks passed");
+        }
+        window.quit();
+    }
+}

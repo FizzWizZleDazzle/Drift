@@ -2,6 +2,7 @@
 
 #include <drift/Resource.hpp>
 #include <drift/Handle.hpp>
+#include <drift/Image.hpp>
 #include <drift/Math.hpp>
 #include <drift/Types.hpp>
 
@@ -101,6 +102,9 @@ public:
     // Render targets are textures you can draw into (camera target, view
     // hooks) and then draw like any other texture.
     TextureHandle createRenderTarget(int w, int h, TextureOptions options = {});
+    // The pixels of a render target as its last frame left them; an empty
+    // image for other textures.
+    Image readTexture(TextureHandle texture) const;
 
     // ---- Shaders and materials ----
     // loadShader("shaders/water") finds water.wgsl, water.frag.glsl and

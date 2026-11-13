@@ -1194,6 +1194,25 @@ fn presentation_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("draw_nine", vec![I, af(), af(), I, F], U),
         ("draw_clip", vec![af()], U),
         ("particles_restart", vec![I], U),
+        // Images: pixel buffers the engine holds, by id.
+        ("image_new", vec![I, I, af()], I),
+        ("image_load", vec![S], I),
+        ("image_from_texture", vec![I], I),
+        ("image_info", vec![I], af()),
+        ("image_get", vec![I, I, I], af()),
+        ("image_set", vec![I, I, I, af()], U),
+        ("image_op", vec![I, S, af(), af(), af()], U),
+        ("image_blit", vec![I, I, I, I, af(), HostType::Bool], U),
+        ("image_crop", vec![I, af()], I),
+        ("image_read", vec![I, af()], HostType::Array(Box::new(I))),
+        ("image_write", vec![I, af(), HostType::Array(Box::new(I))], U),
+        ("image_texture", vec![I], I),
+        ("image_save", vec![I, S], HostType::Bool),
+        ("image_free", vec![I], U),
+        ("texture_update", vec![I, I, af()], U),
+        ("download", vec![S], U),
+        ("window_screenshot", vec![S], U),
+        ("render_target", vec![I, I], I),
     ]
 }
 

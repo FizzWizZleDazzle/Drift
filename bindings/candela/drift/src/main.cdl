@@ -122,6 +122,25 @@ host "drift" {
     draw_clip(float[]);
     // Particles.
     particles_restart(int);
+    // Images: pixel buffers the engine holds, by id.
+    int image_new(int, int, float[]);
+    int image_load(string);
+    int image_from_texture(int);
+    float[] image_info(int);
+    float[] image_get(int, int, int);
+    image_set(int, int, int, float[]);
+    image_op(int, string, float[], float[], float[]);
+    image_blit(int, int, int, int, float[], bool);
+    int image_crop(int, float[]);
+    int[] image_read(int, float[]);
+    image_write(int, float[], int[]);
+    int image_texture(int);
+    bool image_save(int, string);
+    image_free(int);
+    texture_update(int, int, float[]);
+    download(string);
+    window_screenshot(string);
+    int render_target(int, int);
 }
 
 enum Schedule { Startup, Update }
@@ -1312,4 +1331,127 @@ impl Effects {
     // Starts an emitter's run over: its bursts fire again and a finished one
     // emits anew.
     fn restart(self, emitter: Entity) { drift::particles_restart(emitter.id); }
+}
+
+// ---- Images ----
+
+// Pixels in memory that you change from code and show through a texture:
+// procedural art, paint programs, fog of war, minimaps, screenshots. The
+// engine holds the pixels; `free()` lets them go.
+struct Image { id: int = 0 }
+
+// A color as one int, 0xRRGGBBAA, the form Image.pixels() and
+// Image.write_rect use.
+fn pixel(c: Color) -> int {
+    return int(c.r * 255.0 + 0.5) * 16777216 + int(c.g * 255.0 + 0.5) * 65536 + int(c.b * 255.0 + 0.5) * 256
+        + int(c.a * 255.0 + 0.5);
+}
+fn color_of(px: int) -> Color {
+    return Color { r: float(px / 16777216 % 256) / 255.0, g: float(px / 65536 % 256) / 255.0,
+                   b: float(px / 256 % 256) / 255.0, a: float(px % 256) / 255.0 };
+}
+
+fn rect_list(r: Rect) -> float[] { return [r.x, r.y, r.w, r.h]; }
+fn flag(on: bool) -> float {
+    if on {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+fn image_answer(id: int, what: string) -> Image {
+    if id == 0 {
+        throw "drift_load_failed: " + what;
+    }
+    return Image { id: id };
+}
+
+impl Image {
+    fn width(self) -> int { return int(drift::image_info(self.id)[0]); }
+    fn height(self) -> int { return int(drift::image_info(self.id)[1]); }
+    fn get(self, x: int, y: int) -> Color {
+        let c = drift::image_get(self.id, x, y);
+        return Color { r: c[0], g: c[1], b: c[2], a: c[3] };
+    }
+    fn set(self, x: int, y: int, c: Color) { drift::image_set(self.id, x, y, color_list(c)); }
+    fn op(self, name: string, nums: float[], c: Color) { drift::image_op(self.id, name, nums, color_list(c), []); }
+    fn fill(self, c: Color) { self.op("fill", [], c); }
+    fn fill_rect(self, r: Rect, c: Color) { self.op("fill_rect", rect_list(r), c); }
+    // From `a` on the left (on top, when vertical) to `b` on the other side.
+    fn gradient(self, a: Color, b: Color, vertical: bool) {
+        drift::image_op(self.id, "gradient", [flag(vertical)], color_list(a), color_list(b));
+    }
+    // The noise at each pixel, from `low` where it is -1 to `high` where it
+    // is 1.
+    fn noise(self, n: Noise, low: Color, high: Color) {
+        drift::image_op(self.id, "noise", [float(n.seed), float(n.type_code()), n.frequency, float(n.octaves), n.lacunarity,
+                                           n.gain, n.warp, n.warp_frequency], color_list(low), color_list(high));
+    }
+    // Shapes, blended over the pixels by their alpha.
+    fn line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { self.op("line", [a.x, a.y, b.x, b.y, thickness], c); }
+    fn rect_lines(self, r: Rect, c: Color, thickness: float) {
+        self.op("rect_lines", [r.x, r.y, r.w, r.h, thickness], c);
+    }
+    fn circle(self, center: Vec2, radius: float, c: Color) { self.op("circle", [center.x, center.y, radius], c); }
+    fn circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
+        self.op("circle_lines", [center.x, center.y, radius, thickness], c);
+    }
+    // Another image with its top-left at (x, y), blended by its alpha.
+    fn draw(self, src: Image, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, [], true); }
+    // The part `frame` of another image.
+    fn draw_part(self, src: Image, frame: Rect, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, rect_list(frame), true); }
+    // Another image's pixels as they are, alpha included.
+    fn paste(self, src: Image, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, [], false); }
+    fn copy(self) -> Image { return Image { id: drift::image_crop(self.id, []) }; }
+    fn crop(self, r: Rect) -> Image { return Image { id: drift::image_crop(self.id, rect_list(r)) }; }
+    fn flip_x(self) { self.op("flip_x", [], Color { .. }); }
+    fn flip_y(self) { self.op("flip_y", [], Color { .. }); }
+    // Every pixel as 0xRRGGBBAA, row by row; see pixel() and color_of().
+    fn pixels(self) -> int[] { return drift::image_read(self.id, []); }
+    fn set_pixels(self, px: int[]) { drift::image_write(self.id, [], px); }
+    fn read_rect(self, r: Rect) -> int[] { return drift::image_read(self.id, rect_list(r)); }
+    fn write_rect(self, r: Rect, px: int[]) { drift::image_write(self.id, rect_list(r), px); }
+    // A new texture showing the pixels as they are now.
+    fn to_texture(self) -> Texture { return Texture { id: drift::image_texture(self.id) }; }
+    fn save_png(self, path: string) {
+        if !drift::image_save(self.id, path) {
+            throw "drift_save_failed: " + path;
+        }
+    }
+    // Saves the image and offers it as a download in the browser; on the
+    // desktop the file stays at `path`.
+    fn download(self, path: string) {
+        self.save_png(path);
+        drift::download(path);
+    }
+    fn free(self) { drift::image_free(self.id); }
+}
+
+impl Texture {
+    // A render target's pixels as its last frame left them. Raises
+    // drift_load_failed for other textures; load their file with
+    // Assets.image instead.
+    fn to_image(self) -> Image { return image_answer(drift::image_from_texture(self.id), "texture pixels"); }
+    // Writes an image of the texture's size into it. Cheap enough to do
+    // every frame.
+    fn update(self, img: Image) { drift::texture_update(self.id, img.id, []); }
+    // Writes the part `r` of the image to the same place in the texture.
+    fn update_rect(self, img: Image, r: Rect) { drift::texture_update(self.id, img.id, rect_list(r)); }
+}
+
+impl Assets {
+    // A texture cameras can draw into and sprites can show.
+    fn render_target(self, w: int, h: int) -> Texture { return Texture { id: drift::render_target(w, h) }; }
+    fn create_image(self, w: int, h: int, fill: Color) -> Image { return Image { id: drift::image_new(w, h, color_list(fill)) }; }
+    // An image file's pixels, to change before making a texture of them.
+    fn image(self, path: string) -> Image { return image_answer(drift::image_load(path), path); }
+}
+
+impl Window {
+    // Offers a file the game wrote, such as a screenshot, as a download in
+    // the browser. A screenshot asked for this frame is offered once it is
+    // written.
+    fn download(self, path: string) { drift::download(path); }
+    // Saves the next presented frame as a PNG.
+    fn screenshot(self, path: string) { drift::window_screenshot(path); }
 }

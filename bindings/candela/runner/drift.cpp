@@ -51,7 +51,9 @@
 #include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
 
-#ifndef __EMSCRIPTEN__
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#else
 #include "web_pack.hpp"
 #endif
 
@@ -1161,6 +1163,195 @@ bool presentation(const std::string& f, const json& a, json& out) {
     return false;
 }
 
+// ---- Images ----
+//
+// Pixel buffers the engine holds for scripts, by id: made, loaded or read
+// back from a render target, changed, then shown through a texture.
+
+std::unordered_map<int64_t, Image> g_images;
+int64_t g_nextImage = 1;
+std::vector<std::pair<std::string, int>> g_downloads;   // path, frames left to wait for it
+
+Color colorOf(const json& c, Color fallback = {0, 0, 0, 0}) {
+    if (!c.is_array() || c.size() < 4) return fallback;
+    return {channel(c[0].get<double>()), channel(c[1].get<double>()), channel(c[2].get<double>()), channel(c[3].get<double>())};
+}
+json colorList(Color c) { return {c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0}; }
+Rect rectOf(const json& r) { return {num(r, 0), num(r, 1), num(r, 2), num(r, 3)}; }
+int64_t keepImage(Image img) {
+    if (img.empty()) return 0;
+    g_images[g_nextImage] = std::move(img);
+    return g_nextImage++;
+}
+uint32_t packed(const uint8_t* p) { return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3]; }
+
+#ifdef __EMSCRIPTEN__
+// Offers a file of the page's file system as a browser download.
+EM_JS(void, drift_offer_download, (const char* path), {
+    var p = UTF8ToString(path);
+    var data = FS.readFile(p);
+    var url = URL.createObjectURL(new Blob([data], {type: 'application/octet-stream'}));
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = p.split('/').pop();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+});
+#endif
+
+// Downloads wait for their file: a screenshot is written at the end of the
+// frame that asked for it.
+void offerDownloads() {
+    for (auto it = g_downloads.begin(); it != g_downloads.end();) {
+        std::error_code ec;
+        bool there = std::filesystem::is_regular_file(it->first, ec);
+        if (there) {
+#ifdef __EMSCRIPTEN__
+            drift_offer_download(it->first.c_str());
+#else
+            DRIFT_LOG_INFO("Candela: %s is saved", it->first.c_str());
+#endif
+        } else if (--it->second > 0) {
+            ++it;
+            continue;
+        } else {
+            DRIFT_LOG_WARN("Candela: nothing to download at %s", it->first.c_str());
+        }
+        it = g_downloads.erase(it);
+    }
+}
+
+bool images(const std::string& f, const json& a, json& out) {
+    if (f.rfind("image_", 0) != 0 && f != "texture_update" && f != "download" && f != "window_screenshot" &&
+        f != "render_target") return false;
+    auto* r = res<RendererResource>();
+    out = nullptr;
+    if (f == "image_new") {
+        out = keepImage(Image(a[0].get<int32_t>(), a[1].get<int32_t>(), colorOf(a[2])));
+        return true;
+    }
+    if (f == "image_load") {
+        out = keepImage(Image::load(a[0].get<std::string>().c_str()));
+        return true;
+    }
+    if (f == "image_from_texture") {
+        out = r ? keepImage(r->readTexture(TextureHandle{a[0].get<uint32_t>()})) : 0;
+        return true;
+    }
+    if (f == "texture_update") {
+        // texture, image, the part of the image (empty: all of it at 0, 0)
+        auto it = g_images.find(a[1].get<int64_t>());
+        if (!r || it == g_images.end()) return true;
+        const Image& img = it->second;
+        Rect part = a[2].size() == 4 ? rectOf(a[2]) : Rect{0.f, 0.f, float(img.width()), float(img.height())};
+        int32_t x0 = std::max(0, int32_t(part.x)), y0 = std::max(0, int32_t(part.y));
+        int32_t x1 = std::min(img.width(), int32_t(part.x + part.w)), y1 = std::min(img.height(), int32_t(part.y + part.h));
+        if (x1 <= x0 || y1 <= y0) return true;
+        TextureHandle tex{a[0].get<uint32_t>()};
+        if (x0 == 0 && y0 == 0 && x1 == img.width() && y1 == img.height()) {
+            r->updateTexture(tex, 0, 0, img.width(), img.height(), img.data());
+        } else {
+            Image sub = img.crop({float(x0), float(y0), float(x1 - x0), float(y1 - y0)});
+            r->updateTexture(tex, x0, y0, sub.width(), sub.height(), sub.data());
+        }
+        return true;
+    }
+    if (f == "render_target") {
+        out = r ? r->createRenderTarget(a[0].get<int>(), a[1].get<int>()).id : 0u;
+        return true;
+    }
+    if (f == "window_screenshot") {
+        if (r) r->captureScreenshot(a[0].get<std::string>().c_str());
+        return true;
+    }
+    if (f == "download") {
+        g_downloads.push_back({a[0].get<std::string>(), 3});
+        return true;
+    }
+    auto it = g_images.find(a[0].get<int64_t>());
+    if (it == g_images.end()) {
+        if (f == "image_info" || f == "image_get" || f == "image_read") out = json::array();
+        else if (f == "image_crop" || f == "image_texture") out = 0;
+        else if (f == "image_save") out = false;
+        return true;
+    }
+    Image& img = it->second;
+    if (f == "image_info") out = {img.width(), img.height()};
+    else if (f == "image_get") out = colorList(img.get(a[1].get<int32_t>(), a[2].get<int32_t>()));
+    else if (f == "image_set") img.set(a[1].get<int32_t>(), a[2].get<int32_t>(), colorOf(a[3]));
+    else if (f == "image_op") {
+        // image, op, numbers, color, second color
+        std::string op = a[1].get<std::string>();
+        const json& n = a[2];
+        Color c = colorOf(a[3]);
+        if (op == "fill") img.fill(c);
+        else if (op == "fill_rect") img.fillRect(rectOf(n), c);
+        else if (op == "gradient") img.fillGradient(c, colorOf(a[4]), num(n, 0) > 0.5f);
+        else if (op == "line") img.drawLine({num(n, 0), num(n, 1)}, {num(n, 2), num(n, 3)}, c, num(n, 4, 1.f));
+        else if (op == "rect_lines") img.drawRect(rectOf(n), c, num(n, 4, 1.f));
+        else if (op == "circle") img.drawCircle({num(n, 0), num(n, 1)}, num(n, 2), c);
+        else if (op == "circle_lines") img.drawCircleOutline({num(n, 0), num(n, 1)}, num(n, 2), c, num(n, 3, 1.f));
+        else if (op == "flip_x") img.flipX();
+        else if (op == "flip_y") img.flipY();
+        else if (op == "noise") {
+            // seed, type, frequency, octaves, lacunarity, gain, warp, warp
+            // frequency: the noise at each pixel, from `c` at -1 to the
+            // second color at 1.
+            const Noise& noise = noiseFor(static_cast<int64_t>(num(n, 0)));
+            NoiseOptions o = noiseOptions(n);
+            Color hi = colorOf(a[4]);
+            for (int32_t y = 0; y < img.height(); ++y)
+                for (int32_t x = 0; x < img.width(); ++x) {
+                    float t = std::clamp(noise.sample(o, float(x), float(y)) * 0.5f + 0.5f, 0.f, 1.f);
+                    auto lerp = [t](uint8_t u, uint8_t v) { return uint8_t(std::lround(u + (v - u) * t)); };
+                    img.set(x, y, {lerp(c.r, hi.r), lerp(c.g, hi.g), lerp(c.b, hi.b), lerp(c.a, hi.a)});
+                }
+        } else {
+            DRIFT_LOG_WARN("Candela: Image has no '%s'", op.c_str());
+        }
+    } else if (f == "image_blit") {
+        // destination, source, x, y, part of the source, blend
+        auto src = g_images.find(a[1].get<int64_t>());
+        if (src != g_images.end()) {
+            img.blit(src->second, a[2].get<int32_t>(), a[3].get<int32_t>(), a[4].size() == 4 ? rectOf(a[4]) : Rect{},
+                     a[5].get<bool>());
+        }
+    } else if (f == "image_crop") {
+        Rect part = a[1].size() == 4 ? rectOf(a[1]) : Rect{0.f, 0.f, float(img.width()), float(img.height())};
+        out = keepImage(img.crop(part));
+    } else if (f == "image_read") {
+        // Packed 0xRRGGBBAA pixels of a rect, row by row.
+        Rect part = a[1].size() == 4 ? rectOf(a[1]) : Rect{0.f, 0.f, float(img.width()), float(img.height())};
+        out = json::array();
+        for (int32_t y = int32_t(part.y); y < int32_t(part.y + part.h); ++y)
+            for (int32_t x = int32_t(part.x); x < int32_t(part.x + part.w); ++x) {
+                Color c = img.get(x, y);
+                uint8_t p[4] = {c.r, c.g, c.b, c.a};
+                out.push_back(packed(p));
+            }
+    } else if (f == "image_write") {
+        Rect part = a[1].size() == 4 ? rectOf(a[1]) : Rect{0.f, 0.f, float(img.width()), float(img.height())};
+        const json& px = a[2];
+        size_t i = 0;
+        for (int32_t y = int32_t(part.y); y < int32_t(part.y + part.h); ++y)
+            for (int32_t x = int32_t(part.x); x < int32_t(part.x + part.w) && i < px.size(); ++x, ++i) {
+                uint32_t v = static_cast<uint32_t>(px[i].get<int64_t>());
+                img.set(x, y, {uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v)});
+            }
+    } else if (f == "image_texture") {
+        out = r ? r->createTextureFromPixels(img.data(), img.width(), img.height()).id : 0u;
+    } else if (f == "image_save") {
+        out = img.savePng(a[1].get<std::string>().c_str());
+    } else if (f == "image_free") {
+        g_images.erase(it);
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // ---- Services ----
 
 int state(bool held, bool pressed, bool released, int which) {
@@ -1178,6 +1369,7 @@ json service(const std::string& f, const json& a) {
     json answer;
     if (procgen(f, a, answer)) return answer;
     if (presentation(f, a, answer)) return answer;
+    if (images(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {
@@ -1462,6 +1654,7 @@ private:
             for (int i = 0; i < cb->sensorStartCount(); ++i) drift_host_contact(2, cb->sensorStartA(i), cb->sensorStartB(i));
             for (int i = 0; i < cb->sensorEndCount(); ++i) drift_host_contact(3, cb->sensorEndA(i), cb->sensorEndB(i));
         }
+        offerDownloads();
         auto* time = a.getResource<Time>();
         drift_host_frame(time ? time->delta : 0.0, time ? time->elapsed : 0.0, time ? int64_t(time->frame) : 0);
     }

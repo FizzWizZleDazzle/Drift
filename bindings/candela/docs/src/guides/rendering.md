@@ -93,6 +93,19 @@ fn minimap(cmd: Commands, assets: Assets) {
 
 Cameras with a lower `order` draw first, so the minimap is ready before the main camera's frame uses it.
 
+## Textures from code
+
+An `Image` is pixels you change from code: fill it, draw shapes and other images into it, set single pixels, then show it with `to_texture()`. Keep the texture and call `texture.update_rect(image, r)` after each change; it uploads only that part, so painting every frame stays cheap in the browser.
+
+```rust
+let img = assets.create_image(128, 128, rgb(0, 0, 0));
+img.gradient(rgb(40, 0, 80), rgb(255, 120, 0), true);
+img.circle(vec2(64.0, 64.0), 24.0, rgba(255, 255, 255, 200));
+cmd.spawn([at(200.0, 200.0), Sprite { image: img.to_texture(), .. }]);
+```
+
+A render target's `to_image()` reads back what its camera drew, and `save_png` or `download` keeps it. See [Image](../reference/resources.md#image) for every method.
+
 ## Resolution and scale modes
 
 The game draws at the logical resolution `width` and `height` in the `[window]` section of `drift.toml`. `scale_mode` decides how that fits the window:

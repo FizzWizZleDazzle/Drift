@@ -872,6 +872,17 @@ TextureHandle RendererResource::createRenderTarget(int w, int h, TextureOptions 
     return impl_->textures.create({id, w, h, true, options});
 }
 
+Image RendererResource::readTexture(TextureHandle texture) const {
+    const TextureEntry* e = impl_->textures.get(texture);
+    if (!e || !e->renderTarget || !impl_->device) return {};
+    int32_t w = 0, h = 0;
+    std::vector<uint8_t> px;
+    if (!impl_->device->readPixels(e->id, &w, &h, px)) return {};
+    Image img(w, h);
+    std::memcpy(img.data(), px.data(), std::min(px.size(), static_cast<size_t>(w) * h * 4));
+    return img;
+}
+
 void RendererResource::updateTexture(TextureHandle texture, int x, int y, int w, int h,
                                      const uint8_t* rgba) {
     if (TextureEntry* e = impl_->textures.get(texture)) {

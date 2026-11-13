@@ -171,6 +171,37 @@ cmd.spawn().insert(Transform2D{}, Camera{.zoom = 0.2f, .active = true, .order = 
 renderer->draw({.texture = minimap, .position = {1000, 16}, .layer = ScreenLayer});
 ```
 
+## Images
+
+An `Image` (`#include <drift/Image.hpp>`) is pixels in memory, RGBA with 8 bits a channel, row by row from the top-left. Generate textures from code, paint into them, or read a render target back:
+
+```cpp
+Image img(128, 128, Color{20, 20, 40, 255});
+img.fillGradient(Color{255, 0, 0, 255}, Color{0, 0, 255, 255}, /*vertical=*/false);
+img.drawCircle({64, 64}, 20, Color{0, 255, 0, 255});
+img.drawLine({0, 0}, {127, 127}, Color::white(), 2.f);
+TextureHandle tex = renderer->createTextureFromPixels(img.data(), img.width(), img.height());
+
+// Later: change pixels and upload only what changed.
+img.set(10, 10, Color{255, 255, 0, 255});
+renderer->updateTexture(tex, 0, 0, img.width(), img.height(), img.data());
+
+// A render target as its last frame left it.
+Image shot = renderer->readTexture(minimap);
+shot.savePng("minimap.png");
+```
+
+| Method | Does |
+|--------|------|
+| `Image(w, h, fill)`, `Image::load(path)`, `savePng(path)` | Make, load (PNG, JPG, BMP, TGA, GIF) and save |
+| `get(x, y)`, `set(x, y, c)`, `blend(x, y, c)` | One pixel; outside the image reads transparent and writes are skipped |
+| `fill(c)`, `fillRect(r, c)`, `fillGradient(a, b, vertical)` | Areas |
+| `drawLine`, `drawRect`, `drawCircle`, `drawCircleOutline` | Shapes, blended by alpha |
+| `blit(src, x, y, srcRect, blend)`, `crop(r)`, `flipX()`, `flipY()` | Copy, cut and mirror |
+| `data()`, `width()`, `height()` | The pixels, for `createTextureFromPixels` and `updateTexture` |
+
+`RendererResource::readTexture` reads render targets only; for an image file, use `Image::load`.
+
 ## Resolution and Scale Modes
 
 The game draws in a logical resolution (`width` and `height` in the `[window]` section of [drift.toml](../reference/configuration.md)). The scale mode decides how that resolution maps onto the window:

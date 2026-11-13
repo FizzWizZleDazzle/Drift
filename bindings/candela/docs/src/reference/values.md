@@ -22,6 +22,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `PlayOptions` | `volume` (1), `pan` (-1 left to 1 right), `pitch` (1), `looping`, `bus` (the sfx bus when unset), `fade_in` (seconds), `priority` (higher keeps its voice when all are busy). For `Sound.play_with` |
 | `Timer`, `Cooldown` | See [Timers and Save Data](../guides/timers-and-saves.md) |
 | `Texture`, `Sound`, `Font`, `Spritesheet`, `Map`, `Scene` | Assets from `Assets` |
+| `Image` | Pixels to change from code; see [Image](resources.md#image) |
 
 ## Functions
 
@@ -34,6 +35,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `tween()` | An empty `Tween` to chain steps onto |
 | `ease(e, t)` | Eased progress for `t` from 0 to 1 |
 | `hud_layer()` | The screen-space layer, drawn last without a camera |
+| `pixel(c)`, `color_of(px)` | A `Color` as one `int`, 0xRRGGBBAA, and back, for `Image.pixels()` |
 | `layer_mask(layers: int[])` | A `Camera.layer_mask` drawing those world layers: `layer_mask([0, 1])` |
 | `timer(seconds)`, `repeating_timer(seconds)`, `cooldown(seconds)` | Timers |
 | `log(message)`, `warn(message)` | Write to the engine log |
