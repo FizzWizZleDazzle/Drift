@@ -2388,7 +2388,12 @@ bool gameplayInput(const std::string& f, const json& a, json& out) {
         if (actions) actions->bindAxis(a[0].get<std::string>(), key(1), key(2));
         out = nullptr;
     } else if (f == "action_axis") {
-        out = actions ? actions->axis(a[0].get<std::string>()) : 0.f;
+        std::string n = a[0].get<std::string>();
+        if (actions && !actions->has(n)) {
+            out = nullptr;
+        } else {
+            out = actions ? actions->axis(n) : 0.f;
+        }
     } else if (f == "input_bindings") {
         out = json::array();
         std::string n = a[0].get<std::string>();
@@ -2959,17 +2964,27 @@ json service(const std::string& f, const json& a) {
                                         static_cast<GamepadAxis>(a[2].get<int>()));
         return nullptr;
     }
+    // An action the game never declared answers null, and the host raises
+    // drift_unknown_action naming the ones it has.
     if (f == "action_state") {
         std::string n = a[0].get<std::string>();
         if (!actions) return false;
+        if (!actions->has(n)) return nullptr;
         int w = a[1].get<int>();
         return w == 1 ? actions->pressed(n) : w == 2 ? actions->released(n) : actions->held(n);
     }
-    if (f == "action_value") return actions ? actions->value(a[0].get<std::string>()) : 0.0;
+    if (f == "action_value") {
+        std::string n = a[0].get<std::string>();
+        if (actions && !actions->has(n)) return nullptr;
+        return actions ? actions->value(n) : 0.0;
+    }
     if (f == "action_axis2d") {
-        Vec2 v = actions ? actions->axis2D(a[0].get<std::string>()) : Vec2{};
+        std::string n = a[0].get<std::string>();
+        if (actions && !actions->has(n)) return nullptr;
+        Vec2 v = actions ? actions->axis2D(n) : Vec2{};
         return {v.x, v.y};
     }
+    if (f == "action_names") return actions ? json(actions->names()) : json::array();
     if (f == "texture_load") {
         auto* assets = res<AssetServer>();
         return assets ? assets->loadTexture(a[0].get<std::string>().c_str()).id : 0u;

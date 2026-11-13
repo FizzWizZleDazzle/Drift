@@ -96,9 +96,83 @@ impl State<S> {
 
 // Turns systems on and off by function name, from the next system on: a
 // paused game turns off its gameplay systems and keeps its menu running.
+// A name that is not one of the game's systems raises drift_unknown_system,
+// which lists the systems there are.
 struct Systems { id: int = 0 }
 impl Systems {
-    fn enable(self, system: string) { drift::system_switch(system, true); }
-    fn disable(self, system: string) { drift::system_switch(system, false); }
-    fn enabled(self, system: string) -> bool { return drift::system_enabled(system); }
+    fn enable(self, system_name: string) {
+        check_system(system_name);
+        drift::system_switch(system_name, true);
+    }
+    fn disable(self, system_name: string) {
+        check_system(system_name);
+        drift::system_switch(system_name, false);
+    }
+    fn enabled(self, system_name: string) -> bool {
+        check_system(system_name);
+        return drift::system_enabled(system_name);
+    }
+}
+fn check_system(name: string) {
+    let e = drift::system_error(name);
+    if e != "" {
+        throw e;
+    }
+}
+
+// ---- Resource fields ----
+
+// One field of a resource, such as `score` in a `Game` resource, for HUD
+// text, bars and the debug overlay to read every frame. Make one with
+// resource_field<Game>("score").
+struct ResourceField { resource: string = "", field: string = "" }
+
+// The field `path` of the resource T: "score", or "player.hp" for a field of
+// a struct field. T must be a @resource or @settings struct and the path a
+// field of it; otherwise this raises drift_not_a_resource or
+// drift_no_such_field, naming the type and listing its fields. Made in a
+// resource's field default, it is checked when the game loads.
+fn resource_field<T>(path: string) -> ResourceField {
+    let f = ResourceField { resource: drift_type_name<T>(), field: path };
+    f.check();
+    return f;
+}
+impl ResourceField {
+    // Whether it names a field; `ResourceField {}` names none.
+    fn is_set(self) -> bool { return self.resource != ""; }
+    // Raises drift_not_a_resource or drift_no_such_field unless it names a
+    // field of a resource.
+    fn check(self) {
+        let e = drift::resource_field_error(self.resource, self.field);
+        if e != "" {
+            throw e;
+        }
+    }
+    // "Game.score".
+    fn label(self) -> string {
+        let parts = self.resource.split("::");
+        return parts[parts.len() - 1] + "." + self.field;
+    }
+    // The value as text: numbers and bools as written, "" while the
+    // resource does not exist.
+    fn text(self) -> string {
+        let t = drift::resource_text(self.label());
+        if t == "" && self.is_set() {
+            // Raises when the field was written by hand and names nothing.
+            self.check();
+        }
+        return t;
+    }
+    // The value as a number: true is 1.0, and anything that is not a
+    // number 0.0.
+    fn number(self) -> float {
+        let s = self.text();
+        if s.parse<float>() is Some(v) {
+            return v;
+        }
+        if s == "true" {
+            return 1.0;
+        }
+        return 0.0;
+    }
 }

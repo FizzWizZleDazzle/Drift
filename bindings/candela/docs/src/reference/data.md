@@ -196,13 +196,13 @@ fn format(pattern: string, args: any[]) -> string
 
 The pattern with each {} replaced by the next argument and each {0}, {1} by the argument at that index: format("{} of {}", [3, 10]) is "3 of 10".
 
-## fill
+## format_named
 
 ```rust
-fn fill(pattern: string, values: {string: any}) -> string
+fn format_named(pattern: string, values: {string: any}) -> string
 ```
 
-The pattern with each {name} replaced by values[name]: fill("Hi {who}", {"who": "Ana"}). Names not in `values` stay as they are.
+The pattern with each {name} replaced by values[name]: format_named("Hi {who}", {"who": "Ana"}). Names not in `values` stay as they are.
 
 ## fixed
 
@@ -228,13 +228,21 @@ fn grouped(n: int) -> string
 
 n with a comma between each group of three digits: "12,345".
 
-## clock
+## format_clock
 
 ```rust
-fn clock(seconds: float, tenths: bool) -> string
+fn format_clock(seconds: float) -> string
 ```
 
-Seconds as "m:ss", or "h:mm:ss" from an hour up; with `tenths`, a digit of tenths after a point: "1:05.3".
+Seconds as "m:ss", or "h:mm:ss" from an hour up: "1:05".
+
+## format_clock_tenths
+
+```rust
+fn format_clock_tenths(seconds: float) -> string
+```
+
+The same with a digit of tenths after a point: "1:05.3".
 
 ## Strings
 

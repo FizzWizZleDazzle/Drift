@@ -20,7 +20,7 @@ struct Debug {
     shown: bool = true,
     keys: bool = true,
     slow: float = 0.25,
-    watches: string[] = [],
+    watches: ResourceField[] = [],
     lines: string[] = [],
     ages: float[] = [],
     fps: float = 0.0,
@@ -34,10 +34,10 @@ struct Debug {
 ### Debug.watch
 
 ```rust
-fn watch(self, path: string)
+fn watch<T>(self, path: string)
 ```
 
-Shows a resource field on the overlay, by path: "Game.score".
+Shows a field of the resource T on the overlay: watch&lt;Game>("score"), or watch&lt;Game>("player.hp") for a field of a struct field. A type that is not a resource, or a field it does not have, raises drift_not_a_resource or drift_no_such_field.
 
 ### Debug.print
 

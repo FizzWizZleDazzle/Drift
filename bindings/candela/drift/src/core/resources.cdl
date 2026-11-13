@@ -116,11 +116,34 @@ impl Input {
         drift::bind_axis2d_keys(name, key_code(left), key_code(right), key_code(up), key_code(down));
     }
     fn bind_stick(self, name: string, x: GamepadAxis, y: GamepadAxis) { drift::bind_stick(name, axis_code(x), axis_code(y)); }
-    fn action_pressed(self, name: string) -> bool { return drift::action_state(name, 1); }
-    fn action_held(self, name: string) -> bool { return drift::action_state(name, 0); }
-    fn action_released(self, name: string) -> bool { return drift::action_state(name, 2); }
-    fn action_value(self, name: string) -> float { return drift::action_value(name); }
-    fn axis2d(self, name: string) -> Vec2 { let v = drift::action_axis2d(name); return Vec2 { x: v[0], y: v[1] }; }
+    // Actions by name. A name the game never declared, in drift.toml
+    // [input] or with a bind method, raises drift_unknown_action, which lists
+    // the actions there are.
+    fn action_pressed(self, name: string) -> bool { return action_state(name, 1); }
+    fn action_held(self, name: string) -> bool { return action_state(name, 0); }
+    fn action_released(self, name: string) -> bool { return action_state(name, 2); }
+    fn action_value(self, name: string) -> float { return action_number(name, drift::action_value(name)); }
+    fn axis2d(self, name: string) -> Vec2 {
+        let v = drift::action_axis2d(name);
+        if v.len() < 2 {
+            throw drift::action_error(name);
+        }
+        return Vec2 { x: v[0], y: v[1] };
+    }
+}
+
+fn action_state(name: string, which: int) -> bool {
+    let s = drift::action_state(name, which);
+    if s < 0 {
+        throw drift::action_error(name);
+    }
+    return s == 1;
+}
+fn action_number(name: string, v: float[]) -> float {
+    if v.len() == 0 {
+        throw drift::action_error(name);
+    }
+    return v[0];
 }
 
 struct Assets { id: int = 0 }

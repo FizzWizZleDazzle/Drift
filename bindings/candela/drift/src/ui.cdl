@@ -191,14 +191,15 @@ fn panel(theme: Theme, at: Anchor, size: Vec2) -> any[] {
     ];
 }
 
-// Fills a Text from a field of a resource: `path` is the resource and the
-// field, "Game.score" or "Game.player.lives", and `format` the text with
-// {} where the value goes. `count_speed` above 0 counts a number up or down
-// to its new value at that many units per second, with at least a quarter
-// second per change, instead of jumping.
+// Fills a Text from a field of a resource: `source` names it, made with
+// resource_field<Game>("score"), and `format` is the text with {} where the
+// value goes. `count_speed` above 0 counts a number up or down to its new
+// value at that many units per second, with at least a quarter second per
+// change, instead of jumping. `decimals` is how many digits a number shows
+// after the point.
 @component
 struct Bind {
-    path: string = "",
+    source: ResourceField = ResourceField { .. },
     format: string = "{}",
     decimals: int = 0,
     count_speed: float = 0.0,
@@ -206,29 +207,19 @@ struct Bind {
     started: bool = false,
 }
 
-fn bind(path: string, format: string) -> Bind { return Bind { path: path, format: format, .. }; }
-fn bind_counter(path: string, format: string, speed: float) -> Bind {
-    return Bind { path: path, format: format, count_speed: speed, .. };
+// A Bind showing the field `path` of the resource T: bind_text<Game>("score",
+// "Score {}"). A type that is not a resource, or a field it does not have,
+// raises drift_not_a_resource or drift_no_such_field.
+fn bind_text<T>(path: string, format: string) -> Bind { return Bind { source: resource_field<T>(path), format: format, .. }; }
+// The same, counting toward a new number at `units_per_second` or faster.
+fn bind_counter<T>(path: string, format: string, units_per_second: float) -> Bind {
+    return Bind { source: resource_field<T>(path), format: format, count_speed: units_per_second, .. };
 }
-
-// A resource field as a number; 0.0 when it is not one.
-fn resource_number(path: string) -> float {
-    let s = drift::resource_text(path);
-    if s.parse<float>() is Some(v) {
-        return v;
-    }
-    if s == "true" {
-        return 1.0;
-    }
-    return 0.0;
-}
-
-fn resource_string(path: string) -> string { return drift::resource_text(path); }
 
 @system
 fn ui_bind(bind: (Bind, Text), time: Time) {
     let (b, text) = bind;
-    let raw = drift::resource_text(b.path);
+    let raw = b.source.text();
     let shown = raw;
     if raw.parse<float>() is Some(v) {
         let target = v;
@@ -253,14 +244,21 @@ fn ui_bind(bind: (Bind, Text), time: Time) {
     }
 }
 
-// A Text that shows a resource field holding seconds as a clock.
+// A Text that shows a resource field holding seconds as a clock, "m:ss",
+// or "m:ss.d" with `tenths`: ClockBind { source:
+// resource_field<Game>("time_left"), .. }.
 @component
-struct ClockBind { path: string = "", format: string = "{}", tenths: bool = false }
+struct ClockBind { source: ResourceField = ResourceField { .. }, format: string = "{}", tenths: bool = false }
 
 @system
 fn ui_clock(clock_bind: (ClockBind, Text)) {
     let (c, text) = clock_bind;
-    let value = c.format.replace("{}", clock(resource_number(c.path), c.tenths));
+    let seconds = c.source.number();
+    let shown = format_clock(seconds);
+    if c.tenths {
+        shown = format_clock_tenths(seconds);
+    }
+    let value = c.format.replace("{}", shown);
     if value != text.value {
         text.value = value;
     }
@@ -307,14 +305,16 @@ fn fade_of(r: Rectangle, alpha: float) -> float {
 // A bar that fills to value / max: health, stamina, progress. The fill
 // slides toward a new value at `smooth` per second (0 jumps), and a trail
 // in `trail_color` shows recent damage, shrinking after `trail_delay`
-// seconds. `path` and `max_path` fill value and max from resource fields.
-// Colors left unset come from the theme.
+// seconds. `value_from` and `max_from`, made with resource_field<Game>("hp"),
+// fill value and max from resource fields every frame. `smooth` is a rate
+// per second (0 jumps); `trail_speed` is the share of the bar the trail
+// shrinks per second. Colors left unset come from the theme.
 @component
 struct Bar {
     value: float = 1.0,
     max: float = 1.0,
-    path: string = "",
-    max_path: string = "",
+    value_from: ResourceField = ResourceField { .. },
+    max_from: ResourceField = ResourceField { .. },
     fill_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
     trail_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
     smooth: float = 6.0,
@@ -332,7 +332,8 @@ struct Bar {
 
 // Spawns a bar `size` pixels at `at` and answers its entity:
 // `spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
-// Bar { path: "Game.hp", max_path: "Game.max_hp", .. })`. Change it later
+// Bar { value_from: resource_field<Game>("hp"), max_from:
+// resource_field<Game>("max_hp"), .. })`. Change it later
 // through a system that takes its Bar.
 fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> Entity {
     let e = cmd.spawn([
@@ -361,11 +362,11 @@ fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> E
 @system(after: [ui_anchor])
 fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands) {
     let (bar, back, t) = row;
-    if bar.path != "" {
-        bar.value = resource_number(bar.path);
+    if bar.value_from.is_set() {
+        bar.value = bar.value_from.number();
     }
-    if bar.max_path != "" {
-        bar.max = resource_number(bar.max_path);
+    if bar.max_from.is_set() {
+        bar.max = bar.max_from.number();
     }
     let target = 0.0;
     if bar.max > 0.0 {
@@ -425,13 +426,13 @@ fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands) {
 // ---- Icon rows ----
 
 // A row of `max` icons with the first `count` lit: hearts, ammo, lives.
-// Icons are `image` when it is set, circles otherwise. `path` fills count
-// from a resource field.
+// Icons are `image` when it is set, circles otherwise. `count_from`, made
+// with resource_field<Game>("lives"), fills count from a resource field.
 @component
 struct IconRow {
     count: int = 3,
     max: int = 3,
-    path: string = "",
+    count_from: ResourceField = ResourceField { .. },
     image: Texture = Texture { .. },
     size: float = 24.0,
     spacing: float = 30.0,
@@ -447,8 +448,8 @@ fn icon_row(at: Anchor, count: int, max: int) -> any[] {
 @system(after: [ui_anchor])
 fn ui_icon_rows(icon_row: (Entity, IconRow, Transform), cmd: Commands) {
     let (e, row, t) = icon_row;
-    if row.path != "" {
-        row.count = int(resource_number(row.path));
+    if row.count_from.is_set() {
+        row.count = int(row.count_from.number());
     }
     while row.parts.len() < row.max {
         let part = cmd.spawn([Transform { .. }, PartOf { owner: e }]);

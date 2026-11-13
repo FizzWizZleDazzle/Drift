@@ -38,9 +38,12 @@ host "drift" {
     bind(string, string);
     bind_axis2d_keys(string, int, int, int, int);
     bind_stick(string, int, int);
-    bool action_state(string, int);
-    float action_value(string);
+    // -1 for an action the game never declared; the values are then empty,
+    // and action_error says what to raise.
+    int action_state(string, int);
+    float[] action_value(string);
     float[] action_axis2d(string);
+    string action_error(string);
 
     // Assets, sound, window and effects.
     int texture_load(string);
@@ -70,6 +73,9 @@ host "drift" {
     log_message(int, string);
     // A field of the script's resources, by path ("Game.score"), as text.
     string resource_text(string);
+    // "" when the type is a resource with a field at the path; otherwise the
+    // drift_not_a_resource or drift_no_such_field error to raise.
+    string resource_field_error(string, string);
     set_time_scale(float);
     bool entity_alive(int);
     int entity_count();
@@ -194,7 +200,7 @@ host "drift" {
     // Input.
     bool pad_connected(int);
     bind_axis_keys(string, int, int);
-    float action_axis(string);
+    float[] action_axis(string);
     string[] input_bindings(string, int);
     input_rebind(string, int, int, string);
     string input_capture();
@@ -235,7 +241,8 @@ host "drift" {
     // Steering: behavior name, numbers, then point lists.
     float[] steer(string, float[], float[], float[], int[]);
 
-    // Systems and restarts.
+    // Systems and restarts. system_error is "" for a system the game has.
+    string system_error(string);
     system_switch(string, bool);
     bool system_enabled(string);
     restart();

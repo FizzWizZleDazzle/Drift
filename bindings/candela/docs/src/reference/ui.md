@@ -205,12 +205,12 @@ A rounded panel behind other widgets, `size` pixels.
 
 ## Bind
 
-Fills a Text from a field of a resource: `path` is the resource and the field, "Game.score" or "Game.player.lives", and `format` the text with {} where the value goes. `count_speed` above 0 counts a number up or down to its new value at that many units per second, with at least a quarter second per change, instead of jumping.
+Fills a Text from a field of a resource: `source` names it, made with resource_field&lt;Game>("score"), and `format` is the text with {} where the value goes. `count_speed` above 0 counts a number up or down to its new value at that many units per second, with at least a quarter second per change, instead of jumping. `decimals` is how many digits a number shows after the point.
 
 ```rust
 @component
 struct Bind {
-    path: string = "",
+    source: ResourceField = ResourceField { .. },
     format: string = "{}",
     decimals: int = 0,
     count_speed: float = 0.0,
@@ -219,31 +219,21 @@ struct Bind {
 }
 ```
 
-## bind
+## bind_text
 
 ```rust
-fn bind(path: string, format: string) -> Bind
+fn bind_text<T>(path: string, format: string) -> Bind
 ```
+
+A Bind showing the field `path` of the resource T: bind_text&lt;Game>("score", "Score {}"). A type that is not a resource, or a field it does not have, raises drift_not_a_resource or drift_no_such_field.
 
 ## bind_counter
 
 ```rust
-fn bind_counter(path: string, format: string, speed: float) -> Bind
+fn bind_counter<T>(path: string, format: string, units_per_second: float) -> Bind
 ```
 
-## resource_number
-
-```rust
-fn resource_number(path: string) -> float
-```
-
-A resource field as a number; 0.0 when it is not one.
-
-## resource_string
-
-```rust
-fn resource_string(path: string) -> string
-```
+The same, counting toward a new number at `units_per_second` or faster.
 
 ## ui_bind
 
@@ -256,12 +246,12 @@ A system the module adds: it runs in every game that imports the module.
 
 ## ClockBind
 
-A Text that shows a resource field holding seconds as a clock.
+A Text that shows a resource field holding seconds as a clock, "m:ss", or "m:ss.d" with `tenths`: ClockBind { source: resource_field&lt;Game>("time_left"), .. }.
 
 ```rust
 @component
 struct ClockBind {
-    path: string = "",
+    source: ResourceField = ResourceField { .. },
     format: string = "{}",
     tenths: bool = false,
 }
@@ -298,15 +288,15 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Bar
 
-A bar that fills to value / max: health, stamina, progress. The fill slides toward a new value at `smooth` per second (0 jumps), and a trail in `trail_color` shows recent damage, shrinking after `trail_delay` seconds. `path` and `max_path` fill value and max from resource fields. Colors left unset come from the theme.
+A bar that fills to value / max: health, stamina, progress. The fill slides toward a new value at `smooth` per second (0 jumps), and a trail in `trail_color` shows recent damage, shrinking after `trail_delay` seconds. `value_from` and `max_from`, made with resource_field&lt;Game>("hp"), fill value and max from resource fields every frame. `smooth` is a rate per second (0 jumps); `trail_speed` is the share of the bar the trail shrinks per second. Colors left unset come from the theme.
 
 ```rust
 @component
 struct Bar {
     value: float = 1.0,
     max: float = 1.0,
-    path: string = "",
-    max_path: string = "",
+    value_from: ResourceField = ResourceField { .. },
+    max_from: ResourceField = ResourceField { .. },
     fill_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
     trail_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
     smooth: float = 6.0,
@@ -329,7 +319,7 @@ struct Bar {
 fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> Entity
 ```
 
-Spawns a bar `size` pixels at `at` and answers its entity: `spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0), Bar { path: "Game.hp", max_path: "Game.max_hp", .. })`. Change it later through a system that takes its Bar.
+Spawns a bar `size` pixels at `at` and answers its entity: `spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0), Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. })`. Change it later through a system that takes its Bar.
 
 ## ui_bars
 
@@ -342,14 +332,14 @@ A system the module adds: it runs in every game that imports the module.
 
 ## IconRow
 
-A row of `max` icons with the first `count` lit: hearts, ammo, lives. Icons are `image` when it is set, circles otherwise. `path` fills count from a resource field.
+A row of `max` icons with the first `count` lit: hearts, ammo, lives. Icons are `image` when it is set, circles otherwise. `count_from`, made with resource_field&lt;Game>("lives"), fills count from a resource field.
 
 ```rust
 @component
 struct IconRow {
     count: int = 3,
     max: int = 3,
-    path: string = "",
+    count_from: ResourceField = ResourceField { .. },
     image: Texture = Texture { .. },
     size: float = 24.0,
     spacing: float = 30.0,

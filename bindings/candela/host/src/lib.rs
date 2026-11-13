@@ -484,7 +484,7 @@ fn resource_text(path: &str) -> String {
     let Some(first) = parts.next() else { return String::new() };
     RESOURCE_VIEW.with(|r| {
         let r = r.borrow();
-        let Some(mut v) = r.get(first) else { return String::new() };
+        let Some(mut v) = r.get(bare(first)) else { return String::new() };
         for p in parts {
             match field(v, p) {
                 Some(next) => v = next,
@@ -499,6 +499,74 @@ fn resource_text(path: &str) -> String {
             other => to_json(other).to_string(),
         }
     })
+}
+
+/// Checks that `ty` is a resource and `path` ("score", "player.hp") names a
+/// field of it, for `resource_field<T>(path)`. The error names the type and
+/// lists the fields it has.
+fn resource_field_check(ty: &str, path: &str) -> Result<(), String> {
+    TYPES.with(|t| {
+        let t = t.borrow();
+        let Some(types) = t.as_ref() else { return Ok(()) };
+        let Some(DataType::Struct(id)) = types.parse_type(ty) else {
+            return Err(format!("drift_not_a_resource: {ty} is not a struct; resource_field<T> takes a struct marked @resource or @settings"));
+        };
+        let marked = |attr: &str| types.table.named("drift", attr).any(|a| matches!(a.target, AttributeTarget::Struct(s) if s == id));
+        let name = bare(types.struct_name(id)).to_owned();
+        if !marked("resource") && !marked("settings") {
+            let what = if marked("component") {
+                "a component"
+            } else if marked("message") {
+                "a message"
+            } else {
+                "a struct without @resource"
+            };
+            return Err(format!(
+                "drift_not_a_resource: {name} is {what}, not a resource; resource_field<T> takes a struct marked @resource or @settings"
+            ));
+        }
+        let fields_of = |id: u16| types.table.structs[id as usize].fields.iter().map(|(f, _)| f.as_str()).collect::<Vec<_>>().join(", ");
+        let mut at = id;
+        let mut walked = name;
+        let parts: Vec<&str> = path.split('.').collect();
+        for (i, part) in parts.iter().enumerate() {
+            let info = &types.table.structs[at as usize];
+            let Some((_, field_type)) = info.fields.iter().find(|(f, _)| f == part) else {
+                return Err(format!("drift_no_such_field: {walked} has no field \"{part}\"; its fields are {}", fields_of(at)));
+            };
+            if let Some(next) = parts.get(i + 1) {
+                let DataType::Struct(inner) = field_type else {
+                    return Err(format!("drift_no_such_field: {walked}.{part} is not a struct, so it has no field \"{next}\""));
+                };
+                at = *inner;
+                walked = format!("{walked}.{part}");
+            }
+        }
+        Ok(())
+    })
+}
+
+/// "" for one of the game's systems; otherwise the error the module raises,
+/// listing the systems there are.
+fn system_error(name: &str) -> String {
+    if SWITCHES.with(|w| w.borrow().contains_key(name)) {
+        return String::new();
+    }
+    let mut names: Vec<String> = SWITCHES.with(|w| w.borrow().keys().cloned().collect());
+    names.sort();
+    format!("drift_unknown_system: no system \"{name}\"; the systems are {}", names.join(", "))
+}
+
+/// The error the module raises for an input action the game never declared,
+/// listing the ones it has.
+fn action_error(name: &str) -> String {
+    let mut names: Vec<String> =
+        call("action_names", json!([])).as_array().map(|a| a.iter().filter_map(|n| n.as_str().map(str::to_owned)).collect()).unwrap_or_default();
+    names.sort();
+    let known = if names.is_empty() { String::from("none") } else { names.join(", ") };
+    format!(
+        "drift_unknown_action: no input action \"{name}\"; the actions are {known}. Declare actions in drift.toml [input] or with the Input.bind methods"
+    )
 }
 
 fn queue(c: Command) {
@@ -1523,6 +1591,9 @@ fn engine(module_dir: &str) -> Engine {
         SPAWNED.with(|s| s.borrow_mut().insert(e));
         e as i64
     });
+    // Names the game does not have answer the error text, which the module
+    // raises: an error a host function raises reaches the script without it.
+    e.register_host_fn("drift", "system_error", |name: &str| system_error(name));
     e.register_host_fn("drift", "system_switch", |name: String, on: bool| queue(Command::Switch(name, on)));
     e.register_host_fn("drift", "system_enabled", |name: &str| {
         SWITCHES.with(|w| w.borrow().get(name).copied().unwrap_or(false))
@@ -1617,9 +1688,25 @@ fn engine(module_dir: &str) -> Engine {
     e.register_host_fn("drift", "bind_stick", |n: String, x: i64, y: i64| {
         call("bind_stick", json!([n, x, y]));
     });
-    e.register_host_fn("drift", "action_state", move |n: String, s: i64| b(call("action_state", json!([n, s]))));
-    e.register_host_fn("drift", "action_value", move |n: &str| f(call("action_value", json!([n]))));
-    e.register_host_fn("drift", "action_axis2d", move |n: &str| fv(call("action_axis2d", json!([n]))));
+    // The engine answers null for an action the game never declared: the
+    // state is then -1, and the values are empty lists.
+    e.register_host_fn("drift", "action_state", move |n: String, s: i64| {
+        let j = call("action_state", json!([n, s]));
+        if j.is_null() { -1 } else { i64::from(b(j)) }
+    });
+    e.register_host_fn("drift", "action_value", move |n: &str| {
+        let j = call("action_value", json!([n]));
+        if j.is_null() { Vec::new() } else { vec![f(j)] }
+    });
+    e.register_host_fn("drift", "action_axis", move |n: &str| {
+        let j = call("action_axis", json!([n]));
+        if j.is_null() { Vec::new() } else { vec![f(j)] }
+    });
+    e.register_host_fn("drift", "action_axis2d", move |n: &str| {
+        let j = call("action_axis2d", json!([n]));
+        if j.is_null() { Vec::new() } else { fv(j) }
+    });
+    e.register_host_fn("drift", "action_error", |n: &str| action_error(n));
     e.register_host_fn("drift", "texture_load", move |p: &str| -> Result<i64, HostError> {
         let id = i(call("texture_load", json!([p])));
         if id == 0 { Err(host_error(format!("drift_load_failed: {p}"))) } else { Ok(id) }
@@ -1678,6 +1765,9 @@ fn engine(module_dir: &str) -> Engine {
     });
     e.register_host_fn("drift", "log_message", |level: i64, m: String| log(level as i32, &m));
     e.register_host_fn("drift", "resource_text", |path: &str| resource_text(path));
+    e.register_host_fn("drift", "resource_field_error", |ty: String, path: String| {
+        resource_field_check(&ty, &path).err().unwrap_or_default()
+    });
     for (name, args, ret) in forwarded().into_iter().chain(presentation_forwarded()) {
         forward(&mut e, name, args, ret);
     }
@@ -1793,7 +1883,6 @@ fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         // Input.
         ("pad_connected", vec![I], B),
         ("bind_axis_keys", vec![S, I, I], U),
-        ("action_axis", vec![S], F),
         ("input_bindings", vec![S, I], as_()),
         ("input_rebind", vec![S, I, I, S], U),
         ("input_capture", vec![], S),

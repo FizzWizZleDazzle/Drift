@@ -47,3 +47,32 @@ try {
 Because the text goes on past the kind, `catch "drift_load_failed"` with a quoted kind does not match these errors; catch them with a name and test the start.
 
 A file that a resource's field default loads, such as `ship: Texture = texture("assets/ship.png")`, is loaded when the game starts, and an error there stops the game before the first frame.
+
+## Names that do not exist
+
+A name written as text, such as a system name or an input action, cannot be checked by the compiler. Drift checks it when it is used and raises an error that names what is wrong and lists what there is, instead of quietly doing nothing:
+
+| Kind | Raised by |
+|------|-----------|
+| `drift_unknown_system` | `Systems.enable`, `disable` or `enabled` with a name that is not one of the game's systems; the message lists them |
+| `drift_unknown_action` | Reading an input action the game never declared in `[input]` or with an `Input.bind` method; the message lists the actions |
+| `drift_not_a_resource` | `resource_field<T>`, `bind_text<T>`, `bind_counter<T>` or `Debug.watch<T>` with a type that is not a `@resource` or `@settings` struct; the message says what the type is |
+| `drift_no_such_field` | The same with a field the resource does not have; the message lists its fields |
+
+These are mistakes in the game rather than failures to recover from, so they stop the system that made them, and the log shows the message.
+
+## Names that changed
+
+Names that read as one thing and did another were renamed, and an old name is now a compile error naming the function or field. The new names:
+
+| Old | New |
+|-----|-----|
+| `debug.watch("Game.score")` | `debug.watch<Game>("score")` |
+| `bind("Game.score", "{}")` | `bind_text<Game>("score", "{}")` |
+| `bind_counter("Game.score", "{}", 200.0)` | `bind_counter<Game>("score", "{}", 200.0)` |
+| `Bind { path: "Game.score" }`, `ClockBind { path: ... }` | `Bind { source: resource_field<Game>("score") }`, `ClockBind { source: ... }` |
+| `Bar { path, max_path }` | `Bar { value_from, max_from }`, each a `resource_field<Game>("hp")` |
+| `IconRow { path }` | `IconRow { count_from }` |
+| `resource_number(path)`, `resource_string(path)` | `resource_field<Game>("score").number()`, `.text()` |
+| `clock(seconds, false)`, `clock(seconds, true)` | `format_clock(seconds)`, `format_clock_tenths(seconds)` |
+| `fill(pattern, values)` | `format_named(pattern, values)` |

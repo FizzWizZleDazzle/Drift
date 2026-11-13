@@ -60,8 +60,8 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 
 - [`Bar`](ui.md#bar) type
 - [`Bind`](ui.md#bind) type
-- [`bind`](ui.md#bind-1) function
 - [`bind_counter`](ui.md#bind_counter) function
+- [`bind_text`](ui.md#bind_text) function
 - [`Blend`](enums.md#blend) enum
 - [`Bloom`](resources.md#bloom) type
 - [`Blur`](resources.md#blur) type
@@ -111,7 +111,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`CircleCollider`](components.md#circlecollider) type
 - [`circles_overlap`](values.md#circles_overlap) function
 - [`clamp`](values.md#clamp) function
-- [`clock`](data.md#clock) function
 - [`ClockBind`](ui.md#clockbind) type
 - [`Color`](values.md#color) type
 - [`Color.alpha`](values.md#coloralpha) method
@@ -260,7 +259,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`fade_step`](gameplay.md#fade_step) function
 - [`FadeOut`](gameplay.md#fadeout) type
 - [`field_of_view`](procgen.md#field_of_view) function
-- [`fill`](data.md#fill) function
 - [`Filter`](enums.md#filter) enum
 - [`find_path`](procgen.md#find_path) function
 - [`fixed`](data.md#fixed) function
@@ -294,6 +292,9 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Foot.planted`](animation.md#footplanted) method
 - [`Foot.update`](animation.md#footupdate) method
 - [`format`](data.md#format) function
+- [`format_clock`](data.md#format_clock) function
+- [`format_clock_tenths`](data.md#format_clock_tenths) function
+- [`format_named`](data.md#format_named) function
 - [`from_angle`](values.md#from_angle) function
 - [`Fsm`](ai.md#fsm) type
 - [`fsm`](ai.md#fsm-1) function
@@ -668,8 +669,13 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`repeating_timer`](values.md#repeating_timer) function
 - [`Request`](data.md#request) type
 - [`@resource`](attributes.md#resource) attribute
-- [`resource_number`](ui.md#resource_number) function
-- [`resource_string`](ui.md#resource_string) function
+- [`resource_field`](resources.md#resource_field) function
+- [`ResourceField`](resources.md#resourcefield) type
+- [`ResourceField.check`](resources.md#resourcefieldcheck) method
+- [`ResourceField.is_set`](resources.md#resourcefieldis_set) method
+- [`ResourceField.label`](resources.md#resourcefieldlabel) method
+- [`ResourceField.number`](resources.md#resourcefieldnumber) method
+- [`ResourceField.text`](resources.md#resourcefieldtext) method
 - [`Reveal`](ui.md#reveal) type
 - [`reveal`](ui.md#reveal-1) function
 - [`rgb`](values.md#rgb) function

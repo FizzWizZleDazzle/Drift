@@ -120,7 +120,7 @@ score.reset();      // a new run
 score.is_record()   // this run is the best so far
 ```
 
-Show them with `bind("Score.value", "Score {}")` and `bind("Score.best", "Best {}")` from [HUD and Menus](ui-and-score.md).
+Show them with `bind_text<Score>("value", "Score {}")` and `bind_text<Score>("best", "Best {}")` from [UI and Score](ui-and-score.md).
 
 ## Finding entities
 

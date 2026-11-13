@@ -122,14 +122,15 @@ Scores, timers and prices need more than `string(x)`:
 | Function | Returns |
 |----------|---------|
 | `format(pattern, args)` | The pattern with each `{}` replaced by the next argument and `{0}`, `{1}` by the argument at that index: `format("{} of {}", [3, 10])` is `"3 of 10"`. `{{` and `}}` write a brace |
-| `fill(pattern, values)` | The pattern with each `{name}` replaced by `values[name]`: `fill("Hi {who}", {"who": "Ana"})` |
+| `format_named(pattern, values)` | The pattern with each `{name}` replaced by `values[name]`: `format_named("Hi {who}", {"who": "Ana"})` |
 | `fixed(x, decimals)` | A float with exactly that many decimals: `fixed(3.14159, 2)` is `"3.14"` |
 | `pad(n, width)` | An int with leading zeros: `pad(7, 3)` is `"007"` |
 | `grouped(n)` | An int with thousands separated by commas: `"12,345"` |
-| `clock(seconds, tenths)` | A time as `"m:ss"`, or `"h:mm:ss"` from an hour up, with a digit of tenths when `tenths` is set: `clock(75.0, false)` is `"1:15"`, `clock(75.25, true)` is `"1:15.2"` |
+| `format_clock(seconds)` | A time as `"m:ss"`, or `"h:mm:ss"` from an hour up: `format_clock(75.0)` is `"1:15"` |
+| `format_clock_tenths(seconds)` | The same with a digit of tenths: `format_clock_tenths(75.25)` is `"1:15.2"` |
 
 ```rust
-text.value = format("Lap {}  {}  Best {}", [lap, clock(race.time, true), clock(race.best, true)]);
+text.value = format("Lap {}  {}  Best {}", [lap, format_clock_tenths(race.time), format_clock_tenths(race.best)]);
 ```
 
 For text in several languages, see [Localization](localization.md).
@@ -178,10 +179,10 @@ struct Game { score: int = 0, hp: float = 100.0, max_hp: float = 100.0, lives: i
 
 @system(schedule: Schedule::Startup)
 fn hud(cmd: Commands, theme: Theme) {
-    cmd.spawn(plus(label(theme, "", anchor(TOP_LEFT, 16.0, 12.0)), [bind_counter("Game.score", "Score {}", 200.0)]));
+    cmd.spawn(plus(label(theme, "", anchor(TOP_LEFT, 16.0, 12.0)), [bind_counter<Game>("score", "Score {}", 200.0)]));
     spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
-              Bar { path: "Game.hp", max_path: "Game.max_hp", .. });
-    cmd.spawn(plus(icon_row(anchor(TOP_RIGHT, -110.0, 14.0), 3, 3), [IconRow { path: "Game.lives", .. }]));
+              Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. });
+    cmd.spawn(plus(icon_row(anchor(TOP_RIGHT, -110.0, 14.0), 3, 3), [IconRow { count_from: resource_field<Game>("lives"), .. }]));
 }
 ```
 
@@ -231,33 +232,35 @@ A widget copies the theme when it is made. For one widget that looks different, 
 
 `label(theme, text, anchor)` is a bundle: a `Text` in the theme's style with an `Anchor`. Add components to it with `plus`.
 
-`Bind` fills a label from a field of one of your resources. `path` names the resource and the field, with dots for nested structs, and `format` puts the value where `{}` is:
+`Bind` fills a label from a field of one of your resources. `bind_text<Game>("level", "Level {}")` names the resource by its type and the field by name, with dots for a field of a struct field (`"player.hp"`), and `format` puts the value where `{}` is:
 
 ```rust
-cmd.spawn(plus(label(theme, "", anchor(TOP_LEFT, 16.0, 12.0)), [bind("Game.level", "Level {}")]));
-cmd.spawn(plus(label(theme, "", anchor(TOP_LEFT, 16.0, 40.0)), [bind_counter("Game.coins", "{} coins", 50.0)]));
+cmd.spawn(plus(label(theme, "", anchor(TOP_LEFT, 16.0, 12.0)), [bind_text<Game>("level", "Level {}")]));
+cmd.spawn(plus(label(theme, "", anchor(TOP_LEFT, 16.0, 40.0)), [bind_counter<Game>("coins", "{} coins", 50.0)]));
 ```
 
-`bind_counter` counts toward a new number at the given speed, or faster for a large change, instead of jumping. `decimals` sets how many decimals a number shows. `ClockBind` shows a field holding seconds as `m:ss`, or `m:ss.d` with `tenths`, for timers:
+The compiler checks that `Game` is a type. The field name is checked when the binding is made: a type that is not a resource raises `drift_not_a_resource`, and a field it does not have raises `drift_no_such_field` with the fields it does have, so a typo shows in the log at once instead of as an empty label.
+
+`bind_counter` counts toward a new number at the given speed, in units per second, or faster for a large change, instead of jumping. `decimals` sets how many decimals a number shows. `ClockBind` shows a field holding seconds as `m:ss`, or `m:ss.d` with `tenths`, for timers:
 
 ```rust
-cmd.spawn(plus(label(theme.sized(30.0), "", anchor(TOP, 0.0, 12.0)), [ClockBind { path: "Game.time_left", .. }]));
+cmd.spawn(plus(label(theme.sized(30.0), "", anchor(TOP, 0.0, 12.0)), [ClockBind { source: resource_field<Game>("time_left"), .. }]));
 ```
 
-`clock(seconds, tenths)` makes the same text yourself. `resource_number(path)` and `resource_string(path)` read a field by path from any system.
+`format_clock(seconds)` makes the same text yourself. Every binding reads its field through a `ResourceField`, made with `resource_field<Game>("score")`; its `text()` and `number()` read the field from any system.
 
 ### Panels, bars and icon rows
 
 `panel(theme, anchor, size)` is a rounded rectangle in the theme's panel color, to put behind other widgets.
 
-`spawn_bar(cmd, theme, anchor, size, bar)` makes a bar and returns its entity. A `Bar` fills to `value / max`; set those from a system, or bind them with `path` and `max_path`. The fill slides to a new value (`smooth`, per second; 0 jumps), and after a drop a trail in `trail_color` holds for `trail_delay` seconds, then shrinks to the fill. Colors left unset come from the theme.
+`spawn_bar(cmd, theme, anchor, size, bar)` makes a bar and returns its entity. A `Bar` fills to `value / max`; set those from a system, or bind them with `value_from` and `max_from`, each a `resource_field<Game>("hp")`. The fill slides to a new value (`smooth`, per second; 0 jumps), and after a drop a trail in `trail_color` holds for `trail_delay` seconds, then shrinks to the fill. Colors left unset come from the theme.
 
 ```rust
 let stamina = spawn_bar(cmd, theme.accented(rgb(90, 170, 255)), anchor(TOP_LEFT, 16.0, 72.0), vec2(160.0, 10.0),
-                        Bar { path: "Player.stamina", max: 100.0, trail_delay: 0.0, .. });
+                        Bar { value_from: resource_field<Player>("stamina"), max: 100.0, trail_delay: 0.0, .. });
 ```
 
-`icon_row(anchor, count, max)` draws `max` icons with the first `count` lit: hearts, ammo, lives. Set `image` for a texture, or leave it for circles; `full` and `empty` color the lit and unlit ones, and `path` binds the count.
+`icon_row(anchor, count, max)` draws `max` icons with the first `count` lit: hearts, ammo, lives. Set `image` for a texture, or leave it for circles; `full` and `empty` color the lit and unlit ones, and `count_from`, a `resource_field<Game>("lives")`, binds the count.
 
 ### Buttons, toggles and sliders
 

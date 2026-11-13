@@ -17,8 +17,8 @@ struct Debug {
     keys: bool = true,
     // The time scale of slow motion.
     slow: float = 0.25,
-    // Resource fields the overlay shows, by path: "Game.score".
-    watches: string[] = [],
+    // Resource fields the overlay shows; add them with watch<Game>("score").
+    watches: ResourceField[] = [],
     lines: string[] = [],
     ages: float[] = [],
     fps: float = 0.0,
@@ -29,11 +29,18 @@ struct Debug {
 }
 
 impl Debug {
-    // Shows a resource field on the overlay, by path: "Game.score".
-    fn watch(self, path: string) {
-        if !self.watches.contains(path) {
-            self.watches.push(path);
+    // Shows a field of the resource T on the overlay: watch<Game>("score"),
+    // or watch<Game>("player.hp") for a field of a struct field. A type that
+    // is not a resource, or a field it does not have, raises
+    // drift_not_a_resource or drift_no_such_field.
+    fn watch<T>(self, path: string) {
+        let f = resource_field<T>(path);
+        for w in self.watches {
+            if w.resource == f.resource && w.field == f.field {
+                return;
+            }
         }
+        self.watches.push(f);
     }
     // A line on the overlay that goes after five seconds; also logged.
     fn print(self, text: string) {
@@ -124,7 +131,7 @@ fn dbg_overlay(d: Debug, time: Time, draw: Draw, win: Window) {
         rows.push("time " + mode);
     }
     for w in d.watches {
-        rows.push(w + " = " + drift::resource_text(w));
+        rows.push(w.label() + " = " + w.text());
     }
     for l in d.lines {
         rows.push(l);

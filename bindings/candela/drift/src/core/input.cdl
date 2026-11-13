@@ -28,7 +28,7 @@ impl Input {
     fn bind_axis(self, name: string, negative: Key, positive: Key) {
         drift::bind_axis_keys(name, key_code(negative), key_code(positive));
     }
-    fn axis(self, name: string) -> float { return drift::action_axis(name); }
+    fn axis(self, name: string) -> float { return action_number(name, drift::action_axis(name)); }
 
     // Rebinding. Actions have slot 0; a 1D axis has 0 (negative) and 1
     // (positive); a 2D axis 0 to 3 for left, right, up and down.

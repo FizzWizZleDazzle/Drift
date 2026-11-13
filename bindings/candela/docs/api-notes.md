@@ -910,7 +910,7 @@ time.set_scale(0.25);   // slow motion
 
 ## Input
 
-The keyboard, mouse, gamepads, touch and input actions. An action is a name, such as `"jump"`, that any mix of keys, buttons and sticks can drive; write game logic against actions. Bind actions in the `[input]` section of `drift.toml` or from code. See [Input](../guides/input.md).
+The keyboard, mouse, gamepads, touch and input actions. An action is a name, such as `"jump"`, that any mix of keys, buttons and sticks can drive; write game logic against actions. Bind actions in the `[input]` section of `drift.toml` or from code. Reading an action the game never declared, such as a misspelt `"jmup"`, raises `drift_unknown_action`, which lists the actions there are. See [Input](../guides/input.md).
 
 ```rust
 @system
@@ -2235,7 +2235,7 @@ fn freeze(systems: Systems) {
 
 ## Systems.enable
 
-Turns a system on by its function name.
+Turns a system on by its function name. A name that is not one of the game's systems raises `drift_unknown_system`, which lists them.
 
 ```rust
 systems.enable("spawn_enemies");
@@ -2243,7 +2243,7 @@ systems.enable("spawn_enemies");
 
 ## Systems.disable
 
-Turns a system off by its function name.
+Turns a system off by its function name. A name that is not one of the game's systems raises `drift_unknown_system`.
 
 ```rust
 systems.disable("spawn_enemies");
@@ -2251,11 +2251,41 @@ systems.disable("spawn_enemies");
 
 ## Systems.enabled
 
-Whether a system is on.
+Whether a system is on. A name that is not one of the game's systems raises `drift_unknown_system`.
 
 ```rust
 if !systems.enabled("autosave") { log("autosave is off"); }
 ```
+
+## ResourceField
+
+One field of a resource, for widgets and tools that read it every frame: the `drift/ui` bindings and bars, and the debug overlay. Make one with `resource_field<T>(path)`; the compiler checks the type, and the field name is checked when it is made.
+
+```rust
+@resource
+struct Game { score: int = 0, player: PlayerStats = PlayerStats { .. } }
+
+let score = resource_field<Game>("score");
+let hp = resource_field<Game>("player.hp");    // a field of a struct field
+log(score.label() + " is " + score.text());   // "Game.score is 120"
+```
+
+## resource_field
+
+The field `path` of the resource `T`. `T` must be a struct marked `@resource` or `@settings`, or this raises `drift_not_a_resource`; the path must name a field of it, or this raises `drift_no_such_field`, which lists the fields the type has. Made in a resource's field default, it is checked when the game loads.
+
+```rust
+spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
+          Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. });
+```
+
+## ResourceField.text
+
+The field's value as text: numbers and bools as written, strings as they are, and `""` while the resource does not exist.
+
+## ResourceField.number
+
+The field's value as a number: `true` is 1.0, and anything that is not a number is 0.0.
 
 # Assets {#assets}
 
@@ -4265,6 +4295,7 @@ Where names the notes do not place go, by the `// ---- Section ----` comment the
 - Trails: components
 - Audio: assets
 - Systems: resources
+- Resource fields: resources
 - Fonts and text: assets
 - Shaders and materials: assets
 - The window: resources
@@ -4312,6 +4343,10 @@ Helpers the module needs; games do not call them.
 ## Draw.shape
 ## Image.op
 ## bool_float
+## clock_text
+## check_system
+## action_state
+## action_number
 ## anchor_point
 ## align_of
 ## valign_of

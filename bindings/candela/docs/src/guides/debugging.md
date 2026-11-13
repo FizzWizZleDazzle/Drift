@@ -48,8 +48,8 @@ fn debug_keys(input: Input, physics: Physics) {
 ```rust
 @system(schedule: Schedule::Startup)
 fn debug_setup(debug: Debug) {
-    debug.watch("Game.score");
-    debug.watch("Game.wave");
+    debug.watch<Game>("score");
+    debug.watch<Game>("wave");
 }
 
 @system
@@ -68,6 +68,8 @@ Its keys:
 | F6 | Freezes or unfreezes game time |
 | F7 | Steps one frame while frozen |
 
+`watch<T>(field)` takes the resource as its type and the field by name, with dots for a field of a struct field (`watch<Game>("player.hp")`). A type that is not a resource raises `drift_not_a_resource`, and a field the resource does not have raises `drift_no_such_field`, which lists the fields it has.
+
 `[debug]` in `drift.toml` sets `shown`, `keys` (false turns the keys off) and `slow`. Remove the import, or set `shown = false` and `keys = false`, for a release.
 
 ## The dev overlay
@@ -82,7 +84,7 @@ Wrap a call you expect to fail, such as loading a file a player picked, in `try`
 
 ## Which systems run
 
-The log lists every system the game declares when it starts (`Candela: 9 systems: setup, new_game, ...`). A system that never seems to run usually takes a resource that does not exist yet, runs in another state, or has a `run_if` that never holds. `Systems.enabled("name")` says whether a system is switched on.
+The log lists every system the game declares when it starts (`Candela: 9 systems: setup, new_game, ...`). A system that never seems to run usually takes a resource that does not exist yet, runs in another state, or has a `run_if` that never holds. `Systems.enabled("name")` says whether a system is switched on; a name that is not one of the game's systems raises `drift_unknown_system`, which lists them.
 
 ## Scripted input
 

@@ -69,9 +69,10 @@ fn format(pattern: string, args: any[]) -> string {
     }
     return out;
 }
-// The pattern with each {name} replaced by values[name]: fill("Hi {who}",
-// {"who": "Ana"}). Names not in `values` stay as they are.
-fn fill(pattern: string, values: {string: any}) -> string {
+// The pattern with each {name} replaced by values[name]:
+// format_named("Hi {who}", {"who": "Ana"}). Names not in `values` stay as
+// they are.
+fn format_named(pattern: string, values: {string: any}) -> string {
     let out = pattern;
     for k in values.keys() {
         out = out.replace("{" + k + "}", string(values[k]));
@@ -129,9 +130,11 @@ fn grouped(n: int) -> string {
     }
     return out;
 }
-// Seconds as "m:ss", or "h:mm:ss" from an hour up; with `tenths`, a digit
-// of tenths after a point: "1:05.3".
-fn clock(seconds: float, tenths: bool) -> string {
+// Seconds as "m:ss", or "h:mm:ss" from an hour up: "1:05".
+fn format_clock(seconds: float) -> string { return clock_text(seconds, false); }
+// The same with a digit of tenths after a point: "1:05.3".
+fn format_clock_tenths(seconds: float) -> string { return clock_text(seconds, true); }
+fn clock_text(seconds: float, tenths: bool) -> string {
     let s = max(seconds, 0.0);
     let total = int(s.floor());
     let h = total / 3600;
@@ -225,5 +228,5 @@ impl Strings {
         return key;
     }
     // The text for `key` with its {name} parts filled from `values`.
-    fn get_with(self, key: string, values: {string: any}) -> string { return fill(self.get(key), values); }
+    fn get_with(self, key: string, values: {string: any}) -> string { return format_named(self.get(key), values); }
 }
