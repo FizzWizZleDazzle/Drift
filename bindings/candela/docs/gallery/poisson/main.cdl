@@ -1,0 +1,46 @@
+// ANCHOR: all
+// Poisson-disk scatter: trees on a meadow. Plain random points clump and
+// leave gaps; Poisson-disk points keep a minimum distance from each other.
+
+import "drift" { * };
+
+const AREA: Rect = Rect { x: 0.0, y: 0.0, w: 220.0, h: 160.0 };
+
+// ANCHOR: poisson
+fn draw_tree(img: Image, p: Vec2) {
+    img.circle(p + vec2(1.5, 2.0), 5.0, rgba(20, 50, 20, 120));   // shadow
+    img.circle(p, 5.0, rgb(40, 110, 50));
+    img.circle(p - vec2(1.5, 1.5), 2.5, rgb(90, 170, 80));
+}
+
+fn forest(assets: Assets, min_distance: float) -> Image {
+    let img = assets.create_image(220, 160, rgb(150, 196, 104));
+    for p in poisson_disk(rng(4), AREA, min_distance) {
+        draw_tree(img, p);
+    }
+    return img;
+}
+// ANCHOR_END: poisson
+
+// The same number of trees as `forest(assets, 14.0)`, at plain random points.
+fn random_forest(assets: Assets) -> Image {
+    let r = rng(4);
+    let img = assets.create_image(220, 160, rgb(150, 196, 104));
+    for i in range(poisson_disk(rng(4), AREA, 14.0).len()) {
+        draw_tree(img, r.inside_rect(AREA));
+    }
+    return img;
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    show(cmd, random_forest(assets), 120.0, "random points");
+    show(cmd, forest(assets, 14.0), 360.0, "poisson_disk, 14");
+    show(cmd, forest(assets, 24.0), 600.0, "poisson_disk, 24");
+}
+
+fn show(cmd: Commands, img: Image, x: float, caption: string) {
+    cmd.spawn([at(x, 90.0), Sprite { image: img.to_texture(), .. }]);
+    cmd.spawn([at(x, 178.0), Text { value: caption, size: 16.0, align: Align::Center, .. }]);
+}
+// ANCHOR_END: all

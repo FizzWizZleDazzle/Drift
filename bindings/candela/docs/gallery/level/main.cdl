@@ -1,0 +1,93 @@
+// ANCHOR: all
+// Make a level: a dungeon from the game's seed, written into a tilemap whose
+// walls collide, coins on Poisson-disk points, and a player to walk it with
+// the arrow keys or WASD.
+
+import "drift" { * };
+
+const CELL: float = 16.0;
+const W: int = 45;
+const H: int = 26;
+const TOP: float = 24.0;   // the score line above the map
+
+@component(requires: [Velocity])
+struct Player { speed: float = 110.0 }
+
+@component struct Coin {}
+@component struct Hud {}
+
+@resource
+struct Score { coins: int = 0, total: int = 0 }
+
+// ANCHOR: level
+@system(schedule: Schedule::Startup)
+fn make_level(cmd: Commands, assets: Assets, random: Random, input: Input, score: Score) {
+    let r = random.stream("level");
+
+    // 1. The layout: rooms, corridors and doors.
+    let d = dungeon(r, W, H, DungeonOptions { max_room: 8, .. });
+
+    // 2. The tilemap. Values become tile ids through a table: FLOOR (0) is
+    //    tile 1, WALL (1) tile 2, DOOR (2) tile 3, and 0 leaves a cell empty.
+    let map = assets.create_tilemap(W, H, 16, tileset(assets), ["Floor", "Walls"]);
+    map.fill(0, d.grid, [1, 0, 3], cell(0, 0));
+    map.fill(1, d.grid, [0, 2, 0], cell(0, 0));
+    map.set_layer_solid(1, true, [2]);          // walls become colliders
+    cmd.spawn([at(0.0, TOP), Tilemap { map: map, .. }]);
+
+    // 3. The player, in the middle of the first room.
+    cmd.spawn([Transform { position: world(d.rooms[0].center()), .. },
+               Circle { radius: 6.0, color: rgb(255, 220, 90), z: 2.0, .. },
+               RigidBody { fixed_rotation: true, gravity_scale: 0.0, .. },
+               CircleCollider { radius: 5.5, friction: 0.0, .. },
+               Player { .. }]);
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+
+    // 4. Coins on Poisson-disk points over the floor, at least 2 cells apart.
+    for p in poisson_on_grid(r, d.grid, FLOOR, 2.0) {
+        cmd.spawn([at(p.x * CELL, p.y * CELL + TOP), Circle { radius: 3.0, color: rgb(255, 196, 40), z: 1.0, .. },
+                   CircleCollider { radius: 3.0, sensor: true, .. }, Coin {}]);
+        score.total += 1;
+    }
+    cmd.spawn([at(8.0, 3.0), Text { size: 16.0, .. }, Hud {}]);
+}
+// ANCHOR_END: level
+
+// The middle of a cell, in the world.
+fn world(c: Cell) -> Vec2 {
+    return vec2((float(c.x) + 0.5) * CELL, (float(c.y) + 0.5) * CELL + TOP);
+}
+
+// Three 16 x 16 tiles side by side: floor, wall and door.
+fn tileset(assets: Assets) -> Texture {
+    let img = assets.create_image(48, 16, rgb(56, 50, 62));
+    img.rect_lines(rect(0.0, 0.0, 16.0, 16.0), rgb(64, 58, 70), 1.0);
+    img.fill_rect(rect(16.0, 0.0, 16.0, 16.0), rgb(124, 100, 110));
+    img.fill_rect(rect(16.0, 0.0, 16.0, 3.0), rgb(156, 132, 140));
+    img.line(vec2(16.0, 9.5), vec2(32.0, 9.5), rgb(84, 70, 80), 1.0);
+    img.line(vec2(23.5, 3.0), vec2(23.5, 9.0), rgb(84, 70, 80), 1.0);
+    img.fill_rect(rect(32.0, 0.0, 16.0, 16.0), rgb(140, 90, 46));
+    img.line(vec2(40.0, 0.0), vec2(40.0, 16.0), rgb(96, 60, 30), 1.0);
+    return img.to_texture();
+}
+
+@system
+fn walk(row: (Player, Velocity), input: Input) {
+    let (player, velocity) = row;
+    velocity.linear = input.axis2d("move").normalized() * player.speed;
+}
+
+// Runs once for each coin the player touches.
+@system
+fn pick_up(hit: Overlap<Player, Coin>, cmd: Commands, score: Score) {
+    score.coins += 1;
+    cmd.despawn(hit.b);
+}
+
+@system
+fn hud(row: (Hud, Text), score: Score) {
+    let (_, text) = row;
+    text.value = format("coins {} of {}      arrow keys or WASD to walk", [score.coins, score.total]);
+}
+// ANCHOR_END: all

@@ -1,0 +1,34 @@
+// ANCHOR: all
+// Noise: the three kinds on the top row, and simplex noise with more
+// octaves (fractal Brownian motion) on the bottom row.
+
+import "drift" { * };
+
+// ANCHOR: noise
+fn noise_image(assets: Assets, kind: NoiseType, octaves: int) -> Image {
+    let img = assets.create_image(224, 120, rgb(0, 0, 0));
+    img.noise(Noise { seed: 7, kind: kind, frequency: 0.03, octaves: octaves, .. },
+              rgb(20, 24, 40), rgb(236, 232, 214));
+    return img;
+}
+// ANCHOR_END: noise
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let kinds = [NoiseType::Value, NoiseType::Perlin, NoiseType::Simplex];
+    let names = ["Value", "Perlin", "Simplex"];
+    let octaves = [1, 3, 6];
+    for i in range(3) {
+        let x = 120.0 + 240.0 * float(i);
+        show(cmd, noise_image(assets, kinds[i], 1), x, 70.0, names[i]);
+        show(cmd, noise_image(assets, NoiseType::Simplex, octaves[i]), x, 228.0,
+             "Simplex, octaves " + string(octaves[i]));
+    }
+}
+
+// The image at (x, y) with a caption under it.
+fn show(cmd: Commands, img: Image, x: float, y: float, caption: string) {
+    cmd.spawn([at(x, y), Sprite { image: img.to_texture(), .. }]);
+    cmd.spawn([at(x, y + 64.0), Text { value: caption, size: 16.0, align: Align::Center, .. }]);
+}
+// ANCHOR_END: all

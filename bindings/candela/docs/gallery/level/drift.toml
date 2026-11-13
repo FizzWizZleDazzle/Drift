@@ -1,0 +1,19 @@
+[project]
+name = "Make a Level"
+entry = "main.cdl"
+
+[window]
+width = 720
+height = 440
+
+[render]
+clear_color = [0.09, 0.08, 0.11]
+
+# Seen from above: nothing falls.
+[physics]
+gravity = [0, 0]
+
+# A fixed seed makes the same level every run; 0 makes a new one each time
+# and logs its seed.
+[random]
+seed = 2026

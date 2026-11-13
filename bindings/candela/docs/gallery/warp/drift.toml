@@ -1,0 +1,10 @@
+[project]
+name = "Domain Warp"
+entry = "main.cdl"
+
+[window]
+width = 720
+height = 212
+
+[render]
+clear_color = [0.09, 0.08, 0.11]

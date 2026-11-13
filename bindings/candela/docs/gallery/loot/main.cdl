@@ -1,0 +1,54 @@
+// ANCHOR: all
+// Weighted loot tables: 96 drops rolled from one table on the left, and how
+// often each item came up in 1000 rolls on the right.
+
+import "drift" { * };
+
+const NAMES: string[] = ["common", "uncommon", "rare", "legendary"];
+const COLORS: Color[] = [rgb(170, 170, 176), rgb(90, 200, 100), rgb(80, 140, 240), rgb(240, 170, 40)];
+
+// ANCHOR: loot
+// Weights are relative: common comes up 60 times in 100 on average.
+fn loot_table() -> WeightedTable<int> {
+    return weighted_table<int>().add(0, 60.0).add(1, 25.0).add(2, 12.0).add(3, 3.0);
+}
+
+fn roll(table: WeightedTable<int>, r: Rng) -> int {
+    if table.roll(r) is Some(item) {
+        return item;
+    }
+    return 0;
+}
+// ANCHOR_END: loot
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let table = loot_table();
+    let r = rng(9);
+
+    // 12 x 8 drops, one gem each.
+    let drops = assets.create_image(264, 176, rgb(30, 28, 38));
+    for i in range(96) {
+        let x = float(i % 12) * 22.0 + 11.0;
+        let y = float(i / 12) * 22.0 + 11.0;
+        drops.circle(vec2(x, y), 8.0, COLORS[roll(table, r)]);
+    }
+    cmd.spawn([at(152.0, 108.0), Sprite { image: drops.to_texture(), .. }]);
+    cmd.spawn([at(152.0, 200.0), Text { value: "96 drops", size: 16.0, align: Align::Center, .. }]);
+
+    // 1000 more rolls, counted.
+    let counts = [0, 0, 0, 0];
+    for i in range(1000) {
+        let item = roll(table, r);
+        counts[item] += 1;
+    }
+    for i in range(4) {
+        let y = 40.0 + 44.0 * float(i);
+        let w = float(counts[i]) * 0.4;
+        cmd.spawn([at(420.0, y), Rectangle { size: vec2(w, 26.0), color: COLORS[i], anchor: vec2(0.0, 0.5), .. }]);
+        cmd.spawn([at(410.0, y - 9.0), Text { value: NAMES[i], size: 16.0, align: Align::Right, .. }]);
+        cmd.spawn([at(426.0 + w, y - 9.0), Text { value: string(counts[i]), size: 16.0, .. }]);
+    }
+    cmd.spawn([at(530.0, 200.0), Text { value: "1000 rolls", size: 16.0, align: Align::Center, .. }]);
+}
+// ANCHOR_END: all

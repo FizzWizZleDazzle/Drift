@@ -1,0 +1,29 @@
+// ANCHOR: all
+// Cellular-automata caves: one seed, three amounts of starting wall.
+
+import "drift" { * };
+
+// ANCHOR: cave
+// A cave as an image, one pixel per cell.
+fn cave_image(assets: Assets, seed: int, fill: float) -> Image {
+    let g = cave(rng(seed), 56, 44, CaveOptions { fill: fill, .. });
+    let img = assets.create_image(g.width, g.height, rgb(52, 44, 62));
+    for c in g.cells_of(FLOOR) {
+        img.set(c.x, c.y, rgb(222, 204, 166));
+    }
+    return img;
+}
+// ANCHOR_END: cave
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let fills = [0.40, 0.45, 0.50];
+    for i in range(3) {
+        let x = 120.0 + 240.0 * float(i);
+        let img = cave_image(assets, 7, fills[i]);
+        cmd.spawn([Transform { position: vec2(x, 98.0), scale: vec2(4.0, 4.0), .. },
+                   Sprite { image: img.to_texture(), .. }]);
+        cmd.spawn([at(x, 192.0), Text { value: "fill " + fixed(fills[i], 2), size: 18.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

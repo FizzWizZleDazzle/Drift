@@ -1,0 +1,24 @@
+// ANCHOR: all
+// Domain warp: the same noise bent further along a second noise field.
+
+import "drift" { * };
+
+// ANCHOR: warp
+fn warped_image(assets: Assets, warp: float) -> Image {
+    let img = assets.create_image(168, 168, rgb(0, 0, 0));
+    img.noise(Noise { seed: 3, frequency: 0.02, octaves: 4, warp: warp, .. },
+              rgb(16, 40, 72), rgb(240, 214, 150));
+    return img;
+}
+// ANCHOR_END: warp
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let warps = [0.0, 15.0, 40.0, 80.0];
+    for i in range(4) {
+        let x = 90.0 + 180.0 * float(i);
+        cmd.spawn([at(x, 94.0), Sprite { image: warped_image(assets, warps[i]).to_texture(), .. }]);
+        cmd.spawn([at(x, 186.0), Text { value: "warp " + fixed(warps[i], 0), size: 16.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

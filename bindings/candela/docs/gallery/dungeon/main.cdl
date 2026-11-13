@@ -1,0 +1,34 @@
+// ANCHOR: all
+// BSP dungeons with doors: one seed, three largest room sizes.
+
+import "drift" { * };
+
+// ANCHOR: dungeon
+fn dungeon_image(assets: Assets, seed: int, max_room: int) -> Image {
+    let d = dungeon(rng(seed), 50, 40, DungeonOptions { min_room: 4, max_room: max_room, .. });
+    let img = assets.create_image(50, 40, rgb(40, 36, 52));
+    for c in d.grid.cells_of(FLOOR) {
+        img.set(c.x, c.y, rgb(150, 144, 160));
+    }
+    // Rooms lighter than corridors, doors in orange.
+    for room in d.rooms {
+        img.fill_rect(rect(float(room.x), float(room.y), float(room.w), float(room.h)), rgb(214, 206, 222));
+    }
+    for c in d.grid.cells_of(DOOR) {
+        img.set(c.x, c.y, rgb(232, 140, 50));
+    }
+    return img;
+}
+// ANCHOR_END: dungeon
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let sizes = [6, 9, 14];
+    for i in range(3) {
+        let x = 120.0 + 240.0 * float(i);
+        cmd.spawn([Transform { position: vec2(x, 90.0), scale: vec2(4.0, 4.0), .. },
+                   Sprite { image: dungeon_image(assets, 5, sizes[i]).to_texture(), .. }]);
+        cmd.spawn([at(x, 176.0), Text { value: "max_room " + string(sizes[i]), size: 16.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

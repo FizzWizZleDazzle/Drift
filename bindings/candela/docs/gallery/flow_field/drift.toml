@@ -1,0 +1,7 @@
+[project]
+name = "Flow Field"
+entry = "main.cdl"
+
+[window]
+width = 720
+height = 432

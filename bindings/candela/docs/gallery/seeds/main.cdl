@@ -1,0 +1,32 @@
+// ANCHOR: all
+// Seeds and replay: the same seed always makes the same level, and text
+// such as a seed a player typed works as a seed too.
+
+import "drift" { * };
+
+// ANCHOR: seeds
+fn level(seed: int) -> Grid {
+    return cave(rng(seed), 40, 30, CaveOptions { .. });
+}
+// ANCHOR_END: seeds
+
+fn image_of(assets: Assets, g: Grid) -> Image {
+    let img = assets.create_image(g.width, g.height, rgb(52, 44, 62));
+    for c in g.cells_of(FLOOR) {
+        img.set(c.x, c.y, rgb(222, 204, 166));
+    }
+    return img;
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let seeds = [41, 42, 41, seed_from("jam")];
+    let captions = ["seed 41", "seed 42", "seed 41 again", "seed_from(\"jam\")"];
+    for i in range(4) {
+        let x = 90.0 + 180.0 * float(i);
+        cmd.spawn([Transform { position: vec2(x, 76.0), scale: vec2(4.0, 4.0), .. },
+                   Sprite { image: image_of(assets, level(seeds[i])).to_texture(), .. }]);
+        cmd.spawn([at(x, 148.0), Text { value: captions[i], size: 16.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

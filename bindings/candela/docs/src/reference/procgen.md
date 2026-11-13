@@ -359,7 +359,7 @@ struct Noise {
 | `lacunarity` | `float` | `2.0` | Each layer's frequency over the last one's |
 | `gain` | `float` | `0.5` | Each layer's strength over the last one's |
 | `warp` | `float` | `0.0` | Bends the field by up to this many units, for swirls and rivers |
-| `warp_frequency` | `float` | `1.0` | The frequency of the bending field |
+| `warp_frequency` | `float` | `1.0` | The frequency of the bending field, as a multiple of `frequency`: 1.0 bends at the scale of the features, lower values in broader sweeps |
 
 ```rust
 let terrain = Noise { seed: 7, frequency: 0.03, octaves: 5, .. };

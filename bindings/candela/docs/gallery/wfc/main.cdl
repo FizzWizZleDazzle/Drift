@@ -1,0 +1,59 @@
+// ANCHOR: all
+// Wave function collapse: a small village drawn by hand as a sample, and two
+// villages made from it with different seeds. Inside the map every roof
+// stands on walls and every wall carries a roof, because that is all the
+// sample shows.
+
+import "drift" { * };
+
+// ANCHOR: wfc
+// 0 grass, 1 tree, 2 3 4 roof (left, middle, right), 5 7 wall (left,
+// right), 6 window, 8 door.
+const SAMPLE: int[] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 2, 3, 4, 0, 0, 1, 0, 0, 0, 2, 3, 3, 4, 0, 0,
+    0, 5, 8, 7, 0, 0, 0, 0, 0, 0, 5, 6, 8, 7, 0, 1,
+    0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 0, 0, 2, 3, 4, 0, 0, 1, 0, 2, 4, 0, 0, 0, 0,
+    0, 0, 0, 5, 6, 7, 0, 0, 0, 0, 5, 7, 0, 0, 0, 0,
+    0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
+
+fn village(seed: int) -> Grid {
+    let sample = Grid { width: 16, height: 10, cells: SAMPLE };
+    if wfc(rng(seed), sample, 36, 22, WfcOptions { .. }) is Some(g) {
+        return g;
+    }
+    return grid(36, 22, 0);   // every attempt contradicted itself
+}
+// ANCHOR_END: wfc
+
+const COLORS: Color[] = [rgb(104, 176, 80), rgb(34, 84, 46), rgb(170, 64, 52), rgb(190, 78, 60), rgb(170, 64, 52),
+                         rgb(232, 216, 182), rgb(120, 176, 220), rgb(232, 216, 182), rgb(104, 64, 36)];
+
+fn image_of(assets: Assets, g: Grid) -> Image {
+    let img = assets.create_image(g.width, g.height, rgb(0, 0, 0));
+    for y in range(g.height) {
+        for x in range(g.width) {
+            img.set(x, y, COLORS[g.cells[y * g.width + x]]);
+        }
+    }
+    return img;
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let sample = Grid { width: 16, height: 10, cells: SAMPLE };
+    show(cmd, image_of(assets, sample), 76.0, "sample");
+    show(cmd, image_of(assets, village(1)), 300.0, "seed 1");
+    show(cmd, image_of(assets, village(2)), 570.0, "seed 2");
+}
+
+fn show(cmd: Commands, img: Image, x: float, caption: string) {
+    cmd.spawn([Transform { position: vec2(x, 88.0), scale: vec2(7.0, 7.0), .. }, Sprite { image: img.to_texture(), .. }]);
+    cmd.spawn([at(x, 174.0), Text { value: caption, size: 16.0, align: Align::Center, .. }]);
+}
+// ANCHOR_END: all

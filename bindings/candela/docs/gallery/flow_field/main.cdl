@@ -1,0 +1,41 @@
+// ANCHOR: all
+// Flow field: every open cell of a cave points one step closer to the goal
+// (the white dot). Brighter cells are closer to it.
+
+import "drift" { * };
+
+const CELL: int = 18;
+
+// ANCHOR: flow
+fn flow_picture(assets: Assets) -> Image {
+    let g = cave(rng(3), 40, 24, CaveOptions { fill: 0.42, .. });
+    let open = g.cells_of(FLOOR);
+    let goal = open[open.len() / 2];
+    let field = flow_field(g, [goal], [WALL], true);
+
+    let img = assets.create_image(40 * CELL, 24 * CELL, rgb(36, 30, 44));
+    for c in g.cells_of(FLOOR) {
+        let x = float(c.x * CELL);
+        let y = float(c.y * CELL);
+        let near = clamp(1.0 - field.cost(c) / 50.0, 0.0, 1.0);
+        img.fill_rect(rect(x, y, float(CELL), float(CELL)), rgb(40, 60, 90).lerp(rgb(80, 170, 190), near));
+        // An arrow along the cell's direction.
+        let mid = vec2(x, y) + vec2(9.0, 9.0);
+        let d = field.direction(c);
+        if d.length() > 0.0 {
+            let tip = mid + d * 6.0;
+            img.line(mid - d * 6.0, tip, rgb(240, 236, 220), 1.5);
+            img.line(tip, tip - d.rotated(0.5) * 4.0, rgb(240, 236, 220), 1.5);
+            img.line(tip, tip - d.rotated(-0.5) * 4.0, rgb(240, 236, 220), 1.5);
+        }
+    }
+    img.circle(vec2(float(goal.x * CELL + 9), float(goal.y * CELL + 9)), 6.0, rgb(255, 255, 255));
+    return img;
+}
+// ANCHOR_END: flow
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    cmd.spawn([at(360.0, 216.0), Sprite { image: flow_picture(assets).to_texture(), .. }]);
+}
+// ANCHOR_END: all

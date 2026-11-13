@@ -1,0 +1,54 @@
+// ANCHOR: all
+// Random walk: walkers carve floor out of solid rock until a share of the
+// map is open. Each step walks the same seed again with a higher coverage,
+// so the tunnels grow; at 45 percent it holds, then starts over.
+
+import "drift" { * };
+
+@resource
+struct Walk {
+    coverage: float = 0.0,
+    images: Image[] = [],
+    textures: Texture[] = [],
+}
+
+// ANCHOR: walk
+const WALKERS: int[] = [1, 4];
+const BRUSHES: int[] = [1, 2];
+
+fn paint(img: Image, coverage: float, walkers: int, brush: int) {
+    let g = random_walk(rng(21), 80, 50, WalkOptions { coverage: coverage, walkers: walkers, brush: brush, .. });
+    img.fill(rgb(46, 38, 34));
+    for c in g.cells_of(FLOOR) {
+        img.set(c.x, c.y, rgb(230, 190, 120));
+    }
+}
+// ANCHOR_END: walk
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets, walk: Walk) {
+    for i in range(2) {
+        let img = assets.create_image(80, 50, rgb(0, 0, 0));
+        let tex = img.to_texture();
+        walk.images.push(img);
+        walk.textures.push(tex);
+        let x = 180.0 + 360.0 * float(i);
+        cmd.spawn([Transform { position: vec2(x, 110.0), scale: vec2(4.0, 4.0), .. }, Sprite { image: tex, .. }]);
+        cmd.spawn([at(x, 220.0), Text { value: format("walkers {}, brush {}", [WALKERS[i], BRUSHES[i]]),
+                                        size: 16.0, align: Align::Center, .. }]);
+    }
+}
+
+@system
+fn grow(walk: Walk, time: Time) {
+    walk.coverage += time.dt * 0.1;
+    if walk.coverage > 0.5 {
+        walk.coverage = 0.01;
+    }
+    let shown = min(walk.coverage, 0.45);
+    for i in range(2) {
+        paint(walk.images[i], shown, WALKERS[i], BRUSHES[i]);
+        walk.textures[i].update(walk.images[i]);
+    }
+}
+// ANCHOR_END: all

@@ -1,0 +1,44 @@
+// ANCHOR: all
+// Terrain: noise heights, lowered toward the edges into an island, colored
+// in height bands.
+
+import "drift" { * };
+
+const W: int = 360;
+const H: int = 200;
+
+// ANCHOR: terrain
+// The highest band a height reaches gives its color.
+const LEVELS: float[] = [-0.25, 0.0, 0.06, 0.3, 0.5, 0.62];
+const COLORS: Color[] = [rgb(24, 52, 110), rgb(40, 92, 160), rgb(220, 204, 140),
+                         rgb(96, 168, 72), rgb(46, 112, 54), rgb(122, 112, 104), rgb(240, 240, 244)];
+
+fn terrain(assets: Assets, seed: int) -> Texture {
+    let n = Noise { seed: seed, frequency: 0.012, octaves: 5, .. };
+    let heights = n.samples(vec2(0.0, 0.0), W, H, 1.0);
+    let pixels: Color[] = [];
+    for y in range(H) {
+        for x in range(W) {
+            // 0 in the middle, 1 at the edges: pulls the edges under water.
+            let dx = float(x) / float(W) * 2.0 - 1.0;
+            let dy = float(y) / float(H) * 2.0 - 1.0;
+            let h = heights[y * W + x] + 0.35 - 0.9 * (dx * dx + dy * dy);
+            let band = 0;
+            for level in LEVELS {
+                if h > level {
+                    band += 1;
+                }
+            }
+            pixels.push(COLORS[band]);
+        }
+    }
+    return assets.create_texture(W, H, pixels);
+}
+// ANCHOR_END: terrain
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    cmd.spawn([Transform { position: vec2(360.0, 200.0), scale: vec2(2.0, 2.0), .. },
+               Sprite { image: terrain(assets, 11), .. }]);
+}
+// ANCHOR_END: all

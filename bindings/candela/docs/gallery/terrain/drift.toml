@@ -1,0 +1,7 @@
+[project]
+name = "Terrain"
+entry = "main.cdl"
+
+[window]
+width = 720
+height = 400

@@ -3,7 +3,8 @@ name: Deploy Docs
 # Publishes the mdBooks to GitHub Pages, so the site describes the newest
 # release: the engine book in docs/ at the site root, the Candela book in
 # bindings/candela/docs under candela-book/, and every Candela example as a
-# playable page under candela-book/play/<example>/. release.yml calls this
+# playable page under candela-book/play/<example>/ (the procedural
+# generation guide's programs under play/gallery/<name>/). release.yml calls this
 # after it publishes a release: the release is created with the workflow
 # token, and a workflow token raises no events, so a `release: published`
 # trigger here would never fire. Run it by hand to republish.
@@ -33,7 +34,8 @@ jobs:
       - uses: actions/checkout@v6
 
       # The Candela book's example gallery links to every example as a page
-      # under candela-book/play/<example>/, built here by the web runtime.
+      # under candela-book/play/<example>/, built here by the web runtime, and
+      # the procedural generation guide to its programs under play/gallery/.
       - uses: ./.github/actions/setup
         with:
           cache-key: docs-web
@@ -59,6 +61,9 @@ jobs:
           for dir in bindings/candela/examples/*/; do
             targets="$targets $(basename "$dir")_cdl"
           done
+          for dir in bindings/candela/docs/gallery/*/; do
+            targets="$targets gallery_$(basename "$dir")"
+          done
           cmake --build build-web --target $targets
 
       - name: Install mdBook
@@ -79,6 +84,11 @@ jobs:
             name=$(basename "$dir")
             mkdir -p "docs/book/candela-book/play/$name"
             cp "build-web/bindings/candela/${name}_cdl/"* "docs/book/candela-book/play/$name/"
+          done
+          for dir in bindings/candela/docs/gallery/*/; do
+            name=$(basename "$dir")
+            mkdir -p "docs/book/candela-book/play/gallery/$name"
+            cp "build-web/bindings/candela/gallery_${name}/"* "docs/book/candela-book/play/gallery/$name/"
           done
 
       - name: Upload Pages artifact
