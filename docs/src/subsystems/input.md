@@ -42,6 +42,8 @@ bool keyReleased(Key key) const;  // true on the frame the key goes up
 
 **`keyReleased`** fires once, the frame the key transitions from down to up.
 
+A tap that goes down and up between two frames, common with touch screens and on slow devices, reads as both pressed and released in the next frame, though `keyHeld` is false. The same holds for mouse and gamepad buttons and for [input actions](../gameplay/input-actions.md).
+
 ### Key Enum
 
 The `Key` enum mirrors SDL scancodes. Common values:

@@ -307,11 +307,16 @@ void InputActions::evaluate(Control& c, const InputResource& input) const {
 }
 
 void InputActions::beginFrame() {
-    for (auto& [name, c] : controls_) c.wasHeld = c.held;
+    for (auto& [name, c] : controls_) c.wentDown = c.wentUp = false;
 }
 
 void InputActions::refresh(const InputResource& input) {
-    for (auto& [name, c] : controls_) evaluate(c, input);
+    for (auto& [name, c] : controls_) {
+        bool before = c.held;
+        evaluate(c, input);
+        if (c.held && !before) c.wentDown = true;
+        if (!c.held && before) c.wentUp = true;
+    }
 }
 
 void InputActions::processEvent(const SDL_Event&) {
@@ -320,7 +325,7 @@ void InputActions::processEvent(const SDL_Event&) {
 
 bool InputActions::pressed(std::string_view name) const {
     const Control* c = find(name);
-    return c && c->held && !c->wasHeld;
+    return c && c->wentDown;
 }
 
 bool InputActions::held(std::string_view name) const {
@@ -330,7 +335,7 @@ bool InputActions::held(std::string_view name) const {
 
 bool InputActions::released(std::string_view name) const {
     const Control* c = find(name);
-    return c && !c->held && c->wasHeld;
+    return c && c->wentUp;
 }
 
 float InputActions::value(std::string_view name) const {

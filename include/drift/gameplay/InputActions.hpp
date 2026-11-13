@@ -143,7 +143,10 @@ private:
         float value = 0.f;
         Vec2 vec;
         bool held = false;
-        bool wasHeld = false;
+        // Went down / up at some point this frame, so a tap that starts and
+        // ends between two frames still reads as pressed and released.
+        bool wentDown = false;
+        bool wentUp = false;
         int slotCount() const { return kind == Kind::Button ? 1 : (kind == Kind::Axis1D ? 2 : 4); }
     };
 

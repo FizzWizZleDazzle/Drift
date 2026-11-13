@@ -26,7 +26,8 @@ struct GamepadState {
     SDL_JoystickID instance_id = 0;
     float          axes[MAX_GAMEPAD_AXES]           = {};
     bool           buttons_current[MAX_GAMEPAD_BTNS]  = {};
-    bool           buttons_previous[MAX_GAMEPAD_BTNS] = {};
+    bool           buttons_down[MAX_GAMEPAD_BTNS]     = {};   // went down this frame
+    bool           buttons_up[MAX_GAMEPAD_BTNS]       = {};   // went up this frame
 };
 
 // ---------------------------------------------------------------------------
@@ -35,14 +36,18 @@ struct GamepadState {
 
 struct InputResource::Impl {
     // Keyboard
-    bool key_current[MAX_KEYS]  = {};
-    bool key_previous[MAX_KEYS] = {};
+    // Held now, and whether each went down or up at some point this frame,
+    // so a tap that starts and ends between two frames is not lost.
+    bool key_current[MAX_KEYS] = {};
+    bool key_down[MAX_KEYS]    = {};
+    bool key_up[MAX_KEYS]      = {};
 
     // Mouse
     Vec2  mouse_pos;
     Vec2  mouse_delta;
-    bool  mouse_buttons_current[MAX_MOUSE_BTNS + 1]  = {};   // 1-indexed
-    bool  mouse_buttons_previous[MAX_MOUSE_BTNS + 1] = {};
+    bool  mouse_buttons_current[MAX_MOUSE_BTNS + 1] = {};   // 1-indexed
+    bool  mouse_buttons_down[MAX_MOUSE_BTNS + 1]    = {};
+    bool  mouse_buttons_up[MAX_MOUSE_BTNS + 1]      = {};
     float mouse_wheel_delta = 0.0f;
 
     // Logical resolution scaling
@@ -92,28 +97,24 @@ InputResource::~InputResource()
 }
 
 // ---------------------------------------------------------------------------
-// Frame begin -- snapshot current -> previous, reset accumulators
+// Frame begin -- clear this frame's edges and accumulators
 // ---------------------------------------------------------------------------
 
 void InputResource::beginFrame()
 {
-    // Keyboard: current -> previous
-    std::memcpy(impl_->key_previous, impl_->key_current, sizeof(impl_->key_current));
-
-    // Mouse buttons: current -> previous
-    std::memcpy(impl_->mouse_buttons_previous, impl_->mouse_buttons_current,
-                sizeof(impl_->mouse_buttons_current));
+    std::memset(impl_->key_down, 0, sizeof(impl_->key_down));
+    std::memset(impl_->key_up, 0, sizeof(impl_->key_up));
+    std::memset(impl_->mouse_buttons_down, 0, sizeof(impl_->mouse_buttons_down));
+    std::memset(impl_->mouse_buttons_up, 0, sizeof(impl_->mouse_buttons_up));
 
     // Reset per-frame mouse accumulators
     impl_->mouse_delta.x     = 0.0f;
     impl_->mouse_delta.y     = 0.0f;
     impl_->mouse_wheel_delta = 0.0f;
 
-    // Gamepad buttons: current -> previous
     for (int i = 0; i < MAX_GAMEPADS; ++i) {
-        std::memcpy(impl_->gamepads[i].buttons_previous,
-                    impl_->gamepads[i].buttons_current,
-                    sizeof(impl_->gamepads[i].buttons_current));
+        std::memset(impl_->gamepads[i].buttons_down, 0, sizeof(impl_->gamepads[i].buttons_down));
+        std::memset(impl_->gamepads[i].buttons_up, 0, sizeof(impl_->gamepads[i].buttons_up));
     }
 }
 
@@ -128,14 +129,18 @@ void InputResource::processEvent(const SDL_Event& event)
     // ----- Keyboard --------------------------------------------------------
     case SDL_EVENT_KEY_DOWN: {
         int sc = static_cast<int>(event.key.scancode);
-        if (sc >= 0 && sc < MAX_KEYS)
+        if (sc >= 0 && sc < MAX_KEYS && !impl_->key_current[sc]) {
             impl_->key_current[sc] = true;
+            impl_->key_down[sc] = true;
+        }
     } break;
 
     case SDL_EVENT_KEY_UP: {
         int sc = static_cast<int>(event.key.scancode);
-        if (sc >= 0 && sc < MAX_KEYS)
+        if (sc >= 0 && sc < MAX_KEYS && impl_->key_current[sc]) {
             impl_->key_current[sc] = false;
+            impl_->key_up[sc] = true;
+        }
     } break;
 
     // ----- Mouse -----------------------------------------------------------
@@ -148,14 +153,18 @@ void InputResource::processEvent(const SDL_Event& event)
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
         int btn = static_cast<int>(event.button.button);
-        if (btn >= 1 && btn <= MAX_MOUSE_BTNS)
+        if (btn >= 1 && btn <= MAX_MOUSE_BTNS && !impl_->mouse_buttons_current[btn]) {
             impl_->mouse_buttons_current[btn] = true;
+            impl_->mouse_buttons_down[btn] = true;
+        }
     } break;
 
     case SDL_EVENT_MOUSE_BUTTON_UP: {
         int btn = static_cast<int>(event.button.button);
-        if (btn >= 1 && btn <= MAX_MOUSE_BTNS)
+        if (btn >= 1 && btn <= MAX_MOUSE_BTNS && impl_->mouse_buttons_current[btn]) {
             impl_->mouse_buttons_current[btn] = false;
+            impl_->mouse_buttons_up[btn] = true;
+        }
     } break;
 
     case SDL_EVENT_MOUSE_WHEEL: {
@@ -179,7 +188,8 @@ void InputResource::processEvent(const SDL_Event& event)
         gs.instance_id = event.gdevice.which;
         std::memset(gs.axes,             0, sizeof(gs.axes));
         std::memset(gs.buttons_current,  0, sizeof(gs.buttons_current));
-        std::memset(gs.buttons_previous, 0, sizeof(gs.buttons_previous));
+        std::memset(gs.buttons_down,     0, sizeof(gs.buttons_down));
+        std::memset(gs.buttons_up,       0, sizeof(gs.buttons_up));
         DRIFT_LOG_INFO("Gamepad connected in slot %d", slot);
     } break;
 
@@ -196,8 +206,11 @@ void InputResource::processEvent(const SDL_Event& event)
         int slot = impl_->findGamepadByInstance(event.gbutton.which);
         if (slot >= 0) {
             int btn = static_cast<int>(event.gbutton.button);
-            if (btn >= 0 && btn < MAX_GAMEPAD_BTNS)
-                impl_->gamepads[slot].buttons_current[btn] = true;
+            GamepadState& gs = impl_->gamepads[slot];
+            if (btn >= 0 && btn < MAX_GAMEPAD_BTNS && !gs.buttons_current[btn]) {
+                gs.buttons_current[btn] = true;
+                gs.buttons_down[btn] = true;
+            }
         }
     } break;
 
@@ -205,8 +218,11 @@ void InputResource::processEvent(const SDL_Event& event)
         int slot = impl_->findGamepadByInstance(event.gbutton.which);
         if (slot >= 0) {
             int btn = static_cast<int>(event.gbutton.button);
-            if (btn >= 0 && btn < MAX_GAMEPAD_BTNS)
-                impl_->gamepads[slot].buttons_current[btn] = false;
+            GamepadState& gs = impl_->gamepads[slot];
+            if (btn >= 0 && btn < MAX_GAMEPAD_BTNS && gs.buttons_current[btn]) {
+                gs.buttons_current[btn] = false;
+                gs.buttons_up[btn] = true;
+            }
         }
     } break;
 
@@ -235,7 +251,7 @@ bool InputResource::keyPressed(Key key) const
 {
     int k = static_cast<int>(key);
     if (k < 0 || k >= MAX_KEYS) return false;
-    return impl_->key_current[k] && !impl_->key_previous[k];
+    return impl_->key_down[k];
 }
 
 bool InputResource::keyHeld(Key key) const
@@ -249,7 +265,7 @@ bool InputResource::keyReleased(Key key) const
 {
     int k = static_cast<int>(key);
     if (k < 0 || k >= MAX_KEYS) return false;
-    return !impl_->key_current[k] && impl_->key_previous[k];
+    return impl_->key_up[k];
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +294,7 @@ bool InputResource::mouseButtonPressed(MouseButton button) const
 {
     int b = static_cast<int>(button);
     if (b < 1 || b > MAX_MOUSE_BTNS) return false;
-    return impl_->mouse_buttons_current[b] && !impl_->mouse_buttons_previous[b];
+    return impl_->mouse_buttons_down[b];
 }
 
 bool InputResource::mouseButtonHeld(MouseButton button) const
@@ -292,7 +308,7 @@ bool InputResource::mouseButtonReleased(MouseButton button) const
 {
     int b = static_cast<int>(button);
     if (b < 1 || b > MAX_MOUSE_BTNS) return false;
-    return !impl_->mouse_buttons_current[b] && impl_->mouse_buttons_previous[b];
+    return impl_->mouse_buttons_up[b];
 }
 
 float InputResource::mouseWheelDelta() const
@@ -323,8 +339,7 @@ bool InputResource::gamepadButtonPressed(int32_t index, int32_t button) const
     if (index  < 0 || index  >= MAX_GAMEPADS)     return false;
     if (button < 0 || button >= MAX_GAMEPAD_BTNS) return false;
     if (!impl_->gamepads[index].gamepad)           return false;
-    return impl_->gamepads[index].buttons_current[button]
-        && !impl_->gamepads[index].buttons_previous[button];
+    return impl_->gamepads[index].buttons_down[button];
 }
 
 bool InputResource::gamepadButtonHeld(int32_t index, int32_t button) const
@@ -340,8 +355,7 @@ bool InputResource::gamepadButtonReleased(int32_t index, int32_t button) const
     if (index  < 0 || index  >= MAX_GAMEPADS)     return false;
     if (button < 0 || button >= MAX_GAMEPAD_BTNS) return false;
     if (!impl_->gamepads[index].gamepad)           return false;
-    return !impl_->gamepads[index].buttons_current[button]
-        && impl_->gamepads[index].buttons_previous[button];
+    return impl_->gamepads[index].buttons_up[button];
 }
 
 } // namespace drift
