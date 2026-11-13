@@ -188,9 +188,30 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` a
 | `restart(emitter)` | Starts an emitter entity's run over: its bursts fire again and a finished one emits anew |
 | `shake(camera, intensity)` | Screen shake on a camera entity, dying away |
 | `flash(color, seconds)`, `fade_to(color, amount, seconds)` | Screen flashes and fades |
-| `bloom(threshold, intensity)`, `vignette(intensity, radius)`, `crt(curvature, scanlines)`, `grayscale(amount)`, `sepia(amount)`, `pixelate(size)`, `blur(radius, iterations)` | Post effects; each returns an `Effect` with `set_enabled(on)`, `enabled()` and `remove()` |
-| `set_ambient(color)` | Light everywhere, when lighting is on |
+| `add(settings)`, `add_at(settings, order)` | A post effect from its settings struct: `Bloom`, `ColorGrading`, `Blur`, `Pixelate`, `Grayscale`, `Sepia`, `Vignette` or `Crt` (see [Values](values.md#post-effect-settings)). Each kind has its own place in the chain; `add_at` picks one |
+| `bloom(threshold, intensity)`, `vignette(intensity, radius)`, `crt(curvature, scanlines)`, `grayscale(amount)`, `sepia(amount)`, `pixelate(size)`, `blur(radius, iterations)` | The same with the most used settings and the rest at their defaults |
+| `set_ambient(color)`, `set_lighting(on)` | Light everywhere before any light adds to it, and lighting on or off, when drift.toml has a `[lighting]` section |
 | `set_tween_speed(s)` | Multiplies time for every tween; 0 freezes them |
+
+Every post effect call returns an `Effect`: `set(settings)` changes it (settings of the kind it was added with), `set_enabled(on)` and `enabled()` switch it, `set_order(order)` moves it in the chain, and `remove()` deletes it.
+
+```rust
+@resource
+struct Looks { bloom: Effect = Effect { .. } }
+
+@system(schedule: Schedule::Startup)
+fn looks(effects: Effects, looks: Looks) {
+    looks.bloom = effects.add(Bloom { threshold: 0.6, intensity: 1.2, levels: 6, .. });
+    effects.add(ColorGrading { saturation: 1.2, contrast: 1.1, tint: rgb(255, 240, 220), .. });
+}
+
+@system
+fn brighten(input: Input, looks: Looks) {
+    if input.key_pressed(Key::B) {
+        looks.bloom.set(Bloom { threshold: 0.4, intensity: 2.5, .. });
+    }
+}
+```
 
 ## Camera2D
 

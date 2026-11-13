@@ -91,7 +91,7 @@ cmd.spawn([at(300.0, 200.0), Rectangle { size: vec2(64.0, 64.0), .. },
            LightOccluder { shape: OccluderShape::FromCollider, .. }]);
 ```
 
-Change the ambient light while the game runs with `effects.set_ambient(color)`, for a day and night cycle or a room whose lights go out.
+Change the ambient light while the game runs with `effects.set_ambient(color)`, for a day and night cycle or a room whose lights go out, and switch lighting off and on with `effects.set_lighting(on)`. `OccluderShape::Polygon` blocks light with up to 16 `points` of your own.
 
 Light only darkens the scene or leaves it as it is: a sprite under full white light shows its own colors. For a glowing light source, pair the light with an additive sprite and bloom.
 
@@ -127,7 +127,15 @@ fn toggle_crt(input: Input, looks: Looks) {
 | `pixelate(size)` | Blocks of `size` pixels |
 | `blur(radius, iterations)` | Blurs the whole picture, for pause menus |
 
-Effects run in the order you add them. `remove()` deletes one.
+Each kind of effect has its own place in the chain (bloom before color grading, CRT near the end), whatever order you add them in; `set_order` on an `Effect` moves it, and `remove()` deletes it. For every setting of an effect, add its settings struct and change it later with `set`:
+
+```rust
+let glow = effects.add(Bloom { threshold: 0.5, intensity: 1.4, levels: 6, tint: rgb(255, 230, 200), .. });
+glow.set(Bloom { threshold: 0.5, intensity: 2.5, .. });
+effects.add(ColorGrading { saturation: 0.6, brightness: 0.9, .. });
+```
+
+See [Post effect settings](../reference/values.md#post-effect-settings) for every field.
 
 ## Shake, flash and fade
 

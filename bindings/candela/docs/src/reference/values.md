@@ -26,6 +26,20 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `GlobalTransform` | `position`, `rotation`, `scale`: a transform in world space, from `world_transform(e)` |
 | `Texture`, `Sound`, `Font`, `Map`, `Scene` | Assets from `Assets` |
 
+## Post effect settings
+
+The structs `Effects.add` takes; every field has a default.
+
+| Struct | Fields |
+|--------|--------|
+| `Bloom` | `threshold` (0.7), `soft_knee` (0.5), `intensity` (1), `radius` (1), `levels` (5, 1 to 8), `tint` |
+| `ColorGrading` | `brightness`, `contrast`, `saturation` (1 each), `tint`, `lut` (a lookup `Texture`: N slices of N x N side by side, red across a slice, green down, blue picking the slice), `lut_strength` |
+| `Blur` | `radius` (1), `iterations` (2, 1 to 8) |
+| `Pixelate` | `size` (6, in scene pixels) |
+| `Grayscale`, `Sepia` | `amount` (1) |
+| `Vignette` | `intensity` (0.6), `radius` (0.75), `softness` (0.45), `color` (black) |
+| `Crt` | `curvature` (0.15), `scanlines` (0.35), `scanline_spacing` (3), `chromatic_aberration` (1.5), `vignette` (0.3) |
+
 ## Functions
 
 | Function | Returns |
@@ -73,7 +87,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `VAlign` | `Top`, `Middle`, `Bottom` |
 | `BodyKind` | `Static`, `Dynamic`, `Kinematic` |
 | `EmitShape` | `Point`, `Circle`, `Ring`, `Box`, `Line` |
-| `OccluderShape` | `Box`, `Circle`, `FromCollider` |
+| `OccluderShape` | `Box`, `Circle`, `Polygon`, `FromCollider` |
 | `NoiseType` | `Value`, `Perlin`, `Simplex` |
 | `Ease` | `Linear`, and `In`, `Out` and `InOut` of `Sine`, `Quad`, `Cubic`, `Quart`, `Quint`, `Expo`, `Circ`, `Back`, `Elastic`, `Bounce` (`InOutSine`, ...), and `Spring` |
 | `Key` | The letters, `Num0` to `Num9`, `F1` to `F12`, `Return`, `Escape`, `Backspace`, `Tab`, `Space`, `Left`, `Right`, `Up`, `Down`, `LCtrl`, `LShift`, `LAlt`, `RCtrl`, `RShift`, `RAlt` |

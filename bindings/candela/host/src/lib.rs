@@ -1262,6 +1262,12 @@ fn presentation_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("download", vec![S], U),
         ("window_screenshot", vec![S], U),
         ("render_target", vec![I, I], I),
+        // Post effects, lighting and tweens.
+        ("effect_op", vec![I, S, F], F),
+        ("effect_material", vec![I, I], I),
+        ("fade_to", vec![F, F, F, F, F, F], U),
+        ("lighting", vec![S, af()], U),
+        ("tween_speed", vec![F], U),
     ]
 }
 
@@ -1269,7 +1275,12 @@ fn presentation_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
 /// settings of a post effect): each argument goes as JSON, and a struct
 /// carries its type's name in `__type`.
 fn presentation_values() -> Vec<(&'static str, HostType)> {
-    vec![("draw_text", HostType::Unit), ("draw_sprite", HostType::Unit)]
+    vec![
+        ("draw_text", HostType::Unit),
+        ("draw_sprite", HostType::Unit),
+        ("effect_add", HostType::Int),
+        ("effect_set", HostType::Unit),
+    ]
 }
 
 fn typed_json(v: &Value) -> Json {

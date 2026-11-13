@@ -58,9 +58,9 @@ A collider without a `RigidBody` is static. The body is created at the end of th
 |-----------|--------|
 | `ParticleEmitter` | `rate`, `lifetime_min`/`max`, `speed_min`/`max`, `angle_min`/`max`, `size_start`, `size_end`, `size_start_max`, `size_end_max` (0 for the same as the minimum), `color_start`, `color_end`, `gravity`, `drag`, `max_particles`, `blend`, `texture`, `frame` (part of the texture), `shape`, `shape_radius`, `shape_extents`, `duration`, `looping`, `z`, `playing`, `rotation_min`/`max`, `spin_min`/`max` (radians per second), `inherit_velocity`, `local` (particles move with the emitter), `prewarm` (seconds simulated up front), `bounds` (a rect particles stop at), `seed`, `bursts` (`Burst { time, count, cycles, interval }`) |
 | `Trail` | `width`, `lifetime` (seconds a point lasts), `color_start`, `color_end`, `min_distance`, `max_points`, `z` |
-| `PointLight` | `color`, `intensity`, `radius`, `falloff`, `shadows`. Lights shine when drift.toml has a `[lighting]` section |
-| `SpotLight` | As `PointLight`, plus `direction`, `angle`, `softness` |
-| `LightOccluder` | `shape` (`OccluderShape`), `half_size`, `radius` |
+| `PointLight` | `color`, `intensity`, `radius`, `falloff` (1 fades evenly; more keeps a tighter core), `shadows`, `layer_mask` (cameras sharing a layer see it). Lights shine when drift.toml has a `[lighting]` section |
+| `SpotLight` | As `PointLight`, plus `direction` (radians, added to the entity's rotation), `angle` (the whole cone), `softness` (0 hard edge, 1 fades from the middle) |
+| `LightOccluder` | `shape` (`OccluderShape`), `half_size` (`Box`), `radius` (`Circle`), `points` (`Polygon`, up to 16), `offset`, `shadow_self` (false keeps its own area lit), `layer_mask`. Turns and scales with the entity |
 | `AudioSource` | `sound`, `bus`, `volume`, `pitch`, `looping`, `autoplay`, `spatial`, `min_distance`, `max_distance` |
 | `AudioListener` | none. Spatial sounds are heard from this entity, or from the main camera without one |
 
@@ -79,4 +79,12 @@ cmd.spawn([at(400.0, 300.0), ParticleEmitter {
     rate: 10.0, shape: EmitShape::Ring, shape_radius: 24.0, spin_min: -4.0, spin_max: 4.0,
     bursts: [Burst { count: 30, cycles: 3, interval: 0.5, .. }], ..
 }]);
+```
+
+A torch that lights the room, and a wall that casts a shadow from its collider:
+
+```rust
+cmd.spawn([at(300.0, 200.0), PointLight { color: rgb(255, 180, 100), radius: 240.0, .. }]);
+cmd.spawn([at(360.0, 220.0), Rectangle { size: vec2(20.0, 120.0), .. }, BoxCollider { half_size: vec2(10.0, 60.0), .. },
+           LightOccluder { shape: OccluderShape::FromCollider, .. }]);
 ```

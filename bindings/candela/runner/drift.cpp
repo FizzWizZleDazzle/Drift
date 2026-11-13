@@ -438,6 +438,7 @@ const char* textAligns[] = {"Left", "Center", "Right"};
 const char* textVAligns[] = {"Top", "Middle", "Bottom"};
 
 std::vector<Codec> presentationCodecs();
+std::vector<Codec> effectCodecs();
 
 const std::vector<Codec>& codecs() {
     static const std::vector<Codec> list = [] {
@@ -708,6 +709,7 @@ const std::vector<Codec>& codecs() {
          [] { return cid<Transform2D>(); }},
     };
     for (Codec& c : presentationCodecs()) l.push_back(c);
+    for (Codec& c : effectCodecs()) l.push_back(c);
     return l;
     }();
     return list;
@@ -1476,6 +1478,281 @@ bool images(const std::string& f, const json& a, json& out) {
     return true;
 }
 
+// ---- Post effects, lights and trails ----
+
+EffectId fade();
+
+// Post effects scripts added, by the id their Effect holds: one of the
+// PostEffects library, or a material run by the renderer.
+struct ScriptEffect {
+    EffectId library;
+    MaterialHandle material;
+    int32_t rendererId = 0;   // the material's post effect while enabled
+    int32_t order = 0;
+};
+std::unordered_map<int64_t, ScriptEffect> g_effects;
+int64_t g_nextEffect = 1;
+constexpr int64_t kDefaultOrder = -2147483647;
+
+// The settings of a post effect from a candela value whose `__type` names
+// it. False for a struct that is not one.
+bool effectSettings(const json& j, PostEffectParams& out) {
+    std::string kind = j.value("__type", "");
+    if (kind == "Bloom") {
+        Bloom b;
+        b.threshold = j.value("threshold", 0.7f);
+        b.softKnee = j.value("soft_knee", 0.5f);
+        b.intensity = j.value("intensity", 1.f);
+        b.radius = j.value("radius", 1.f);
+        b.levels = j.value("levels", 5);
+        b.tint = colorF(j.value("tint", json()), {1.f, 1.f, 1.f, 1.f});
+        out = b;
+    } else if (kind == "ColorGrading") {
+        ColorGrading g;
+        g.brightness = j.value("brightness", 1.f);
+        g.contrast = j.value("contrast", 1.f);
+        g.saturation = j.value("saturation", 1.f);
+        g.tint = colorF(j.value("tint", json()), {1.f, 1.f, 1.f, 1.f});
+        g.lut = TextureHandle{idOf(j.value("lut", json()))};
+        g.lutStrength = j.value("lut_strength", 1.f);
+        out = g;
+    } else if (kind == "Blur") {
+        out = Blur{j.value("radius", 1.f), j.value("iterations", 2)};
+    } else if (kind == "Pixelate") {
+        out = Pixelate{j.value("size", 6.f)};
+    } else if (kind == "Grayscale") {
+        out = Grayscale{j.value("amount", 1.f)};
+    } else if (kind == "Sepia") {
+        out = Sepia{j.value("amount", 1.f)};
+    } else if (kind == "Vignette") {
+        Vignette v;
+        v.intensity = j.value("intensity", 0.6f);
+        v.radius = j.value("radius", 0.75f);
+        v.softness = j.value("softness", 0.45f);
+        v.color = colorF(j.value("color", json()), {0.f, 0.f, 0.f, 1.f});
+        out = v;
+    } else if (kind == "Crt") {
+        Crt c;
+        c.curvature = j.value("curvature", 0.15f);
+        c.scanlines = j.value("scanlines", 0.35f);
+        c.scanlineSpacing = j.value("scanline_spacing", 3.f);
+        c.chromaticAberration = j.value("chromatic_aberration", 1.5f);
+        c.vignette = j.value("vignette", 0.3f);
+        out = c;
+    } else {
+        DRIFT_LOG_WARN("Candela: %s is not a post effect", kind.empty() ? "that value" : kind.c_str());
+        return false;
+    }
+    return true;
+}
+
+json lightJ(ColorF color, float intensity, float radius, float falloff, bool shadows, uint32_t mask) {
+    return {{"color", colorF(color)}, {"intensity", intensity}, {"radius", radius}, {"falloff", falloff},
+            {"shadows", shadows}, {"layer_mask", mask}};
+}
+
+std::vector<Codec> effectCodecs() {
+    return {
+        {"Trail",
+         [](EntityId e) { return get<TrailRenderer>(e) != nullptr; },
+         [](EntityId e) {
+             const TrailRenderer& t = *get<TrailRenderer>(e);
+             return json{{"width", t.width}, {"lifetime", t.lifetime}, {"color_start", colorF(t.colorStart)},
+                         {"color_end", colorF(t.colorEnd)}, {"min_distance", t.minDistance},
+                         {"max_points", t.maxPoints}, {"z", t.zOrder}};
+         },
+         [](EntityId e, const json& j) {
+             TrailRenderer t;
+             t.width = j.value("width", 4.f);
+             t.lifetime = j.value("lifetime", 0.5f);
+             t.colorStart = colorF(j.value("color_start", json()), {1, 1, 1, 1});
+             t.colorEnd = colorF(j.value("color_end", json()), {1, 1, 1, 0});
+             t.minDistance = j.value("min_distance", 2.f);
+             t.maxPoints = std::max(2, j.value("max_points", 64));
+             t.zOrder = j.value("z", -1.f);
+             put(e, t);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<TrailRenderer>()); },
+         [] { return cid<TrailRenderer>(); }},
+        {"PointLight",
+         [](EntityId e) { return get<PointLight2D>(e) != nullptr; },
+         [](EntityId e) {
+             const PointLight2D& l = *get<PointLight2D>(e);
+             return lightJ(l.color, l.intensity, l.radius, l.falloff, l.castShadows, l.layerMask);
+         },
+         [](EntityId e, const json& j) {
+             PointLight2D l;
+             l.color = colorF(j.value("color", json()), {1, 1, 1, 1});
+             l.intensity = j.value("intensity", 1.f);
+             l.radius = j.value("radius", 200.f);
+             l.falloff = j.value("falloff", 2.f);
+             l.castShadows = j.value("shadows", true);
+             l.layerMask = maskOf(j);
+             put(e, l);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<PointLight2D>()); },
+         [] { return cid<PointLight2D>(); }},
+        {"SpotLight",
+         [](EntityId e) { return get<SpotLight2D>(e) != nullptr; },
+         [](EntityId e) {
+             const SpotLight2D& l = *get<SpotLight2D>(e);
+             json j = lightJ(l.color, l.intensity, l.radius, l.falloff, l.castShadows, l.layerMask);
+             j["direction"] = l.direction;
+             j["angle"] = l.angle;
+             j["softness"] = l.softness;
+             return j;
+         },
+         [](EntityId e, const json& j) {
+             SpotLight2D l;
+             l.color = colorF(j.value("color", json()), {1, 1, 1, 1});
+             l.intensity = j.value("intensity", 1.f);
+             l.radius = j.value("radius", 300.f);
+             l.falloff = j.value("falloff", 2.f);
+             l.direction = j.value("direction", 0.f);
+             l.angle = j.value("angle", 0.8f);
+             l.softness = j.value("softness", 0.2f);
+             l.castShadows = j.value("shadows", true);
+             l.layerMask = maskOf(j);
+             put(e, l);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<SpotLight2D>()); },
+         [] { return cid<SpotLight2D>(); }},
+        {"LightOccluder",
+         [](EntityId e) { return get<LightOccluder2D>(e) != nullptr; },
+         [](EntityId e) {
+             const LightOccluder2D& o = *get<LightOccluder2D>(e);
+             json points = json::array();
+             for (int i = 0; i < o.pointCount; ++i) points.push_back(vec(o.points[i]));
+             return json{{"shape", name(o.shape, {"Box", "Circle", "Polygon", "FromCollider"})},
+                         {"half_size", vec(o.halfSize)}, {"radius", o.radius}, {"points", points},
+                         {"offset", vec(o.offset)}, {"shadow_self", o.shadowSelf}, {"layer_mask", o.layerMask}};
+         },
+         [](EntityId e, const json& j) {
+             LightOccluder2D o;
+             o.shape = pick<OccluderShape>(j.value("shape", json()), {"Box", "Circle", "Polygon", "FromCollider"});
+             o.halfSize = vec(j.value("half_size", json()), {16.f, 16.f});
+             o.radius = j.value("radius", 16.f);
+             for (const auto& p : j.value("points", json::array())) {
+                 if (o.pointCount >= LightOccluder2D::kMaxPoints) break;
+                 o.points[o.pointCount++] = vec(p);
+             }
+             o.offset = vec(j.value("offset", json()));
+             o.shadowSelf = j.value("shadow_self", false);
+             o.layerMask = maskOf(j);
+             put(e, o);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<LightOccluder2D>()); },
+         [] { return cid<LightOccluder2D>(); }},
+    };
+}
+
+bool effects(const std::string& f, const json& a, json& out) {
+    out = nullptr;
+    auto* fx = res<PostEffects>();
+    if (f == "effect_add") {
+        // settings, order
+        PostEffectParams params;
+        out = 0;
+        if (!fx || !effectSettings(a[0], params)) return true;
+        int64_t order = a.size() > 1 && a[1].is_number() ? a[1].get<int64_t>() : kDefaultOrder;
+        EffectId id = std::visit([&](auto& p) {
+            return order == kDefaultOrder ? fx->add(p) : fx->add(p, static_cast<int32_t>(order));
+        }, params);
+        g_effects[g_nextEffect] = ScriptEffect{id, {}, 0, 0};
+        out = g_nextEffect++;
+        return true;
+    }
+    if (f == "effect_set") {
+        // id, settings: the new settings of the same kind.
+        auto it = g_effects.find(a[0].get<int64_t>());
+        PostEffectParams params;
+        if (!fx || it == g_effects.end() || !effectSettings(a[1], params)) return true;
+        bool same = std::visit([&](auto& p) {
+            using T = std::decay_t<decltype(p)>;
+            T* cur = fx->get<T>(it->second.library);
+            if (cur) *cur = p;
+            return cur != nullptr;
+        }, params);
+        if (!same) DRIFT_LOG_WARN("Candela: Effect.set takes the kind of settings the effect was added with");
+        return true;
+    }
+    if (f == "effect_op") {
+        // id, op, value
+        auto it = g_effects.find(a[0].get<int64_t>());
+        std::string op = a[1].get<std::string>();
+        float v = a[2].get<float>();
+        out = 0.0;
+        if (it == g_effects.end()) return true;
+        ScriptEffect& e = it->second;
+        auto* r = res<RendererResource>();
+        bool isMaterial = e.material.valid();
+        if (op == "enabled") {
+            out = isMaterial ? (e.rendererId != 0 ? 1.0 : 0.0) : (fx && fx->enabled(e.library) ? 1.0 : 0.0);
+        } else if (op == "set_enabled" || op == "set_order") {
+            if (op == "set_order") e.order = static_cast<int32_t>(v);
+            bool on = op == "set_enabled" ? v > 0.5f : (isMaterial ? e.rendererId != 0 : true);
+            if (isMaterial && r) {
+                // The renderer has no switch for a material post effect: it
+                // is removed and added again.
+                if (e.rendererId) r->removePostEffect(e.rendererId);
+                e.rendererId = on ? r->addPostEffect(e.order, e.material) : 0;
+            } else if (fx) {
+                if (op == "set_enabled") fx->setEnabled(e.library, on);
+                else fx->setOrder(e.library, e.order);
+            }
+        } else if (op == "remove") {
+            if (isMaterial && r && e.rendererId) r->removePostEffect(e.rendererId);
+            else if (!isMaterial && fx) fx->remove(e.library);
+            g_effects.erase(it);
+        }
+        return true;
+    }
+    if (f == "effect_material") {
+        auto* r = res<RendererResource>();
+        out = 0;
+        if (!r) return true;
+        ScriptEffect e;
+        e.material = MaterialHandle{a[0].get<uint32_t>()};
+        e.order = a[1].get<int32_t>();
+        e.rendererId = r->addPostEffect(e.order, e.material);
+        g_effects[g_nextEffect] = e;
+        out = g_nextEffect++;
+        return true;
+    }
+    if (f == "fade_to") {
+        // r, g, b, a, amount, seconds
+        EffectId id = fade();
+        if (fx && id.valid()) {
+            if (auto* sf = fx->get<ScreenFade>(id)) {
+                sf->color = ColorF{a[0].get<float>(), a[1].get<float>(), a[2].get<float>(), a[3].get<float>()};
+            }
+            fx->fadeTo(id, a[4].get<float>(), a[5].get<float>());
+        }
+        return true;
+    }
+    if (f == "lighting") {
+        // What lighting is like; with no [lighting] section there is none.
+        auto* ls = res<LightingSettings>();
+        std::string what = a[0].get<std::string>();
+        const json& n = a[1];
+        if (!ls) {
+            static bool told = false;
+            if (!told) DRIFT_LOG_WARN("Candela: lighting is off; add a [lighting] section to drift.toml");
+            told = true;
+        } else if (what == "ambient") {
+            ls->ambient = ColorF{num(n, 0), num(n, 1), num(n, 2), num(n, 3, 1.f)};
+        } else if (what == "enabled") {
+            ls->enabled = num(n, 0) > 0.5f;
+        }
+        return true;
+    }
+    if (f == "tween_speed") {
+        if (auto* tw = res<Tweens>()) tw->timeScale = std::max(0.f, a[0].get<float>());
+        return true;
+    }
+    return false;
+}
+
 // ---- Services ----
 
 int state(bool held, bool pressed, bool released, int which) {
@@ -1689,6 +1966,7 @@ json service(const std::string& f, const json& a) {
     if (images(f, a, answer)) return answer;
     if (hierarchyService(f, a, answer)) return answer;
     if (gameplay(f, a, answer)) return answer;
+    if (effects(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {
