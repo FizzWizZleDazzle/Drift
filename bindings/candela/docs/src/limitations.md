@@ -5,3 +5,5 @@
 - **No callbacks into scripts.** The engine calls systems; it does not call other script functions. Behavior that reacts to the engine reads messages instead.
 - **Startup systems run once.** A script reload does not run them again; restart to rebuild what they made.
 - **C++ systems are not reachable.** A game is all candela. Tiled object spawners and other hooks that take C++ functions have candela equivalents only where this book lists them.
+- **Networking needs the web build.** HTTP requests and WebSockets go through the browser; on the desktop they answer with an error.
+- **Data files load when asked.** Editing a data file while the game runs changes nothing until the game loads it again.

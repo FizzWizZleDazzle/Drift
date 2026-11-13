@@ -1,6 +1,6 @@
-# Timers and Save Data
+# Timers, Sequences and Save Data
 
-Timers count down game time for spawn waves, cooldowns and delays; save data keeps high scores, progress and options between runs.
+Timers count down game time for spawn waves, cooldowns and delays; sequences run timed steps one after another; save data keeps high scores, progress and options between runs.
 
 ## Timers
 
@@ -77,6 +77,58 @@ fn dash(d: Dash, v: Velocity, input: Input, time: Time) {
 | `fraction()` | 1 right after use, falling to 0 when ready; suits a radial indicator |
 | `reset()` | Ready at once |
 
+## Delayed messages
+
+`cmd.send_after(seconds, message)` sends a [message](../concepts/messages.md) once the time has passed, for one-off delays that need no state of their own:
+
+```rust
+@system
+fn pick_up(_: Overlap<Player, Bomb>, cmd: Commands) {
+    cmd.send_after(2.0, Explode { .. });
+}
+```
+
+The message arrives at the start of the first frame after the delay, before your `Update` systems run.
+
+## Sequences
+
+A `Sequence` is a list of steps that run one after another across frames: waits, named events, messages, and waits for a signal. It suits intros, tutorials, boss patterns and spawn waves. Like a timer it is a plain value; keep it in a resource or component and tick it every frame:
+
+```rust
+@resource
+struct Intro {
+    steps: Sequence = sequence()
+        .wait(1.0).then("show_title")
+        .wait(2.0).send(SpawnWave { size: 5 })
+        .wait_for("wave_cleared").then("show_boss"),
+}
+
+@system
+fn run_intro(intro: Intro, time: Time, ui: Ui) {
+    for name in intro.steps.tick(time.dt) {
+        if name == "show_title" { ui.title_visible = true; }
+        if name == "show_boss" { ui.boss_bar = true; }
+    }
+}
+
+@system
+fn wave_done(_: WaveCleared, intro: Intro) {
+    intro.steps.signal("wave_cleared");
+}
+```
+
+| Member | Meaning |
+|--------|---------|
+| `wait(seconds)` | Pause the sequence |
+| `then(name)` | `tick` returns `name` when the sequence reaches this step |
+| `send(message)` | Send a message when the sequence reaches this step |
+| `wait_for(name)` | Pause until `signal(name)` is called; a signal sent early is kept until the step is reached |
+| `repeat(times)` | Run the steps again `times` more times once they end; -1 repeats forever |
+| `tick(dt)` | Advance by `dt` seconds. Returns the names of the `then` steps reached, in order; a long frame can pass several |
+| `signal(name)` | Let a `wait_for(name)` step go on |
+| `finished()` | Every step has run |
+| `restart()` | Start again from the first step |
+
 ## Save data
 
 `Save` is a key-value store kept as one JSON file per slot in the per-user data directory, named after `organization` and `name` in the `[project]` section of `drift.toml`:
@@ -110,5 +162,26 @@ let slot = save.slot("slot" + string(menu.choice));
 slot.set_int("level", progress.level);
 slot.flush();
 ```
+
+### Whole values
+
+`set_value(key, value)` stores any value as JSON in one key, and `get_value<T>(key, fallback)` reads it back, or returns `fallback` when the key is missing. A struct holding the player's progress, an `Inventory`, `Flags` or `Quests` saves in one call:
+
+```rust
+struct Progress { level: int = 1, coins: int = 0, unlocked: string[] = [] }
+
+@system(schedule: Schedule::Startup)
+fn load_progress(save: Save, game: Game) {
+    game.progress = save.get_value<Progress>("progress", Progress { .. });
+}
+
+@system
+fn checkpoint(_: ReachedCheckpoint, save: Save, game: Game) {
+    save.set_value("progress", game.progress);
+    save.flush();
+}
+```
+
+A field the stored JSON lacks, such as one added in a later version of the game, reads as its type's zero value.
 
 Save data methods act at once.

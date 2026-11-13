@@ -92,4 +92,9 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+// TOML text as JSON text: tables become objects, dates and times their TOML
+// text. Returns false and sets `error` when the text is not TOML. Data files
+// in TOML are read this way.
+bool tomlToJson(const std::string& toml, std::string& json, std::string& error);
+
 } // namespace drift

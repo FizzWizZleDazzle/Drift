@@ -126,11 +126,24 @@ impl Types {
     /// A value of type `ty` read from JSON; what JSON leaves out takes the
     /// zero value of its type.
     fn from_json(&self, j: &Json, ty: &DataType) -> Value {
+        // Text stands in for a number or a bool (a CSV cell is always text),
+        // and a number for text.
+        let text = j.as_str().map(str::trim);
         match ty {
-            DataType::Int => Value::Int(j.as_i64().or_else(|| j.as_f64().map(|f| f as i64)).unwrap_or(0)),
-            DataType::Float => Value::Float(j.as_f64().unwrap_or(0.0)),
-            DataType::Bool => Value::Bool(j.as_bool().unwrap_or(false)),
-            DataType::String => Value::String(j.as_str().unwrap_or("").to_owned()),
+            DataType::Int => Value::Int(
+                j.as_i64()
+                    .or_else(|| j.as_f64().map(|f| f as i64))
+                    .or_else(|| text.and_then(|t| t.parse::<i64>().ok().or_else(|| t.parse::<f64>().ok().map(|f| f as i64))))
+                    .unwrap_or(0),
+            ),
+            DataType::Float => Value::Float(j.as_f64().or_else(|| text.and_then(|t| t.parse().ok())).unwrap_or(0.0)),
+            DataType::Bool => Value::Bool(j.as_bool().or_else(|| text.map(|t| t == "true" || t == "1")).unwrap_or(false)),
+            DataType::String => Value::String(match j {
+                Json::String(s) => s.clone(),
+                Json::Number(n) => n.to_string(),
+                Json::Bool(b) => b.to_string(),
+                _ => String::new(),
+            }),
             DataType::Array(elem) => {
                 let elem = elem.as_deref().unwrap_or(&DataType::Unknown);
                 Value::Array(j.as_array().map(|a| a.iter().map(|e| self.from_json(e, elem)).collect()).unwrap_or_default())
@@ -170,11 +183,70 @@ impl Types {
                 Json::Bool(b) => Value::Bool(*b),
                 Json::Number(n) => n.as_i64().map_or_else(|| Value::Float(n.as_f64().unwrap_or(0.0)), Value::Int),
                 Json::String(s) => Value::String(s.clone()),
-                _ => Value::Null,
+                Json::Array(a) => Value::Array(a.iter().map(|e| self.from_json(e, &DataType::Unknown)).collect()),
+                Json::Object(o) => {
+                    Value::Map(o.iter().map(|(k, v)| (k.clone(), self.from_json(v, &DataType::Unknown))).collect())
+                }
+                Json::Null => Value::Null,
             },
         }
     }
 
+    /// The type a `type()` answer spells: `int`, `Item`, `Item[]`,
+    /// `{string: Item}`, `Pair<int, Item>`. Structs and enums match by name,
+    /// then by the name without its module.
+    fn parse_type(&self, name: &str) -> Option<DataType> {
+        let name = name.trim();
+        if let Some(inner) = name.strip_suffix("[]") {
+            return Some(DataType::Array(Some(Box::new(self.parse_type(inner)?))));
+        }
+        if let Some(inner) = name.strip_prefix('{').and_then(|n| n.strip_suffix('}')) {
+            let (k, v) = split_top(inner, ':')?;
+            return Some(DataType::Map(Box::new((Some(self.parse_type(k)?), Some(self.parse_type(v)?)))));
+        }
+        match name {
+            "int" => return Some(DataType::Int),
+            "float" => return Some(DataType::Float),
+            "bool" => return Some(DataType::Bool),
+            "string" => return Some(DataType::String),
+            "any" => return Some(DataType::Unknown),
+            _ => {}
+        }
+        let t = &self.table;
+        let find = |pick: &dyn Fn(&str) -> bool| -> Option<DataType> {
+            if let Some(i) = t.structs.iter().position(|s| pick(&s.name)) {
+                return Some(DataType::Struct(i as u16));
+            }
+            t.enums.iter().position(|e| pick(&e.name)).map(|i| DataType::Enum(i as u16))
+        };
+        find(&|n| n == name).or_else(|| find(&|n| bare_type(n) == bare_type(name)))
+    }
+}
+
+/// `a: b` split at its first top-level `sep`.
+fn split_top(s: &str, sep: char) -> Option<(&str, &str)> {
+    let mut depth = 0;
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '<' | '{' | '(' => depth += 1,
+            '>' | '}' | ')' => depth -= 1,
+            c if c == sep && depth == 0 => return Some((&s[..i], &s[i + 1..])),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// A type name without the module of its base: `drift::Pair<int>` -> `Pair<int>`.
+fn bare_type(name: &str) -> &str {
+    let open = name.find('<').unwrap_or(name.len());
+    match name[..open].rfind("::") {
+        Some(i) => &name[i + 2..],
+        None => name,
+    }
+}
+
+impl Types {
     /// `base` with the fields `j` names replaced, for settings sections.
     fn merge(&self, base: &Value, j: &Json, id: u16) -> Value {
         let Value::Struct { name, fields } = base else { return base.clone() };
@@ -256,6 +328,8 @@ enum Command {
     Switch(String, bool),
     /// Starts the game over once this frame's systems have run.
     Restart,
+    /// A message delivered once this many seconds have passed.
+    SendAfter(f64, Value),
 }
 
 thread_local! {
@@ -266,6 +340,9 @@ thread_local! {
     static QUEUE: RefCell<Vec<Command>> = const { RefCell::new(Vec::new()) };
     static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
     static ERROR: RefCell<CString> = RefCell::new(CString::default());
+    /// The game's types, for host functions that build values of a type the
+    /// script names.
+    static TYPES: RefCell<Option<std::rc::Rc<Types>>> = const { RefCell::new(None) };
     /// The script's resources by bare name, as of the last change, for
     /// `drift::resource_text` while a system runs.
     static RESOURCE_VIEW: RefCell<HashMap<String, Value>> = RefCell::new(HashMap::new());
@@ -312,7 +389,7 @@ fn queue(c: Command) {
 
 struct Host {
     program: Program,
-    types: Types,
+    types: std::rc::Rc<Types>,
     systems: Vec<System>,
     components: HashSet<String>,
     messages_kinds: HashSet<String>,
@@ -321,6 +398,8 @@ struct Host {
     stores: HashMap<String, BTreeMap<u64, Value>>,
     resources: HashMap<String, Value>,
     messages: Vec<(u64, String, Value)>,
+    /// Messages sent with a delay: seconds left, then the message.
+    later: Vec<(f64, Value)>,
     next_seq: u64,
     /// This frame's collisions: kind, a, b, and for contacts that began the
     /// first point and the normal from a to b.
@@ -829,10 +908,46 @@ impl Host {
                     SWITCHES.with(|w| w.borrow_mut().insert(name, on));
                 }
                 Command::Restart => self.restart_pending = true,
-                Command::Send(v) => {
-                    if let Value::Struct { name, .. } = &v {
-                        self.next_seq += 1;
-                        self.messages.push((self.next_seq, name.clone(), v.clone()));
+                Command::Send(v) => self.deliver(v),
+                Command::SendAfter(seconds, v) => self.later.push((seconds, v)),
+            }
+        }
+    }
+
+    fn deliver(&mut self, v: Value) {
+        if let Value::Struct { name, .. } = &v {
+            self.next_seq += 1;
+            self.messages.push((self.next_seq, name.clone(), v.clone()));
+        }
+    }
+
+    /// Delayed messages whose time has come, and messages the engine sent
+    /// since the last frame (`{"type": struct name, "value": fields}`).
+    fn receive(&mut self, dt: f64) {
+        let mut due = Vec::new();
+        self.later.retain_mut(|(left, v)| {
+            *left -= dt;
+            if *left <= 0.0 {
+                due.push(v.clone());
+                false
+            } else {
+                true
+            }
+        });
+        for v in due {
+            self.deliver(v);
+        }
+        let Json::Array(sent) = call("take_messages", json!([])) else { return };
+        for m in sent {
+            let name = m.get("type").and_then(Json::as_str).unwrap_or("");
+            match self.types.parse_type(name) {
+                Some(ty @ DataType::Struct(_)) => {
+                    let v = self.types.from_json(m.get("value").unwrap_or(&Json::Null), &ty);
+                    self.deliver(v);
+                }
+                _ => {
+                    if self.reported.insert(format!("message:{name}")) {
+                        log(1, &format!("the engine sent a {name}, which the game does not declare"));
                     }
                 }
             }
@@ -973,6 +1088,7 @@ impl Host {
         for st in self.states.values_mut() {
             st.since += time.0;
         }
+        self.receive(time.0);
         let order: Vec<usize> = (0..self.systems.len()).collect();
         let is_transition = |s: &System| s.on_enter.is_some() || s.on_exit.is_some();
         if !self.started {
@@ -1049,6 +1165,7 @@ impl Host {
             st.next = None;
         }
         self.messages.clear();
+        self.later.clear();
         self.contacts.clear();
         for (sys, on) in self.systems.iter_mut().zip(self.initial_enabled.iter()) {
             sys.enabled = *on;
@@ -1167,6 +1284,32 @@ fn engine(module_dir: &str) -> Engine {
         queue(Command::Send(v(a, 0)));
         Ok(Value::Null)
     });
+    e.register_host_fn_variadic("drift", "send_message_after", move |a| {
+        queue(Command::SendAfter(v(a, 0).as_f64().unwrap_or(0.0), v(a, 1)));
+        Ok(Value::Null)
+    });
+    // Values of a type the script names, from JSON text, and back. The
+    // answer is [value], or the reason as text when the text is not JSON;
+    // the module raises drift_bad_data with it, since a host error reaches
+    // the script as host_fn_error.
+    e.register_host_fn_variadic("drift", "value_from_json", move |a| {
+        let text = v(a, 0);
+        let ty_name = v(a, 1);
+        let (Some(text), Some(ty_name)) = (text.as_str(), ty_name.as_str()) else {
+            return Err(host_error("value_from_json needs text and a type"));
+        };
+        let j: Json = match serde_json::from_str(text) {
+            Ok(j) => j,
+            Err(e) => return Ok(Value::String(e.to_string())),
+        };
+        TYPES.with(|t| {
+            let t = t.borrow();
+            let Some(types) = t.as_ref() else { return Ok(Value::String("the game is not loaded yet".into())) };
+            let Some(ty) = types.parse_type(ty_name) else { return Ok(Value::String(format!("no type {ty_name}"))) };
+            Ok(Value::Array(vec![types.from_json(&j, &ty)]))
+        })
+    });
+    e.register_host_fn_variadic("drift", "value_to_json", move |a| Ok(Value::String(to_json(&v(a, 0)).to_string())));
 
     let b = |j: Json| j.as_bool().unwrap_or(false);
     let f = |j: Json| j.as_f64().unwrap_or(0.0);
@@ -1335,6 +1478,15 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("local_time", vec![], af()),
         ("is_web", vec![], B),
         ("is_touch", vec![], B),
+        // Data files, settings and the player's language.
+        ("data_read", vec![S, S], S),
+        ("setting_text", vec![S], S),
+        ("system_language", vec![], S),
+        // HTTP and WebSockets; answers arrive as messages.
+        ("http_request", vec![S, S, S, S], I),
+        ("ws_open", vec![S], I),
+        ("ws_send", vec![I, S], B),
+        ("ws_close", vec![I], U),
     ]
     .into_iter()
     .chain(gameplay_forwarded())
@@ -1505,7 +1657,7 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     // First the game alone, for its attributes.
     let first = engine(module_dir).compile(&format!("{src}{main}"), entry).map_err(|d| report(&d, entry, &src))?;
     let table = first.attributes();
-    let types = Types { table };
+    let types = std::rc::Rc::new(Types { table });
     let named = |n: &str| -> Vec<(u16, Option<String>)> {
         types
             .table
@@ -1567,6 +1719,7 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         stores: HashMap::new(),
         resources: HashMap::new(),
         messages: Vec::new(),
+        later: Vec::new(),
         next_seq: 0,
         contacts: Vec::new(),
         started: false,
@@ -1581,6 +1734,8 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         states: HashMap::new(),
         time_scale: (1.0, 0.0),
     };
+    // Resource defaults may load data files, which needs the types.
+    TYPES.with(|t| *t.borrow_mut() = Some(host.types.clone()));
     for a in host.types.table.named("drift", "state") {
         let AttributeTarget::Enum(id) = a.target else { continue };
         let info = &host.types.table.enums[id as usize];

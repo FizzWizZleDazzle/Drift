@@ -22,7 +22,8 @@ Engine calls raise these kinds, which a script can catch with `try` / `catch "ki
 
 | Kind | Raised by |
 |------|-----------|
-| `drift_load_failed` | A file that does not exist or does not load |
+| `drift_load_failed` | A file that does not exist or does not load, including a data file that is not valid JSON, TOML or CSV |
+| `drift_bad_data` | `parse_json` of text that is not JSON |
 | `drift_save_failed` | Save data that cannot be read or written |
 | `drift_missing_resource` | `cmd.remove_resource` of a resource that is not there |
 | `drift_no_such_layer` | A tilemap layer name the map does not have |

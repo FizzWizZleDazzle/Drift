@@ -73,7 +73,7 @@ set(_module ${CMAKE_CURRENT_SOURCE_DIR}/drift)
 
 # The `drift` program, for the desktop or, in a web build, as the runtime.
 function(drift_candela_program target)
-    add_executable(${target} ${_runner}/drift.cpp)
+    add_executable(${target} ${_runner}/drift.cpp ${_runner}/data.cpp ${_runner}/net.cpp)
     target_link_libraries(${target} PRIVATE drift drift_candela_host)
     target_compile_definitions(${target} PRIVATE
         DRIFT_CANDELA_MODULE_DIR="${_module}"

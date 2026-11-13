@@ -150,7 +150,7 @@ void setup(Res<Settings> settings) {
 }
 ```
 
-`has`, `getInt`, `getFloat`, `getBool` and `getString` see environment and `--set` values too. `valueJson(path)` returns a value or a whole table as JSON text, which is how a scripting host reads a section.
+`has`, `getInt`, `getFloat`, `getBool` and `getString` see environment and `--set` values too. `valueJson(path)` returns a value or a whole table as JSON text, which is how a scripting host reads a section. The free function `tomlToJson(toml, json, error)` converts any TOML text the same way, for data files kept in TOML.
 
 ## Live Reload
 

@@ -20,7 +20,8 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `FlowField` | `direction(c)`, `direction_at(pos, cell_size)`, `step(c)`, `cost(c)` |
 | `Burst` | `time`, `count`, `cycles` (0 forever), `interval`: particles at once, for `ParticleEmitter.bursts` |
 | `PlayOptions` | `volume` (1), `pan` (-1 left to 1 right), `pitch` (1), `looping`, `bus` (the sfx bus when unset), `fade_in` (seconds), `priority` (higher keeps its voice when all are busy). For `Sound.play_with` |
-| `Timer`, `Cooldown` | See [Timers and Save Data](../guides/timers-and-saves.md) |
+| `Timer`, `Cooldown`, `Sequence` | See [Timers, Sequences and Save Data](../guides/timers-and-saves.md) |
+| `Request`, `HttpResponse`, `Socket`, `SocketEvent` | HTTP requests, WebSockets and their messages; see [Networking](../guides/networking.md) |
 | `Image` | Pixels to change from code; see [Image](resources.md#image) |
 | `Shader`, `Material` | A fragment shader, and a shader with its parameters and textures; from `Assets` |
 | `Spritesheet` | A texture cut into equal frames: `texture`, `frame_w`, `frame_h`, `columns`, `rows`. `frame(col, row)`, `frame_at(i)` (left to right, top to bottom from 0), `frames(first, count)`, `count()`; for an Aseprite file also `tag(name)` and `clip(name)`. Built with `assets.spritesheet(texture, frame_w, frame_h)` or `assets.aseprite(path)` |
@@ -72,6 +73,9 @@ The structs `Effects.add` takes; every field has a default.
 | `spring(v)`, `spring2(v)`, `angle_spring(v)` | Springs at rest at a value |
 | `two_bone_ik(root, target, upper_len, lower_len, bend)` | A `TwoBone` pose |
 | `ik_chain(root, count, length, direction)`, `rope(start, count, segment, direction)`, `foot(at)` | A straight IK chain, a rope, a planted foot |
+| `load_data<T>(path)`, `read_text(path)`, `parse_json<T>(text)`, `to_json(value)` | Data files and JSON; see [Data Files](../guides/data-files.md) |
+| `http_get(url)`, `http_post(url, body)`, `http_request(method, url, body, headers)`, `websocket(url)` | See [Networking](../guides/networking.md) |
+| `sequence()` | An empty `Sequence` to chain steps onto |
 | `parent_of(e)` | The entity's parent; `Entity {}` for a root |
 | `children_of(e)`, `descendants_of(e)` | The direct children in the order they were added; everything below, depth first |
 | `world_transform(e)` | The entity's `GlobalTransform`: its place after every parent |
@@ -109,6 +113,7 @@ The structs `Effects.add` takes; every field has a default.
 | `EmitShape` | `Point`, `Circle`, `Ring`, `Box`, `Line` |
 | `OccluderShape` | `Box`, `Circle`, `Polygon`, `FromCollider` |
 | `NoiseType` | `Value`, `Perlin`, `Simplex` |
+| `SocketEventKind` | `Opened`, `Message`, `Closed`, `Error` |
 | `Ease` | `Linear`, and `In`, `Out` and `InOut` of `Sine`, `Quad`, `Cubic`, `Quart`, `Quint`, `Expo`, `Circ`, `Back`, `Elastic`, `Bounce` (`InOutSine`, ...), and `Spring` |
 | `Key` | The letters, `Num0` to `Num9`, `F1` to `F12`, `Return`, `Escape`, `Backspace`, `Tab`, `Space`, `Left`, `Right`, `Up`, `Down`, `LCtrl`, `LShift`, `LAlt`, `RCtrl`, `RShift`, `RAlt` |
 | `MouseButton` | `Left`, `Middle`, `Right`, `X1`, `X2` |

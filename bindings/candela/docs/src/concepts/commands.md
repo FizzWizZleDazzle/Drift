@@ -39,6 +39,7 @@ Commands change the world's shape; assigning to a parameter changes the data the
 | `insert_resource(r)` | Adds a resource, or replaces it |
 | `remove_resource<R>()` | Removes a resource; systems that take it stop running |
 | `send(message)` | Sends a message to the systems that read its type; see [Messages](messages.md) |
+| `send_after(seconds, message)` | Sends the message once `seconds` have passed; it arrives at the start of that frame |
 | `spawn_scene(scene, options) -> SceneInstance` | Spawns a copy of a scene or prefab; see [Scenes and Prefabs](../guides/scenes.md) |
 | `restart()` | Starts the game over once this frame's systems have run: every entity the game spawned is despawned, resources and states return to their defaults, and the startup systems run again |
 

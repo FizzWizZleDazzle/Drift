@@ -54,6 +54,7 @@
 #include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
 
+#include "services.hpp"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
@@ -2762,6 +2763,13 @@ json service(const std::string& f, const json& a) {
     if (windowAndAssets(f, a, answer)) return answer;
     if (platform(f, a, answer)) return answer;
     if (animation(f, a, answer)) return answer;
+    if (candela::dataService(*g_app, f, a, answer) || candela::netService(f, a, answer)) return answer;
+    if (f == "take_messages") {
+        candela::netPoll();
+        json sent(std::move(candela::outbox()));
+        candela::outbox().clear();
+        return sent;
+    }
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {

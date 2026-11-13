@@ -250,6 +250,22 @@ host "drift" {
     float[] local_time();
     bool is_web();
     bool is_touch();
+
+    // Data files, delayed messages, settings and language. A data file
+    // crosses as JSON text; value_from_json builds a value of the named type.
+    send_message_after(...);
+    string data_read(string, string);
+    any value_from_json(...);
+    string value_to_json(...);
+    string setting_text(string);
+    string system_language();
+
+    // HTTP and WebSockets. Answers arrive as HttpResponse and SocketEvent
+    // messages.
+    int http_request(string, string, string, string);
+    int ws_open(string);
+    bool ws_send(int, string);
+    ws_close(int);
 }
 
 enum Schedule { Startup, Update }
@@ -2931,3 +2947,163 @@ fn grid_line(a: Cell, b: Cell) -> Cell[] {
     }
     return out;
 }
+
+// ---- Data files ----
+
+// The text of a file, such as one under assets/.
+fn read_text(path: string) -> string { return parse_json<string>(read_data(path, "text")); }
+fn read_data(path: string, format: string) -> string {
+    let j = drift::data_read(path, format);
+    if j == "" {
+        throw "drift_load_failed: " + path;
+    }
+    return j;
+}
+// A JSON, TOML or CSV file (by its extension) as a value of type T: a
+// struct, a list, a map. Fields the file leaves out keep their zero value.
+// A CSV file is a list of rows, so T is a list: load_data<Item[]>(path).
+fn load_data<T>(path: string) -> T { return parse_json<T>(read_data(path, "")); }
+// JSON text as a value of type T.
+fn parse_json<T>(text: string) -> T {
+    let r = drift::value_from_json(text, drift_type_name<T>());
+    if r is string {
+        throw "drift_bad_data: " + (r as string);
+    }
+    return (r as any[])[0] as T;
+}
+// Any value as JSON text: structs become objects, enums their variant name.
+fn to_json(value: any) -> string { return drift::value_to_json(value); }
+
+impl Save {
+    // A value of any type stored as JSON under `key`, or `fallback`.
+    fn get_value<T>(self, key: string, fallback: T) -> T {
+        if !drift::save_has(self.name, key) {
+            return fallback;
+        }
+        return parse_json<T>(drift::save_get_string(self.name, key, ""));
+    }
+    fn set_value(self, key: string, value: any) { drift::save_set_string(self.name, key, to_json(value)); }
+}
+
+// ---- Networking ----
+
+// A request in flight. Its answer arrives as an HttpResponse message.
+struct Request { id: int = 0 }
+
+// The answer to a request. `ok` is true for a 2xx status; `status` is 0 and
+// `error` says why when there was no answer at all (offline, blocked by
+// CORS, a bad URL).
+@message
+struct HttpResponse { request: Request, status: int, ok: bool, body: string, error: string }
+
+fn http_get(url: string) -> Request { return Request { id: drift::http_request("GET", url, "", "") }; }
+// Sends `body` as JSON: http_post(url, to_json(score)).
+fn http_post(url: string, body: string) -> Request {
+    return Request { id: drift::http_request("POST", url, body, "{\"Content-Type\": \"application/json\"}") };
+}
+// Any method, with headers.
+fn http_request(method: string, url: string, body: string, headers: {string: string}) -> Request {
+    return Request { id: drift::http_request(method, url, body, to_json(headers)) };
+}
+
+// A WebSocket connection. What happens on it arrives as SocketEvent messages.
+struct Socket { id: int = 0 }
+enum SocketEventKind { Opened, Message, Closed, Error }
+@message
+struct SocketEvent { socket: Socket, kind: SocketEventKind, text: string, code: int }
+
+// Opens a WebSocket to a ws:// or wss:// URL. Send once Opened has arrived.
+fn websocket(url: string) -> Socket { return Socket { id: drift::ws_open(url) }; }
+impl Socket {
+    // False when the socket is not open.
+    fn send(self, text: string) -> bool { return drift::ws_send(self.id, text); }
+    fn close(self) { drift::ws_close(self.id); }
+}
+
+// ---- Sequences ----
+
+impl Commands {
+    // Sends the message once `seconds` have passed.
+    fn send_after(self, seconds: float, message: any) { drift::send_message_after(seconds, message); }
+}
+
+// One step of a Sequence; build them with sequence() and its methods.
+struct SequenceStep { kind: int = 0, seconds: float = 0.0, name: string = "", message: any = 0 }
+
+// Steps that run one after another across frames: waits, named events,
+// messages, and waits for a signal. Keep one in a component or resource and
+// tick it every frame.
+struct Sequence { steps: SequenceStep[] = [], at: int = 0, waited: float = 0.0, loops: int = 0, signals: string[] = [] }
+fn sequence() -> Sequence { return Sequence { .. }; }
+impl Sequence {
+    fn wait(self, seconds: float) -> Sequence {
+        self.steps.push(SequenceStep { kind: 0, seconds: seconds, .. });
+        return self;
+    }
+    // tick() returns `name` when the sequence gets here.
+    fn then(self, name: string) -> Sequence {
+        self.steps.push(SequenceStep { kind: 1, name: name, .. });
+        return self;
+    }
+    // Sends a message when the sequence gets here.
+    fn send(self, message: any) -> Sequence {
+        self.steps.push(SequenceStep { kind: 2, message: message, .. });
+        return self;
+    }
+    // Waits until signal(name) is called.
+    fn wait_for(self, name: string) -> Sequence {
+        self.steps.push(SequenceStep { kind: 3, name: name, .. });
+        return self;
+    }
+    // Runs the steps `times` more times once they end; -1 forever.
+    fn repeat(self, times: int) -> Sequence {
+        self.loops = times;
+        return self;
+    }
+    // Lets a wait_for(name) step go on, now or when the sequence reaches it.
+    fn signal(self, name: string) { self.signals.push(name); }
+    fn finished(self) -> bool { return self.at >= self.steps.len(); }
+    fn restart(self) {
+        self.at = 0;
+        self.waited = 0.0;
+        self.signals = [];
+    }
+    // Advances by dt seconds; returns the names of the `then` steps reached.
+    fn tick(self, dt: float) -> string[] {
+        let reached: string[] = [];
+        let budget = dt;
+        let guard = 0;
+        while self.at < self.steps.len() && guard < 10000 {
+            guard += 1;
+            let s = self.steps[self.at];
+            if s.kind == 0 {
+                if self.waited + budget < s.seconds {
+                    self.waited += budget;
+                    return reached;
+                }
+                budget -= s.seconds - self.waited;
+                self.waited = 0.0;
+            } else if s.kind == 1 {
+                reached.push(s.name);
+            } else if s.kind == 2 {
+                drift::send_message(s.message);
+            } else {
+                match self.signals.index_of(s.name) {
+                    Some(k) => self.signals.remove(k),
+                    None => {
+                        return reached;
+                    }
+                }
+            }
+            self.at += 1;
+            if self.at >= self.steps.len() && self.loops != 0 {
+                if self.loops > 0 {
+                    self.loops -= 1;
+                }
+                self.at = 0;
+            }
+        }
+        return reached;
+    }
+}
+

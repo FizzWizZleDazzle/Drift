@@ -31,6 +31,10 @@ fn death_effects(died: Died, effects: Effects) {
 
 A list parameter, `deaths: Died[]`, receives every message of the type sent since the system last ran, once. A single parameter, `died: Died`, runs the system once for each of them. A reader ordered `after:` the sender gets the messages the same frame; one that runs before it gets them next frame. Messages nobody reads are dropped at the end of the next frame.
 
+## Later, and from outside
+
+`cmd.send_after(seconds, message)` sends a message after a delay. The engine sends messages too: an `HttpResponse` answers an HTTP request and a `SocketEvent` reports a WebSocket's traffic (see [Networking](../guides/networking.md)). Both kinds arrive at the start of a frame, before the `Update` systems run, and are read like messages a system sent.
+
 ## Collisions
 
 Physics reports collisions as messages, typed by the components of the two entities:

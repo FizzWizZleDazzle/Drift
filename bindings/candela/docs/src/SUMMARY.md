@@ -33,9 +33,11 @@
 - [Tilemaps](guides/tilemaps.md)
 - [Procedural Generation](guides/procedural-generation.md)
 - [Scenes and Prefabs](guides/scenes.md)
-- [Timers and Save Data](guides/timers-and-saves.md)
+- [Timers, Sequences and Save Data](guides/timers-and-saves.md)
 - [HUD and Menus](guides/hud.md)
 - [Building Blocks](guides/building-blocks.md)
+- [Data Files](guides/data-files.md)
+- [Networking](guides/networking.md)
 - [Debugging](guides/debugging.md)
 - [Web Games](guides/web.md)
 

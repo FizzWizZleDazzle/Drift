@@ -269,6 +269,7 @@ The save slot `<user data>/<organization>/<name>/save.json`, named after `[proje
 | `has(key)`, `erase(key)`, `clear()` | |
 | `flush()` | Write the slot to disk; in a browser, to the site's storage |
 | `slot(name)` | Another slot in the same directory |
+| `get_value<T>(key, fallback)`, `set_value(key, value)` | Any value, stored as JSON; see [Whole values](../guides/timers-and-saves.md#whole-values) |
 
 ## Platform
 

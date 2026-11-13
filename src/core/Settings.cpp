@@ -150,6 +150,18 @@ std::string enumChoices(const reflect::TypeInfo& t) {
 
 } // namespace
 
+bool tomlToJson(const std::string& text, std::string& out, std::string& error) {
+    try {
+        toml::table t = toml::parse(text);
+        std::unordered_map<std::string, int> ignored;
+        out = toJson(t, "", ignored).dump();
+        return true;
+    } catch (const toml::parse_error& e) {
+        error = std::string(e.description()) + " (line " + std::to_string(e.source().begin.line) + ")";
+        return false;
+    }
+}
+
 struct Settings::Impl {
     struct Binding {
         std::string section;
