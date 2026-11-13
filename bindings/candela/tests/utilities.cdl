@@ -26,6 +26,7 @@ struct Checks {
     got: string[] = [],
     pings: int[] = [],
     frames: int = 0,
+    checked: bool = false,
 }
 
 fn expect(checks: Checks, what: string, ok: bool) {
@@ -139,7 +140,10 @@ fn advance(checks: Checks, time: Time, window: Window) {
             checks.steps.signal("go");
         }
     }
-    if checks.frames == 60 {
+    // Checked after a second of game time, which the delayed message and the
+    // sequence fit in at any frame rate.
+    if time.elapsed >= 1.0 && !checks.checked {
+        checks.checked = true;
         expect(checks, "sequence", checks.got == ["a", "b"] && checks.steps.finished());
         expect(checks, "messages", checks.pings.contains(1) && checks.pings.contains(2));
         if checks.failed == 0 {
