@@ -144,9 +144,10 @@ A loaded Tiled map or LDtk level, or a map made with `create_tilemap`. Layers ar
 | `fill(layer, grid, tiles: int[], at)`, `to_grid(layer)` | Write a [grid](../guides/procedural-generation.md#grids) into a tile layer through a tile id per value; read a layer back as a grid |
 | `destroy()` | Free the map once no `Tilemap` entity shows it |
 | `objects(kind)` | `MapObject[]` of a Tiled class or LDtk entity identifier; `""` for all |
-| `property(name)`, `object_property(object, name)` | Map or level properties and object properties, as strings; `""` when missing |
+| `property(name)`, `object_property(object, name)`, `tile_property(tile, name)` | Map or level properties, object properties and tileset tile properties, as strings; `""` when missing |
+| `autotile(source, target, rules)` | Writes the `target` layer's tiles from the terrain in `source`, by which neighbours are terrain too; see [Tilemaps](../guides/tilemaps.md#autotiling) |
 
-A `MapObject` has `name`, `kind`, `bounds` (world `Rect`) and `anchor` (world position of its pivot).
+A `MapObject` has `name`, `kind`, `id` (the Tiled object id), `shape` (`ObjectShape`: `Rect`, `Point`, `Ellipse`, `Polygon`, `Polyline`, `Tile`, `Text`), `bounds` (world `Rect`), `anchor` (world position of its pivot), `rotation`, `tile` (for tile objects) and `points` (world positions of a polygon or polyline), plus the `layer` and `index` that identify it in its map.
 
 ### Scene
 

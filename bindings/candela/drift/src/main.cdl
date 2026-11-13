@@ -209,6 +209,13 @@ host "drift" {
     physics_push(int, int, float, float);
     physics_debug(bool);
 
+    // Tilemap objects, tile properties and autotiling.
+    float[] map_objects(int, string);
+    string[] map_object_names(int, string);
+    string map_object_property(int, int, int, string);
+    string map_tile_property(int, int, string);
+    map_autotile(int, int, int, int, int[], int[], int, bool);
+
     // Systems and restarts.
     system_switch(string, bool);
     bool system_enabled(string);
@@ -2653,3 +2660,85 @@ impl Window {
     fn backend(self) -> string { return drift::window_backend(); }
 }
 
+// ---- Tilemap objects and autotiling ----
+
+enum ObjectShape { Rect, Point, Ellipse, Polygon, Polyline, Tile, Text }
+
+// An object from a Tiled object layer or an LDtk entity, in world
+// coordinates where its map's Tilemap entity puts it.
+struct MapObject {
+    map: Map = Map { .. },
+    layer: int = 0,
+    index: int = 0,             // place in its layer
+    id: int = 0,                // the Tiled object id
+    name: string = "",          // Tiled name; LDtk identifier
+    kind: string = "",          // Tiled class; LDtk identifier
+    shape: ObjectShape = ObjectShape::Rect,
+    bounds: Rect = Rect { .. },
+    anchor: Vec2 = Vec2 { .. }, // the pivot: LDtk's pivot, a Tiled tile object's bottom-left
+    rotation: float = 0.0,      // radians
+    tile: int = 0,              // the tile of a Tile object
+    points: Vec2[] = [],        // polygon and polyline points
+}
+
+fn object_shape(code: int) -> ObjectShape {
+    return match code {
+        1 => ObjectShape::Point, 2 => ObjectShape::Ellipse, 3 => ObjectShape::Polygon,
+        4 => ObjectShape::Polyline, 5 => ObjectShape::Tile, 6 => ObjectShape::Text, _ => ObjectShape::Rect,
+    };
+}
+
+enum AutotileMode { Neighbours4, Neighbours8 }
+
+// How autotile picks tiles. A source cell is terrain when its value is in
+// `terrain` (empty: any non-zero value). `tiles` holds a tile id per
+// neighbour mask: 16 for Neighbours4 (bits N=1 E=2 S=4 W=8), 256 for
+// Neighbours8 (NW=1 N=2 NE=4 W=8 E=16 SW=32 S=64 SE=128; a corner counts
+// only with both edges beside it). 0 entries use `fallback`.
+struct AutotileRules {
+    mode: AutotileMode = AutotileMode::Neighbours4,
+    terrain: int[] = [],
+    tiles: int[] = [],
+    fallback: int = 0,
+    edges_are_terrain: bool = false,
+}
+
+impl Map {
+    // The objects of a Tiled class or LDtk identifier, every layer, in
+    // order; "" for all of them.
+    fn objects(self, kind: string) -> MapObject[] {
+        let f = drift::map_objects(self.id, kind);
+        let names = drift::map_object_names(self.id, kind);
+        let out: MapObject[] = [];
+        let k = 0;
+        let n = 0;
+        while k < f.len() {
+            let o = MapObject { map: self, layer: int(f[k]), index: int(f[k + 1]), id: int(f[k + 2]),
+                                name: names[n * 2], kind: names[n * 2 + 1], shape: object_shape(int(f[k + 3])),
+                                bounds: Rect { x: f[k + 4], y: f[k + 5], w: f[k + 6], h: f[k + 7] },
+                                anchor: Vec2 { x: f[k + 8], y: f[k + 9] }, rotation: f[k + 10], tile: int(f[k + 11]), .. };
+            let count = int(f[k + 12]);
+            k += 13;
+            for i in range(count) {
+                o.points.push(Vec2 { x: f[k + i * 2], y: f[k + i * 2 + 1] });
+            }
+            k += count * 2;
+            n += 1;
+            out.push(o);
+        }
+        return out;
+    }
+    // A property of an object, as text; "" when it has none of that name.
+    fn object_property(self, o: MapObject, name: string) -> string {
+        return drift::map_object_property(self.id, o.layer, o.index, name);
+    }
+    // A property of a tile in the map's tilesets, as text.
+    fn tile_property(self, tile: int, name: string) -> string { return drift::map_tile_property(self.id, tile, name); }
+    // Writes `target` tiles from the terrain in `source`, picking each tile
+    // by which neighbours are terrain too.
+    fn autotile(self, source: int, target: int, rules: AutotileRules) {
+        let mode = match rules.mode { AutotileMode::Neighbours4 => 0, AutotileMode::Neighbours8 => 1 };
+        drift::map_autotile(self.id, source, target, mode, rules.terrain, rules.tiles, rules.fallback,
+                            rules.edges_are_terrain);
+    }
+}

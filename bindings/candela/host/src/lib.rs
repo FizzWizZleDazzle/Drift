@@ -1357,6 +1357,12 @@ fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("physics_overlap", vec![I, F, F, F, F, I], HostType::Array(Box::new(I))),
         ("physics_push", vec![I, I, F, F], U),
         ("physics_debug", vec![B], U),
+        // Tilemap objects and autotiling.
+        ("map_objects", vec![I, S], af()),
+        ("map_object_names", vec![I, S], as_()),
+        ("map_object_property", vec![I, I, I, S], S),
+        ("map_tile_property", vec![I, I, S], S),
+        ("map_autotile", vec![I, I, I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, B], U),
         // Audio.
         ("voice_play", vec![I, I, F, F, F, B, F, I], I),
         ("voice_op", vec![I, I, F, F], F),

@@ -2322,8 +2322,72 @@ bool gameplayAudio(const std::string& f, const json& a, json& out) {
     return true;
 }
 
+// The objects of a kind ("" for all) with their layer and place in it.
+template <typename Fn> void eachObject(TilemapResource& maps, TilemapHandle m, const std::string& kind, Fn&& fn) {
+    int32_t layers = maps.layerCount(m);
+    for (int32_t l = 0; l < layers; ++l) {
+        const auto& objs = maps.objects(m, l);
+        for (size_t i = 0; i < objs.size(); ++i) {
+            if (kind.empty() || objs[i].type == kind) fn(l, int32_t(i), objs[i]);
+        }
+    }
+}
+
+bool gameplayTilemap(const std::string& f, const json& a, json& out) {
+    if (f != "map_objects" && f != "map_object_names" && f != "map_object_property" && f != "map_tile_property" &&
+        f != "map_autotile") {
+        return false;
+    }
+    auto* maps = res<TilemapResource>();
+    out = f == "map_objects" || f == "map_object_names" ? json::array() : json(std::string());
+    if (!maps) return true;
+    TilemapHandle m{a[0].get<uint32_t>()};
+    if (f == "map_objects") {
+        Vec2 o = maps->origin(m);
+        eachObject(*maps, m, a[1].get<std::string>(), [&](int32_t l, int32_t i, const MapObject& ob) {
+            Vec2 anchor = o + ob.anchor();
+            for (double v : std::initializer_list<double>{double(l), double(i), double(ob.id), double(int(ob.shape)),
+                                                          o.x + ob.position.x, o.y + ob.position.y, ob.size.x,
+                                                          ob.size.y, anchor.x, anchor.y, ob.rotation,
+                                                          double(ob.tile & 0x0FFFFFFFu), double(ob.points.size())}) {
+                out.push_back(v);
+            }
+            for (Vec2 p : ob.points) {
+                out.push_back(o.x + ob.position.x + p.x);
+                out.push_back(o.y + ob.position.y + p.y);
+            }
+        });
+    } else if (f == "map_object_names") {
+        eachObject(*maps, m, a[1].get<std::string>(), [&](int32_t, int32_t, const MapObject& ob) {
+            out.push_back(ob.name);
+            out.push_back(ob.type);
+        });
+    } else if (f == "map_object_property") {
+        int32_t l = a[1].get<int32_t>(), i = a[2].get<int32_t>();
+        if (l >= 0 && l < maps->layerCount(m)) {
+            const auto& objs = maps->objects(m, l);
+            if (i >= 0 && size_t(i) < objs.size()) out = objs[size_t(i)].properties.getString(a[3].get<std::string>());
+        }
+    } else if (f == "map_tile_property") {
+        if (const TilemapProperties* p = maps->tileProperties(m, a[1].get<uint32_t>())) {
+            out = p->getString(a[2].get<std::string>());
+        }
+    } else {
+        AutotileRules r;
+        r.mode = a[3].get<int>() == 1 ? AutotileMode::Neighbours8 : AutotileMode::Neighbours4;
+        r.terrain = ints(a[4]);
+        for (const auto& t : a[5]) r.tiles.push_back(static_cast<uint32_t>(std::max<int64_t>(0, t.get<int64_t>())));
+        r.fallback = static_cast<uint32_t>(std::max<int64_t>(0, a[6].get<int64_t>()));
+        r.edgesAreTerrain = a[7].get<bool>();
+        maps->autotile(m, a[1].get<int32_t>(), a[2].get<int32_t>(), r);
+        out = nullptr;
+    }
+    return true;
+}
+
 bool gameplay(const std::string& f, const json& a, json& out) {
-    return gameplayInput(f, a, out) || gameplayPhysics(f, a, out) || gameplayAudio(f, a, out);
+    return gameplayInput(f, a, out) || gameplayPhysics(f, a, out) || gameplayAudio(f, a, out) ||
+           gameplayTilemap(f, a, out);
 }
 
 json service(const std::string& f, const json& a) {

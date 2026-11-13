@@ -101,7 +101,36 @@ fn spawn_objects(cmd: Commands, level: Level, art: Art) {   // Art holds the tex
 }
 ```
 
-`property(name)` reads a property of the Tiled map or the LDtk level. Properties come back as strings, `""` when missing; convert numbers with `int(...)` or `float(...)`.
+`property(name)` reads a property of the Tiled map or the LDtk level. Properties come back as strings, `""` when missing; convert numbers with `int(...)` or `float(...)`. `tile_property(tile, name)` reads a property set on a tile in Tiled's tileset editor, such as a `damage` value on spike tiles under the player.
+
+Objects also carry their `shape`, `rotation`, the `tile` of a tile object and the `points` of a polygon or polyline, in world positions, so a patrol path drawn as a polyline in Tiled is a list of waypoints:
+
+```rust
+for path in level.map.objects("Patrol") {
+    cmd.spawn([Transform { position: path.points[0], .. }, Guard { route: path.points, next: 1 }]);
+}
+```
+
+## Autotiling
+
+`autotile(source, target, rules)` turns terrain into tiles: for every terrain cell of the `source` layer it writes a tile to the `target` layer chosen by which of its neighbours are terrain too, so edges, corners and inner pieces join up. Paint terrain, from code or a generator, and let the rules pick the art:
+
+```rust
+let tiles: int[] = [];
+for mask in range(16) {
+    tiles.push(17 + mask);   // the 16 edge pieces sit in tileset order after tile 17
+}
+map.autotile(map.layer("Terrain"), map.layer("Ground"), AutotileRules { tiles: tiles, .. });
+```
+
+| `AutotileRules` field | Meaning |
+|-----------------------|---------|
+| `mode` | `AutotileMode::Neighbours4`: 16 tiles indexed by N=1, E=2, S=4, W=8. `Neighbours8`: a 256-entry blob tileset, NW=1, N=2, NE=4, W=8, E=16, SW=32, S=64, SE=128, where a corner counts only when both edges beside it are terrain |
+| `terrain` | Source values that are terrain; empty means any non-zero value |
+| `tiles` | The tile for each mask; a 0 entry uses `fallback` |
+| `edges_are_terrain` | Cells outside the layer count as terrain, so the map's border has no edge pieces |
+
+Run it again after changing the terrain; it rewrites the whole target layer.
 
 ## Collision
 
