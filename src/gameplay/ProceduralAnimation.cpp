@@ -125,20 +125,22 @@ void stepVerlet(std::span<Vec2> points, std::span<Vec2> previous, Vec2 anchor, f
             }
         }
         if (stiff > 0.f) {
-            // Bending: push the neighbours of each point apart toward the
-            // distance they have when the chain is straight. Both ends move,
-            // so stiffness adds no net force and the chain still hangs.
+            // Bending: move each point toward the line through its
+            // neighbours, and the neighbours the other way, by a share of how
+            // far it sticks out; at 1 the three end up in line. The pull grows
+            // with the bend itself, so a gentle curve straightens as well as a
+            // fold. The moves add up to zero, so stiffness adds no net force
+            // and the chain still hangs.
             for (size_t i = 1; i + 1 < n; ++i) {
-                Vec2 delta = points[i + 1] - points[i - 1];
-                float d = delta.length();
-                float rest = 2.f * segmentLength;
-                if (d < 1e-6f || d >= rest) continue;
-                Vec2 fix = delta * ((d - rest) / d * stiff);
+                Vec2 bulge = points[i] - (points[i - 1] + points[i + 1]) * 0.5f;
                 if (i == 1) {
-                    points[2] = points[2] - fix;
+                    // points[0] is held at the anchor: only its far neighbour gives.
+                    points[1] = points[1] - bulge * (stiff * 2.f / 3.f);
+                    points[2] = points[2] + bulge * (stiff * 2.f / 3.f);
                 } else {
-                    points[i - 1] = points[i - 1] + fix * 0.5f;
-                    points[i + 1] = points[i + 1] - fix * 0.5f;
+                    points[i] = points[i] - bulge * (stiff * 2.f / 3.f);
+                    points[i - 1] = points[i - 1] + bulge * (stiff / 3.f);
+                    points[i + 1] = points[i + 1] + bulge * (stiff / 3.f);
                 }
             }
         }

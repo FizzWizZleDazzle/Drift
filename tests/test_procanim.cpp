@@ -113,6 +113,7 @@ TEST(hierarchy_despawn_takes_the_subtree) {
 #include <drift/gameplay/ProceduralAnimation.hpp>
 #include <drift/math/Vector.hpp>
 
+#include <cmath>
 #include <vector>
 
 TEST(procanim_rotate_towards_takes_the_short_arc) {
@@ -214,6 +215,35 @@ TEST(procanim_verlet_hangs_and_keeps_segments) {
     o.ground = 20.f;
     for (int f = 0; f < 120; ++f) stepVerlet(pts, prev, {0, 0}, 10.f, 1.f / 60.f, o);
     for (auto& p : pts) CHECK(p.y <= 20.f + 1e-4f);
+}
+
+TEST(procanim_verlet_stiffness_keeps_a_tail_straighter) {
+    // A gravity-free tail dragged back and forth curls behind its anchor;
+    // the stiffer it is, the further its tip stays from its base.
+    auto reach = [](float stiffness) {
+        std::vector<Vec2> p, q;
+        for (int i = 0; i < 14; ++i) p.push_back({-7.f * float(i), 0.f});
+        q = p;
+        VerletOptions o;
+        o.gravity = {0, 0};
+        o.damping = 0.9f;
+        o.stiffness = stiffness;
+        float sum = 0.f;
+        int count = 0;
+        for (int f = 0; f < 600; ++f) {
+            float t = float(f) / 60.f;
+            Vec2 a{80.f * std::sin(Pi * t), 25.f * std::sin(2.f * Pi * t)};
+            stepVerlet(p, q, a, 7.f, 1.f / 60.f, o);
+            if (f > 240) {
+                sum += (p[13] - p[0]).length();
+                ++count;
+            }
+        }
+        return sum / float(count);
+    };
+    float loose = reach(0.f), half = reach(0.5f), full = reach(1.f);
+    CHECK(half > loose + 5.f);
+    CHECK(full > half + 3.f);
 }
 
 TEST(procanim_foot_steps_when_it_strays) {
