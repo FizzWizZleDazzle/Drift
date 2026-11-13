@@ -650,33 +650,6 @@ fn pixel_ratio(self) -> float
 
 Screen pixels per window unit: 2 on most phones, 1 on most monitors.
 
-### Window.download
-
-```rust
-fn download(self, path: string)
-```
-
-Offers a file the game wrote, such as a screenshot, as a download in the browser. A screenshot asked for this frame is offered once it is written.
-
-```rust
-window.download("shot.png");
-```
-
-### Window.screenshot
-
-```rust
-fn screenshot(self, path: string)
-```
-
-Saves the next presented frame as a PNG.
-
-```rust
-if input.key_pressed(Key::F12) {
-    window.screenshot("shot.png");
-    window.download("shot.png");
-}
-```
-
 ### Window.op
 
 ```rust
@@ -770,6 +743,33 @@ fn backend(self) -> string
 ```
 
 "gl" or "webgpu".
+
+### Window.download
+
+```rust
+fn download(self, path: string)
+```
+
+Offers a file the game wrote, such as a screenshot, as a download in the browser. A screenshot asked for this frame is offered once it is written.
+
+```rust
+window.download("shot.png");
+```
+
+### Window.screenshot
+
+```rust
+fn screenshot(self, path: string)
+```
+
+Saves the next presented frame as a PNG.
+
+```rust
+if input.key_pressed(Key::F12) {
+    window.screenshot("shot.png");
+    window.download("shot.png");
+}
+```
 
 ## Assets
 
@@ -1012,6 +1012,14 @@ effects.burst(t.position, ParticleEmitter {
 }, 40);
 ```
 
+### Effects.add_material
+
+```rust
+fn add_material(self, m: Material, order: int) -> Effect
+```
+
+A post effect running a material's shader over the picture, which arrives as its texture0.
+
 ### Effects.restart
 
 ```rust
@@ -1180,14 +1188,6 @@ Multiplies time for every tween; 0 freezes them.
 ```rust
 effects.set_tween_speed(0.0);   // freeze every tween
 ```
-
-### Effects.add_material
-
-```rust
-fn add_material(self, m: Material, order: int) -> Effect
-```
-
-A post effect running a material's shader over the picture, which arrives as its texture0.
 
 ## Effect
 

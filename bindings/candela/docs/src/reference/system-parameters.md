@@ -42,6 +42,55 @@ fn setup(cmd: Commands) {
 }
 ```
 
+### Commands.spawn_child
+
+```rust
+fn spawn_child(self, parent: Entity, bundle: any[]) -> Entity
+```
+
+Spawns an entity whose Transform is relative to `parent`.
+
+```rust
+let ship = cmd.spawn([at(200.0, 200.0), Sprite { image: art.ship, .. }]);
+cmd.spawn_child(ship, [at(0.0, -20.0), Sprite { image: art.turret, .. }]);
+```
+
+### Commands.set_parent
+
+```rust
+fn set_parent(self, child: Entity, parent: Entity)
+```
+
+Moves `child` under `parent`, keeping its Transform's numbers.
+
+```rust
+cmd.set_parent(sword, hand);
+```
+
+### Commands.set_parent_in_place
+
+```rust
+fn set_parent_in_place(self, child: Entity, parent: Entity)
+```
+
+Moves `child` under `parent`, keeping it where it is on screen.
+
+```rust
+cmd.set_parent_in_place(crate_entity, platform);   // rides along from where it is
+```
+
+### Commands.detach
+
+```rust
+fn detach(self, child: Entity)
+```
+
+Makes `child` a root again, where it is on screen.
+
+```rust
+cmd.detach(sword);   // drops it where it is
+```
+
 ### Commands.spawn
 
 ```rust
@@ -136,55 +185,6 @@ Starts the game over once this frame's systems have run: every entity the game s
 
 ```rust
 if input.key_pressed(Key::F5) { cmd.restart(); }
-```
-
-### Commands.spawn_child
-
-```rust
-fn spawn_child(self, parent: Entity, bundle: any[]) -> Entity
-```
-
-Spawns an entity whose Transform is relative to `parent`.
-
-```rust
-let ship = cmd.spawn([at(200.0, 200.0), Sprite { image: art.ship, .. }]);
-cmd.spawn_child(ship, [at(0.0, -20.0), Sprite { image: art.turret, .. }]);
-```
-
-### Commands.set_parent
-
-```rust
-fn set_parent(self, child: Entity, parent: Entity)
-```
-
-Moves `child` under `parent`, keeping its Transform's numbers.
-
-```rust
-cmd.set_parent(sword, hand);
-```
-
-### Commands.set_parent_in_place
-
-```rust
-fn set_parent_in_place(self, child: Entity, parent: Entity)
-```
-
-Moves `child` under `parent`, keeping it where it is on screen.
-
-```rust
-cmd.set_parent_in_place(crate_entity, platform);   // rides along from where it is
-```
-
-### Commands.detach
-
-```rust
-fn detach(self, child: Entity)
-```
-
-Makes `child` a root again, where it is on screen.
-
-```rust
-cmd.detach(sword);   // drops it where it is
 ```
 
 ### Commands.send_after

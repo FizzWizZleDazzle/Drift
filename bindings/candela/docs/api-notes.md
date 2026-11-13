@@ -1,7 +1,7 @@
 <!--
 Notes for the Candela reference. scripts/candela-reference.py reads this
-file and the drift module (bindings/candela/drift/src/main.cdl) and writes
-the pages in src/reference/.
+file and the drift module (bindings/candela/drift/src/main.cdl and the
+core/ files it passes on) and writes the pages in src/reference/.
 
 - `# Title {#slug}` starts a page, written to src/reference/<slug>.md. The
   text under it, before the first entry, is the page's introduction.
@@ -4219,7 +4219,7 @@ See [Debugging](../guides/debugging.md#the-debug-overlay-in-every-build).
 
 # Sections {#sections}
 
-Where names the notes do not place go, by the `// ---- Section ----` comment they sit under in main.cdl. Names in a section not listed here go on the Values and Functions page.
+Where names the notes do not place go, by the `// ---- Section ----` comment they sit under in the module's files. Names in a section not listed here go on the Values and Functions page.
 
 - Values: values
 - Assets: assets
@@ -4253,7 +4253,6 @@ Where names the notes do not place go, by the `// ---- Section ----` comment the
 - IK chains (FABRIK): animation
 - Verlet ropes: animation
 - Stepping feet: animation
-- Gameplay: resources
 - Input: resources
 - Physics: resources
 - Post effects: resources

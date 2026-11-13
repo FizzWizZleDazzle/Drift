@@ -1,0 +1,48 @@
+// Loading textures and sounds.
+
+import "drift/core/values" { * };
+import "drift/core/audio" { * };
+
+// ---- Assets ----
+
+struct Texture { id: int = 0 }
+// The texture of an image file, loaded once per path. Works anywhere,
+// field defaults included: `pipe: Texture = texture("assets/pipe.png")`.
+fn texture(path: string) -> Texture { return Texture { id: drift::texture_load(path) }; }
+impl Texture {
+    fn size(self) -> Vec2 {
+        let s = drift::texture_size(self.id);
+        return Vec2 { x: s[0], y: s[1] };
+    }
+    fn set_filter(self, f: Filter) {
+        let code = match f { Filter::Nearest => 0, Filter::Linear => 1 };
+        drift::texture_filter(self.id, code);
+    }
+}
+
+struct Font { id: int = 0 }
+
+struct Sound { id: int = 0 }
+// The sound in a WAV, OGG or MP3 file, loaded once per path.
+fn sound(path: string) -> Sound { return Sound { id: drift::sound_load(path) }; }
+impl Sound {
+    // Plays at full volume on the sfx bus.
+    fn play(self) -> Voice { return self.play_with(PlayOptions { .. }); }
+    fn play_with(self, o: PlayOptions) -> Voice {
+        return Voice { id: drift::voice_play(self.id, o.bus.id, o.volume, o.pan, o.pitch, o.looping, o.fade_in,
+                                             o.priority) };
+    }
+}
+// How one playback sounds. `bus` empty plays on the sfx bus; `pan` is -1
+// (left) to 1 (right); `pitch` 2.0 is an octave up and twice as fast;
+// `fade_in` in seconds. When every voice is busy, a sound with a higher
+// `priority` takes the place of a lower one.
+struct PlayOptions {
+    volume: float = 1.0,
+    pitch: float = 1.0,
+    looping: bool = false,
+    pan: float = 0.0,
+    bus: Bus = Bus { .. },
+    fade_in: float = 0.0,
+    priority: int = 0,
+}

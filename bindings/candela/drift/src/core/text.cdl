@@ -1,0 +1,229 @@
+// Fonts, text formatting and localization.
+
+import "drift/core/values" { * };
+import "drift/core/assets" { * };
+import "drift/core/components" { * };
+import "drift/core/data" { * };
+
+// ---- Fonts and text ----
+
+impl Font {
+    // Widest line and height of `s` in this font at `size`.
+    fn measure(self, s: string, size: float) -> Vec2 {
+        let m = drift::text_measure(s, Text { size: size, font: self, .. });
+        return Vec2 { x: m[0], y: m[1] };
+    }
+    fn line_height(self, size: float) -> float { return drift::font_line_height(self.id, size); }
+    // Characters this font lacks come from `other`; every font falls back to
+    // the built-in one until this changes it.
+    fn set_fallback(self, other: Font) { drift::font_fallback(self.id, other.id); }
+}
+impl Text {
+    // The size this text covers as drawn, outline and shadow left out.
+    fn measure(self) -> Vec2 {
+        let m = drift::text_measure(self.value, self);
+        return Vec2 { x: m[0], y: m[1] };
+    }
+}
+
+// ---- Text formatting ----
+
+// The pattern with each {} replaced by the next argument and each {0}, {1}
+// by the argument at that index: format("{} of {}", [3, 10]) is "3 of 10".
+fn format(pattern: string, args: any[]) -> string {
+    let out = "";
+    let next = 0;
+    let i = 0;
+    let n = pattern.len();
+    while i < n {
+        let c = pattern[i..i + 1];
+        if c == "{" && i + 1 < n && pattern[i + 1..i + 2] == "{" {
+            out = out + "{";
+            i += 2;
+        } else if c == "}" && i + 1 < n && pattern[i + 1..i + 2] == "}" {
+            out = out + "}";
+            i += 2;
+        } else if c == "{" {
+            let close = match pattern[i..n].index_of("}") { Some(k) => i + k, None => -1 };
+            if close < 0 {
+                out = out + pattern[i..n];
+                return out;
+            }
+            let inside = pattern[i + 1..close];
+            let at = next;
+            if inside == "" {
+                next += 1;
+            } else {
+                at = match inside.parse<int>() { Some(k) => k, None => -1 };
+            }
+            if at >= 0 && at < args.len() {
+                out = out + string(args[at]);
+            } else {
+                out = out + pattern[i..close + 1];
+            }
+            i = close + 1;
+        } else {
+            out = out + c;
+            i += 1;
+        }
+    }
+    return out;
+}
+// The pattern with each {name} replaced by values[name]: fill("Hi {who}",
+// {"who": "Ana"}). Names not in `values` stay as they are.
+fn fill(pattern: string, values: {string: any}) -> string {
+    let out = pattern;
+    for k in values.keys() {
+        out = out.replace("{" + k + "}", string(values[k]));
+    }
+    return out;
+}
+// x with exactly `decimals` digits after the point: fixed(3.14159, 2) is "3.14".
+fn fixed(x: float, decimals: int) -> string {
+    let scale = 1;
+    for i in range(decimals) {
+        scale *= 10;
+    }
+    let n = int((x.abs() * float(scale)).round());
+    let sign_text = "";
+    if x < 0.0 && n > 0 {
+        sign_text = "-";
+    }
+    if decimals <= 0 {
+        return sign_text + string(n);
+    }
+    let frac = string(n % scale);
+    while frac.len() < decimals {
+        frac = "0" + frac;
+    }
+    return sign_text + string(n / scale) + "." + frac;
+}
+// n with zeros in front up to `width` digits: pad(7, 3) is "007".
+fn pad(n: int, width: int) -> string {
+    let digits = string(n.abs());
+    while digits.len() < width {
+        digits = "0" + digits;
+    }
+    if n < 0 {
+        return "-" + digits;
+    }
+    return digits;
+}
+// n with a comma between each group of three digits: "12,345".
+fn grouped(n: int) -> string {
+    let digits = string(n.abs());
+    let out = "";
+    let count = 0;
+    let i = digits.len();
+    while i > 0 {
+        if count == 3 {
+            out = "," + out;
+            count = 0;
+        }
+        out = digits[i - 1..i] + out;
+        count += 1;
+        i -= 1;
+    }
+    if n < 0 {
+        return "-" + out;
+    }
+    return out;
+}
+// Seconds as "m:ss", or "h:mm:ss" from an hour up; with `tenths`, a digit
+// of tenths after a point: "1:05.3".
+fn clock(seconds: float, tenths: bool) -> string {
+    let s = max(seconds, 0.0);
+    let total = int(s.floor());
+    let h = total / 3600;
+    let m = (total / 60) % 60;
+    let out = string(m) + ":" + pad(total % 60, 2);
+    if h > 0 {
+        out = string(h) + ":" + pad(m, 2) + ":" + pad(total % 60, 2);
+    }
+    if tenths {
+        out = out + "." + string(int(((s - float(total)) * 10.0).floor()));
+    }
+    return out;
+}
+
+// ---- Localization ----
+
+// The game's text in the player's language: one file per language, key ->
+// text, in JSON or TOML. drift.toml [locale] says where:
+//
+//     [locale]
+//     folder = "assets/lang"   # files named <language>.json or .toml
+//     language = "auto"        # the browser's (or system's) language, or "fr"
+//     fallback = "en"          # where keys missing from a language come from
+struct Strings { language: string = "", table: {string: string} = {}, fallback: {string: string} = {} }
+
+fn locale_setting(key: string, fallback: string) -> string {
+    let j = drift::setting_text("locale." + key);
+    if j == "" {
+        return fallback;
+    }
+    return parse_json<string>(j);
+}
+fn locale_table(folder: string, language: string) -> Option<{string: string}> {
+    for ext in [".json", ".toml"] {
+        let j = drift::data_read(folder + "/" + language + ext, "?");
+        if j != "" {
+            return Some(parse_json<{string: string}>(j));
+        }
+    }
+    return None;
+}
+// The text the player reads, as [locale] in drift.toml picks it.
+fn localization() -> Strings { return localization_for(locale_setting("language", "auto")); }
+// The text in one language ("fr-CA" falls back to "fr", then to the
+// fallback language).
+fn localization_for(language: string) -> Strings {
+    let folder = locale_setting("folder", "assets/lang");
+    let fallback = locale_setting("fallback", "en");
+    let lang = language;
+    if lang == "" || lang == "auto" {
+        lang = drift::system_language();
+    }
+    let empty: {string: string} = {};
+    let out = Strings { language: fallback, table: empty, fallback: empty };
+    match locale_table(folder, fallback) {
+        Some(t) => {
+            out.fallback = t;
+            out.table = t;
+        }
+        None => {}
+    }
+    let tries = [lang];
+    match lang.index_of("-") {
+        Some(k) => tries.push(lang[0..k]),
+        None => {}
+    }
+    for l in tries {
+        if l != "" && l != fallback {
+            match locale_table(folder, l) {
+                Some(t) => {
+                    out.table = t;
+                    out.language = l;
+                    return out;
+                }
+                None => {}
+            }
+        }
+    }
+    return out;
+}
+impl Strings {
+    // The text for `key`, from the fallback language when this one lacks
+    // it, or the key itself when neither has it.
+    fn get(self, key: string) -> string {
+        if self.table.contains(key) {
+            return self.table[key];
+        }
+        if self.fallback.contains(key) {
+            return self.fallback[key];
+        }
+        return key;
+    }
+    // The text for `key` with its {name} parts filled from `values`.
+    fn get_with(self, key: string, values: {string: any}) -> string { return fill(self.get(key), values); }
+}

@@ -1,0 +1,424 @@
+// Drawing: render layers, cameras, immediate drawing, images, sprite sheets, sprite animation and shaders.
+
+import "drift/core/values" { * };
+import "drift/core/assets" { * };
+import "drift/core/components" { * };
+import "drift/core/resources" { * };
+import "drift/core/random" { * };
+import "drift/core/effects" { * };
+import "drift/core/text" { * };
+
+// ---- Rendering and presentation ----
+//
+// Cameras, render layers, immediate drawing and particle control.
+
+// ---- Render layers ----
+
+// Every world layer, 0 to 30: the default `layer_mask` of a camera or light.
+const ALL_LAYERS: int = 2147483647;
+
+// A layer mask holding `layers`, for `Camera.layer_mask`.
+fn layer_mask(layers: int[]) -> int {
+    let mask = 0;
+    for l in layers {
+        let bit = 1;
+        for i in range(l) {
+            bit = bit * 2;
+        }
+        mask = mask + bit;
+    }
+    return mask;
+}
+
+// ---- Cameras ----
+
+// A view of the world from the entity's Transform. Several active cameras
+// draw in ascending `order`: split screen, minimaps, picture in picture.
+// The first active one that draws to the window is the main camera.
+struct Camera {
+    zoom: float = 1.0,
+    rotation: float = 0.0,
+    active: bool = true,
+    viewport: Rect = Rect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 },   // part of the window, 0 to 1
+    order: int = 0,
+    layer_mask: int = ALL_LAYERS,
+    target: Texture = Texture { .. },    // a render target; Texture {} draws to the window
+    clear: bool = false,
+    clear_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+}
+
+// Moves the camera smoothly toward `target`, staying still while the target
+// is within `dead_zone` (half sizes) of the point it aims at.
+struct CameraFollow {
+    target: Entity = Entity { .. },
+    smoothing: float = 5.0,
+    offset: Vec2 = Vec2 { .. },
+    dead_zone: Vec2 = Vec2 { .. },
+}
+
+// Keeps what the camera shows inside `area`, such as the level's rect.
+struct CameraBounds { area: Rect = Rect { .. } }
+
+// Converting between screen and world positions.
+struct Camera2D { id: int = 0 }
+impl Camera2D {
+    fn convert(self, camera: Entity, dir: int, p: Vec2) -> Vec2 {
+        let v = drift::camera_point(camera.id, dir, p.x, p.y);
+        return Vec2 { x: v[0], y: v[1] };
+    }
+    // Through the main camera.
+    fn screen_to_world(self, p: Vec2) -> Vec2 { return self.convert(Entity { .. }, 0, p); }
+    fn world_to_screen(self, p: Vec2) -> Vec2 { return self.convert(Entity { .. }, 1, p); }
+    // The world rect the main camera shows.
+    fn visible(self) -> Rect { return self.visible_in(Entity { .. }); }
+    // The same through a camera entity of your own.
+    fn screen_to_world_in(self, camera: Entity, p: Vec2) -> Vec2 { return self.convert(camera, 0, p); }
+    fn world_to_screen_in(self, camera: Entity, p: Vec2) -> Vec2 { return self.convert(camera, 1, p); }
+    fn visible_in(self, camera: Entity) -> Rect {
+        let r = drift::camera_view(camera.id);
+        return Rect { x: r[0], y: r[1], w: r[2], h: r[3] };
+    }
+}
+
+// ---- Immediate drawing ----
+
+// Shapes, text and images for this frame only. They draw in world
+// coordinates on layer 0 at z 1000, over entities, until `hud()`,
+// `on_layer` or `at_z` says otherwise, for the rest of the system.
+struct Draw { layer: int = 0, z: float = 1000.0 }
+fn color_list(c: Color) -> float[] { return [c.r, c.g, c.b, c.a]; }
+impl Draw {
+    fn shape(self, kind: string, nums: float[], c: Color) { drift::draw_shape(kind, self.layer, self.z, nums, color_list(c)); }
+    // Screen coordinates on the HUD layer, drawn after post effects.
+    fn hud(self) { self.layer = 31; }
+    // World coordinates on layer 0.
+    fn world(self) { self.layer = 0; }
+    fn on_layer(self, layer: int) { self.layer = layer; }
+    fn at_z(self, z: float) { self.z = z; }
+    fn rect(self, r: Rect, c: Color) { self.shape("rect", [r.x, r.y, r.w, r.h], c); }
+    fn rect_lines(self, r: Rect, c: Color, thickness: float) { self.shape("rect_lines", [r.x, r.y, r.w, r.h, thickness], c); }
+    fn rounded_rect(self, r: Rect, radius: float, c: Color) { self.shape("rounded_rect", [r.x, r.y, r.w, r.h, radius], c); }
+    fn circle(self, center: Vec2, radius: float, c: Color) { self.shape("circle", [center.x, center.y, radius], c); }
+    fn circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
+        self.shape("circle_lines", [center.x, center.y, radius, thickness], c);
+    }
+    // From `start` to `end` radians, clockwise from +x.
+    fn arc(self, center: Vec2, radius: float, start: float, end: float, c: Color, thickness: float) {
+        self.shape("arc", [center.x, center.y, radius, start, end, thickness], c);
+    }
+    fn line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { self.shape("line", [a.x, a.y, b.x, b.y, thickness], c); }
+    fn polyline(self, points: Vec2[], c: Color, thickness: float, closed: bool) {
+        let nums: float[] = [thickness, 0.0];
+        if closed {
+            nums[1] = 1.0;
+        }
+        for p in points {
+            nums.push(p.x);
+            nums.push(p.y);
+        }
+        self.shape("polyline", nums, c);
+    }
+    fn triangle(self, a: Vec2, b: Vec2, d: Vec2, c: Color) { self.shape("triangle", [a.x, a.y, b.x, b.y, d.x, d.y], c); }
+    // A filled polygon, convex or not.
+    fn polygon(self, points: Vec2[], c: Color) {
+        let nums: float[] = [];
+        for p in points {
+            nums.push(p.x);
+            nums.push(p.y);
+        }
+        self.shape("polygon", nums, c);
+    }
+    // Text in the built-in font, its top-left at `pos`.
+    fn text(self, s: string, pos: Vec2, size: float, c: Color) {
+        drift::draw_text(s, pos, Text { size: size, color: c, .. }, self.layer, self.z);
+    }
+    // Text styled like a Text component: font, size, alignment, outline and
+    // the rest. Its `value`, `layer`, `z` and `visible` are not used.
+    fn text_styled(self, s: string, pos: Vec2, style: Text) { drift::draw_text(s, pos, style, self.layer, self.z); }
+    // An image centered at `pos`.
+    fn texture(self, t: Texture, pos: Vec2) {
+        drift::draw_sprite(Sprite { image: t, .. }, Transform { position: pos, .. }, self.layer, self.z);
+    }
+    // A sprite as an entity would draw it, without the entity.
+    fn sprite(self, s: Sprite, t: Transform) { drift::draw_sprite(s, t, self.layer, self.z); }
+    // An image cut in nine: the corners keep their size, the edges and middle
+    // stretch over `dest`. `border` holds the left, top, right and bottom
+    // margins of `frame` (zero size for the whole image) as x, y, w, h.
+    fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Rect, c: Color) {
+        drift::draw_nine(t.id, [dest.x, dest.y, dest.w, dest.h, frame.x, frame.y, frame.w, frame.h,
+                                border.x, border.y, border.w, border.h], color_list(c), self.layer, self.z);
+    }
+    // Draws after this only inside `r`, in screen pixels, until pop_clip().
+    fn push_clip(self, r: Rect) { drift::draw_clip([r.x, r.y, r.w, r.h]); }
+    fn pop_clip(self) { drift::draw_clip([]); }
+}
+
+// ---- Images ----
+
+// Pixels in memory that you change from code and show through a texture:
+// procedural art, paint programs, fog of war, minimaps, screenshots. The
+// engine holds the pixels; `free()` lets them go.
+struct Image { id: int = 0 }
+
+// A color as one int, 0xRRGGBBAA, the form Image.pixels() and
+// Image.write_rect use.
+fn pixel(c: Color) -> int {
+    return int(c.r * 255.0 + 0.5) * 16777216 + int(c.g * 255.0 + 0.5) * 65536 + int(c.b * 255.0 + 0.5) * 256
+        + int(c.a * 255.0 + 0.5);
+}
+fn color_of(px: int) -> Color {
+    return Color { r: float(px / 16777216 % 256) / 255.0, g: float(px / 65536 % 256) / 255.0,
+                   b: float(px / 256 % 256) / 255.0, a: float(px % 256) / 255.0 };
+}
+
+fn rect_list(r: Rect) -> float[] { return [r.x, r.y, r.w, r.h]; }
+fn flag(on: bool) -> float {
+    if on {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+fn image_answer(id: int, what: string) -> Image {
+    if id == 0 {
+        throw "drift_load_failed: " + what;
+    }
+    return Image { id: id };
+}
+
+impl Image {
+    fn width(self) -> int { return int(drift::image_info(self.id)[0]); }
+    fn height(self) -> int { return int(drift::image_info(self.id)[1]); }
+    fn get(self, x: int, y: int) -> Color {
+        let c = drift::image_get(self.id, x, y);
+        return Color { r: c[0], g: c[1], b: c[2], a: c[3] };
+    }
+    fn set(self, x: int, y: int, c: Color) { drift::image_set(self.id, x, y, color_list(c)); }
+    fn op(self, name: string, nums: float[], c: Color) { drift::image_op(self.id, name, nums, color_list(c), []); }
+    fn fill(self, c: Color) { self.op("fill", [], c); }
+    fn fill_rect(self, r: Rect, c: Color) { self.op("fill_rect", rect_list(r), c); }
+    // From `a` on the left (on top, when vertical) to `b` on the other side.
+    fn gradient(self, a: Color, b: Color, vertical: bool) {
+        drift::image_op(self.id, "gradient", [flag(vertical)], color_list(a), color_list(b));
+    }
+    // The noise at each pixel, from `low` where it is -1 to `high` where it
+    // is 1.
+    fn noise(self, n: Noise, low: Color, high: Color) {
+        drift::image_op(self.id, "noise", [float(n.seed), float(n.type_code()), n.frequency, float(n.octaves), n.lacunarity,
+                                           n.gain, n.warp, n.warp_frequency], color_list(low), color_list(high));
+    }
+    // Shapes, blended over the pixels by their alpha.
+    fn line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { self.op("line", [a.x, a.y, b.x, b.y, thickness], c); }
+    fn rect_lines(self, r: Rect, c: Color, thickness: float) {
+        self.op("rect_lines", [r.x, r.y, r.w, r.h, thickness], c);
+    }
+    fn circle(self, center: Vec2, radius: float, c: Color) { self.op("circle", [center.x, center.y, radius], c); }
+    fn circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
+        self.op("circle_lines", [center.x, center.y, radius, thickness], c);
+    }
+    // Another image with its top-left at (x, y), blended by its alpha.
+    fn draw(self, src: Image, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, [], true); }
+    // The part `frame` of another image.
+    fn draw_part(self, src: Image, frame: Rect, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, rect_list(frame), true); }
+    // Another image's pixels as they are, alpha included.
+    fn paste(self, src: Image, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, [], false); }
+    fn copy(self) -> Image { return Image { id: drift::image_crop(self.id, []) }; }
+    fn crop(self, r: Rect) -> Image { return Image { id: drift::image_crop(self.id, rect_list(r)) }; }
+    fn flip_x(self) { self.op("flip_x", [], Color { .. }); }
+    fn flip_y(self) { self.op("flip_y", [], Color { .. }); }
+    // Every pixel as 0xRRGGBBAA, row by row; see pixel() and color_of().
+    fn pixels(self) -> int[] { return drift::image_read(self.id, []); }
+    fn set_pixels(self, px: int[]) { drift::image_write(self.id, [], px); }
+    fn read_rect(self, r: Rect) -> int[] { return drift::image_read(self.id, rect_list(r)); }
+    fn write_rect(self, r: Rect, px: int[]) { drift::image_write(self.id, rect_list(r), px); }
+    // A new texture showing the pixels as they are now.
+    fn to_texture(self) -> Texture { return Texture { id: drift::image_texture(self.id) }; }
+    fn save_png(self, path: string) {
+        if !drift::image_save(self.id, path) {
+            throw "drift_save_failed: " + path;
+        }
+    }
+    // Saves the image and offers it as a download in the browser; on the
+    // desktop the file stays at `path`.
+    fn download(self, path: string) {
+        self.save_png(path);
+        drift::download(path);
+    }
+    fn free(self) { drift::image_free(self.id); }
+}
+
+impl Texture {
+    // A render target's pixels as its last frame left them. Raises
+    // drift_load_failed for other textures; load their file with
+    // Assets.image instead.
+    fn to_image(self) -> Image { return image_answer(drift::image_from_texture(self.id), "texture pixels"); }
+    // Writes an image of the texture's size into it. Cheap enough to do
+    // every frame.
+    fn update(self, img: Image) { drift::texture_update(self.id, img.id, []); }
+    // Writes the part `r` of the image to the same place in the texture.
+    fn update_rect(self, img: Image, r: Rect) { drift::texture_update(self.id, img.id, rect_list(r)); }
+}
+
+impl Assets {
+    // A texture cameras can draw into and sprites can show.
+    fn render_target(self, w: int, h: int) -> Texture { return Texture { id: drift::render_target(w, h) }; }
+    fn create_image(self, w: int, h: int, fill: Color) -> Image { return Image { id: drift::image_new(w, h, color_list(fill)) }; }
+    // An image file's pixels, to change before making a texture of them.
+    fn image(self, path: string) -> Image { return image_answer(drift::image_load(path), path); }
+}
+
+impl Window {
+    // Offers a file the game wrote, such as a screenshot, as a download in
+    // the browser. A screenshot asked for this frame is offered once it is
+    // written.
+    fn download(self, path: string) { drift::download(path); }
+    // Saves the next presented frame as a PNG.
+    fn screenshot(self, path: string) { drift::window_screenshot(path); }
+}
+
+// ---- Sprite sheets ----
+
+// A texture cut into a grid of equal frames, counted left to right, top to
+// bottom from 0. Put a frame in `Sprite.frame`.
+struct Spritesheet { texture: Texture = Texture { .. }, frame_w: float = 0.0, frame_h: float = 0.0, columns: int = 1, rows: int = 1,
+                    source: int = 0 }   // the Aseprite file it came from; 0 for a grid
+impl Assets {
+    fn spritesheet(self, t: Texture, frame_w: float, frame_h: float) -> Spritesheet {
+        let s = t.size();
+        let cols = int((s.x / frame_w).floor());
+        let rows = int((s.y / frame_h).floor());
+        return Spritesheet { texture: t, frame_w: frame_w, frame_h: frame_h, columns: max_int(cols, 1), rows: max_int(rows, 1), .. };
+    }
+}
+fn max_int(a: int, b: int) -> int {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+impl Spritesheet {
+    fn frame(self, col: int, row: int) -> Rect {
+        return Rect { x: float(col) * self.frame_w, y: float(row) * self.frame_h, w: self.frame_w, h: self.frame_h };
+    }
+    fn frame_at(self, i: int) -> Rect { return self.frame(i % self.columns, i / self.columns); }
+    fn frames(self, first: int, count: int) -> Rect[] {
+        let out: Rect[] = [];
+        for i in range(count) {
+            out.push(self.frame_at(first + i));
+        }
+        return out;
+    }
+    fn count(self) -> int { return self.columns * self.rows; }
+}
+
+// ---- Shaders and materials ----
+
+// A fragment shader: WGSL for the WebGPU backend and GLSL for OpenGL and
+// the browser's WebGL2.
+struct Shader { id: int = 0 }
+// A shader with its settings: eight vec4 parameters and up to three extra
+// textures. Sprites and post effects use materials.
+struct Material { id: int = 0 }
+impl Material {
+    // Parameter 0 to 7, `material.params[i]` in the shader.
+    fn set_param(self, i: int, x: float, y: float, z: float, w: float) { drift::material_param(self.id, i, x, y, z, w); }
+    fn set_color(self, i: int, c: Color) { drift::material_param(self.id, i, c.r, c.g, c.b, c.a); }
+    // Texture slot 1 to 3; slot 0 is what is being drawn.
+    fn set_texture(self, slot: int, t: Texture) { drift::material_texture(self.id, slot, t.id); }
+}
+
+impl Assets {
+    // A TrueType, OpenType or BMFont font. `size` is the size a Text with
+    // size 0 uses.
+    fn font(self, path: string, size: float) -> Font {
+        let id = drift::font_load(path, size);
+        if id == 0 {
+            throw "drift_load_failed: " + path;
+        }
+        return Font { id: id };
+    }
+    // `path` without an extension finds path.wgsl and path.frag.glsl.
+    fn shader(self, path: string) -> Shader {
+        let id = drift::shader_load(path);
+        if id == 0 {
+            throw "drift_load_failed: " + path;
+        }
+        return Shader { id: id };
+    }
+    // A shader from source: the body of `fn fragment` in WGSL, the `main` of
+    // a GLSL fragment shader, or both. Empty for the one you do not have.
+    fn create_shader(self, wgsl: string, glsl: string) -> Shader {
+        let id = drift::shader_create(wgsl, glsl);
+        if id == 0 {
+            throw "drift_shader_failed";
+        }
+        return Shader { id: id };
+    }
+    fn create_material(self, s: Shader) -> Material { return Material { id: drift::material_create(s.id) }; }
+}
+
+impl Effects {
+    // A post effect running a material's shader over the picture, which
+    // arrives as its texture0.
+    fn add_material(self, m: Material, order: int) -> Effect { return Effect { id: drift::effect_material(m.id, order) }; }
+}
+
+// ---- Sprite animation ----
+
+struct AnimationClip { frames: Rect[] = [], frame_seconds: float = 0.1, looping: bool = true }
+
+// Plays clips on the entity's Sprite by setting its `frame`. Set `clip` to
+// switch; the new clip starts at its first frame. A clip that does not loop
+// stops on its last frame and sets `finished`; set `playing` again to replay
+// it.
+struct Animator {
+    clips: AnimationClip[] = [],
+    clip: int = 0,
+    playing: bool = true,
+    frame: int = 0,
+    finished: bool = false,
+}
+
+fn rects_from(v: float[], from: int) -> Rect[] {
+    let out: Rect[] = [];
+    let i = from;
+    while i + 3 < v.len() {
+        out.push(Rect { x: v[i], y: v[i + 1], w: v[i + 2], h: v[i + 3] });
+        i += 4;
+    }
+    return out;
+}
+
+impl Assets {
+    // An Aseprite file (.ase, .aseprite): its frames side by side in one
+    // texture, and its tags.
+    fn aseprite(self, path: string) -> Spritesheet {
+        let v = drift::sheet_aseprite(path);
+        if v.len() == 0 {
+            throw "drift_load_failed: " + path;
+        }
+        return Spritesheet { texture: Texture { id: int(v[1]) }, frame_w: v[2], frame_h: v[3], columns: int(v[4]), rows: 1,
+                             source: int(v[0]) };
+    }
+}
+
+impl Spritesheet {
+    // The frames of an Aseprite tag; empty for a grid or a tag the file
+    // does not have.
+    fn tag(self, name: string) -> Rect[] {
+        if self.source == 0 {
+            let none: Rect[] = [];
+            return none;
+        }
+        return rects_from(drift::sheet_tag(self.source, name), 2);
+    }
+    // A tag as a clip, timed by the file's frame durations (their average)
+    // and looping.
+    fn clip(self, name: string) -> AnimationClip {
+        if self.source == 0 {
+            return AnimationClip { .. };
+        }
+        let v = drift::sheet_tag(self.source, name);
+        return AnimationClip { frames: rects_from(v, 2), frame_seconds: v[0], looping: v[1] > 0.5 };
+    }
+}

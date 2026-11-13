@@ -77,6 +77,28 @@ fn lerp(self, o: Vec2, t: float) -> Vec2
 t.position = t.position.lerp(target, 0.1);   // eases toward the target
 ```
 
+### Vec2.cross
+
+```rust
+fn cross(self, o: Vec2) -> float
+```
+
+### Vec2.move_towards
+
+```rust
+fn move_towards(self, target: Vec2, max_distance: float) -> Vec2
+```
+
+Toward target by at most max_distance, never past it.
+
+### Vec2.reflect
+
+```rust
+fn reflect(self, normal: Vec2) -> Vec2
+```
+
+Bounced off a surface with this normal.
+
 ### Vec2.angle
 
 ```rust
@@ -136,28 +158,6 @@ The same direction, no longer than `max_length`.
 ```rust
 v.linear = v.linear.clamp_length(250.0);
 ```
-
-### Vec2.cross
-
-```rust
-fn cross(self, o: Vec2) -> float
-```
-
-### Vec2.move_towards
-
-```rust
-fn move_towards(self, target: Vec2, max_distance: float) -> Vec2
-```
-
-Toward target by at most max_distance, never past it.
-
-### Vec2.reflect
-
-```rust
-fn reflect(self, normal: Vec2) -> Vec2
-```
-
-Bounced off a surface with this normal.
 
 ## vec2
 
@@ -311,18 +311,6 @@ The same color with another alpha, 0 to 1.
 let faded = gold.alpha(0.3);
 ```
 
-### Color.lerp
-
-```rust
-fn lerp(self, o: Color, t: float) -> Color
-```
-
-A blend from this color to `o`; `t` from 0 to 1.
-
-```rust
-text.color = rgb(255, 255, 255).lerp(rgb(255, 60, 60), danger);
-```
-
 ### Color.to_hsv
 
 ```rust
@@ -360,6 +348,18 @@ fn to_hex(self) -> string
 ```
 
 "#rrggbb", or "#rrggbbaa" when not opaque.
+
+### Color.lerp
+
+```rust
+fn lerp(self, o: Color, t: float) -> Color
+```
+
+A blend from this color to `o`; `t` from 0 to 1.
+
+```rust
+text.color = rgb(255, 255, 255).lerp(rgb(255, 60, 60), danger);
+```
 
 ## rgb
 
@@ -879,6 +879,74 @@ fn to_local(e: Entity, world: Vec2) -> Vec2
 let local = to_local(ship, input.mouse_world());
 ```
 
+## inverse_lerp
+
+```rust
+fn inverse_lerp(a: float, b: float, x: float) -> float
+```
+
+Where x sits between a and b: 0.0 at a, 1.0 at b.
+
+## remap
+
+```rust
+fn remap(x: float, a: float, b: float, c: float, d: float) -> float
+```
+
+x moved from the range a..b to the range c..d.
+
+## wrap
+
+```rust
+fn wrap(x: float, lo: float, hi: float) -> float
+```
+
+x wrapped into lo up to, not including, hi: angles, looping worlds.
+
+## sign
+
+```rust
+fn sign(x: float) -> float
+```
+
+-1.0, 0.0 or 1.0.
+
+## radians
+
+```rust
+fn radians(degrees: float) -> float
+```
+
+## degrees
+
+```rust
+fn degrees(radians: float) -> float
+```
+
+## circles_overlap
+
+```rust
+fn circles_overlap(a: Vec2, ra: float, b: Vec2, rb: float) -> bool
+```
+
+Whether two circles touch.
+
+## circle_overlaps_rect
+
+```rust
+fn circle_overlaps_rect(c: Vec2, r: float, box: Rect) -> bool
+```
+
+Whether a circle touches a rect.
+
+## segments_intersect
+
+```rust
+fn segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> Option<Vec2>
+```
+
+Where segments a1-a2 and b1-b2 cross, if they do.
+
 ## LocalTime
 
 The local date and time. month counts from 1, weekday from 0 (Sunday).
@@ -959,74 +1027,6 @@ A value from the page address: query("level") is "3" for index.html?level=3, "" 
 ```rust
 fn local_time(self) -> LocalTime
 ```
-
-## inverse_lerp
-
-```rust
-fn inverse_lerp(a: float, b: float, x: float) -> float
-```
-
-Where x sits between a and b: 0.0 at a, 1.0 at b.
-
-## remap
-
-```rust
-fn remap(x: float, a: float, b: float, c: float, d: float) -> float
-```
-
-x moved from the range a..b to the range c..d.
-
-## wrap
-
-```rust
-fn wrap(x: float, lo: float, hi: float) -> float
-```
-
-x wrapped into lo up to, not including, hi: angles, looping worlds.
-
-## sign
-
-```rust
-fn sign(x: float) -> float
-```
-
--1.0, 0.0 or 1.0.
-
-## radians
-
-```rust
-fn radians(degrees: float) -> float
-```
-
-## degrees
-
-```rust
-fn degrees(radians: float) -> float
-```
-
-## circles_overlap
-
-```rust
-fn circles_overlap(a: Vec2, ra: float, b: Vec2, rb: float) -> bool
-```
-
-Whether two circles touch.
-
-## circle_overlaps_rect
-
-```rust
-fn circle_overlaps_rect(c: Vec2, r: float, box: Rect) -> bool
-```
-
-Whether a circle touches a rect.
-
-## segments_intersect
-
-```rust
-fn segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> Option<Vec2>
-```
-
-Where segments a1-a2 and b1-b2 cross, if they do.
 
 ## flat
 

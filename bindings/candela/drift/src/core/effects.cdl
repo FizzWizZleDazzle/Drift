@@ -1,0 +1,150 @@
+// Particles, post effects, lights and trails.
+
+import "drift/core/host" { * };
+import "drift/core/values" { * };
+import "drift/core/assets" { * };
+import "drift/core/components" { * };
+import "drift/core/resources" { * };
+import "drift/core/rendering" { * };
+
+// ---- Particles ----
+
+impl Effects {
+    // Starts an emitter's run over: its bursts fire again and a finished one
+    // emits anew.
+    fn restart(self, emitter: Entity) { drift::particles_restart(emitter.id); }
+}
+
+// ---- Post effects ----
+
+// Bright parts bleed light around them.
+struct Bloom {
+    threshold: float = 0.7,     // brightness where it starts, 0 to 1
+    soft_knee: float = 0.5,     // 0 cuts off hard, 1 eases in
+    intensity: float = 1.0,
+    radius: float = 1.0,
+    levels: int = 5,            // 1 to 8; more spreads wider
+    tint: Color = Color { .. },
+}
+// Brightness, contrast, saturation and tint, and an optional lookup table:
+// a strip of N slices of N x N, red across a slice, green down it, blue
+// picking the slice.
+struct ColorGrading {
+    brightness: float = 1.0,
+    contrast: float = 1.0,
+    saturation: float = 1.0,
+    tint: Color = Color { .. },
+    lut: Texture = Texture { .. },
+    lut_strength: float = 1.0,
+}
+struct Blur { radius: float = 1.0, iterations: int = 2 }
+struct Pixelate { size: float = 6.0 }
+struct Grayscale { amount: float = 1.0 }
+struct Sepia { amount: float = 1.0 }
+struct Vignette {
+    intensity: float = 0.6,
+    radius: float = 0.75,       // distance from the center where it is full
+    softness: float = 0.45,     // it starts this far inside `radius`
+    color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+}
+struct Crt {
+    curvature: float = 0.15,
+    scanlines: float = 0.35,
+    scanline_spacing: float = 3.0,
+    chromatic_aberration: float = 1.5,
+    vignette: float = 0.3,
+}
+
+// A post effect running on the picture.
+struct Effect { id: int = 0 }
+impl Effect {
+    // New settings of the same kind as the effect was added with.
+    fn set(self, settings: any) { drift::effect_set(self.id, settings); }
+    fn set_enabled(self, on: bool) { drift::effect_op(self.id, "set_enabled", flag(on)); }
+    fn enabled(self) -> bool { return drift::effect_op(self.id, "enabled", 0.0) > 0.5; }
+    // Effects run from the lowest order up.
+    fn set_order(self, order: int) { drift::effect_op(self.id, "set_order", float(order)); }
+    fn remove(self) { drift::effect_op(self.id, "remove", 0.0); }
+}
+
+impl Effects {
+    // A post effect from its settings: Bloom, ColorGrading, Blur, Pixelate,
+    // Grayscale, Sepia, Vignette or Crt. Each kind has its own place in the
+    // chain; add_at picks one.
+    fn add(self, settings: any) -> Effect { return Effect { id: drift::effect_add(settings, -2147483647) }; }
+    fn add_at(self, settings: any, order: int) -> Effect { return Effect { id: drift::effect_add(settings, order) }; }
+    fn bloom(self, threshold: float, intensity: float) -> Effect {
+        return self.add(Bloom { threshold: threshold, intensity: intensity, .. });
+    }
+    fn vignette(self, intensity: float, radius: float) -> Effect {
+        return self.add(Vignette { intensity: intensity, radius: radius, .. });
+    }
+    fn crt(self, curvature: float, scanlines: float) -> Effect {
+        return self.add(Crt { curvature: curvature, scanlines: scanlines, .. });
+    }
+    fn grayscale(self, amount: float) -> Effect { return self.add(Grayscale { amount: amount }); }
+    fn sepia(self, amount: float) -> Effect { return self.add(Sepia { amount: amount }); }
+    fn pixelate(self, size: float) -> Effect { return self.add(Pixelate { size: size }); }
+    fn blur(self, radius: float, iterations: int) -> Effect { return self.add(Blur { radius: radius, iterations: iterations }); }
+    // Moves the screen `amount` of the way to `c` over `seconds` and holds
+    // it there; amount 0 fades back.
+    fn fade_to(self, c: Color, amount: float, seconds: float) { drift::fade_to(c.r, c.g, c.b, c.a, amount, seconds); }
+    // Light everywhere before any light adds to it, when lighting is on.
+    fn set_ambient(self, c: Color) { drift::lighting("ambient", color_list(c)); }
+    fn set_lighting(self, on: bool) { drift::lighting("enabled", [flag(on)]); }
+    // Multiplies time for every tween; 0 freezes them.
+    fn set_tween_speed(self, s: float) { drift::tween_speed(s); }
+}
+
+// ---- Lights ----
+
+// Light in every direction from the entity, out to `radius`. Lights shine
+// when drift.toml has a [lighting] section.
+struct PointLight {
+    color: Color = Color { .. },
+    intensity: float = 1.0,
+    radius: float = 200.0,
+    falloff: float = 2.0,          // 1 fades evenly to the edge; more keeps a tighter core
+    shadows: bool = true,
+    layer_mask: int = ALL_LAYERS,  // cameras sharing a layer with it see it
+}
+
+// A cone of light. `direction` adds to the entity's rotation.
+struct SpotLight {
+    color: Color = Color { .. },
+    intensity: float = 1.0,
+    radius: float = 300.0,
+    falloff: float = 2.0,
+    direction: float = 0.0,        // radians, 0 is +x
+    angle: float = 0.8,            // the whole cone, radians
+    softness: float = 0.2,         // 0 hard edge, 1 fades from the middle
+    shadows: bool = true,
+    layer_mask: int = ALL_LAYERS,
+}
+
+enum OccluderShape { Box, Circle, Polygon, FromCollider }
+
+// Blocks light and casts a shadow from lights with `shadows`. The shape is
+// in the entity's space and turns and scales with it.
+struct LightOccluder {
+    shape: OccluderShape = OccluderShape::Box,
+    half_size: Vec2 = Vec2 { x: 16.0, y: 16.0 },
+    radius: float = 16.0,
+    points: Vec2[] = [],           // Polygon, up to 16, either winding
+    offset: Vec2 = Vec2 { .. },
+    shadow_self: bool = false,     // false keeps its own area lit
+    layer_mask: int = ALL_LAYERS,
+}
+
+// ---- Trails ----
+
+// A fading ribbon behind a moving entity.
+struct Trail {
+    width: float = 4.0,
+    lifetime: float = 0.5,         // seconds a point lasts
+    color_start: Color = Color { .. },
+    color_end: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.0 },
+    min_distance: float = 2.0,     // the entity moves this far before a new point
+    max_points: int = 64,
+    z: float = -1.0,
+}

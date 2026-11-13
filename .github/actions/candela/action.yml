@@ -22,15 +22,15 @@ runs:
   using: composite
   steps:
     # The candela the drift program is built with. Drift needs changes that
-    # are not released yet (lumen-fx/candela#246, branch
-    # feat/embedded-game-hosts), so builds check out this commit. Once they
-    # are released, empty this line and set the release in
+    # are not released yet (`export import`, lumen-fx/candela#250, branch
+    # feat/export-import, on top of main), so builds check out this commit.
+    # Once they are released, empty this line and set the release in
     # bindings/candela/host/Cargo.toml.
     - name: Pick the candela commit
       id: pin
       shell: bash
       env:
-        CANDELA_COMMIT: 7dcac9e254f6d4e7d325b6955fd5be323cf64db7
+        CANDELA_COMMIT: e472713c4825f2cd3d63bc9c329fbc6045144807
       run: echo "commit=${CANDELA_COMMIT}" >> "$GITHUB_OUTPUT"
 
     - name: Check out candela

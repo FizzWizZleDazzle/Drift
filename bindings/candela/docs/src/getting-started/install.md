@@ -68,7 +68,7 @@ The Candela extension for VS Code, from version 0.3.0, gives `.cdl` files comple
 }
 ```
 
-`candela.importRoots` tells it where `import "drift"` lives; with an installed toolchain that is `~/.drift/lib/drift/module` (or set `candela.libPath` instead). `candela.languageServerPath` points at a `candela-lsp` built from that branch. Without them the editor colors the code but does not know the engine's names.
+`candela.importRoots` tells it where `import "drift"` lives; with an installed toolchain that is `~/.drift/lib/drift/module`. `candela.languageServerPath` points at a `candela-lsp` that reads `export import` (lumen-fx/candela#250), which the `drift` module is written with; an older one reports an error on the import and knows none of the engine's names. Without the two settings the editor colors the code but does not know the engine's names.
 
 ## Building drift from source
 

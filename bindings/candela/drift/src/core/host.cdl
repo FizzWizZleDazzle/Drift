@@ -1,0 +1,276 @@
+// The host block: the attributes games mark their declarations with, and
+// the engine functions the rest of the module calls as drift::name.
+// Candela merges no second `host "drift"` block, so every engine
+// function is declared here.
+
+host "drift" {
+    attribute component(requires: type[] = []) on struct;
+    attribute resource on struct;
+    attribute settings(section: string) on struct;
+    attribute message on struct;
+    attribute state on enum;
+    attribute query(with: type[] = [], without: type[] = []) on struct;
+    attribute system(after: fn[] = [], before: fn[] = [], run_if: fn[] = [],
+                     in_state: enum[] = [], on_enter: enum?, on_exit: enum?,
+                     schedule: Schedule = Schedule::Update, enabled: bool = true) on fn;
+
+    // Commands. The host applies them when the system that issued them returns.
+    int entity_new();
+    spawn_bundle(...);
+    insert_component(...);
+    remove_component(int, string);
+    despawn_entity(int);
+    insert_resource(...);
+    remove_resource(string);
+    send_message(...);
+
+    // Input. `state` is 0 held, 1 went down this frame, 2 went up this frame.
+    bool key_state(int, int);
+    bool mouse_state(int, int);
+    bool pad_state(int, int, int);
+    float pad_axis(int, int);
+    float[] mouse_vec(int);
+    bind(string, string);
+    bind_axis2d_keys(string, int, int, int, int);
+    bind_stick(string, int, int);
+    bool action_state(string, int);
+    float action_value(string);
+    float[] action_axis2d(string);
+
+    // Assets, sound, window and effects.
+    int texture_load(string);
+    int texture_create(int, int, float[]);
+    float[] texture_size(int);
+    texture_filter(int, int);
+    int sound_load(string);
+    int sound_create(float[], int);
+    quit();
+    float[] window_size();
+    flash(float, float, float, float, float);
+    burst(...);
+    // Save data: the slot name ("" for the default slot) comes first.
+    int save_get_int(string, string, int);
+    save_set_int(string, string, int);
+    float save_get_float(string, string, float);
+    save_set_float(string, string, float);
+    string save_get_string(string, string, string);
+    save_set_string(string, string, string);
+    bool save_get_bool(string, string, bool);
+    save_set_bool(string, string, bool);
+    bool save_has(string, string);
+    save_erase(string, string);
+    save_clear(string);
+    save_flush(string);
+    shake(int, float);
+    log_message(int, string);
+    // A field of the script's resources, by path ("Game.score"), as text.
+    string resource_text(string);
+    set_time_scale(float);
+    bool entity_alive(int);
+    int entity_count();
+
+    // Random numbers. A generator crosses as its state (hi, lo) and
+    // increment; the answer starts with the new (hi, lo).
+    int[] rng_seed(int, int);
+    int[] rng_int(int, int, int, string, int, int);
+    float[] rng_float(int, int, int, string, float, float);
+    int[] rng_weighted(int, int, int, float[]);
+    int hash_text(string);
+    int random_seed();
+    int[] random_stream(string);
+
+    // Noise: seed, type, frequency, octaves, lacunarity, gain, warp, warp
+    // frequency, then the points.
+    float noise_sample(int, int, float, int, float, float, float, float, float, float);
+    float[] noise_grid(int, int, float, int, float, float, float, float, float, float, int, int, float);
+    int[] noise_cells(int, int, float, int, float, float, float, float, int, int, float, int, int);
+
+    // Generators answer (hi, lo) of the generator, then width, height and
+    // cells.
+    int[] gen_cave(int, int, int, int, int, float, int, int, int, bool, bool);
+    int[] gen_dungeon(int, int, int, int, int, int, int, int, int, int, bool);
+    int[] gen_walk(int, int, int, int, int, float, int, float, int, int, int);
+    float[] gen_poisson(int, int, int, float, float, float, float, float, int);
+    float[] gen_poisson_grid(int, int, int, int, int, int[], int, float, int);
+    int[] gen_wfc(int, int, int, int, int, int[], int, int, int, bool, int[]);
+    int[] grid_op(int, int, int[], string, int, int, int);
+    int[] path_find(int, int, int[], int[], int, int, int, int, bool);
+    float[] flow_field(int, int, int[], int[], int[], bool);
+
+    // Tilemaps.
+    int map_load(string, string);
+    int map_create(int, int, int, int, int, string[]);
+    float[] map_info(int);
+    int map_layer(int, string);
+    string map_layer_name(int, int);
+    map_layer_visible(int, int, bool);
+    map_layer_solid(int, int, bool, int[]);
+    int map_tile(int, int, int, int, int);
+    map_set_tile(int, int, int, int, int, int);
+    int map_tile_at(int, int, float, float);
+    int[] map_world_to_tile(int, float, float, int);
+    float[] map_tile_to_world(int, int, int, int);
+    map_fill(int, int, int, int, int[], int[], int, int);
+    int[] map_read(int, int);
+    string map_property(int, string);
+    map_destroy(int);
+
+    // ---- Rendering and presentation ----
+    // A camera entity (0: the main camera); 0 screen to world, 1 back.
+    float[] camera_point(int, int, float, float);
+    float[] camera_view(int);
+    // Immediate drawing: shape name, layer, z, numbers, color.
+    draw_shape(string, int, float, float[], float[]);
+    draw_text(...);
+    draw_sprite(...);
+    draw_nine(int, float[], float[], int, float);
+    draw_clip(float[]);
+    // Particles.
+    particles_restart(int);
+    // Images: pixel buffers the engine holds, by id.
+    int image_new(int, int, float[]);
+    int image_load(string);
+    int image_from_texture(int);
+    float[] image_info(int);
+    float[] image_get(int, int, int);
+    image_set(int, int, int, float[]);
+    image_op(int, string, float[], float[], float[]);
+    image_blit(int, int, int, int, float[], bool);
+    int image_crop(int, float[]);
+    int[] image_read(int, float[]);
+    image_write(int, float[], int[]);
+    int image_texture(int);
+    bool image_save(int, string);
+    image_free(int);
+    texture_update(int, int, float[]);
+    download(string);
+    window_screenshot(string);
+    int render_target(int, int);
+    // Post effects, by the struct of their settings; lighting; tweens.
+    int effect_add(...);
+    effect_set(...);
+    float effect_op(int, string, float);
+    int effect_material(int, int);
+    fade_to(float, float, float, float, float, float);
+    lighting(string, float[]);
+    tween_speed(float);
+    // The window, fonts, shaders and materials.
+    float[] window_op(string, float[], string);
+    string window_backend();
+    int font_load(string, float);
+    float[] text_measure(...);
+    float font_line_height(int, float);
+    font_fallback(int, int);
+    int shader_load(string);
+    int shader_create(string, string);
+    int material_create(int);
+    material_param(int, int, float, float, float, float);
+    material_texture(int, int, int);
+    // Aseprite sheets.
+    float[] sheet_aseprite(string);
+    float[] sheet_tag(int, string);
+
+    // Hierarchy: answers about the engine's current Transforms.
+    int hier_parent(int);
+    int[] hier_children(int);
+    int[] hier_descendants(int);
+    float[] hier_world(int);
+    float[] hier_to_world(int, float, float);
+    float[] hier_to_local(int, float, float);
+    // Procedural animation solvers; state crosses as flat float lists.
+    float[] anim_spring(int, float, float, float, float, float, float);
+    float[] anim_spring2(int, float, float, float, float, float, float, float, float, float);
+    float[] anim_two_bone(float, float, float, float, float, float, float);
+    float[] anim_fabrik(float[], float[], float, float, int, float, float, float[], float[]);
+    float[] anim_verlet(float[], float[], float, float, float, float, float, float, float, int, float, float, bool, float, float);
+    float[] anim_foot(float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool);
+
+    // ==== Gameplay ====
+    // Input.
+    bool pad_connected(int);
+    bind_axis_keys(string, int, int);
+    float action_axis(string);
+    string[] input_bindings(string, int);
+    input_rebind(string, int, int, string);
+    string input_capture();
+    input_tuning(float, float, int);
+    string input_bindings_json();
+    int input_load_bindings(string);
+    input_send(int, int, bool, float, float);
+    string text_input(int);
+    float[] touch_list();
+
+    // Physics. Masks pick the collider categories a query sees.
+    float[] physics_gravity();
+    physics_set_gravity(float, float);
+    float[] physics_raycast(float, float, float, float, float, int);
+    int[] physics_overlap(int, float, float, float, float, int);
+    physics_push(int, int, float, float);
+    physics_debug(bool);
+
+    // Tilemap objects, tile properties and autotiling.
+    float[] map_objects(int, string);
+    string[] map_object_names(int, string);
+    string map_object_property(int, int, int, string);
+    string map_tile_property(int, int, string);
+    map_autotile(int, int, int, int, int[], int[], int, bool);
+
+    // Spatial index queries and sight on grids.
+    int[] spatial_query(int, float, float, float, float, int);
+    int[] grid_fov(int, int, int[], int[], int, int, int);
+    bool grid_los(int, int, int[], int[], int, int, int, int);
+    int[] grid_line(int, int, int, int);
+
+    // Scenes.
+    int scene_load(string);
+    int[] scene_spawn(int, float, float, int, string[], string[]);
+    string[] scene_names();
+    scene_save(string, int);
+
+    // Steering: behavior name, numbers, then point lists.
+    float[] steer(string, float[], float[], float[], int[]);
+
+    // Systems and restarts.
+    system_switch(string, bool);
+    bool system_enabled(string);
+    restart();
+
+    // Audio. Voices, buses and sounds by handle id.
+    int voice_play(int, int, float, float, float, bool, float, int);
+    float voice_op(int, int, float, float);
+    int music_load(string);
+    float sound_info(int, int, int);
+    float music_op(int, int, float, bool);
+    music_playlist(int[], float, bool, bool, float);
+    int audio_bus(string, int);
+    float bus_op(int, int, float, float);
+
+    // The browser page and the platform.
+    window_lock_pointer(bool);
+    float pixel_ratio();
+    open_url(string);
+    clipboard_set(string);
+    string clipboard_get();
+    string page_query(string);
+    float[] local_time();
+    bool is_web();
+    bool is_touch();
+
+    // Data files, delayed messages, settings and language. A data file
+    // crosses as JSON text; value_from_json builds a value of the named type.
+    send_message_after(...);
+    string data_read(string, string);
+    any value_from_json(...);
+    string value_to_json(...);
+    string setting_text(string);
+    string system_language();
+
+    // HTTP and WebSockets. Answers arrive as HttpResponse and SocketEvent
+    // messages.
+    int http_request(string, string, string, string);
+    int ws_open(string);
+    bool ws_send(int, string);
+    ws_close(int);
+}
+
+enum Schedule { Startup, Update }

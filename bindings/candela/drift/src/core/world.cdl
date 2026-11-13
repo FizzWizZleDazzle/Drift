@@ -1,0 +1,101 @@
+// What systems are handed: collision events, lookups, commands, states and system switches.
+
+import "drift/core/host" { * };
+import "drift/core/values" { * };
+
+// ---- Collisions ----
+
+// A contact that began also has the first contact point and the normal,
+// pointing from a to b.
+struct Contact<A, B> { a: Entity, b: Entity, point: Vec2 = Vec2 { .. }, normal: Vec2 = Vec2 { .. } }
+struct ContactEnd<A, B> { a: Entity, b: Entity }
+struct Overlap<A, B> { a: Entity, b: Entity }
+struct OverlapEnd<A, B> { a: Entity, b: Entity }
+
+// ---- Lookups ----
+
+struct Lookup<T> { ids: int[], rows: T[] }
+impl Lookup<T> {
+    fn get(self, e: Entity) -> Option<T> {
+        for i in range(self.ids.len()) {
+            if self.ids[i] == e.id {
+                return Some(self.rows[i]);
+            }
+        }
+        return None;
+    }
+    fn has(self, e: Entity) -> bool {
+        for id in self.ids {
+            if id == e.id {
+                return true;
+            }
+        }
+        return false;
+    }
+    fn len(self) -> int { return self.ids.len(); }
+}
+
+// ---- Commands ----
+
+fn drift_type_name<T>() -> string {
+    let probe: T[] = [];
+    let s = type(probe);
+    return s[..s.len() - 2];
+}
+
+struct Commands { id: int = 0 }
+impl Commands {
+    fn spawn(self, bundle: any[]) -> Entity {
+        let id = drift::entity_new();
+        drift::spawn_bundle(id, bundle);
+        return Entity { id: id };
+    }
+    fn insert(self, e: Entity, component: any) { drift::insert_component(e.id, component); }
+    fn remove<T>(self, e: Entity) { drift::remove_component(e.id, drift_type_name<T>()); }
+    fn despawn(self, e: Entity) { drift::despawn_entity(e.id); }
+    fn insert_resource(self, r: any) { drift::insert_resource(r); }
+    fn remove_resource<R>(self) { drift::remove_resource(drift_type_name<R>()); }
+    fn send(self, message: any) { drift::send_message(message); }
+    // Starts the game over once this frame's systems have run: every entity
+    // the game spawned goes, resources and states return to their
+    // defaults, and the startup systems run again.
+    fn restart(self) { drift::restart(); }
+}
+
+// A bundle with more components after it, for prefabs with extras:
+// `cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}, Health { hp: 500.0, .. }]))`.
+// A component given twice is the later one, so this also overrides.
+fn plus(bundle: any[], more: any[]) -> any[] {
+    let out: any[] = [];
+    for c in bundle {
+        out.push(c);
+    }
+    for c in more {
+        out.push(c);
+    }
+    return out;
+}
+
+// ---- States ----
+
+// The current variant of a @drift::state enum. `set` asks for a change; the
+// change happens after this frame's Update systems, running the on_exit
+// systems of the old variant and the on_enter systems of the new one.
+struct State<S> { now: S, since: float, next: S, changing: bool }
+impl State<S> {
+    fn set(self, s: S) {
+        self.next = s;
+        self.changing = true;
+    }
+}
+
+// ---- Systems ----
+
+// Turns systems on and off by function name, from the next system on: a
+// paused game turns off its gameplay systems and keeps its menu running.
+struct Systems { id: int = 0 }
+impl Systems {
+    fn enable(self, system: string) { drift::system_switch(system, true); }
+    fn disable(self, system: string) { drift::system_switch(system, false); }
+    fn enabled(self, system: string) -> bool { return drift::system_enabled(system); }
+}

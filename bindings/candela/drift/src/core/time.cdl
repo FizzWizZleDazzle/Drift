@@ -1,0 +1,153 @@
+// Timers, cooldowns and sequences of steps.
+
+import "drift/core/host" { * };
+import "drift/core/values" { * };
+import "drift/core/components" { * };
+import "drift/core/world" { * };
+
+// ---- Timers ----
+
+struct Timer { seconds: float = 1.0, left: float = 1.0, repeating: bool = false, paused: bool = false }
+fn timer(seconds: float) -> Timer { return Timer { seconds: seconds, left: seconds, .. }; }
+fn repeating_timer(seconds: float) -> Timer { return Timer { seconds: seconds, left: seconds, repeating: true, .. }; }
+impl Timer {
+    // Advances the timer; returns how many times it finished.
+    fn tick(self, dt: float) -> int {
+        if self.paused || self.seconds <= 0.0 {
+            return 0;
+        }
+        if !self.repeating && self.left <= 0.0 {
+            return 0;
+        }
+        self.left -= dt;
+        let n = 0;
+        while self.left <= 0.0 {
+            n += 1;
+            if !self.repeating {
+                self.left = 0.0;
+                return n;
+            }
+            self.left += self.seconds;
+        }
+        return n;
+    }
+    fn finished(self) -> bool { return !self.repeating && self.left <= 0.0; }
+    fn remaining(self) -> float { return max(self.left, 0.0); }
+    fn fraction(self) -> float { return 1.0 - self.left / self.seconds; }
+    fn reset(self) { self.left = self.seconds; }
+}
+
+// Gates an action: ready, used, then ready again after `seconds`.
+struct Cooldown { seconds: float = 1.0, left: float = 0.0 }
+fn cooldown(seconds: float) -> Cooldown { return Cooldown { seconds: seconds, left: 0.0 }; }
+impl Cooldown {
+    fn tick(self, dt: float) {
+        if self.left > 0.0 {
+            self.left = max(0.0, self.left - dt);
+        }
+    }
+    fn ready(self) -> bool { return self.left <= 0.0; }
+    // If ready, starts the cooldown and returns true.
+    fn try_use(self) -> bool {
+        if self.left > 0.0 {
+            return false;
+        }
+        self.left = self.seconds;
+        return true;
+    }
+    // 1.0 right after use, falling to 0.0 when ready.
+    fn fraction(self) -> float {
+        if self.seconds <= 0.0 {
+            return 0.0;
+        }
+        return clamp(self.left / self.seconds, 0.0, 1.0);
+    }
+    fn reset(self) { self.left = 0.0; }
+}
+
+// ---- Sequences ----
+
+impl Commands {
+    // Sends the message once `seconds` have passed.
+    fn send_after(self, seconds: float, message: any) { drift::send_message_after(seconds, message); }
+}
+
+// One step of a Sequence; build them with sequence() and its methods.
+struct SequenceStep { kind: int = 0, seconds: float = 0.0, name: string = "", message: any = 0 }
+
+// Steps that run one after another across frames: waits, named events,
+// messages, and waits for a signal. Keep one in a component or resource and
+// tick it every frame.
+struct Sequence { steps: SequenceStep[] = [], at: int = 0, waited: float = 0.0, loops: int = 0, signals: string[] = [] }
+fn sequence() -> Sequence { return Sequence { .. }; }
+impl Sequence {
+    fn wait(self, seconds: float) -> Sequence {
+        self.steps.push(SequenceStep { kind: 0, seconds: seconds, .. });
+        return self;
+    }
+    // tick() returns `name` when the sequence gets here.
+    fn then(self, name: string) -> Sequence {
+        self.steps.push(SequenceStep { kind: 1, name: name, .. });
+        return self;
+    }
+    // Sends a message when the sequence gets here.
+    fn send(self, message: any) -> Sequence {
+        self.steps.push(SequenceStep { kind: 2, message: message, .. });
+        return self;
+    }
+    // Waits until signal(name) is called.
+    fn wait_for(self, name: string) -> Sequence {
+        self.steps.push(SequenceStep { kind: 3, name: name, .. });
+        return self;
+    }
+    // Runs the steps `times` more times once they end; -1 forever.
+    fn repeat(self, times: int) -> Sequence {
+        self.loops = times;
+        return self;
+    }
+    // Lets a wait_for(name) step go on, now or when the sequence reaches it.
+    fn signal(self, name: string) { self.signals.push(name); }
+    fn finished(self) -> bool { return self.at >= self.steps.len(); }
+    fn restart(self) {
+        self.at = 0;
+        self.waited = 0.0;
+        self.signals = [];
+    }
+    // Advances by dt seconds; returns the names of the `then` steps reached.
+    fn tick(self, dt: float) -> string[] {
+        let reached: string[] = [];
+        let budget = dt;
+        let guard = 0;
+        while self.at < self.steps.len() && guard < 10000 {
+            guard += 1;
+            let s = self.steps[self.at];
+            if s.kind == 0 {
+                if self.waited + budget < s.seconds {
+                    self.waited += budget;
+                    return reached;
+                }
+                budget -= s.seconds - self.waited;
+                self.waited = 0.0;
+            } else if s.kind == 1 {
+                reached.push(s.name);
+            } else if s.kind == 2 {
+                drift::send_message(s.message);
+            } else {
+                match self.signals.index_of(s.name) {
+                    Some(k) => self.signals.remove(k),
+                    None => {
+                        return reached;
+                    }
+                }
+            }
+            self.at += 1;
+            if self.at >= self.steps.len() && self.loops != 0 {
+                if self.loops > 0 {
+                    self.loops -= 1;
+                }
+                self.at = 0;
+            }
+        }
+        return reached;
+    }
+}

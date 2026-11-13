@@ -994,6 +994,30 @@ A flow field over a grid toward the nearest of `goals`, through cells whose valu
 let field = flow_field(g, [goal], [WALL], true);
 ```
 
+## field_of_view
+
+```rust
+fn field_of_view(g: Grid, from: Cell, radius: int, opaque: int[]) -> Grid
+```
+
+The cells `from` sees within `radius` cells, as a grid of the same size: 1 where visible, 0 elsewhere. Cells whose value is in `opaque` block sight and are seen themselves. Symmetric: if a sees b, b sees a.
+
+## line_of_sight
+
+```rust
+fn line_of_sight(g: Grid, a: Cell, b: Cell, opaque: int[]) -> bool
+```
+
+Whether no opaque cell lies strictly between a and b.
+
+## grid_line
+
+```rust
+fn grid_line(a: Cell, b: Cell) -> Cell[]
+```
+
+The cells of the straight line from a to b, both included.
+
 ## SpatialBounds
 
 Puts the entity in the spatial index: a box of `half_size` around its position plus `offset`; a zero size indexes the point.
@@ -1034,27 +1058,3 @@ fn nearest(self, p: Vec2, max_distance: float, ignore: Entity) -> Entity
 ```
 
 The closest within `max_distance`, skipping `ignore` (pass the asking entity); Entity {} when there is none.
-
-## field_of_view
-
-```rust
-fn field_of_view(g: Grid, from: Cell, radius: int, opaque: int[]) -> Grid
-```
-
-The cells `from` sees within `radius` cells, as a grid of the same size: 1 where visible, 0 elsewhere. Cells whose value is in `opaque` block sight and are seen themselves. Symmetric: if a sees b, b sees a.
-
-## line_of_sight
-
-```rust
-fn line_of_sight(g: Grid, a: Cell, b: Cell, opaque: int[]) -> bool
-```
-
-Whether no opaque cell lies strictly between a and b.
-
-## grid_line
-
-```rust
-fn grid_line(a: Cell, b: Cell) -> Cell[]
-```
-
-The cells of the straight line from a to b, both included.

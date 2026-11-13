@@ -1,0 +1,119 @@
+// Physics bodies, queries and joints, and the spatial index for things without colliders.
+
+import "drift/core/values" { * };
+
+// ---- Physics ----
+
+// What a ray hit; `hit` false when it hit nothing.
+struct RayHit {
+    hit: bool = false,
+    entity: Entity = Entity { .. },
+    point: Vec2 = Vec2 { .. },
+    normal: Vec2 = Vec2 { .. },
+    fraction: float = 0.0,     // how far along the ray, 0 to 1
+}
+
+// Every collider category, for queries that see everything.
+const ALL_CATEGORIES: int = 65535;
+
+fn entity_list(ids: int[]) -> Entity[] {
+    let out: Entity[] = [];
+    for id in ids {
+        out.push(Entity { id: id });
+    }
+    return out;
+}
+
+// The physics world: gravity, queries and pushes.
+struct Physics { id: int = 0 }
+impl Physics {
+    fn gravity(self) -> Vec2 {
+        let g = drift::physics_gravity();
+        return Vec2 { x: g[0], y: g[1] };
+    }
+    fn set_gravity(self, g: Vec2) { drift::physics_set_gravity(g.x, g.y); }
+    // The first collider along the ray. Sensors count.
+    fn raycast(self, origin: Vec2, direction: Vec2, distance: float) -> RayHit {
+        return self.raycast_mask(origin, direction, distance, ALL_CATEGORIES);
+    }
+    // The same, seeing only colliders whose category is in `mask`.
+    fn raycast_mask(self, origin: Vec2, direction: Vec2, distance: float, mask: int) -> RayHit {
+        let r = drift::physics_raycast(origin.x, origin.y, direction.x, direction.y, distance, mask);
+        if r.len() < 7 {
+            return RayHit { .. };
+        }
+        return RayHit { hit: r[0] > 0.5, entity: Entity { id: int(r[1]) }, point: Vec2 { x: r[2], y: r[3] },
+                        normal: Vec2 { x: r[4], y: r[5] }, fraction: r[6] };
+    }
+    // Entities whose colliders contain the point.
+    fn overlap_point(self, p: Vec2) -> Entity[] { return entity_list(drift::physics_overlap(0, p.x, p.y, 0.0, 0.0, ALL_CATEGORIES)); }
+    // Entities whose colliders' bounding boxes touch the rect.
+    fn overlap_rect(self, r: Rect) -> Entity[] { return entity_list(drift::physics_overlap(1, r.x, r.y, r.w, r.h, ALL_CATEGORIES)); }
+    // Entities whose colliders touch the circle.
+    fn overlap_circle(self, center: Vec2, radius: float) -> Entity[] {
+        return entity_list(drift::physics_overlap(2, center.x, center.y, radius, 0.0, ALL_CATEGORIES));
+    }
+    fn overlap_circle_mask(self, center: Vec2, radius: float, mask: int) -> Entity[] {
+        return entity_list(drift::physics_overlap(2, center.x, center.y, radius, 0.0, mask));
+    }
+    // Pushes on a dynamic body: an impulse changes its velocity at once (a
+    // jump, a hit), a force acts over this step (thrust, wind).
+    fn apply_impulse(self, e: Entity, impulse: Vec2) { drift::physics_push(0, e.id, impulse.x, impulse.y); }
+    fn apply_force(self, e: Entity, force: Vec2) { drift::physics_push(1, e.id, force.x, force.y); }
+    fn apply_torque(self, e: Entity, torque: float) { drift::physics_push(2, e.id, torque, 0.0); }
+    fn apply_angular_impulse(self, e: Entity, impulse: float) { drift::physics_push(3, e.id, impulse, 0.0); }
+    // Draws every collider's outline over the game.
+    fn set_debug_draw(self, on: bool) { drift::physics_debug(on); }
+}
+
+enum JointKind { Distance, Revolute, Prismatic, Weld }
+
+// Joins this entity's body to `target`'s, or pins it to the world when
+// `target` is no entity. Both need a RigidBody or a collider; the joint is
+// made once both bodies exist, and made again when a field changes.
+// Anchors are in each body's local space; without a target,
+// `target_anchor` is a point in the world.
+struct Joint {
+    kind: JointKind = JointKind::Revolute,
+    target: Entity = Entity { .. },
+    anchor: Vec2 = Vec2 { .. },
+    target_anchor: Vec2 = Vec2 { .. },
+    length: float = 0.0,          // Distance: 0 keeps the distance the bodies start at
+    min_length: float = 0.0,      // Distance: with max_length above min_length, a rope's slack
+    max_length: float = 0.0,
+    stiffness: float = 0.0,       // Distance and Weld: spring frequency in Hz; 0 is rigid
+    damping: float = 0.0,         // spring damping, 0 to 1
+    limit: bool = false,          // Revolute: angle range; Prismatic: travel range
+    lower: float = 0.0,
+    upper: float = 0.0,
+    motor: bool = false,
+    motor_speed: float = 0.0,     // radians or pixels per second
+    max_motor_force: float = 0.0, // torque for Revolute
+    axis: Vec2 = Vec2 { x: 1.0, y: 0.0 },   // Prismatic: the slide direction
+    collide_connected: bool = false,
+}
+
+// ---- Spatial index ----
+
+// Puts the entity in the spatial index: a box of `half_size` around its
+// position plus `offset`; a zero size indexes the point.
+struct SpatialBounds { half_size: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. } }
+
+// "What is near here" over the entities with SpatialBounds, without
+// colliders. The index holds where they were at the start of the frame.
+struct Spatial { id: int = 0 }
+impl Spatial {
+    fn in_rect(self, r: Rect) -> Entity[] { return entity_list(drift::spatial_query(0, r.x, r.y, r.w, r.h, 0)); }
+    fn in_radius(self, center: Vec2, radius: float) -> Entity[] {
+        return entity_list(drift::spatial_query(1, center.x, center.y, radius, 0.0, 0));
+    }
+    // The closest within `max_distance`, skipping `ignore` (pass the
+    // asking entity); Entity {} when there is none.
+    fn nearest(self, p: Vec2, max_distance: float, ignore: Entity) -> Entity {
+        let r = drift::spatial_query(2, p.x, p.y, max_distance, 0.0, ignore.id);
+        if r.len() == 0 {
+            return Entity { .. };
+        }
+        return Entity { id: r[0] };
+    }
+}

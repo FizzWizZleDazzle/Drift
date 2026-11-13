@@ -1230,48 +1230,6 @@ fn autotile(self, source: int, target: int, rules: AutotileRules)
 
 Writes `target` tiles from the terrain in `source`, picking each tile by which neighbours are terrain too.
 
-## Shader
-
-A fragment shader: WGSL for the WebGPU backend and GLSL for OpenGL and the browser's WebGL2.
-
-```rust
-struct Shader {
-    id: int = 0,
-}
-```
-
-## Material
-
-A shader with its settings: eight vec4 parameters and up to three extra textures. Sprites and post effects use materials.
-
-```rust
-struct Material {
-    id: int = 0,
-}
-```
-
-### Material.set_param
-
-```rust
-fn set_param(self, i: int, x: float, y: float, z: float, w: float)
-```
-
-Parameter 0 to 7, `material.params[i]` in the shader.
-
-### Material.set_color
-
-```rust
-fn set_color(self, i: int, c: Color)
-```
-
-### Material.set_texture
-
-```rust
-fn set_texture(self, slot: int, t: Texture)
-```
-
-Texture slot 1 to 3; slot 0 is what is being drawn.
-
 ## ObjectShape
 
 ```rust
@@ -1339,6 +1297,48 @@ struct AutotileRules {
     edges_are_terrain: bool = false,
 }
 ```
+
+## Shader
+
+A fragment shader: WGSL for the WebGPU backend and GLSL for OpenGL and the browser's WebGL2.
+
+```rust
+struct Shader {
+    id: int = 0,
+}
+```
+
+## Material
+
+A shader with its settings: eight vec4 parameters and up to three extra textures. Sprites and post effects use materials.
+
+```rust
+struct Material {
+    id: int = 0,
+}
+```
+
+### Material.set_param
+
+```rust
+fn set_param(self, i: int, x: float, y: float, z: float, w: float)
+```
+
+Parameter 0 to 7, `material.params[i]` in the shader.
+
+### Material.set_color
+
+```rust
+fn set_color(self, i: int, c: Color)
+```
+
+### Material.set_texture
+
+```rust
+fn set_texture(self, slot: int, t: Texture)
+```
+
+Texture slot 1 to 3; slot 0 is what is being drawn.
 
 ## Scene
 

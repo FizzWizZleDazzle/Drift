@@ -5,8 +5,9 @@
     scripts/candela-reference.py --check   exit 1 if a page differs from
                                            what the module gives (CI)
 
-The module, bindings/candela/drift/src/main.cdl, is the source of every
-signature, field, default and enum variant. Descriptions come from the
+The module, bindings/candela/drift/src/main.cdl and the core/ files it
+passes on with `export import`, is the source of every signature, field,
+default and enum variant. Descriptions come from the
 comments above each declaration in the module, and from
 bindings/candela/docs/api-notes.md, which also holds the examples and says
 which page each type and function belongs on. A note for a name the module
@@ -28,11 +29,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "bindings" / "candela" / "drift" / "src"
 MODULE = SRC / "main.cdl"
+# The files `drift` is written as: main.cdl passes each one on with
+# `export import "drift/core/<name>" { * };`, in this order.
+CORE = [SRC / f"{m.group(1)}.cdl"
+        for m in re.finditer(r'^export import "drift/(core/\w+)"', MODULE.read_text(), re.M)]
 # Each file of the module, and the page its names go on when the notes do
-# not place them: `drift` itself, and `drift/ui`.
-MODULES = [(SRC / "main.cdl", "values"), (SRC / "ui.cdl", "ui"), (SRC / "gameplay.cdl", "gameplay"),
-           (SRC / "control.cdl", "control"), (SRC / "screens.cdl", "screens"), (SRC / "ai.cdl", "ai"),
-           (SRC / "rpg.cdl", "rpg"), (SRC / "debug.cdl", "debug")]
+# not place them: `drift` itself, and the opt-in modules such as `drift/ui`.
+MODULES = [(MODULE, "values")] + [(path, "values") for path in CORE] + [
+    (SRC / "ui.cdl", "ui"), (SRC / "gameplay.cdl", "gameplay"), (SRC / "control.cdl", "control"),
+    (SRC / "screens.cdl", "screens"), (SRC / "ai.cdl", "ai"), (SRC / "rpg.cdl", "rpg"),
+    (SRC / "debug.cdl", "debug")]
 NOTES = ROOT / "bindings" / "candela" / "docs" / "api-notes.md"
 OUT = ROOT / "bindings" / "candela" / "docs" / "src" / "reference"
 
@@ -94,7 +100,7 @@ def block_end(lines, start, col):
                 depth -= 1
                 if depth == 0:
                     return i
-    raise SystemExit(f"{MODULE}:{start + 1}: unbalanced braces")
+    raise SystemExit(f"{READING}:{start + 1}: unbalanced braces")
 
 
 def split_top(text, sep=","):
@@ -239,10 +245,15 @@ def fn_end(lines, k, text):
 
 def module_name(path):
     """The path a game imports a module file by."""
-    return "drift" if path.stem == "main" else "drift/" + path.stem
+    return "drift" if path == MODULE or path in CORE else "drift/" + path.stem
+
+
+READING = MODULE                  # the file being read, for error messages
 
 
 def read_module(path, page):
+    global READING
+    READING = path
     lines = path.read_text().split("\n")
     decls = []
     owner, owner_end = None, -1
