@@ -170,6 +170,24 @@ Rect SpriteResource::getFrame(SpritesheetHandle sheet, int32_t col, int32_t row)
     return s->frameRects[idx];
 }
 
+AnimationClip SpriteResource::clipFromTag(SpritesheetHandle sheet, const char* tagName) const {
+    AnimationClip clip;
+    auto* s = impl_->sheets.get(sheet);
+    if (!s || !tagName) return clip;
+    for (const auto& tag : s->tags) {
+        if (tag.name != tagName) continue;
+        float total = 0.f;
+        for (int32_t f = tag.fromFrame; f <= tag.toFrame && f < static_cast<int32_t>(s->frameRects.size()); ++f) {
+            clip.frames.push_back(s->frameRects[f]);
+        }
+        for (float d : tag.durations) total += d;
+        if (!tag.durations.empty() && total > 0.f) clip.frameDuration = total / static_cast<float>(tag.durations.size());
+        clip.looping = tag.looping;
+        break;
+    }
+    return clip;
+}
+
 int32_t SpriteResource::frameCount(SpritesheetHandle sheet) const {
     auto* s = impl_->sheets.get(sheet);
     return s ? s->totalFrames : 0;

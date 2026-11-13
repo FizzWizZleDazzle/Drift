@@ -23,7 +23,8 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `Timer`, `Cooldown` | See [Timers and Save Data](../guides/timers-and-saves.md) |
 | `Image` | Pixels to change from code; see [Image](resources.md#image) |
 | `Shader`, `Material` | A fragment shader, and a shader with its parameters and textures; from `Assets` |
-| `Spritesheet` | A texture cut into equal frames: `texture`, `frame_w`, `frame_h`, `columns`, `rows`. `frame(col, row)`, `frame_at(i)` (left to right, top to bottom from 0), `frames(first, count)`, `count()`. Built with `assets.spritesheet(texture, frame_w, frame_h)` |
+| `Spritesheet` | A texture cut into equal frames: `texture`, `frame_w`, `frame_h`, `columns`, `rows`. `frame(col, row)`, `frame_at(i)` (left to right, top to bottom from 0), `frames(first, count)`, `count()`; for an Aseprite file also `tag(name)` and `clip(name)`. Built with `assets.spritesheet(texture, frame_w, frame_h)` or `assets.aseprite(path)` |
+| `AnimationClip` | `frames` (`Rect[]`), `frame_seconds`, `looping`: one clip of an `Animator` |
 | `GlobalTransform` | `position`, `rotation`, `scale`: a transform in world space, from `world_transform(e)` |
 | `Spring`, `Spring2`, `AngleSpring` | Damped springs for a float, a `Vec2` and a rotation: `value`, `velocity`, `update(target, stiffness, damping, dt)`; `Spring` and `Spring2` also `smooth(target, seconds, dt)`. See [Procedural Animation](../guides/procedural-animation.md#springs) |
 | `TwoBone` | A two-bone limb's pose: `joint`, `end`, `upper`, `lower` (world rotations), `reached` |

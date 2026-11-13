@@ -3,6 +3,7 @@
 #include <drift/Resource.hpp>
 #include <drift/Handle.hpp>
 #include <drift/Types.hpp>
+#include <drift/components/SpriteAnimator.hpp>
 
 namespace drift {
 
@@ -29,6 +30,10 @@ public:
     void destroySpritesheet(SpritesheetHandle sheet);
     Rect getFrame(SpritesheetHandle sheet, int32_t col, int32_t row) const;
     int32_t frameCount(SpritesheetHandle sheet) const;
+    // The frames of an Aseprite tag as a clip for SpriteAnimator, timed by
+    // the average of the tag's frame durations. Empty when there is no such
+    // tag.
+    AnimationClip clipFromTag(SpritesheetHandle sheet, const char* tagName) const;
     void setPivot(SpritesheetHandle sheet, float x, float y);
     Vec2 getPivot(SpritesheetHandle sheet) const;
     TextureHandle getTexture(SpritesheetHandle sheet) const;

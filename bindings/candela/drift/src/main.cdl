@@ -170,6 +170,9 @@ host "drift" {
     int material_create(int);
     material_param(int, int, float, float, float, float);
     material_texture(int, int, int);
+    // Aseprite sheets.
+    float[] sheet_aseprite(string);
+    float[] sheet_tag(int, string);
 
     // Hierarchy: answers about the engine's current Transforms.
     int hier_parent(int);
@@ -1743,13 +1746,14 @@ impl Color {
 
 // A texture cut into a grid of equal frames, counted left to right, top to
 // bottom from 0. Put a frame in `Sprite.frame`.
-struct Spritesheet { texture: Texture = Texture { .. }, frame_w: float = 0.0, frame_h: float = 0.0, columns: int = 1, rows: int = 1 }
+struct Spritesheet { texture: Texture = Texture { .. }, frame_w: float = 0.0, frame_h: float = 0.0, columns: int = 1, rows: int = 1,
+                    source: int = 0 }   // the Aseprite file it came from; 0 for a grid
 impl Assets {
     fn spritesheet(self, t: Texture, frame_w: float, frame_h: float) -> Spritesheet {
         let s = t.size();
         let cols = int((s.x / frame_w).floor());
         let rows = int((s.y / frame_h).floor());
-        return Spritesheet { texture: t, frame_w: frame_w, frame_h: frame_h, columns: max_int(cols, 1), rows: max_int(rows, 1) };
+        return Spritesheet { texture: t, frame_w: frame_w, frame_h: frame_h, columns: max_int(cols, 1), rows: max_int(rows, 1), .. };
     }
 }
 fn max_int(a: int, b: int) -> int {
@@ -2797,5 +2801,65 @@ impl Map {
         let mode = match rules.mode { AutotileMode::Neighbours4 => 0, AutotileMode::Neighbours8 => 1 };
         drift::map_autotile(self.id, source, target, mode, rules.terrain, rules.tiles, rules.fallback,
                             rules.edges_are_terrain);
+    }
+}
+
+// ---- Sprite animation ----
+
+struct AnimationClip { frames: Rect[] = [], frame_seconds: float = 0.1, looping: bool = true }
+
+// Plays clips on the entity's Sprite by setting its `frame`. Set `clip` to
+// switch; the new clip starts at its first frame. A clip that does not loop
+// stops on its last frame and sets `finished`; set `playing` again to replay
+// it.
+struct Animator {
+    clips: AnimationClip[] = [],
+    clip: int = 0,
+    playing: bool = true,
+    frame: int = 0,
+    finished: bool = false,
+}
+
+fn rects_from(v: float[], from: int) -> Rect[] {
+    let out: Rect[] = [];
+    let i = from;
+    while i + 3 < v.len() {
+        out.push(Rect { x: v[i], y: v[i + 1], w: v[i + 2], h: v[i + 3] });
+        i += 4;
+    }
+    return out;
+}
+
+impl Assets {
+    // An Aseprite file (.ase, .aseprite): its frames side by side in one
+    // texture, and its tags.
+    fn aseprite(self, path: string) -> Spritesheet {
+        let v = drift::sheet_aseprite(path);
+        if v.len() == 0 {
+            throw "drift_load_failed: " + path;
+        }
+        return Spritesheet { texture: Texture { id: int(v[1]) }, frame_w: v[2], frame_h: v[3], columns: int(v[4]), rows: 1,
+                             source: int(v[0]) };
+    }
+}
+
+impl Spritesheet {
+    // The frames of an Aseprite tag; empty for a grid or a tag the file
+    // does not have.
+    fn tag(self, name: string) -> Rect[] {
+        if self.source == 0 {
+            let none: Rect[] = [];
+            return none;
+        }
+        return rects_from(drift::sheet_tag(self.source, name), 2);
+    }
+    // A tag as a clip, timed by the file's frame durations (their average)
+    // and looping.
+    fn clip(self, name: string) -> AnimationClip {
+        if self.source == 0 {
+            return AnimationClip { .. };
+        }
+        let v = drift::sheet_tag(self.source, name);
+        return AnimationClip { frames: rects_from(v, 2), frame_seconds: v[0], looping: v[1] > 0.5 };
     }
 }

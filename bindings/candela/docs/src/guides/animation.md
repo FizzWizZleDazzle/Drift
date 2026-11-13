@@ -33,7 +33,7 @@ fn spawn_hero(cmd: Commands, assets: Assets) {
 }
 ```
 
-For a grid sheet, take frames with `frames(first, count)`, `frame(col, row)` or `frame_at(i)`.
+For a grid sheet, take frames with `frames(first, count)`, `frame(col, row)` or `frame_at(i)`. `sheet.clip("run")` turns an Aseprite tag into a whole `AnimationClip`, timed by the file's frame durations (their average, since a clip has one frame time).
 
 The `Animator` sets the sprite's `frame` as time passes. Switch clips by writing `clip`, the index into `clips`; the new clip starts from its first frame:
 

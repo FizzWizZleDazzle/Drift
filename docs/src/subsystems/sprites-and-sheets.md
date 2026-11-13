@@ -120,6 +120,14 @@ AnimationHandle jump = sprites->createAnimationFromTag(sheet, "jump");
 
 Frame indices and per-frame durations are pulled from the Aseprite tag data automatically.
 
+For the `SpriteAnimator` component, `clipFromTag` returns a tag as an `AnimationClip`. A clip has one frame duration, so it uses the average of the tag's durations:
+
+```cpp
+SpriteAnimator anim;
+anim.clips.push_back(sprites->clipFromTag(sheet, "idle"));
+anim.clips.push_back(sprites->clipFromTag(sheet, "run"));
+```
+
 ### Updating and Querying Animations
 
 ```cpp

@@ -76,7 +76,7 @@ Images and sounds load with the free functions `texture(path)`, `sound(path)` an
 | `create_texture(w, h, pixels: Color[])` | A `Texture` from colors, row by row from the top-left |
 | `render_target(w, h)` | A `Texture` a `Camera` can draw into |
 | `create_image(w, h, fill)`, `image(path)` | An `Image` to change from code: blank, or an image file's pixels. See [Image](#image) |
-| `spritesheet(texture, frame_w, frame_h)`, `aseprite(path)` | A `Spritesheet`: `frame(col, row)`, `frame_at(i)`, `frames(first, count)`, `frame_count()`, `tag(name)` (the frames of an Aseprite tag), `texture` |
+| `spritesheet(texture, frame_w, frame_h)`, `aseprite(path)` | A `Spritesheet` (see [Values](values.md)). An Aseprite file's frames sit side by side in one texture, and its tags come with it: `tag(name)` gives a tag's frames and `clip(name)` an `AnimationClip` timed and looped as the file says |
 | `create_sound(samples: float[], rate)` | A mono `Sound` from samples in -1 to 1 |
 | `font(path, size)` | A `Font`: TrueType, OpenType or BMFont. `Font {}` is the built-in font. `measure(s, size)` gives the size of a string, `line_height(size)` the distance between lines, `set_fallback(other)` where missing characters come from |
 | `shader(path)`, `create_shader(wgsl, glsl)` | A `Shader`: from `path.wgsl` and `path.frag.glsl` beside each other, or from source. The browser runs the GLSL; see [Shaders](../guides/rendering.md#shaders) |

@@ -543,6 +543,7 @@ const char* textVAligns[] = {"Top", "Middle", "Bottom"};
 
 std::vector<Codec> presentationCodecs();
 std::vector<Codec> effectCodecs();
+std::vector<Codec> animationCodecs();
 
 const std::vector<Codec>& codecs() {
     static const std::vector<Codec> list = [] {
@@ -850,6 +851,7 @@ const std::vector<Codec>& codecs() {
     };
     for (Codec& c : presentationCodecs()) l.push_back(c);
     for (Codec& c : effectCodecs()) l.push_back(c);
+    for (Codec& c : animationCodecs()) l.push_back(c);
     return l;
     }();
     return list;
@@ -2138,6 +2140,116 @@ void showStartError(const char* text) {
 #endif
 }
 
+// ---- Sprite animation ----
+//
+// The Animator component, and Aseprite files cut into frames and tags.
+
+json clipJ(const AnimationClip& c) {
+    json frames = json::array();
+    for (const Rect& r : c.frames) frames.push_back(rectJ(r));
+    return {{"frames", frames}, {"frame_seconds", c.frameDuration}, {"looping", c.looping}};
+}
+AnimationClip clipOf(const json& j) {
+    AnimationClip c;
+    for (const auto& r : j.value("frames", json::array())) c.frames.push_back(rectJ(r));
+    c.frameDuration = std::max(0.001f, j.value("frame_seconds", 0.1f));
+    c.looping = j.value("looping", true);
+    return c;
+}
+bool sameClips(const std::vector<AnimationClip>& a, const std::vector<AnimationClip>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].frameDuration != b[i].frameDuration || a[i].looping != b[i].looping ||
+            a[i].frames.size() != b[i].frames.size()) return false;
+        for (size_t k = 0; k < a[i].frames.size(); ++k) {
+            const Rect &p = a[i].frames[k], &q = b[i].frames[k];
+            if (p.x != q.x || p.y != q.y || p.w != q.w || p.h != q.h) return false;
+        }
+    }
+    return true;
+}
+
+std::vector<Codec> animationCodecs() {
+    return {
+        {"Animator",
+         [](EntityId e) { return get<SpriteAnimator>(e) != nullptr; },
+         [](EntityId e) {
+             const SpriteAnimator& a = *get<SpriteAnimator>(e);
+             json clips = json::array();
+             for (const auto& c : a.clips) clips.push_back(clipJ(c));
+             return json{{"clips", clips}, {"clip", a.currentClip}, {"playing", a.playing},
+                         {"frame", a.currentFrame}, {"finished", a.isFinished()}};
+         },
+         [](EntityId e, const json& j) {
+             // A new clip, or new clips, start from their first frame; the
+             // same clip keeps its place unless the script moved `frame`. A
+             // finished clip set playing again starts over.
+             SpriteAnimator a;
+             for (const auto& c : j.value("clips", json::array())) a.clips.push_back(clipOf(c));
+             a.currentClip = j.value("clip", 0);
+             a.playing = j.value("playing", true);
+             int frame = j.value("frame", 0);
+             const SpriteAnimator* cur = get<SpriteAnimator>(e);
+             bool restart = !cur || cur->currentClip != a.currentClip || !sameClips(cur->clips, a.clips) ||
+                            (a.playing && !cur->playing && cur->isFinished());
+             if (!restart) {
+                 a.currentFrame = frame;
+                 a.elapsed = frame == cur->currentFrame ? cur->elapsed : 0.f;
+             }
+             if (a.currentClip >= 0 && a.currentClip < static_cast<int32_t>(a.clips.size())) {
+                 const auto& frames = a.clips[a.currentClip].frames;
+                 a.currentFrame = std::clamp(a.currentFrame, 0, std::max(0, static_cast<int32_t>(frames.size()) - 1));
+                 // Show the frame now, not after the first step.
+                 if (!frames.empty()) {
+                     if (const Sprite* s = get<Sprite>(e)) {
+                         Sprite shown = *s;
+                         shown.srcRect = frames[a.currentFrame];
+                         put(e, shown);
+                     }
+                 }
+             }
+             put(e, a);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<SpriteAnimator>()); },
+         [] { return cid<SpriteAnimator>(); }},
+    };
+}
+
+bool animation(const std::string& f, const json& a, json& out) {
+    if (f == "sheet_aseprite") {
+        // path -> sheet, texture, frame width, frame height, frames
+        static std::unordered_map<std::string, SpritesheetHandle> loaded;
+        auto* sprites = res<SpriteResource>();
+        out = json::array();
+        if (!sprites) return true;
+        std::string path = a[0].get<std::string>();
+        auto it = loaded.find(path);
+        SpritesheetHandle sheet = it != loaded.end() ? it->second : sprites->loadAseprite(path.c_str());
+        if (!sheet.valid()) return true;
+        loaded[path] = sheet;
+        Rect first = sprites->getFrame(sheet, 0, 0);
+        out = {sheet.id, sprites->getTexture(sheet).id, first.w, first.h, sprites->frameCount(sheet)};
+        return true;
+    }
+    if (f == "sheet_tag") {
+        // sheet, tag -> frame seconds, looping, then the frames
+        auto* sprites = res<SpriteResource>();
+        out = json::array();
+        if (!sprites) return true;
+        AnimationClip c = sprites->clipFromTag(SpritesheetHandle{a[0].get<uint32_t>()}, a[1].get<std::string>().c_str());
+        out.push_back(c.frameDuration);
+        out.push_back(c.looping ? 1.0 : 0.0);
+        for (const Rect& r : c.frames) {
+            out.push_back(r.x);
+            out.push_back(r.y);
+            out.push_back(r.w);
+            out.push_back(r.h);
+        }
+        return true;
+    }
+    return false;
+}
+
 // ---- Services ----
 
 int state(bool held, bool pressed, bool released, int which) {
@@ -2539,6 +2651,7 @@ json service(const std::string& f, const json& a) {
     if (animService(f, a, answer)) return answer;
     if (windowAndAssets(f, a, answer)) return answer;
     if (platform(f, a, answer)) return answer;
+    if (animation(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {
