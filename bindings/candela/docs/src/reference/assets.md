@@ -858,27 +858,27 @@ let c = color_of(img.pixels()[0]);
 
 ## Spritesheet
 
-A texture cut into a grid of equal frames, counted left to right, top to bottom from 0. Put a frame in `Sprite.frame`.
+A texture cut into a grid of frames. Show one frame with `Sprite.frame`, or play frames with an [`Animator`](components.md#animator).
 
 ```rust
 struct Spritesheet {
+    id: int = 0,
     texture: Texture = Texture { .. },
     frame_w: float = 0.0,
     frame_h: float = 0.0,
     columns: int = 1,
     rows: int = 1,
-    source: int = 0,
 }
 ```
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's sheet |
 | `texture` | `Texture` | `Texture { .. }` | The whole image |
 | `frame_w` | `float` | `0.0` | Width of one frame in pixels |
 | `frame_h` | `float` | `0.0` | Height of one frame in pixels |
 | `columns` | `int` | `1` | Frames across |
 | `rows` | `int` | `1` | Frames down |
-| `source` | `int` | `0` |  |
 
 ```rust
 let sheet = assets.spritesheet(texture("assets/hero.png"), 16.0, 16.0);
@@ -909,18 +909,6 @@ The frame at an index, counted left to right, top to bottom from 0.
 sprite.frame = sheet.frame_at(int(time.elapsed * 10.0) % sheet.count());
 ```
 
-### Spritesheet.frames
-
-```rust
-fn frames(self, first: int, count: int) -> Rect[]
-```
-
-`count` frames starting at index `first`.
-
-```rust
-let run = sheet.frames(8, 6);
-```
-
 ### Spritesheet.count
 
 ```rust
@@ -933,21 +921,18 @@ How many frames the sheet has.
 let n = sheet.count();
 ```
 
-### Spritesheet.tag
-
-```rust
-fn tag(self, name: string) -> Rect[]
-```
-
-The frames of an Aseprite tag; empty for a grid or a tag the file does not have.
-
 ### Spritesheet.clip
 
 ```rust
 fn clip(self, name: string) -> AnimationClip
 ```
 
-A tag as a clip, timed by the file's frame durations (their average) and looping.
+An Aseprite tag as a clip: its frames in the order the tag plays them (forward, reverse or ping-pong), each with its duration from the file. A tag set to repeat once plays once; any other loops. A tag the file does not have raises `drift_unknown_clip` with the tags it has.
+
+```rust
+let knight = assets.aseprite("assets/knight.aseprite");
+let run = knight.clip("run");
+```
 
 ## Map
 

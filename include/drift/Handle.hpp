@@ -30,7 +30,6 @@ struct Handle {
 // Concrete handle typedefs
 struct TextureTag {};
 struct SpritesheetTag {};
-struct AnimationTag {};
 struct SoundTag {};
 struct PlayingSoundTag {};
 struct FontTag {};
@@ -42,7 +41,6 @@ struct MaterialTag {};
 
 using TextureHandle      = Handle<TextureTag>;
 using SpritesheetHandle  = Handle<SpritesheetTag>;
-using AnimationHandle    = Handle<AnimationTag>;
 using SoundHandle        = Handle<SoundTag>;
 using PlayingSoundHandle = Handle<PlayingSoundTag>;
 using FontHandle         = Handle<FontTag>;

@@ -37,7 +37,7 @@ fn death_effects(died: Died, effects: Effects) {
 
 ## Later, and from outside
 
-`cmd.send_after(seconds, message)` sends a message after a delay. The engine sends messages too: an `HttpResponse` answers an HTTP request and a `SocketEvent` reports a WebSocket's traffic (see [Networking](../guides/networking.md)). Both kinds arrive at the start of a frame, before the `Update` systems run, and are read like messages a system sent.
+`cmd.send_after(seconds, message)` sends a message after a delay. The engine sends messages too: an `HttpResponse` answers an HTTP request, a `SocketEvent` reports a WebSocket's traffic (see [Networking](../guides/networking.md)), and an `AnimationFinished` tells that a sprite animation clip played to its end (see [Movement](../guides/movement.md#animation-frames)). They arrive at the start of a frame, before the `Update` systems run, and are read like messages a system sent.
 
 ## Collisions
 

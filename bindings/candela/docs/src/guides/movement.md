@@ -116,48 +116,106 @@ See [Engine Components](../reference/components.md#oscillate) for every field.
 
 ## Animation frames
 
-A spritesheet cuts a texture into frames. `Assets` makes one from a grid with `spritesheet(texture, frame_w, frame_h)`, or loads an Aseprite file with `aseprite(path)`, which brings its frames and tags:
+An `Animator` plays named clips on the entity's `Sprite`. A clip is a sprite sheet, the frames to show from it, and how long each one shows: one number for every frame, or a list with one duration per frame. `clip(sheet, frames, seconds)` makes one, and `.once()` makes it play one time instead of looping. `play` names the clip to start with.
 
 ```rust
 @system(schedule: Schedule::Startup)
 fn spawn_hero(cmd: Commands, assets: Assets) {
-    let sheet = assets.aseprite("assets/hero.aseprite");
-    cmd.spawn([
-        at(200.0, 200.0),
-        Sprite { image: sheet.texture, .. },
-        Animator { clips: [
-            AnimationClip { frames: sheet.tag("idle"), frame_seconds: 0.15, looping: true },
-            AnimationClip { frames: sheet.tag("run"), frame_seconds: 0.08, looping: true },
-        ], .. },
-        Hero {},
-    ]);
+    let hero = assets.spritesheet(texture("assets/hero.png"), 32.0, 32.0);
+    let slash = assets.spritesheet(texture("assets/slash.png"), 48.0, 32.0);
+    cmd.spawn([at(100.0, 100.0), Sprite { image: hero.texture, .. }, Hero {}, Animator {
+        clips: {
+            "idle":   clip(hero, [0, 1, 2, 3], 0.15),
+            "run":    clip(hero, range(8, 14), 0.08),
+            "attack": clip(slash, [0, 1, 2], [0.05, 0.05, 0.2]).once()
+        },
+        play: "idle",
+        ..
+    }]);
 }
 ```
 
-For a grid sheet, take frames with `frames(first, count)`, `frame(col, row)` or `frame_at(i)`. `sheet.clip("run")` turns an Aseprite tag into a whole `AnimationClip`, timed by the file's frame durations (their average, since a clip has one frame time).
+Each clip carries its sheet, so switching to `attack` shows the slash sheet's texture and frame, and switching back shows the hero's. Frames count from 0 at the sheet's top-left, as in [sprite sheets](sprites.md#sprite-sheets).
 
-The `Animator` sets the sprite's `frame` as time passes. Switch clips by writing `clip`, the index into `clips`; the new clip starts from its first frame:
+Switch clips by name. `play` changes nothing when that clip is already playing, so a system can call it every frame:
 
 ```rust
 @system
-fn hero_anim(heroes: (Hero, Velocity, Animator, Sprite)[]) {
-    for (_, v, anim, sprite) in heroes {
-        let running = v.linear.x != 0.0;
-        let want = 0;
-        if running {
-            want = 1;
+fn hero_anim(hero: (Hero, Velocity, Animator, Sprite), input: Input) {
+    let (_, v, anim, sprite) = hero;
+    if input.key_pressed(Key::X) {
+        anim.play_once("attack", "idle");   // once, then back to idle
+    } else if !anim.once {
+        if v.linear.x != 0.0 {
+            anim.play("run");
+        } else {
+            anim.play("idle");
         }
-        if anim.clip != want {
-            anim.clip = want;
-        }
-        if running {
-            sprite.flip_x = v.linear.x < 0.0;
-        }
+    }
+    if v.linear.x != 0.0 {
+        sprite.flip_x = v.linear.x < 0.0;
     }
 }
 ```
 
-A clip with `looping: false` stops on its last frame and sets `finished`, which a system reads to move on from an attack or a death animation. `playing: false` pauses the animator.
+`play_once(name, then)` plays a clip one time, even a looping one, and then switches to `then`; an empty `then` holds the last frame. A clip made with `.once()` ends the same way when `play` starts it. `finished("attack")` is true once that clip has played to its end, until another clip starts. To act on the end without checking every frame, take the `AnimationFinished` message, which names the entity and the clip:
+
+```rust
+@system
+fn remove_fallen(done: AnimationFinished, cmd: Commands) {
+    if done.clip == "die" {
+        cmd.despawn(done.entity);
+    }
+}
+```
+
+The animator also tells where it is: `play` is the clip playing, `frame` the index into that clip's frames and `time` the seconds into the clip. Setting `frame` or `time` jumps there. `speed` scales time, so 2.0 plays twice as fast, and `playing: false` pauses.
+
+A name the animator does not have is an error, never ignored: `play` and `play_once` raise `drift_unknown_clip` with the names it has, and an unknown name written into the `play` field logs the same error. `clip` raises `drift_bad_clip` for a frame outside the sheet or a duration list whose length does not match the frames.
+
+### Aseprite files
+
+`assets.aseprite(path)` loads an Aseprite file (.ase, .aseprite) as a sheet, and `sheet.clip(tag)` turns one of its tags into a clip: its frames in the order the tag plays them (forward, reverse or ping-pong), each with its own duration from the file. A tag set to repeat once plays once; any other loops.
+
+```rust
+let knight = assets.aseprite("assets/knight.aseprite");
+cmd.spawn([at(200.0, 200.0), Sprite { image: knight.texture, .. }, Animator {
+    clips: { "idle": knight.clip("idle"), "run": knight.clip("run"), "die": knight.clip("die") },
+    play: "idle",
+    ..
+}]);
+```
+
+A tag the file does not have raises `drift_unknown_clip` with the tags it has.
+
+### Updating a game written with numbered clips
+
+Clips used to be lists of frame rects with one frame time, held in a list and picked by index. They are now sheet frames with their durations, held by name. `sheet.tag(name)` and `sheet.frames(first, count)` are gone; `clip(sheet, frames, seconds)` and `sheet.clip(tag)` make clips, and `Spritesheet.source` is now `id`.
+
+Before:
+
+```rust
+Animator { clips: [
+    AnimationClip { frames: sheet.frames(0, 4), frame_seconds: 0.15, looping: true },
+    AnimationClip { frames: sheet.frames(8, 6), frame_seconds: 0.08, looping: true },
+], .. }
+// ...
+anim.clip = 1;
+if anim.finished { ... }
+```
+
+After:
+
+```rust
+Animator {
+    clips: { "idle": clip(sheet, range(0, 4), 0.15), "run": clip(sheet, range(8, 14), 0.08) },
+    play: "idle",
+    ..
+}
+// ...
+anim.play("run");
+if anim.finished("run") { ... }
+```
 
 ## Parts that move together
 

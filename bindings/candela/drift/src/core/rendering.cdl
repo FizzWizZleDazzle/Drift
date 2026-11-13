@@ -1,5 +1,6 @@
 // Drawing: render layers, cameras, immediate drawing, images, sprite sheets, sprite animation and shaders.
 
+import "drift/core/host" { * };
 import "drift/core/values" { * };
 import "drift/core/assets" { * };
 import "drift/core/components" { * };
@@ -279,15 +280,17 @@ impl Window {
 // ---- Sprite sheets ----
 
 // A texture cut into a grid of equal frames, counted left to right, top to
-// bottom from 0. Put a frame in `Sprite.frame`.
-struct Spritesheet { texture: Texture = Texture { .. }, frame_w: float = 0.0, frame_h: float = 0.0, columns: int = 1, rows: int = 1,
-                    source: int = 0 }   // the Aseprite file it came from; 0 for a grid
+// bottom from 0. Put a frame in `Sprite.frame`, or play frames with an
+// Animator.
+struct Spritesheet { id: int = 0, texture: Texture = Texture { .. }, frame_w: float = 0.0, frame_h: float = 0.0, columns: int = 1,
+                    rows: int = 1 }
 impl Assets {
     fn spritesheet(self, t: Texture, frame_w: float, frame_h: float) -> Spritesheet {
-        let s = t.size();
-        let cols = int((s.x / frame_w).floor());
-        let rows = int((s.y / frame_h).floor());
-        return Spritesheet { texture: t, frame_w: frame_w, frame_h: frame_h, columns: max_int(cols, 1), rows: max_int(rows, 1), .. };
+        let v = drift::sheet_grid(t.id, frame_w, frame_h);
+        if v.len() == 0 {
+            throw "drift_load_failed: a " + string(frame_w) + "x" + string(frame_h) + " sheet of texture " + string(t.id);
+        }
+        return Spritesheet { id: int(v[0]), texture: t, frame_w: frame_w, frame_h: frame_h, columns: int(v[1]), rows: int(v[2]) };
     }
 }
 fn max_int(a: int, b: int) -> int {
@@ -301,13 +304,6 @@ impl Spritesheet {
         return Rect { x: float(col) * self.frame_w, y: float(row) * self.frame_h, w: self.frame_w, h: self.frame_h };
     }
     fn frame_at(self, i: int) -> Rect { return self.frame(i % self.columns, i / self.columns); }
-    fn frames(self, first: int, count: int) -> Rect[] {
-        let out: Rect[] = [];
-        for i in range(count) {
-            out.push(self.frame_at(first + i));
-        }
-        return out;
-    }
     fn count(self) -> int { return self.columns * self.rows; }
 }
 
@@ -365,60 +361,146 @@ impl Effects {
 
 // ---- Sprite animation ----
 
-struct AnimationClip { frames: Rect[] = [], frame_seconds: float = 0.1, looping: bool = true }
+// Frames of a sprite sheet played over time: indices into the sheet and how
+// long each one shows, in seconds. Make one with clip().
+struct AnimationClip { sheet: Spritesheet = Spritesheet { .. }, frames: int[] = [], seconds: float[] = [], looping: bool = true }
 
-// Plays clips on the entity's Sprite by setting its `frame`. Set `clip` to
-// switch; the new clip starts at its first frame. A clip that does not loop
-// stops on its last frame and sets `finished`; set `playing` again to replay
-// it.
-struct Animator {
-    clips: AnimationClip[] = [],
-    clip: int = 0,
-    playing: bool = true,
-    frame: int = 0,
-    finished: bool = false,
+// A clip of `frames` from `sheet`. `seconds` is one duration for every frame,
+// or a list with one duration per frame.
+fn clip(sheet: Spritesheet, frames: int[], seconds: float | float[]) -> AnimationClip {
+    let durations: float[] = [];
+    if seconds is float {
+        durations = [seconds];
+    } else if seconds is float[] {
+        durations = seconds;
+    }
+    if sheet.id == 0 {
+        throw "drift_bad_clip: the sheet was not made by assets.spritesheet or assets.aseprite";
+    }
+    if frames.len() == 0 {
+        throw "drift_bad_clip: a clip needs at least one frame";
+    }
+    if durations.len() != 1 && durations.len() != frames.len() {
+        throw "drift_bad_clip: " + string(frames.len()) + " frames and " + string(durations.len())
+            + " durations; give one duration or one per frame";
+    }
+    for f in frames {
+        if f < 0 || f >= sheet.count() {
+            throw "drift_bad_clip: frame " + string(f) + " is outside the sheet's " + string(sheet.count()) + " frames";
+        }
+    }
+    return AnimationClip { sheet: sheet, frames: frames, seconds: durations, looping: true };
 }
 
-fn rects_from(v: float[], from: int) -> Rect[] {
-    let out: Rect[] = [];
-    let i = from;
-    while i + 3 < v.len() {
-        out.push(Rect { x: v[i], y: v[i + 1], w: v[i + 2], h: v[i + 3] });
-        i += 4;
+impl AnimationClip {
+    // The same clip, played one time instead of looping.
+    fn once(self) -> AnimationClip {
+        return AnimationClip { sheet: self.sheet, frames: self.frames, seconds: self.seconds, looping: false };
     }
-    return out;
+    // How long frame `i` shows.
+    fn frame_seconds(self, i: int) -> float {
+        if self.seconds.len() == 1 {
+            return self.seconds[0];
+        }
+        return self.seconds[i];
+    }
+    // The whole clip, in seconds.
+    fn length(self) -> float {
+        let total = 0.0;
+        for i in range(self.frames.len()) {
+            total += self.frame_seconds(i);
+        }
+        return total;
+    }
+}
+
+// Sent when a clip plays to its end: a clip made with once(), or one started
+// with play_once.
+@message
+struct AnimationFinished { entity: Entity, clip: string }
+
+// Plays named clips on the entity's Sprite, setting its image and frame.
+// Start with `play` naming a clip; switch with play() and play_once().
+struct Animator {
+    clips: {string: AnimationClip} = {},
+    play: string = "",
+    then: string = "",
+    once: bool = false,
+    speed: float = 1.0,
+    playing: bool = true,
+    frame: int = 0,
+    time: float = 0.0,
+    ended: string = "",
+}
+
+impl Animator {
+    // Switches to a clip. Playing the clip that is already playing changes
+    // nothing; a clip that ended starts again.
+    fn play(self, name: string) {
+        self.check_clip(name);
+        if name == self.play && self.ended != name {
+            return;
+        }
+        self.play = name;
+        self.then = "";
+        self.once = false;
+        self.restart();
+    }
+    // Plays a clip one time, then switches to `then`; an empty `then` holds
+    // the last frame.
+    fn play_once(self, name: string, then: string) {
+        self.check_clip(name);
+        if then != "" {
+            self.check_clip(then);
+        }
+        self.play = name;
+        self.then = then;
+        self.once = true;
+        self.restart();
+    }
+    // Whether the clip played to its end and no other clip has started since.
+    fn finished(self, name: string) -> bool { return name != "" && self.ended == name; }
+    fn restart(self) {
+        self.frame = 0;
+        self.time = 0.0;
+        self.ended = "";
+        self.playing = true;
+    }
+    fn check_clip(self, name: string) {
+        if !self.clips.contains(name) {
+            throw "drift_unknown_clip: " + name + " (clips: " + self.clips.keys().join(", ") + ")";
+        }
+    }
 }
 
 impl Assets {
     // An Aseprite file (.ase, .aseprite): its frames side by side in one
-    // texture, and its tags.
+    // texture, its frame durations and its tags.
     fn aseprite(self, path: string) -> Spritesheet {
         let v = drift::sheet_aseprite(path);
         if v.len() == 0 {
             throw "drift_load_failed: " + path;
         }
-        return Spritesheet { texture: Texture { id: int(v[1]) }, frame_w: v[2], frame_h: v[3], columns: int(v[4]), rows: 1,
-                             source: int(v[0]) };
+        return Spritesheet { id: int(v[0]), texture: Texture { id: int(v[1]) }, frame_w: v[2], frame_h: v[3], columns: int(v[4]), rows: 1 };
     }
 }
 
 impl Spritesheet {
-    // The frames of an Aseprite tag; empty for a grid or a tag the file
-    // does not have.
-    fn tag(self, name: string) -> Rect[] {
-        if self.source == 0 {
-            let none: Rect[] = [];
-            return none;
-        }
-        return rects_from(drift::sheet_tag(self.source, name), 2);
-    }
-    // A tag as a clip, timed by the file's frame durations (their average)
-    // and looping.
+    // An Aseprite tag as a clip: its frames in the order the tag plays them,
+    // each with its duration from the file. A tag set to repeat once plays
+    // once; any other loops.
     fn clip(self, name: string) -> AnimationClip {
-        if self.source == 0 {
-            return AnimationClip { .. };
+        let v = drift::sheet_tag(self.id, name);
+        if v.len() == 0 {
+            throw "drift_unknown_clip: " + name + " (tags: " + drift::sheet_tags(self.id) + ")";
         }
-        let v = drift::sheet_tag(self.source, name);
-        return AnimationClip { frames: rects_from(v, 2), frame_seconds: v[0], looping: v[1] > 0.5 };
+        let n = int(v[1]);
+        let frames: int[] = [];
+        let seconds: float[] = [];
+        for i in range(n) {
+            frames.push(int(v[2 + i]));
+            seconds.push(v[2 + n + i]);
+        }
+        return AnimationClip { sheet: self, frames: frames, seconds: seconds, looping: v[0] > 0.5 };
     }
 }

@@ -1,6 +1,6 @@
 # Sprites and Sheets
 
-The `SpriteResource` manages spritesheets and frame-based animations. It handles uniform grid sheets, Aseprite imports, and animation playback with per-frame timing.
+The `SpriteResource` manages spritesheets: uniform grids cut from a texture, and Aseprite files with their frame durations and tags. The `SpriteAnimator` component plays a sheet's frames over time; see [Sprite Animation](../components/sprite-animation.md).
 
 **Header:** `#include <drift/resources/SpriteResource.hpp>`
 
@@ -41,13 +41,15 @@ SpritesheetHandle sheet = sprites->loadAseprite("assets/hero.aseprite");
 
 ```cpp
 Rect    getFrame(SpritesheetHandle sheet, int32_t col, int32_t row) const;
+Rect    frameAt(SpritesheetHandle sheet, int32_t index) const;
 int32_t frameCount(SpritesheetHandle sheet) const;
 ```
 
-`getFrame` returns the source rectangle for a frame at the given column and row in the grid. Use this to set a `Sprite` component's `srcRect` manually.
+`getFrame` returns the source rectangle for a frame at the given column and row in the grid, and `frameAt` the one at an index, counted left to right, top to bottom from 0; animation clips use these indices. Use either to set a `Sprite` component's `srcRect` for a single frame.
 
 ```cpp
 Rect frame = sprites->getFrame(sheet, 3, 0); // column 3, row 0
+Rect same  = sprites->frameAt(sheet, 3);     // index 3 on a sheet 4 or more frames wide
 ```
 
 ### Pivot
@@ -70,159 +72,28 @@ TextureHandle getTexture(SpritesheetHandle sheet) const;
 void          destroySpritesheet(SpritesheetHandle sheet);
 ```
 
-## Animations
-
-Animations play a sequence of frames from a spritesheet with per-frame timing control.
-
-### Creating Animations
+## Aseprite Tags
 
 ```cpp
-AnimationHandle createAnimation(SpritesheetHandle sheet, const AnimationDef& def);
-AnimationHandle createAnimationFromTag(SpritesheetHandle sheet, const char* tagName);
+AnimationClip clipFromTag(SpritesheetHandle sheet, const char* tagName) const;
+std::vector<std::string> tagNames(SpritesheetHandle sheet) const;
 ```
 
-`AnimationDef` specifies the frame sequence and timing:
+`clipFromTag` turns a tag of a loaded Aseprite file into an `AnimationClip` for the `SpriteAnimator`: the tag's frames in the order it plays them (forward, reverse or ping-pong), each with its own duration from the file. A tag set to repeat once plays once; any other loops. A tag the file does not have logs an error naming the tags it has and returns an empty clip. `tagNames` lists the tags in file order.
 
 ```cpp
-struct AnimationDef {
-    int32_t* frames    = nullptr;   // array of frame indices
-    float*   durations = nullptr;   // per-frame duration in seconds
-    int32_t  frameCount = 0;
-    bool     looping    = true;
-};
-```
-
-For uniform frame timing, fill the durations array with the same value:
-
-```cpp
-int32_t frames[] = {0, 1, 2, 3};
-float durations[] = {0.1f, 0.1f, 0.1f, 0.1f};
-
-AnimationDef walkDef;
-walkDef.frames = frames;
-walkDef.durations = durations;
-walkDef.frameCount = 4;
-walkDef.looping = true;
-
-AnimationHandle walkAnim = sprites->createAnimation(sheet, walkDef);
-```
-
-### Aseprite Tags
-
-If you loaded an Aseprite file, you can create animations directly from tags defined in the Aseprite editor:
-
-```cpp
-SpritesheetHandle sheet = sprites->loadAseprite("assets/hero.aseprite");
-AnimationHandle idle = sprites->createAnimationFromTag(sheet, "idle");
-AnimationHandle run  = sprites->createAnimationFromTag(sheet, "run");
-AnimationHandle jump = sprites->createAnimationFromTag(sheet, "jump");
-```
-
-Frame indices and per-frame durations are pulled from the Aseprite tag data automatically.
-
-For the `SpriteAnimator` component, `clipFromTag` returns a tag as an `AnimationClip`. A clip has one frame duration, so it uses the average of the tag's durations:
-
-```cpp
+SpritesheetHandle knight = sprites->loadAseprite("assets/knight.aseprite");
 SpriteAnimator anim;
-anim.clips.push_back(sprites->clipFromTag(sheet, "idle"));
-anim.clips.push_back(sprites->clipFromTag(sheet, "run"));
-```
-
-### Updating and Querying Animations
-
-```cpp
-Rect updateAnimation(AnimationHandle anim, float dt);
-Rect getAnimationFrame(AnimationHandle anim) const;
-void resetAnimation(AnimationHandle anim);
-bool isAnimationFinished(AnimationHandle anim) const;
-SpritesheetHandle getAnimationSheet(AnimationHandle anim) const;
-```
-
-`updateAnimation` advances the animation by `dt` seconds and returns the current frame's source rectangle. Use this if you are driving animation manually rather than through the `SpriteAnimator` component.
-
-```cpp
-void animateManually(ResMut<SpriteResource> sprites, Res<Time> time,
-                     QueryMut<Sprite> query, Res<GameState> state) {
-    Rect frame = sprites->updateAnimation(state->currentAnim, time->delta);
-    TextureHandle tex = sprites->getTexture(
-        sprites->getAnimationSheet(state->currentAnim));
-
-    query.iter([&](Sprite& s) {
-        s.srcRect = frame;
-        s.texture = tex;
-    });
-}
-```
-
-### Checking Completion
-
-For non-looping animations (death, attack, landing), check if the animation has finished:
-
-```cpp
-if (sprites->isAnimationFinished(deathAnim)) {
-    cmd.entity(entityId).despawn();
-}
-```
-
-### Cleanup
-
-```cpp
-void destroyAnimation(AnimationHandle anim);
-```
-
-## ECS-Driven Animation: SpriteAnimator
-
-For most gameplay, use the `SpriteAnimator` component instead of calling `updateAnimation` manually. The `SpriteAnimationPlugin` (included in `DefaultPlugins`) updates all `SpriteAnimator` components each frame and writes the resulting `srcRect` into the entity's `Sprite` component.
-
-```cpp
-#include <drift/components/SpriteAnimator.hpp>
+anim.clips = {
+    {"idle", sprites->clipFromTag(knight, "idle")},
+    {"run", sprites->clipFromTag(knight, "run")},
+    {"die", sprites->clipFromTag(knight, "die")},
+};
+anim.current = "idle";
 
 cmd.spawn().insert(
-    Transform2D{.position = {100.f, 200.f}},
-    Sprite{.texture = sprites->getTexture(sheet)},
-    SpriteAnimator{.animation = walkAnim}
+    Transform2D{.position = {200.f, 300.f}},
+    Sprite{.texture = sprites->getTexture(knight)},
+    anim
 );
-```
-
-See the [Sprite Animation](../components/sprite-animation.md) chapter for details on the component-driven approach.
-
-## Complete Example
-
-```cpp
-struct PlayerAnims : public Resource {
-    DRIFT_RESOURCE(PlayerAnims)
-    SpritesheetHandle sheet;
-    AnimationHandle idle;
-    AnimationHandle run;
-    AnimationHandle jump;
-};
-
-void setupAnims(ResMut<SpriteResource> sprites, ResMut<PlayerAnims> anims,
-                Commands& cmd) {
-    anims->sheet = sprites->loadAseprite("assets/hero.aseprite");
-    anims->idle  = sprites->createAnimationFromTag(anims->sheet, "idle");
-    anims->run   = sprites->createAnimationFromTag(anims->sheet, "run");
-    anims->jump  = sprites->createAnimationFromTag(anims->sheet, "jump");
-
-    TextureHandle tex = sprites->getTexture(anims->sheet);
-    sprites->setPivot(anims->sheet, 16.f, 16.f);
-
-    cmd.spawn().insert(
-        Transform2D{.position = {200.f, 300.f}},
-        Sprite{.texture = tex},
-        SpriteAnimator{.animation = anims->idle},
-        PlayerTag{}
-    );
-}
-
-void switchAnim(Res<InputResource> input, Res<PlayerAnims> anims,
-                QueryMut<SpriteAnimator, With<PlayerTag>> query) {
-    query.iter([&](SpriteAnimator& animator) {
-        if (input->keyHeld(Key::A) || input->keyHeld(Key::D)) {
-            animator.animation = anims->run;
-        } else {
-            animator.animation = anims->idle;
-        }
-    });
-}
 ```

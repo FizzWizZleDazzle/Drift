@@ -507,6 +507,121 @@ Draws a string at the entity's position.
 cmd.spawn([at(16.0, 12.0), Text { value: "Score 0", size: 28.0, outline: 2.0, layer: hud_layer(), .. }, ScoreLabel {}]);
 ```
 
+## Animator
+
+Plays named clips on the entity's `Sprite`, setting its image and frame as time passes. `play` names the clip to start with. See [Movement](../guides/movement.md#animation-frames).
+
+```rust
+let hero = assets.spritesheet(texture("assets/hero.png"), 32.0, 32.0);
+cmd.spawn([at(100.0, 100.0), Sprite { image: hero.texture, .. }, Animator {
+    clips: {
+        "idle":   clip(hero, [0, 1, 2, 3], 0.15),
+        "run":    clip(hero, range(8, 14), 0.08),
+        "attack": clip(slash, [0, 1, 2], [0.05, 0.05, 0.2]).once()
+    },
+    play: "idle",
+    ..
+}]);
+```
+
+- clips: The clips, by name
+- play: The clip playing; writing an unknown name logs `drift_unknown_clip`
+- then: The clip to switch to when this one ends; empty holds the last frame
+- once: Whether the clip playing ends after one pass, even a looping one
+- speed: Time multiplier: 2.0 plays twice as fast, 0.0 freezes
+- playing: False pauses on the current frame
+- frame: Index into the playing clip's frames; setting it jumps there
+- time: Seconds into the playing clip; setting it jumps there
+- ended: The last clip that played to its end, until another starts
+
+## Animator.play
+
+Switches to a clip by name, from its first frame. The clip already playing keeps going, so calling this every frame is fine; a clip that ended starts again. An unknown name raises `drift_unknown_clip`.
+
+```rust
+if v.linear.x != 0.0 {
+    anim.play("run");
+} else {
+    anim.play("idle");
+}
+```
+
+## Animator.play_once
+
+Plays a clip one time, even a looping one, then switches to `then`. An empty `then` holds the last frame.
+
+```rust
+anim.play_once("attack", "idle");
+```
+
+## Animator.finished
+
+Whether the clip played to its end and no other clip has started since. To act once when it happens, take the `AnimationFinished` message instead.
+
+```rust
+if anim.finished("die") {
+    cmd.despawn(e);
+}
+```
+
+## AnimationClip
+
+Frames of a sprite sheet played over time. Make one with [`clip`](#clip) or an Aseprite tag's [`Spritesheet.clip`](assets.md#spritesheetclip).
+
+- sheet: The sheet the frames come from; its texture shows while the clip plays
+- frames: Frame indices into the sheet
+- seconds: How long each frame shows: one value for every frame, or one per frame
+- looping: Whether the clip starts again after its last frame
+
+## clip
+
+A clip of `frames` from `sheet`, each shown for `seconds`: one number for every frame, or a list with one per frame. Raises `drift_bad_clip` for a frame outside the sheet or a list whose length does not match the frames.
+
+```rust
+let idle = clip(hero, [0, 1, 2, 3], 0.15);
+let swing = clip(slash, [0, 1, 2], [0.05, 0.05, 0.2]).once();
+```
+
+## AnimationClip.once
+
+The same clip, played one time instead of looping. When it ends, the animator holds its last frame, or switches to `then`.
+
+```rust
+let die = clip(hero, range(16, 22), 0.1).once();
+```
+
+## AnimationClip.frame_seconds
+
+How long frame `i` of the clip shows.
+
+```rust
+let last = swing.frame_seconds(swing.frames.len() - 1);
+```
+
+## AnimationClip.length
+
+The whole clip, in seconds.
+
+```rust
+let seconds = swing.length();
+```
+
+## AnimationFinished
+
+Sent when a clip plays to its end: a clip made with `once()`, or one started with `play_once`. A clip that switches to `then` sends it as it switches.
+
+```rust
+@system
+fn remove_fallen(done: AnimationFinished, cmd: Commands) {
+    if done.clip == "die" {
+        cmd.despawn(done.entity);
+    }
+}
+```
+
+- entity: The entity whose animator played the clip
+- clip: The clip's name
+
 ## Camera
 
 - zoom: Magnification; 2.0 shows the world twice as large
@@ -2795,11 +2910,14 @@ let c = color_of(img.pixels()[0]);
 
 ## Spritesheet
 
+A texture cut into a grid of frames. Show one frame with `Sprite.frame`, or play frames with an [`Animator`](components.md#animator).
+
 ```rust
 let sheet = assets.spritesheet(texture("assets/hero.png"), 16.0, 16.0);
 cmd.spawn([at(100.0, 100.0), Sprite { image: sheet.texture, frame: sheet.frame_at(0), .. }]);
 ```
 
+- id: The engine's sheet
 - texture: The whole image
 - frame_w: Width of one frame in pixels
 - frame_h: Height of one frame in pixels
@@ -2822,20 +2940,21 @@ The frame at an index, counted left to right, top to bottom from 0.
 sprite.frame = sheet.frame_at(int(time.elapsed * 10.0) % sheet.count());
 ```
 
-## Spritesheet.frames
-
-`count` frames starting at index `first`.
-
-```rust
-let run = sheet.frames(8, 6);
-```
-
 ## Spritesheet.count
 
 How many frames the sheet has.
 
 ```rust
 let n = sheet.count();
+```
+
+## Spritesheet.clip
+
+An Aseprite tag as a clip: its frames in the order the tag plays them (forward, reverse or ping-pong), each with its duration from the file. A tag set to repeat once plays once; any other loops. A tag the file does not have raises `drift_unknown_clip` with the tags it has.
+
+```rust
+let knight = assets.aseprite("assets/knight.aseprite");
+let run = knight.clip("run");
 ```
 
 ## Map
@@ -4331,6 +4450,8 @@ Helpers the module needs; games do not call them.
 ## flag
 ## image_answer
 ## max_int
+## Animator.restart
+## Animator.check_clip
 ## ids_to_entities
 ## entity_list
 ## TweenStep

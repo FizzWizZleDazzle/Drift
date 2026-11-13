@@ -1,6 +1,6 @@
-// Cameras, camera bounds and conversions, post effects, fonts, shaders and
-// the window, through the drift module. ctest runs it with `drift run` and
-// reads the log.
+// Cameras, camera bounds and conversions, post effects, fonts, shaders,
+// sprite animation and the window, through the drift module. ctest runs it
+// with `drift run` from tests/, where its Aseprite file is, and reads the log.
 
 import "drift" { * };
 
@@ -12,8 +12,12 @@ const TINT: string = "void main() {
 @component
 struct Runner {}
 
+@component
+struct Walker {}
+
 @resource
-struct Checks { failed: int = 0, done: bool = false, camera: Entity = Entity { .. }, bloom: Effect = Effect { .. } }
+struct Checks { failed: int = 0, done: bool = false, camera: Entity = Entity { .. }, bloom: Effect = Effect { .. },
+                walker: Entity = Entity { .. }, finished: string[] = [] }
 
 fn expect(checks: Checks, what: string, ok: bool) {
     if !ok {
@@ -41,10 +45,65 @@ fn setup(cmd: Commands, assets: Assets, effects: Effects, checks: Checks) {
     let tint = assets.create_material(assets.create_shader("", TINT));
     tint.set_color(0, rgba(255, 0, 0, 128));
     cmd.spawn([at(50.0, 50.0), Sprite { image: assets.render_target(16, 16), material: tint, .. }]);
+
+    // Two sheets drawn in code: a one-shot on the second falls back to a
+    // loop on the first.
+    let walk = assets.spritesheet(assets.create_image(64, 32, rgb(0, 0, 255)).to_texture(), 16.0, 16.0);
+    let swing = assets.spritesheet(assets.create_image(48, 24, rgb(255, 0, 0)).to_texture(), 24.0, 24.0);
+    expect(checks, "sheet grid", walk.count() == 8 && walk.columns == 4 && swing.count() == 2);
+    let swing_clip = clip(swing, [0, 1], [0.1, 0.3]).once();
+    expect(checks, "clip durations", (swing_clip.length() - 0.4).abs() < 0.001 && !swing_clip.looping);
+    checks.walker = cmd.spawn([at(200.0, 100.0), Sprite { image: walk.texture, .. }, Walker {}, Animator {
+        clips: { "walk": clip(walk, range(0, 8), 0.1), "swing": swing_clip },
+        play: "swing",
+        then: "walk",
+        ..
+    }]);
+    let raised = "";
+    try {
+        clip(walk, [0, 1, 2], [0.1, 0.2]);
+    } catch e {
+        raised = e;
+    }
+    expect(checks, "clip duration count", raised.starts_with("drift_bad_clip"));
+    raised = "";
+    try {
+        clip(walk, [8], 0.1);
+    } catch e {
+        raised = e;
+    }
+    expect(checks, "clip frame range", raised.starts_with("drift_bad_clip"));
+    raised = "";
+    try {
+        assets.spritesheet(walk.texture, 0.0, 16.0);
+    } catch e {
+        raised = e;
+    }
+    expect(checks, "sheet with no frames", raised.starts_with("drift_load_failed"));
+
+    // An Aseprite file with per-frame durations and a ping-pong tag.
+    let ase = assets.aseprite("assets/animation/hero.aseprite");
+    let bob = ase.clip("bob");
+    expect(checks, "aseprite tag frames", bob.frames == [0, 1, 2, 1] && bob.looping);
+    expect(checks, "aseprite tag durations", (bob.seconds[0] - 0.1).abs() < 0.001 && (bob.seconds[2] - 0.08).abs() < 0.001);
+    expect(checks, "aseprite once tag", !ase.clip("hit").looping);
+    raised = "";
+    try {
+        ase.clip("jump");
+    } catch e {
+        raised = e;
+    }
+    expect(checks, "aseprite unknown tag", raised.starts_with("drift_unknown_clip"));
 }
 
 @system
-fn check(time: Time, checks: Checks, cam: Camera2D, places: Lookup<Transform>, window: Window, draw: Draw) {
+fn note_finished(done: AnimationFinished, checks: Checks) {
+    checks.finished.push(done.clip);
+}
+
+@system
+fn check(time: Time, checks: Checks, cam: Camera2D, places: Lookup<Transform>, walkers: Lookup<Animator>, window: Window,
+         draw: Draw) {
     draw.line(vec2(0.0, 0.0), vec2(100.0, 100.0), rgb(255, 0, 0), 2.0);
     draw.hud();
     draw.text("presentation", vec2(8.0, 8.0), 16.0, rgb(255, 255, 255));
@@ -63,6 +122,22 @@ fn check(time: Time, checks: Checks, cam: Camera2D, places: Lookup<Transform>, w
         expect(checks, "camera exists", false);
     }
     expect(checks, "draw calls", window.draw_calls() > 0);
+    if walkers.get(checks.walker) is Some(anim) {
+        // The 0.4 s swing ended long ago and the walk loop took over.
+        expect(checks, "one-shot fell back", anim.play == "walk" && anim.finished("swing"));
+        expect(checks, "finished message", checks.finished == ["swing"]);
+        let raised = "";
+        try {
+            anim.play("jump");
+        } catch e {
+            raised = e;
+        }
+        expect(checks, "unknown clip", raised.starts_with("drift_unknown_clip"));
+        anim.play("walk");
+        expect(checks, "play keeps a playing clip", !anim.finished("walk") && anim.play == "walk");
+    } else {
+        expect(checks, "walker exists", false);
+    }
     window.set_title("presentation");
     window.set_logical_size(320, 240);
     if checks.failed == 0 {

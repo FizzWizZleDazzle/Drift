@@ -177,9 +177,11 @@ host "drift" {
     int material_create(int);
     material_param(int, int, float, float, float, float);
     material_texture(int, int, int);
-    // Aseprite sheets.
+    // Sprite sheets: grids and Aseprite files.
+    float[] sheet_grid(int, float, float);
     float[] sheet_aseprite(string);
     float[] sheet_tag(int, string);
+    string sheet_tags(int);
 
     // Hierarchy: answers about the engine's current Transforms.
     int hier_parent(int);

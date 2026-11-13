@@ -76,9 +76,11 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -2224,31 +2226,40 @@ void showStartError(const char* text) {
 
 // ---- Sprite animation ----
 //
-// The Animator component, and Aseprite files cut into frames and tags.
+// Sprite sheets, the Animator component, and Aseprite files cut into frames
+// and tags.
+
+// The script's Spritesheet value for each sheet made here, by sheet id, so a
+// clip read back carries the same sheet the script made it from.
+std::unordered_map<uint32_t, json>& sheetValues() {
+    static std::unordered_map<uint32_t, json> sheets;
+    return sheets;
+}
+json sheetJ(SpritesheetHandle sheet) {
+    auto it = sheetValues().find(sheet.id);
+    return it != sheetValues().end() ? it->second : json{{"id", sheet.id}};
+}
 
 json clipJ(const AnimationClip& c) {
-    json frames = json::array();
-    for (const Rect& r : c.frames) frames.push_back(rectJ(r));
-    return {{"frames", frames}, {"frame_seconds", c.frameDuration}, {"looping", c.looping}};
+    return {{"sheet", sheetJ(c.sheet)}, {"frames", c.frames}, {"seconds", c.seconds}, {"looping", c.looping}};
 }
 AnimationClip clipOf(const json& j) {
     AnimationClip c;
-    for (const auto& r : j.value("frames", json::array())) c.frames.push_back(rectJ(r));
-    c.frameDuration = std::max(0.001f, j.value("frame_seconds", 0.1f));
+    c.sheet = SpritesheetHandle{idOf(j.value("sheet", json()))};
+    for (const auto& f : j.value("frames", json::array())) c.frames.push_back(f.get<int32_t>());
+    for (const auto& s : j.value("seconds", json::array())) c.seconds.push_back(s.get<float>());
     c.looping = j.value("looping", true);
     return c;
 }
-bool sameClips(const std::vector<AnimationClip>& a, const std::vector<AnimationClip>& b) {
-    if (a.size() != b.size()) return false;
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (a[i].frameDuration != b[i].frameDuration || a[i].looping != b[i].looping ||
-            a[i].frames.size() != b[i].frames.size()) return false;
-        for (size_t k = 0; k < a[i].frames.size(); ++k) {
-            const Rect &p = a[i].frames[k], &q = b[i].frames[k];
-            if (p.x != q.x || p.y != q.y || p.w != q.w || p.h != q.h) return false;
-        }
-    }
-    return true;
+bool sameClip(const AnimationClip& a, const AnimationClip& b) {
+    return a.sheet == b.sheet && a.frames == b.frames && a.seconds == b.seconds && a.looping == b.looping;
+}
+
+// Logs a clip name an Animator does not have, once per entity and name.
+void reportUnknownClip(EntityId e, const SpriteAnimator& a, const std::string& name) {
+    static std::unordered_set<std::string> reported;
+    if (!reported.insert(std::to_string(e) + "/" + name).second) return;
+    DRIFT_LOG_ERROR("drift_unknown_clip: %s (clips: %s)", name.c_str(), a.clipNames().c_str());
 }
 
 std::vector<Codec> animationCodecs() {
@@ -2257,37 +2268,53 @@ std::vector<Codec> animationCodecs() {
          [](EntityId e) { return get<SpriteAnimator>(e) != nullptr; },
          [](EntityId e) {
              const SpriteAnimator& a = *get<SpriteAnimator>(e);
-             json clips = json::array();
-             for (const auto& c : a.clips) clips.push_back(clipJ(c));
-             return json{{"clips", clips}, {"clip", a.currentClip}, {"playing", a.playing},
-                         {"frame", a.currentFrame}, {"finished", a.isFinished()}};
+             json clips = json::object();
+             for (const auto& c : a.clips) clips[c.name] = clipJ(c.clip);
+             return json{{"clips", clips}, {"play", a.current}, {"then", a.then}, {"once", a.once},
+                         {"speed", a.speed}, {"playing", a.playing}, {"frame", a.frame}, {"time", a.time()},
+                         {"ended", a.ended}};
          },
          [](EntityId e, const json& j) {
-             // A new clip, or new clips, start from their first frame; the
-             // same clip keeps its place unless the script moved `frame`. A
-             // finished clip set playing again starts over.
+             // The engine keeps the clip's place unless the script switched
+             // clips (then it starts from the first frame), moved `frame`, or
+             // moved `time`.
              SpriteAnimator a;
-             for (const auto& c : j.value("clips", json::array())) a.clips.push_back(clipOf(c));
-             a.currentClip = j.value("clip", 0);
+             json clips = j.value("clips", json::object());
+             for (const auto& [name, c] : clips.items()) a.clips.push_back({name, clipOf(c)});
+             a.current = j.value("play", std::string());
+             a.then = j.value("then", std::string());
+             a.once = j.value("once", false);
+             a.speed = std::max(0.f, j.value("speed", 1.f));
              a.playing = j.value("playing", true);
+             a.ended = j.value("ended", std::string());
              int frame = j.value("frame", 0);
+             float time = j.value("time", 0.f);
              const SpriteAnimator* cur = get<SpriteAnimator>(e);
-             bool restart = !cur || cur->currentClip != a.currentClip || !sameClips(cur->clips, a.clips) ||
-                            (a.playing && !cur->playing && cur->isFinished());
-             if (!restart) {
-                 a.currentFrame = frame;
-                 a.elapsed = frame == cur->currentFrame ? cur->elapsed : 0.f;
+             const AnimationClip* now = a.find(a.current);
+             const AnimationClip* before = cur ? cur->find(cur->current) : nullptr;
+             bool samePlaying = cur && cur->current == a.current && now && before && sameClip(*now, *before);
+             if (samePlaying && frame == cur->frame && time == cur->time()) {
+                 a.frame = cur->frame;
+                 a.frameTime = cur->frameTime;
+             } else if (samePlaying && frame != cur->frame) {
+                 a.frame = frame;
+             } else if (time > 0.f) {
+                 a.seek(time);
+             } else {
+                 a.frame = frame;
              }
-             if (a.currentClip >= 0 && a.currentClip < static_cast<int32_t>(a.clips.size())) {
-                 const auto& frames = a.clips[a.currentClip].frames;
-                 a.currentFrame = std::clamp(a.currentFrame, 0, std::max(0, static_cast<int32_t>(frames.size()) - 1));
+             if (!a.current.empty() && !now) reportUnknownClip(e, a, a.current);
+             if (!a.then.empty() && !a.find(a.then)) reportUnknownClip(e, a, a.then);
+             if (now && !now->frames.empty()) {
+                 a.frame = std::clamp(a.frame, 0, static_cast<int32_t>(now->frames.size()) - 1);
                  // Show the frame now, not after the first step.
-                 if (!frames.empty()) {
-                     if (const Sprite* s = get<Sprite>(e)) {
-                         Sprite shown = *s;
-                         shown.srcRect = frames[a.currentFrame];
-                         put(e, shown);
-                     }
+                 const Sprite* s = get<Sprite>(e);
+                 auto* sprites = res<SpriteResource>();
+                 auto* renderer = res<RendererResource>();
+                 if (s && sprites && renderer) {
+                     Sprite shown = *s;
+                     showAnimatorFrame(a, shown, *sprites, *renderer);
+                     put(e, shown);
                  }
              }
              put(e, a);
@@ -2297,7 +2324,41 @@ std::vector<Codec> animationCodecs() {
     };
 }
 
+// Clips that reached their end, as AnimationFinished messages.
+void postFinishedAnimations(App& app) {
+    auto* finished = app.getResource<Events<AnimationFinished>>();
+    if (!finished) return;
+    for (const AnimationFinished& f : *finished) {
+        candela::postMessage("AnimationFinished", {{"entity", entityJ(f.entity)}, {"clip", f.clip}});
+    }
+}
+
 bool animation(const std::string& f, const json& a, json& out) {
+    if (f == "sheet_grid") {
+        // texture, frame width, frame height -> sheet, columns, rows. The
+        // same grid of the same texture is one sheet.
+        static std::map<std::tuple<uint32_t, float, float>, SpritesheetHandle> made;
+        auto* sprites = res<SpriteResource>();
+        out = json::array();
+        if (!sprites) return true;
+        uint32_t tex = a[0].get<uint32_t>();
+        float w = a[1].get<float>(), h = a[2].get<float>();
+        auto key = std::make_tuple(tex, w, h);
+        auto it = made.find(key);
+        SpritesheetHandle sheet = it != made.end()
+            ? it->second
+            : sprites->createSpritesheet(TextureHandle{tex}, static_cast<int32_t>(w), static_cast<int32_t>(h));
+        if (!sheet.valid()) return true;
+        made[key] = sheet;
+        int32_t count = sprites->frameCount(sheet);
+        Rect last = sprites->frameAt(sheet, count - 1);
+        int columns = static_cast<int>(std::lround(last.x / w)) + 1;
+        int rows = static_cast<int>(std::lround(last.y / h)) + 1;
+        sheetValues()[sheet.id] = {{"id", sheet.id}, {"texture", {{"id", tex}}}, {"frame_w", w}, {"frame_h", h},
+                                   {"columns", columns}, {"rows", rows}};
+        out = {sheet.id, columns, rows};
+        return true;
+    }
     if (f == "sheet_aseprite") {
         // path -> sheet, texture, frame width, frame height, frames
         static std::unordered_map<std::string, SpritesheetHandle> loaded;
@@ -2309,24 +2370,40 @@ bool animation(const std::string& f, const json& a, json& out) {
         SpritesheetHandle sheet = it != loaded.end() ? it->second : sprites->loadAseprite(path.c_str());
         if (!sheet.valid()) return true;
         loaded[path] = sheet;
-        Rect first = sprites->getFrame(sheet, 0, 0);
-        out = {sheet.id, sprites->getTexture(sheet).id, first.w, first.h, sprites->frameCount(sheet)};
+        Rect first = sprites->frameAt(sheet, 0);
+        int32_t count = sprites->frameCount(sheet);
+        uint32_t tex = sprites->getTexture(sheet).id;
+        sheetValues()[sheet.id] = {{"id", sheet.id}, {"texture", {{"id", tex}}}, {"frame_w", first.w},
+                                   {"frame_h", first.h}, {"columns", count}, {"rows", 1}};
+        out = {sheet.id, tex, first.w, first.h, count};
         return true;
     }
     if (f == "sheet_tag") {
-        // sheet, tag -> frame seconds, looping, then the frames
+        // sheet, tag -> looping, frame count, the frames, their seconds;
+        // empty for a tag the sheet does not have
         auto* sprites = res<SpriteResource>();
         out = json::array();
         if (!sprites) return true;
-        AnimationClip c = sprites->clipFromTag(SpritesheetHandle{a[0].get<uint32_t>()}, a[1].get<std::string>().c_str());
-        out.push_back(c.frameDuration);
+        SpritesheetHandle sheet{a[0].get<uint32_t>()};
+        std::string name = a[1].get<std::string>();
+        auto names = sprites->tagNames(sheet);
+        if (std::find(names.begin(), names.end(), name) == names.end()) return true;
+        AnimationClip c = sprites->clipFromTag(sheet, name.c_str());
         out.push_back(c.looping ? 1.0 : 0.0);
-        for (const Rect& r : c.frames) {
-            out.push_back(r.x);
-            out.push_back(r.y);
-            out.push_back(r.w);
-            out.push_back(r.h);
+        out.push_back(c.frames.size());
+        for (int32_t i : c.frames) out.push_back(i);
+        for (float s : c.seconds) out.push_back(s);
+        return true;
+    }
+    if (f == "sheet_tags") {
+        // sheet -> its tag names, comma separated
+        std::string names;
+        if (auto* sprites = res<SpriteResource>()) {
+            for (const auto& n : sprites->tagNames(SpritesheetHandle{a[0].get<uint32_t>()})) {
+                names += (names.empty() ? "" : ", ") + n;
+            }
         }
+        out = names.empty() ? std::string("none") : names;
         return true;
     }
     return false;
@@ -3224,6 +3301,7 @@ private:
             for (int i = 0; i < cb->sensorStartCount(); ++i) drift_host_contact(2, cb->sensorStartA(i), cb->sensorStartB(i), 0, 0, 0, 0);
             for (int i = 0; i < cb->sensorEndCount(); ++i) drift_host_contact(3, cb->sensorEndA(i), cb->sensorEndB(i), 0, 0, 0, 0);
         }
+        postFinishedAnimations(a);
         offerDownloads();
         auto* time = a.getResource<Time>();
         drift_host_frame(time ? time->delta : 0.0, time ? time->elapsed : 0.0, time ? int64_t(time->frame) : 0,

@@ -948,7 +948,7 @@ fn create_material(self, s: Shader) -> Material
 fn aseprite(self, path: string) -> Spritesheet
 ```
 
-An Aseprite file (.ase, .aseprite): its frames side by side in one texture, and its tags.
+An Aseprite file (.ase, .aseprite): its frames side by side in one texture, its frame durations and its tags.
 
 ### Assets.scene
 

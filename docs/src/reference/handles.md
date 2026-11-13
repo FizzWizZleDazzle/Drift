@@ -66,8 +66,7 @@ Each resource category has a tag struct and a corresponding type alias:
 | Type Alias | Tag | Used For |
 |------------|-----|----------|
 | `TextureHandle` | `TextureTag` | GPU textures loaded from images or created from pixels |
-| `SpritesheetHandle` | `SpritesheetTag` | Sprite sheet metadata (frame rects) |
-| `AnimationHandle` | `AnimationTag` | Sprite animation clip data |
+| `SpritesheetHandle` | `SpritesheetTag` | Sprite sheet metadata (frame rects, Aseprite durations and tags) |
 | `SoundHandle` | `SoundTag` | Loaded audio samples |
 | `PlayingSoundHandle` | `PlayingSoundTag` | A currently-playing sound instance (for stopping/querying) |
 | `BusHandle` | `BusTag` | An audio mixer bus (declared in `AudioResource.hpp`) |

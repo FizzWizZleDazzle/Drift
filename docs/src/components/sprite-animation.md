@@ -1,216 +1,176 @@
 # Sprite Animation
 
-The sprite animation system drives frame-by-frame animation on entities that have both a `Sprite` and a `SpriteAnimator` component. Each frame, the `SpriteAnimationPlugin` advances the animation timer and writes the correct `srcRect` into the `Sprite` component.
-
-## Components
-
-### AnimationClip
-
-A single animation sequence: a list of source rectangles and timing information.
-
-```cpp
-struct AnimationClip {
-    std::vector<Rect> frames;       // srcRect per frame
-    float frameDuration = 0.1f;     // seconds per frame
-    bool looping = true;
-};
-```
+A `SpriteAnimator` plays named clips on an entity's `Sprite`. A clip is a spritesheet, the frames to show from it, and how long each one shows. Each frame, the `SpriteAnimationPlugin` moves every animator on and puts the current frame's texture and region on the sprite.
 
 **Header:** `#include <drift/components/SpriteAnimator.hpp>`
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `frames` | `vector<Rect>` | `{}` | Source rectangles within the texture, one per animation frame. |
-| `frameDuration` | `float` | `0.1` | Time in seconds each frame is displayed. 0.1 = 10 FPS animation. |
-| `looping` | `bool` | `true` | When `true`, the clip restarts after the last frame. When `false`, it stops on the last frame. |
-
-### SpriteAnimator
-
-Holds one or more `AnimationClip` entries and tracks playback state.
+## Clips
 
 ```cpp
-struct SpriteAnimator {
-    std::vector<AnimationClip> clips;
-    int32_t currentClip = 0;
-    int32_t currentFrame = 0;
-    float elapsed = 0.f;
-    bool playing = true;
+struct AnimationClip {
+    SpritesheetHandle sheet;
+    std::vector<int32_t> frames;    // frame indices into the sheet
+    std::vector<float> seconds;     // per frame, or one value for all of them
+    bool looping = true;
 
-    void play(int32_t clipIndex);
-    void stop();
-    bool isFinished() const;
+    float frameSeconds(size_t i) const;
+    float length() const;
+    AnimationClip once() const;
+};
+
+AnimationClip clip(SpritesheetHandle sheet, std::vector<int32_t> frames, float seconds);
+AnimationClip clip(SpritesheetHandle sheet, std::vector<int32_t> frames, std::vector<float> seconds);
+```
+
+`clip` makes a clip with one duration for every frame, or with one duration per frame; a list whose length matches neither logs an error. Frame indices count from 0 at the sheet's top-left, left to right, then down, as `SpriteResource::frameAt` does. `once()` returns the clip set to play one time instead of looping. `SpriteResource::clipFromTag` makes a clip from an Aseprite tag with the file's own durations; see [Sprites and Sheets](../subsystems/sprites-and-sheets.md#aseprite-tags).
+
+Each clip carries its sheet, so clips from different sheets can share one animator: switching clips switches the sprite's texture as well as its region.
+
+## SpriteAnimator
+
+```cpp
+struct NamedClip {
+    std::string name;
+    AnimationClip clip;
+};
+
+struct SpriteAnimator {
+    std::vector<NamedClip> clips;
+    std::string current;       // the clip playing
+    std::string then;          // played when a one-shot ends; empty holds the last frame
+    bool once = false;         // the current clip plays one time, even a looping one
+    float speed = 1.f;
+    bool playing = true;
+    int32_t frame = 0;         // index into the current clip's frames
+    float frameTime = 0.f;     // seconds into the current frame
+    std::string ended;         // the last clip that played to its end
+
+    bool play(const std::string& name);
+    bool playOnce(const std::string& name, const std::string& then = {});
+    void pause();
+    void resume();
+    bool finished(std::string_view name) const;
+    float time() const;
+    void seek(float t);
+    const AnimationClip* find(std::string_view name) const;
+    void advance(float dt, std::vector<std::string>* endedOut = nullptr);
 };
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `clips` | `vector<AnimationClip>` | `{}` | All animation clips available on this entity. |
-| `currentClip` | `int32_t` | `0` | Index of the currently active clip. |
-| `currentFrame` | `int32_t` | `0` | Current frame index within the active clip. |
-| `elapsed` | `float` | `0` | Time accumulated since the last frame advance. |
-| `playing` | `bool` | `true` | Whether the animation is advancing. |
-
-#### Methods
-
 | Method | Description |
 |--------|-------------|
-| `play(int32_t clipIndex)` | Switch to a different clip. Resets frame and elapsed time, sets `playing = true`. |
-| `stop()` | Pauses the animation on the current frame. |
-| `isFinished()` | Returns `true` if the current clip is non-looping and has reached its last frame. |
+| `play(name)` | Switches to a clip from its first frame. The clip already playing keeps going, so calling it every frame is fine; a clip that ended starts again. |
+| `playOnce(name, then)` | Plays a clip one time, even a looping one, then switches to `then`. An empty `then` holds the last frame. |
+| `pause()`, `resume()` | Stop and continue time on the current frame. |
+| `finished(name)` | Whether that clip played to its end and no other clip has started since. |
+| `time()` | Seconds into the current clip. |
+| `seek(t)` | Moves to `t` seconds into the current clip: wrapped for a looping clip, clamped for one that plays once. |
+| `advance(dt, endedOut)` | Moves the clip on by `dt` seconds times `speed`. The plugin calls it; tests and custom loops can too. |
+
+A name the animator does not have is an error: `play` and `playOnce` log it with the names the animator has, return `false` and change nothing.
+
+`speed` scales time: `2.f` plays twice as fast and `0.f` freezes the clip.
+
+## AnimationFinished
+
+When a clip plays to its end (a clip made with `once()`, or one started with `playOnce`), the plugin sends an `AnimationFinished` event naming the entity and the clip. Read it with an `EventReader` instead of checking `finished` every frame:
+
+```cpp
+struct AnimationFinished {
+    EntityId entity;
+    std::string clip;
+};
+```
+
+```cpp
+void removeFallen(EventReader<AnimationFinished> done, Commands& cmd) {
+    for (const auto& e : done) {
+        if (e.clip == "die") cmd.entity(e.entity).despawn();
+    }
+}
+```
 
 ## Plugin
 
-The `SpriteAnimationPlugin` is included in `DefaultPlugins`. It registers a system in the `PostUpdate` phase that iterates all entities with both `SpriteAnimator` and `Sprite`, advancing the animation and writing the current frame's `Rect` into `Sprite::srcRect`.
+The `SpriteAnimationPlugin` is included in `DefaultPlugins`. It registers a system in the `PostUpdate` phase that advances every entity with both `SpriteAnimator` and `Sprite`, sends `AnimationFinished`, and writes the current frame's texture and `srcRect` into the `Sprite`. When the new frame has a different size from the old one, the sprite's `origin` scales with it, so the sprite keeps its anchor.
 
-If you are not using `DefaultPlugins`, add it manually:
+If you are not using `DefaultPlugins`, add it after `SpritePlugin`:
 
 ```cpp
 app.addPlugin<SpriteAnimationPlugin>();
 ```
 
-## Basic usage
+## Usage
 
-### Single animation clip
-
-For a spritesheet with a horizontal row of 32x32 frames:
+### Clips from two sheets
 
 ```cpp
-void setup(ResMut<AssetServer> assets, Commands& cmd) {
-    TextureHandle sheet = assets->load<Texture>("assets/character.png");
+void setup(ResMut<SpriteResource> sprites, ResMut<RendererResource> renderer, Commands& cmd) {
+    SpritesheetHandle hero = sprites->createSpritesheet(renderer->loadTexture("assets/hero.png"), 32, 32);
+    SpritesheetHandle slash = sprites->createSpritesheet(renderer->loadTexture("assets/slash.png"), 48, 32);
 
-    AnimationClip walkClip;
-    walkClip.frameDuration = 0.1f;
-    walkClip.looping = true;
-    for (int i = 0; i < 6; ++i) {
-        walkClip.frames.push_back(Rect{i * 32.f, 0.f, 32.f, 32.f});
-    }
+    SpriteAnimator anim;
+    anim.clips = {
+        {"idle", clip(hero, {0, 1, 2, 3}, 0.15f)},
+        {"run", clip(hero, {8, 9, 10, 11, 12, 13}, 0.08f)},
+        {"attack", clip(slash, {0, 1, 2}, {0.05f, 0.05f, 0.2f}).once()},
+    };
+    anim.current = "idle";
 
     cmd.spawn().insert(
         Transform2D{.position = {400.f, 300.f}},
-        Sprite{.texture = sheet, .origin = {16.f, 16.f}},
-        SpriteAnimator{.clips = {walkClip}}
+        Sprite{.texture = sprites->getTexture(hero), .origin = {16.f, 16.f}},
+        anim
     );
 }
 ```
 
-### Multiple clips with switching
-
-Store different animation states (idle, walk, jump) as separate clips and switch between them:
+### Switching by name
 
 ```cpp
-enum Anim { Idle = 0, Walk = 1, Jump = 2 };
-
-void setup(ResMut<AssetServer> assets, Commands& cmd) {
-    TextureHandle sheet = assets->load<Texture>("assets/character.png");
-
-    // Row 0: idle (4 frames), Row 1: walk (6 frames), Row 2: jump (3 frames)
-    AnimationClip idle;
-    idle.frameDuration = 0.2f;
-    for (int i = 0; i < 4; ++i)
-        idle.frames.push_back(Rect{i * 32.f, 0.f, 32.f, 32.f});
-
-    AnimationClip walk;
-    walk.frameDuration = 0.1f;
-    for (int i = 0; i < 6; ++i)
-        walk.frames.push_back(Rect{i * 32.f, 32.f, 32.f, 32.f});
-
-    AnimationClip jump;
-    jump.frameDuration = 0.15f;
-    jump.looping = false;
-    for (int i = 0; i < 3; ++i)
-        jump.frames.push_back(Rect{i * 32.f, 64.f, 32.f, 32.f});
-
-    cmd.spawn().insert(
-        Transform2D{.position = {400.f, 300.f}},
-        Sprite{.texture = sheet, .origin = {16.f, 32.f}},
-        SpriteAnimator{.clips = {idle, walk, jump}}
-    );
-}
-```
-
-Switch clips based on input:
-
-```cpp
-void updateAnimation(Res<InputResource> input,
-                     QueryMut<SpriteAnimator, Sprite> animated) {
-    animated.iter([&](SpriteAnimator& animator, Sprite& sprite) {
-        bool moving = input->keyHeld(Key::A) || input->keyHeld(Key::D);
-        bool jumping = input->keyPressed(Key::Space);
-
-        if (jumping) {
-            animator.play(Anim::Jump);
-        } else if (moving && animator.currentClip != Anim::Walk) {
-            animator.play(Anim::Walk);
-        } else if (!moving && !jumping && animator.currentClip != Anim::Idle) {
-            animator.play(Anim::Idle);
+void heroAnimation(Res<InputResource> input, QueryMut<SpriteAnimator, Sprite, With<Player>> heroes) {
+    heroes.iter([&](SpriteAnimator& anim, Sprite& sprite) {
+        bool left = input->keyHeld(Key::A), right = input->keyHeld(Key::D);
+        if (input->keyPressed(Key::Space)) {
+            anim.playOnce("attack", "idle");
+        } else if (!anim.once) {
+            anim.play(left || right ? "run" : "idle");
         }
-
-        // Flip sprite based on direction
-        if (input->keyHeld(Key::A))
-            sprite.flip = Flip::H;
-        else if (input->keyHeld(Key::D))
-            sprite.flip = Flip::None;
+        if (left) sprite.flip = Flip::H;
+        else if (right) sprite.flip = Flip::None;
     });
 }
 ```
 
-### One-shot animation
-
-For animations that play once and stop (death, attack, explosion):
-
-```cpp
-AnimationClip deathClip;
-deathClip.frameDuration = 0.08f;
-deathClip.looping = false;
-for (int i = 0; i < 8; ++i)
-    deathClip.frames.push_back(Rect{i * 64.f, 0.f, 64.f, 64.f});
-```
-
-Check when it finishes:
-
-```cpp
-void checkAnimationDone(QueryMut<SpriteAnimator> animators, Commands& cmd) {
-    animators.iterWithEntity([&](EntityId id, SpriteAnimator& animator) {
-        if (animator.isFinished()) {
-            cmd.entity(id).despawn();
-        }
-    });
-}
-```
-
-### Pausing and resuming
-
-```cpp
-void toggleAnimation(Res<InputResource> input,
-                     QueryMut<SpriteAnimator> animators) {
-    if (input->keyPressed(Key::P)) {
-        animators.iter([](SpriteAnimator& a) {
-            if (a.playing)
-                a.stop();
-            else
-                a.playing = true;
-        });
-    }
-}
-```
-
-## How it works
-
-Each frame, the `SpriteAnimationPlugin` system does the following for every entity with both `SpriteAnimator` and `Sprite`:
-
-1. If `playing` is `false`, skip.
-2. Add the frame's delta time to `elapsed`.
-3. While `elapsed >= frameDuration`, advance `currentFrame` by 1 and subtract `frameDuration`.
-4. If `currentFrame` exceeds the last frame:
-   - If `looping` is `true`, wrap back to frame 0.
-   - If `looping` is `false`, clamp to the last frame and set `playing = false`.
-5. Write `clips[currentClip].frames[currentFrame]` into `sprite.srcRect`.
-
-Because the system writes to `Sprite::srcRect`, you should not manually set `srcRect` on entities that also have a `SpriteAnimator`; the animation system will overwrite it.
+`anim.once` is true while a one-shot plays, so the check above lets the attack finish before running or idling takes over.
 
 ## Notes
 
-- `SpriteAnimator` requires a `Sprite` on the same entity. The animation system updates `Sprite::srcRect` directly.
-- The plugin runs in `PostUpdate`, so animation state changes made during `Update` take effect in the same frame.
-- Frame durations are in seconds. A `frameDuration` of `0.1` gives 10 FPS animation regardless of the game's actual frame rate.
-- Calling `play()` with the same clip index that is already playing will restart the animation from frame 0.
+- The plugin writes `Sprite::texture` and `Sprite::srcRect` on animated entities; set `Sprite::srcRect` yourself only on sprites without a `SpriteAnimator`.
+- The plugin runs in `PostUpdate`, so a clip switched during `Update` shows in the same frame.
+- A clip's sheet is made at run time, so scenes do not save it; give a loaded animator its clips again.
+
+## Updating code written with numbered clips
+
+Clips used to be lists of source rectangles with one `frameDuration`, held in a list and picked by index with `currentClip`. They are now sheet frames with per-frame `seconds`, held by name.
+
+Before:
+
+```cpp
+AnimationClip walk;
+walk.frameDuration = 0.1f;
+for (int i = 0; i < 6; ++i) walk.frames.push_back(Rect{i * 32.f, 0.f, 32.f, 32.f});
+SpriteAnimator anim{.clips = {walk}};
+anim.play(0);
+if (anim.isFinished()) { /* ... */ }
+```
+
+After:
+
+```cpp
+SpriteAnimator anim{.clips = {{"walk", clip(sheet, {0, 1, 2, 3, 4, 5}, 0.1f)}}, .current = "walk"};
+anim.play("walk");
+if (anim.finished("walk")) { /* ... */ }
+```
+
+The `AnimationHandle` animations of `SpriteResource` (`createAnimation`, `createAnimationFromTag`, `updateAnimation` and the rest) are replaced by `SpriteAnimator` and `clipFromTag`.

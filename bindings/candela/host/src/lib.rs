@@ -1978,9 +1978,11 @@ fn presentation_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("material_create", vec![I], I),
         ("material_param", vec![I, I, F, F, F, F], U),
         ("material_texture", vec![I, I, I], U),
-        // Aseprite sheets.
+        // Sprite sheets: grids and Aseprite files.
+        ("sheet_grid", vec![I, F, F], af()),
         ("sheet_aseprite", vec![S], af()),
         ("sheet_tag", vec![I, S], af()),
+        ("sheet_tags", vec![I], S),
     ]
 }
 

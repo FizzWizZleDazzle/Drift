@@ -209,4 +209,4 @@ int main() {
 
 - A `Sprite` without a valid `TextureHandle` will not be drawn. Always load the texture first.
 - The rendering system requires both `Transform2D` and `Sprite` on an entity for it to appear. Children in a hierarchy are drawn at their composed world transform (`GlobalTransform2D`).
-- For animated sprites, pair `Sprite` with a `SpriteAnimator` component. The animation system automatically updates `srcRect` each frame. See [Sprite Animation](sprite-animation.md).
+- For animated sprites, pair `Sprite` with a `SpriteAnimator` component. The animation system sets `texture` and `srcRect` each frame from the clip playing. See [Sprite Animation](sprite-animation.md).

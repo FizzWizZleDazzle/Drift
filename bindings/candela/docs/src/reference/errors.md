@@ -26,11 +26,12 @@ Engine calls raise errors you can catch with `try` and `catch e`. The text of th
 
 | Kind | Raised by |
 |------|-----------|
-| `drift_load_failed` | A map, a music track, a data file or an image file that does not exist or does not load (a data file also when it is not valid JSON, TOML or CSV), and an image read back from a texture that is not a render target |
+| `drift_load_failed` | A map, a music track, a data file or an image file that does not exist or does not load (a data file also when it is not valid JSON, TOML or CSV), an image read back from a texture that is not a render target, and a sprite sheet cut from a texture with no pixels or with a frame size of 0 |
 | `drift_save_failed` | Save data or an image that cannot be written, such as when the browser refuses storage |
 | `drift_no_such_layer` | `Map.layer` with a name the map does not have |
 | `drift_bad_data` | `parse_json` of text that is not JSON |
 | `drift_bad_color` | `hex` of text that is not a color |
+| `drift_bad_clip` | `clip` with no frames, a frame outside the sheet, a duration list whose length is neither 1 nor the number of frames, or a sheet not made by `assets.spritesheet` or `assets.aseprite` |
 | `host_fn_error` | An image or sound file that `texture` or `sound` cannot load |
 
 ```rust
@@ -56,6 +57,7 @@ A name written as text, such as a system name or an input action, cannot be chec
 |------|-----------|
 | `drift_unknown_system` | `Systems.enable`, `disable` or `enabled` with a name that is not one of the game's systems; the message lists them |
 | `drift_unknown_action` | Reading an input action the game never declared in `[input]` or with an `Input.bind` method; the message lists the actions |
+| `drift_unknown_clip` | `Animator.play` or `play_once` with a name the animator has no clip for, and `Spritesheet.clip` with a tag the Aseprite file does not have; the message lists the names there are. An unknown name written into `Animator.play` logs the same error |
 | `drift_not_a_resource` | `resource_field<T>`, `bind_text<T>`, `bind_counter<T>` or `Debug.watch<T>` with a type that is not a `@resource` or `@settings` struct; the message says what the type is |
 | `drift_no_such_field` | The same with a field the resource does not have; the message lists its fields |
 

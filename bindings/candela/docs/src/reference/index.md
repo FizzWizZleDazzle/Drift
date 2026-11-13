@@ -18,7 +18,14 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`AngleSpring`](animation.md#anglespring) type
 - [`AngleSpring.update`](animation.md#anglespringupdate) method
 - [`AnimationClip`](components.md#animationclip) type
+- [`AnimationClip.frame_seconds`](components.md#animationclipframe_seconds) method
+- [`AnimationClip.length`](components.md#animationcliplength) method
+- [`AnimationClip.once`](components.md#animationcliponce) method
+- [`AnimationFinished`](components.md#animationfinished) type
 - [`Animator`](components.md#animator) type
+- [`Animator.finished`](components.md#animatorfinished) method
+- [`Animator.play`](components.md#animatorplay) method
+- [`Animator.play_once`](components.md#animatorplay_once) method
 - [`approach`](control.md#approach) function
 - [`Assets`](resources.md#assets) type
 - [`Assets.aseprite`](resources.md#assetsaseprite) method
@@ -111,6 +118,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`CircleCollider`](components.md#circlecollider) type
 - [`circles_overlap`](values.md#circles_overlap) function
 - [`clamp`](values.md#clamp) function
+- [`clip`](components.md#clip) function
 - [`ClockBind`](ui.md#clockbind) type
 - [`Color`](values.md#color) type
 - [`Color.alpha`](values.md#coloralpha) method
@@ -664,7 +672,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Rect.expand`](values.md#rectexpand) method
 - [`Rect.overlaps`](values.md#rectoverlaps) method
 - [`Rectangle`](components.md#rectangle) type
-- [`rects_from`](components.md#rects_from) function
 - [`remap`](values.md#remap) function
 - [`repeating_timer`](values.md#repeating_timer) function
 - [`Request`](data.md#request) type
@@ -819,8 +826,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Spritesheet.count`](assets.md#spritesheetcount) method
 - [`Spritesheet.frame`](assets.md#spritesheetframe) method
 - [`Spritesheet.frame_at`](assets.md#spritesheetframe_at) method
-- [`Spritesheet.frames`](assets.md#spritesheetframes) method
-- [`Spritesheet.tag`](assets.md#spritesheettag) method
 - [`squash`](animation.md#squash) function
 - [`@state`](attributes.md#state) attribute
 - [`State`](system-parameters.md#state) type

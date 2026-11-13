@@ -63,7 +63,7 @@ let sheet = assets.spritesheet(texture("assets/hero.png"), 16.0, 16.0);
 cmd.spawn([at(100.0, 100.0), Sprite { image: sheet.texture, frame: sheet.frame(0, 0), .. }]);
 ```
 
-Frames count from 0 at the top-left, left to right, then down. `frame(col, row)`, `frame_at(i)` and `frames(first, count)` hand out the rects, and `count()` is how many there are. `assets.aseprite(path)` loads an Aseprite file with its tags. To play frames over time, give the entity an `Animator`; see [Movement](movement.md#animation-frames).
+Frames count from 0 at the top-left, left to right, then down. `frame(col, row)` and `frame_at(i)` hand out one frame's rect, and `count()` is how many there are. `assets.aseprite(path)` loads an Aseprite file with its frame durations and tags. To play frames over time, give the entity an `Animator` with clips of the sheet's frames; see [Movement](movement.md#animation-frames).
 
 ## Images
 

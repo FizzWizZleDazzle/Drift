@@ -17,10 +17,8 @@ namespace drift {
 
 struct AseTag {
     std::string name;
-    int32_t fromFrame;
-    int32_t toFrame;
+    std::vector<int32_t> frames;    // in play order: reversed and ping-pong tags unrolled
     bool looping;
-    std::vector<float> durations;
 };
 
 struct SpriteSheetData {
@@ -32,24 +30,13 @@ struct SpriteSheetData {
     int32_t totalFrames;
     Vec2 pivot;
     std::vector<Rect> frameRects;
+    std::vector<float> durations;   // per frame, from an Aseprite file
     std::vector<AseTag> tags;
-};
-
-struct AnimationData {
-    SpritesheetHandle sheet;
-    std::vector<int32_t> frames;
-    std::vector<float> durations;
-    int32_t frameCount;
-    bool looping;
-    int32_t currentFrame;
-    float elapsed;
-    bool finished;
 };
 
 struct SpriteResource::Impl {
     RendererResource& renderer;
     HandlePool<SpritesheetTag, SpriteSheetData> sheets;
-    HandlePool<AnimationTag, AnimationData> anims;
 
     Impl(RendererResource& r) : renderer(r) {}
 };
@@ -138,18 +125,28 @@ SpritesheetHandle SpriteResource::loadAseprite(const char* path) {
             static_cast<float>(i * w), 0.f,
             static_cast<float>(w), static_cast<float>(h)
         });
+        data.durations.push_back(ase->frames[i].duration_milliseconds / 1000.f);
     }
 
-    // Load tags
+    // Tags, with their frames in the order the tag plays them. A tag set to
+    // repeat once plays once; any other repeat count loops.
     for (int i = 0; i < ase->tag_count; ++i) {
         ase_tag_t* tag = ase->tags + i;
         AseTag at;
         at.name = tag->name;
-        at.fromFrame = tag->from_frame;
-        at.toFrame = tag->to_frame;
-        at.looping = true;
-        for (int f = tag->from_frame; f <= tag->to_frame && f < frameCount; ++f) {
-            at.durations.push_back(ase->frames[f].duration_milliseconds / 1000.f);
+        at.looping = tag->repeat != 1;
+        int from = std::max(0, tag->from_frame);
+        int to = std::min(frameCount - 1, tag->to_frame);
+        std::vector<int32_t> forward;
+        for (int f = from; f <= to; ++f) forward.push_back(f);
+        std::vector<int32_t> backward(forward.rbegin(), forward.rend());
+        // 0 forward, 1 reverse, 2 ping-pong, 3 ping-pong starting at the end.
+        int direction = static_cast<int>(tag->loop_animation_direction);
+        const auto& first = direction == 1 || direction == 3 ? backward : forward;
+        const auto& second = direction == 3 ? forward : backward;
+        at.frames = first;
+        if ((direction == 2 || direction == 3) && first.size() > 2) {
+            at.frames.insert(at.frames.end(), second.begin() + 1, second.end() - 1);
         }
         data.tags.push_back(std::move(at));
     }
@@ -170,22 +167,38 @@ Rect SpriteResource::getFrame(SpritesheetHandle sheet, int32_t col, int32_t row)
     return s->frameRects[idx];
 }
 
+Rect SpriteResource::frameAt(SpritesheetHandle sheet, int32_t index) const {
+    auto* s = impl_->sheets.get(sheet);
+    if (!s || index < 0 || index >= static_cast<int32_t>(s->frameRects.size())) return {};
+    return s->frameRects[index];
+}
+
 AnimationClip SpriteResource::clipFromTag(SpritesheetHandle sheet, const char* tagName) const {
     AnimationClip clip;
+    clip.sheet = sheet;
     auto* s = impl_->sheets.get(sheet);
     if (!s || !tagName) return clip;
     for (const auto& tag : s->tags) {
         if (tag.name != tagName) continue;
-        float total = 0.f;
-        for (int32_t f = tag.fromFrame; f <= tag.toFrame && f < static_cast<int32_t>(s->frameRects.size()); ++f) {
-            clip.frames.push_back(s->frameRects[f]);
+        clip.frames = tag.frames;
+        for (int32_t f : tag.frames) {
+            clip.seconds.push_back(f < static_cast<int32_t>(s->durations.size()) ? s->durations[f] : 0.1f);
         }
-        for (float d : tag.durations) total += d;
-        if (!tag.durations.empty() && total > 0.f) clip.frameDuration = total / static_cast<float>(tag.durations.size());
         clip.looping = tag.looping;
-        break;
+        return clip;
     }
+    std::string known;
+    for (const auto& tag : s->tags) known += (known.empty() ? "" : ", ") + tag.name;
+    DRIFT_LOG_ERROR("clipFromTag: no tag \"%s\" (tags: %s)", tagName, known.empty() ? "none" : known.c_str());
     return clip;
+}
+
+std::vector<std::string> SpriteResource::tagNames(SpritesheetHandle sheet) const {
+    std::vector<std::string> names;
+    if (auto* s = impl_->sheets.get(sheet)) {
+        for (const auto& tag : s->tags) names.push_back(tag.name);
+    }
+    return names;
 }
 
 int32_t SpriteResource::frameCount(SpritesheetHandle sheet) const {
@@ -206,107 +219,6 @@ Vec2 SpriteResource::getPivot(SpritesheetHandle sheet) const {
 TextureHandle SpriteResource::getTexture(SpritesheetHandle sheet) const {
     auto* s = impl_->sheets.get(sheet);
     return s ? s->texture : TextureHandle{};
-}
-
-AnimationHandle SpriteResource::createAnimation(SpritesheetHandle sheet, const AnimationDef& def) {
-    if (!impl_->sheets.valid(sheet) || !def.frames || def.frameCount <= 0)
-        return AnimationHandle{};
-
-    AnimationData data;
-    data.sheet = sheet;
-    data.frames.assign(def.frames, def.frames + def.frameCount);
-    if (def.durations) {
-        data.durations.assign(def.durations, def.durations + def.frameCount);
-    } else {
-        data.durations.assign(def.frameCount, 0.1f);
-    }
-    data.frameCount = def.frameCount;
-    data.looping = def.looping;
-    data.currentFrame = 0;
-    data.elapsed = 0.f;
-    data.finished = false;
-
-    return impl_->anims.create(std::move(data));
-}
-
-AnimationHandle SpriteResource::createAnimationFromTag(SpritesheetHandle sheet, const char* tagName) {
-    if (!tagName) return AnimationHandle{};
-    auto* s = impl_->sheets.get(sheet);
-    if (!s) return AnimationHandle{};
-
-    for (auto& tag : s->tags) {
-        if (tag.name == tagName) {
-            AnimationData data;
-            data.sheet = sheet;
-            for (int32_t f = tag.fromFrame; f <= tag.toFrame; ++f) {
-                data.frames.push_back(f);
-            }
-            data.durations = tag.durations;
-            if (data.durations.size() < data.frames.size()) {
-                data.durations.resize(data.frames.size(), 0.1f);
-            }
-            data.frameCount = static_cast<int32_t>(data.frames.size());
-            data.looping = tag.looping;
-            data.currentFrame = 0;
-            data.elapsed = 0.f;
-            data.finished = false;
-            return impl_->anims.create(std::move(data));
-        }
-    }
-    return AnimationHandle{};
-}
-
-void SpriteResource::destroyAnimation(AnimationHandle anim) {
-    impl_->anims.destroy(anim);
-}
-
-void SpriteResource::resetAnimation(AnimationHandle anim) {
-    auto* a = impl_->anims.get(anim);
-    if (!a) return;
-    a->currentFrame = 0;
-    a->elapsed = 0.f;
-    a->finished = false;
-}
-
-Rect SpriteResource::updateAnimation(AnimationHandle anim, float dt) {
-    auto* a = impl_->anims.get(anim);
-    if (!a || a->finished || a->frameCount <= 0) return getAnimationFrame(anim);
-
-    a->elapsed += dt;
-    while (a->elapsed >= a->durations[a->currentFrame]) {
-        a->elapsed -= a->durations[a->currentFrame];
-        a->currentFrame++;
-        if (a->currentFrame >= a->frameCount) {
-            if (a->looping) {
-                a->currentFrame = 0;
-            } else {
-                a->currentFrame = a->frameCount - 1;
-                a->finished = true;
-                break;
-            }
-        }
-    }
-    return getAnimationFrame(anim);
-}
-
-Rect SpriteResource::getAnimationFrame(AnimationHandle anim) const {
-    auto* a = impl_->anims.get(anim);
-    if (!a || a->frameCount <= 0) return {};
-    auto* s = impl_->sheets.get(a->sheet);
-    if (!s) return {};
-    int idx = a->frames[a->currentFrame];
-    if (idx < 0 || idx >= static_cast<int>(s->frameRects.size())) return {};
-    return s->frameRects[idx];
-}
-
-bool SpriteResource::isAnimationFinished(AnimationHandle anim) const {
-    auto* a = impl_->anims.get(anim);
-    return a ? a->finished : true;
-}
-
-SpritesheetHandle SpriteResource::getAnimationSheet(AnimationHandle anim) const {
-    auto* a = impl_->anims.get(anim);
-    return a ? a->sheet : SpritesheetHandle{};
 }
 
 } // namespace drift

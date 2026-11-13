@@ -101,7 +101,7 @@ Components are plain structs attached to entities. They carry data but no behavi
 | `Hierarchy.hpp` | `Parent`, `Children` | Parent-child entity relationships. `Parent{EntityId}` on child, `Children{ids[], count}` on parent. |
 | `GlobalTransform.hpp` | `GlobalTransform2D` | Computed world-space transform, automatically propagated from hierarchy. |
 | `ParticleEmitter.hpp` | `ParticleEmitter` | ECS-based particle emitter component with `EmitterConfig`. |
-| `SpriteAnimator.hpp` | `SpriteAnimator` | Sprite sheet animation with `AnimationClip` definitions. |
+| `SpriteAnimator.hpp` | `SpriteAnimator` | Named sprite sheet clips (`AnimationClip`) with per-frame durations. |
 | `CameraController.hpp` | `CameraShake`, `CameraFollow` | Camera shake (trigger with magnitude, auto-decay) and smooth follow (target entity, smoothing, dead zone). |
 | `TrailRenderer.hpp` | `TrailRenderer` | Trail rendering with width, lifetime, color lerp, and minimum distance. |
 | `AudioSource.hpp` | `AudioSource`, `AudioListener` | A sound played from an entity, optionally positional, and the entity it is heard from. |
@@ -131,7 +131,7 @@ Each plugin registers resources and systems in its `build()` method. Most are he
 | `TilemapPlugin.hpp` | `TilemapPlugin` | `TilemapResource`, the `Tilemap` component, map drawing, colliders and object spawning. |
 | `UIPlugin.hpp` | `UIPlugin` | `UIResource` for ImGui-based UI. |
 | `HierarchyPlugin.hpp` | `HierarchyPlugin` | Registers `GlobalTransform2D`, propagates transforms through Parent/Children hierarchy in PostUpdate. Despawn cascades to children. |
-| `SpriteAnimationPlugin.hpp` | `SpriteAnimationPlugin` | Updates `Sprite::srcRect` from `SpriteAnimator` each frame. |
+| `SpriteAnimationPlugin.hpp` | `SpriteAnimationPlugin` | Sets each animated `Sprite`'s texture and `srcRect` from its `SpriteAnimator` and sends `AnimationFinished`. |
 | `CameraPlugin.hpp` | `CameraPlugin` | `CameraFollow` and `CameraShake` systems in PostUpdate. |
 | `TrailPlugin.hpp` | `TrailPlugin` | Trail update and rendering systems. |
 | `PostEffectsPlugin.hpp` | `PostEffectsPlugin` | `PostEffects` resource: the post effect library. |

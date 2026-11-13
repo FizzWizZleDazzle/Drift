@@ -259,6 +259,186 @@ fn measure(self) -> Vec2
 
 The size this text covers as drawn, outline and shadow left out.
 
+## Animator
+
+Plays named clips on the entity's `Sprite`, setting its image and frame as time passes. `play` names the clip to start with. See [Movement](../guides/movement.md#animation-frames).
+
+```rust
+struct Animator {
+    clips: {string: AnimationClip} = {},
+    play: string = "",
+    then: string = "",
+    once: bool = false,
+    speed: float = 1.0,
+    playing: bool = true,
+    frame: int = 0,
+    time: float = 0.0,
+    ended: string = "",
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `clips` | `{string: AnimationClip}` | `{}` | The clips, by name |
+| `play` | `string` | `""` | The clip playing; writing an unknown name logs `drift_unknown_clip` |
+| `then` | `string` | `""` | The clip to switch to when this one ends; empty holds the last frame |
+| `once` | `bool` | `false` | Whether the clip playing ends after one pass, even a looping one |
+| `speed` | `float` | `1.0` | Time multiplier: 2.0 plays twice as fast, 0.0 freezes |
+| `playing` | `bool` | `true` | False pauses on the current frame |
+| `frame` | `int` | `0` | Index into the playing clip's frames; setting it jumps there |
+| `time` | `float` | `0.0` | Seconds into the playing clip; setting it jumps there |
+| `ended` | `string` | `""` | The last clip that played to its end, until another starts |
+
+```rust
+let hero = assets.spritesheet(texture("assets/hero.png"), 32.0, 32.0);
+cmd.spawn([at(100.0, 100.0), Sprite { image: hero.texture, .. }, Animator {
+    clips: {
+        "idle":   clip(hero, [0, 1, 2, 3], 0.15),
+        "run":    clip(hero, range(8, 14), 0.08),
+        "attack": clip(slash, [0, 1, 2], [0.05, 0.05, 0.2]).once()
+    },
+    play: "idle",
+    ..
+}]);
+```
+
+### Animator.play
+
+```rust
+fn play(self, name: string)
+```
+
+Switches to a clip by name, from its first frame. The clip already playing keeps going, so calling this every frame is fine; a clip that ended starts again. An unknown name raises `drift_unknown_clip`.
+
+```rust
+if v.linear.x != 0.0 {
+    anim.play("run");
+} else {
+    anim.play("idle");
+}
+```
+
+### Animator.play_once
+
+```rust
+fn play_once(self, name: string, then: string)
+```
+
+Plays a clip one time, even a looping one, then switches to `then`. An empty `then` holds the last frame.
+
+```rust
+anim.play_once("attack", "idle");
+```
+
+### Animator.finished
+
+```rust
+fn finished(self, name: string) -> bool
+```
+
+Whether the clip played to its end and no other clip has started since. To act once when it happens, take the `AnimationFinished` message instead.
+
+```rust
+if anim.finished("die") {
+    cmd.despawn(e);
+}
+```
+
+## AnimationClip
+
+Frames of a sprite sheet played over time. Make one with [`clip`](#clip) or an Aseprite tag's [`Spritesheet.clip`](assets.md#spritesheetclip).
+
+```rust
+struct AnimationClip {
+    sheet: Spritesheet = Spritesheet { .. },
+    frames: int[] = [],
+    seconds: float[] = [],
+    looping: bool = true,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `sheet` | `Spritesheet` | `Spritesheet { .. }` | The sheet the frames come from; its texture shows while the clip plays |
+| `frames` | `int[]` | `[]` | Frame indices into the sheet |
+| `seconds` | `float[]` | `[]` | How long each frame shows: one value for every frame, or one per frame |
+| `looping` | `bool` | `true` | Whether the clip starts again after its last frame |
+
+### AnimationClip.once
+
+```rust
+fn once(self) -> AnimationClip
+```
+
+The same clip, played one time instead of looping. When it ends, the animator holds its last frame, or switches to `then`.
+
+```rust
+let die = clip(hero, range(16, 22), 0.1).once();
+```
+
+### AnimationClip.frame_seconds
+
+```rust
+fn frame_seconds(self, i: int) -> float
+```
+
+How long frame `i` of the clip shows.
+
+```rust
+let last = swing.frame_seconds(swing.frames.len() - 1);
+```
+
+### AnimationClip.length
+
+```rust
+fn length(self) -> float
+```
+
+The whole clip, in seconds.
+
+```rust
+let seconds = swing.length();
+```
+
+## clip
+
+```rust
+fn clip(sheet: Spritesheet, frames: int[], seconds: float | float[]) -> AnimationClip
+```
+
+A clip of `frames` from `sheet`, each shown for `seconds`: one number for every frame, or a list with one per frame. Raises `drift_bad_clip` for a frame outside the sheet or a list whose length does not match the frames.
+
+```rust
+let idle = clip(hero, [0, 1, 2, 3], 0.15);
+let swing = clip(slash, [0, 1, 2], [0.05, 0.05, 0.2]).once();
+```
+
+## AnimationFinished
+
+Sent when a clip plays to its end: a clip made with `once()`, or one started with `play_once`. A clip that switches to `then` sends it as it switches.
+
+```rust
+@message
+struct AnimationFinished {
+    entity: Entity,
+    clip: string,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `entity` | `Entity` | required | The entity whose animator played the clip |
+| `clip` | `string` | required | The clip's name |
+
+```rust
+@system
+fn remove_fallen(done: AnimationFinished, cmd: Commands) {
+    if done.clip == "die" {
+        cmd.despawn(done.entity);
+    }
+}
+```
+
 ## Camera
 
 Without a camera, world position (0, 0) is the top-left of the screen and one world unit is one logical pixel. A camera centers its view on its entity's position. See [Cameras](../guides/cameras.md).
@@ -1037,34 +1217,4 @@ struct Orbit {
     speed: float = 1.0,
     angle: float = 0.0,
 }
-```
-
-## AnimationClip
-
-```rust
-struct AnimationClip {
-    frames: Rect[] = [],
-    frame_seconds: float = 0.1,
-    looping: bool = true,
-}
-```
-
-## Animator
-
-Plays clips on the entity's Sprite by setting its `frame`. Set `clip` to switch; the new clip starts at its first frame. A clip that does not loop stops on its last frame and sets `finished`; set `playing` again to replay it.
-
-```rust
-struct Animator {
-    clips: AnimationClip[] = [],
-    clip: int = 0,
-    playing: bool = true,
-    frame: int = 0,
-    finished: bool = false,
-}
-```
-
-## rects_from
-
-```rust
-fn rects_from(v: float[], from: int) -> Rect[]
 ```

@@ -284,7 +284,9 @@ if(DRIFT_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "image checks passed"
         FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
         TIMEOUT 60)
-    add_test(NAME candela_presentation COMMAND drift_run run ${CMAKE_CURRENT_SOURCE_DIR}/tests/presentation.cdl)
+    # Its Aseprite file is under tests/assets, read relative to the working directory.
+    add_test(NAME candela_presentation COMMAND drift_run run ${CMAKE_CURRENT_SOURCE_DIR}/tests/presentation.cdl
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests)
     set_tests_properties(candela_presentation PROPERTIES
         ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
         PASS_REGULAR_EXPRESSION "presentation checks passed"
