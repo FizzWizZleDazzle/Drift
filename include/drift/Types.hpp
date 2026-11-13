@@ -228,11 +228,16 @@ struct RaycastHit {
     Vec2 normal;
     float fraction = 0.f;
     bool hit = false;
+    uint64_t shape = 0;   // the shape hit, packed like ContactEvent::shapeA
 };
 
 struct ContactEvent {
     uint64_t shapeA = 0;
     uint64_t shapeB = 0;
+    // Contact begin events: the first contact point in world space and the
+    // normal pointing from shape A to shape B. Zero for other events.
+    Vec2 point;
+    Vec2 normal;
 };
 
 struct HitEvent {

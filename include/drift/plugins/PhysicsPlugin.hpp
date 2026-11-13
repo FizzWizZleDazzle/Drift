@@ -74,6 +74,27 @@ public:
             .field("friction", &CircleCollider2D::friction)
             .field("restitution", &CircleCollider2D::restitution)
             .field("filter", &CircleCollider2D::filter);
+        reflect::enumType<JointType>("JointType", {
+            {"Distance", JointType::Distance}, {"Revolute", JointType::Revolute},
+            {"Prismatic", JointType::Prismatic}, {"Weld", JointType::Weld}});
+        reflect::component<Joint2D>(world, "Joint2D")
+            .field("type", &Joint2D::type)
+            .entity("target", &Joint2D::target)
+            .field("anchor", &Joint2D::anchor)
+            .field("targetAnchor", &Joint2D::targetAnchor)
+            .field("length", &Joint2D::length)
+            .field("minLength", &Joint2D::minLength)
+            .field("maxLength", &Joint2D::maxLength)
+            .field("stiffness", &Joint2D::stiffness)
+            .field("damping", &Joint2D::damping)
+            .field("limit", &Joint2D::limit)
+            .field("lower", &Joint2D::lower)
+            .field("upper", &Joint2D::upper)
+            .field("motor", &Joint2D::motor)
+            .field("motorSpeed", &Joint2D::motorSpeed)
+            .field("maxMotorForce", &Joint2D::maxMotorForce)
+            .field("axis", &Joint2D::axis)
+            .field("collideConnected", &Joint2D::collideConnected);
         reflect::component<Velocity2D>(world, "Velocity2D")
             .field("linear", &Velocity2D::linear)
             .field("angular", &Velocity2D::angular);
@@ -143,7 +164,7 @@ public:
                 EntityId ea = lookupEntity(ce.shapeA);
                 EntityId eb = lookupEntity(ce.shapeB);
                 if (ea != InvalidEntityId && eb != InvalidEntityId)
-                    cb->addCollisionStart(ea, eb);
+                    cb->addCollisionStart(ea, eb, ce.point, ce.normal);
             }
             for (auto& ce : physics->contactEndEvents()) {
                 EntityId ea = lookupEntity(ce.shapeA);

@@ -77,7 +77,7 @@ using nlohmann::json;
 extern "C" {
 int32_t drift_host_load(const char* entry, const char* module_dir);
 const char* drift_host_error();
-void drift_host_contact(int32_t kind, uint64_t a, uint64_t b);
+void drift_host_contact(int32_t kind, uint64_t a, uint64_t b, float px, float py, float nx, float ny);
 void drift_host_frame(double dt, double elapsed, int64_t frame);
 void drift_host_unload();
 }
@@ -423,6 +423,17 @@ void startTween(EntityId e, const json& j) {
     g_tweens[e] = {b.start(), j};
 }
 
+// A collider's category and mask bits; out of range values keep the defaults.
+CollisionFilter filterOf(const json& j) {
+    CollisionFilter f;
+    int64_t cat = j.value("category", int64_t(1)), mask = j.value("mask", int64_t(0xFFFF));
+    f.category = cat >= 0 && cat <= 0xFFFFFFFFll ? uint32_t(cat) : 1u;
+    f.mask = mask >= 0 && mask <= 0xFFFFFFFFll ? uint32_t(mask) : 0xFFFFu;
+    return f;
+}
+
+const char* jointKinds[] = {"Distance", "Revolute", "Prismatic", "Weld"};
+
 const char* textAligns[] = {"Left", "Center", "Right"};
 const char* textVAligns[] = {"Top", "Middle", "Bottom"};
 
@@ -562,7 +573,8 @@ const std::vector<Codec>& codecs() {
          [](EntityId e) {
              const BoxCollider2D& c = *get<BoxCollider2D>(e);
              return json{{"half_size", vec(c.halfSize)}, {"offset", vec(c.offset)}, {"sensor", c.isSensor},
-                         {"density", c.density}, {"friction", c.friction}, {"restitution", c.restitution}};
+                         {"density", c.density}, {"friction", c.friction}, {"restitution", c.restitution},
+                         {"category", c.filter.category}, {"mask", c.filter.mask}};
          },
          [](EntityId e, const json& j) {
              BoxCollider2D c;
@@ -572,6 +584,7 @@ const std::vector<Codec>& codecs() {
              c.density = j.value("density", 1.f);
              c.friction = j.value("friction", 0.3f);
              c.restitution = j.value("restitution", 0.f);
+             c.filter = filterOf(j);
              put(e, c);
          },
          [](EntityId e) { world().removeComponent(e, cid<BoxCollider2D>()); },
@@ -581,7 +594,8 @@ const std::vector<Codec>& codecs() {
          [](EntityId e) {
              const CircleCollider2D& c = *get<CircleCollider2D>(e);
              return json{{"radius", c.radius}, {"offset", vec(c.offset)}, {"sensor", c.isSensor},
-                         {"density", c.density}, {"friction", c.friction}, {"restitution", c.restitution}};
+                         {"density", c.density}, {"friction", c.friction}, {"restitution", c.restitution},
+                         {"category", c.filter.category}, {"mask", c.filter.mask}};
          },
          [](EntityId e, const json& j) {
              CircleCollider2D c;
@@ -591,10 +605,47 @@ const std::vector<Codec>& codecs() {
              c.density = j.value("density", 1.f);
              c.friction = j.value("friction", 0.3f);
              c.restitution = j.value("restitution", 0.f);
+             c.filter = filterOf(j);
              put(e, c);
          },
          [](EntityId e) { world().removeComponent(e, cid<CircleCollider2D>()); },
          [] { return cid<CircleCollider2D>(); }},
+        {"Joint",
+         [](EntityId e) { return get<Joint2D>(e) != nullptr; },
+         [](EntityId e) {
+             const Joint2D& j = *get<Joint2D>(e);
+             return json{{"kind", jointKinds[int(j.type)]}, {"target", {{"id", j.target}}},
+                         {"anchor", vec(j.anchor)}, {"target_anchor", vec(j.targetAnchor)},
+                         {"length", j.length}, {"min_length", j.minLength}, {"max_length", j.maxLength},
+                         {"stiffness", j.stiffness}, {"damping", j.damping}, {"limit", j.limit},
+                         {"lower", j.lower}, {"upper", j.upper}, {"motor", j.motor},
+                         {"motor_speed", j.motorSpeed}, {"max_motor_force", j.maxMotorForce},
+                         {"axis", vec(j.axis)}, {"collide_connected", j.collideConnected}};
+         },
+         [](EntityId e, const json& j) {
+             Joint2D d;
+             d.type = pick<JointType>(j.value("kind", json()), {"Distance", "Revolute", "Prismatic", "Weld"});
+             d.target = j.value("target", json::object()).value("id", EntityId(0));
+             if (d.target == 0) d.target = InvalidEntityId;
+             d.anchor = vec(j.value("anchor", json()));
+             d.targetAnchor = vec(j.value("target_anchor", json()));
+             d.length = j.value("length", 0.f);
+             d.minLength = j.value("min_length", 0.f);
+             d.maxLength = j.value("max_length", 0.f);
+             d.stiffness = j.value("stiffness", 0.f);
+             d.damping = j.value("damping", 0.f);
+             d.limit = j.value("limit", false);
+             d.lower = j.value("lower", 0.f);
+             d.upper = j.value("upper", 0.f);
+             d.motor = j.value("motor", false);
+             d.motorSpeed = j.value("motor_speed", 0.f);
+             d.maxMotorForce = j.value("max_motor_force", 0.f);
+             d.axis = vec(j.value("axis", json()), {1, 0});
+             d.collideConnected = j.value("collide_connected", false);
+             put(e, d);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<Joint2D>()); },
+         [] { return cid<Joint2D>(); }},
         {"Lifetime",
          [](EntityId e) { return get<Lifetime>(e) != nullptr; },
          [](EntityId e) { return json{{"seconds", get<Lifetime>(e)->seconds}}; },
@@ -1438,12 +1489,206 @@ EffectId fade() {
     return g_fade;
 }
 
+// ---- Gameplay: input, physics, audio, scenes, app ----
+
+// Logical screen coordinates back to window coordinates, for input sent
+// as if from the device.
+Vec2 logicalToWindow(Vec2 p) {
+    auto* r = res<RendererResource>();
+    if (!r) return p;
+    Vec2 o = r->windowToLogical({0.f, 0.f});
+    Vec2 one = r->windowToLogical({1.f, 1.f}) - o;
+    return {one.x != 0.f ? (p.x - o.x) / one.x : p.x, one.y != 0.f ? (p.y - o.y) / one.y : p.y};
+}
+
+SDL_WindowID windowId() {
+    int count = 0;
+    SDL_Window** windows = SDL_GetWindows(&count);
+    SDL_WindowID id = windows && count > 0 ? SDL_GetWindowID(windows[0]) : 0;
+    SDL_free(windows);
+    return id;
+}
+
+bool gameplayInput(const std::string& f, const json& a, json& out) {
+    auto* in = res<InputResource>();
+    auto* actions = res<InputActions>();
+    if (f == "pad_connected") {
+        out = in && in->gamepadConnected(a[0].get<int>());
+    } else if (f == "bind_axis_keys") {
+        auto key = [&](int i) { return InputBinding::key(static_cast<Key>(a[i].get<int>())); };
+        if (actions) actions->bindAxis(a[0].get<std::string>(), key(1), key(2));
+        out = nullptr;
+    } else if (f == "action_axis") {
+        out = actions ? actions->axis(a[0].get<std::string>()) : 0.f;
+    } else if (f == "input_bindings") {
+        out = json::array();
+        std::string n = a[0].get<std::string>();
+        if (actions && actions->has(n)) {
+            for (const InputBinding& b : actions->bindings(n, a[1].get<int>())) out.push_back(b.toString());
+        }
+    } else if (f == "input_rebind") {
+        InputBinding b = InputBinding::parse(a[3].get<std::string>());
+        if (actions && b.valid()) {
+            actions->rebind(a[0].get<std::string>(), a[1].get<int>(), static_cast<size_t>(std::max(0, a[2].get<int>())), b);
+        }
+        out = nullptr;
+    } else if (f == "input_capture") {
+        std::optional<InputBinding> b = actions && in ? actions->captureNext(*in) : std::nullopt;
+        out = b ? b->toString() : std::string();
+    } else if (f == "input_tuning") {
+        if (actions) {
+            actions->deadZone = a[0].get<float>();
+            actions->pressThreshold = a[1].get<float>();
+            actions->gamepad = a[2].get<int32_t>();
+        }
+        out = nullptr;
+    } else if (f == "input_bindings_json") {
+        out = actions ? actions->toJson().dump() : std::string("{}");
+    } else if (f == "input_load_bindings") {
+        json j = json::parse(a[0].get<std::string>(), nullptr, false);
+        out = actions && !j.is_discarded() ? actions->fromJson(j) : 0;
+    } else if (f == "input_send") {
+        // Pushed as SDL events, so they arrive next frame through every
+        // handler, actions included, like the device's own.
+        SDL_Event e{};
+        int kind = a[0].get<int>(), code = a[1].get<int>();
+        bool down = a[2].get<bool>();
+        Vec2 p = logicalToWindow({a[3].get<float>(), a[4].get<float>()});
+        Uint64 now = SDL_GetTicksNS();
+        if (kind == 0) {
+            e.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+            e.key.timestamp = now;
+            e.key.windowID = windowId();
+            e.key.scancode = static_cast<SDL_Scancode>(code);
+            e.key.down = down;
+        } else if (kind == 1) {
+            e.type = SDL_EVENT_MOUSE_MOTION;
+            e.motion.timestamp = now;
+            e.motion.windowID = windowId();
+            e.motion.x = p.x;
+            e.motion.y = p.y;
+        } else {
+            e.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+            e.button.timestamp = now;
+            e.button.windowID = windowId();
+            e.button.button = static_cast<Uint8>(code);
+            e.button.down = down;
+            e.button.clicks = 1;
+            e.button.x = p.x;
+            e.button.y = p.y;
+        }
+        SDL_PushEvent(&e);
+        out = nullptr;
+    } else if (f == "text_input") {
+        int op = a[0].get<int>();
+        if (in && op == 1) in->startTextInput();
+        if (in && op == 2) in->stopTextInput();
+        out = in && op == 0 ? in->textInput() : std::string();
+    } else if (f == "touch_list") {
+        out = json::array();
+        if (in) {
+            for (const Touch& t : in->touches()) {
+                for (double v : std::initializer_list<double>{double(t.id), t.position.x, t.position.y, t.start.x, t.start.y, t.delta.x, t.delta.y,
+                                t.pressed ? 1.f : 0.f, t.released ? 1.f : 0.f}) {
+                    out.push_back(v);
+                }
+            }
+        }
+    } else {
+        return false;
+    }
+    return true;
+}
+
+// The entity a shape belongs to; 0 for shapes the engine made itself.
+EntityId shapeEntity(uint64_t packed) {
+    auto* physics = res<PhysicsResource>();
+    if (!physics || packed == 0) return 0;
+    void* data = physics->getShapeUserData(u64_to_shape(packed));
+    return static_cast<EntityId>(reinterpret_cast<uintptr_t>(data));
+}
+
+CollisionFilter queryFilter(const json& mask) {
+    CollisionFilter f;
+    f.category = 0xFFFFFFFFu;
+    int64_t m = mask.is_number_integer() ? mask.get<int64_t>() : 0xFFFF;
+    f.mask = m >= 0 && m <= 0xFFFFFFFFll ? uint32_t(m) : 0xFFFFu;
+    return f;
+}
+
+bool gameplayPhysics(const std::string& f, const json& a, json& out) {
+    if (f.rfind("physics_", 0) != 0) return false;
+    auto* physics = res<PhysicsResource>();
+    auto* bridge = res<PhysicsBridge>();
+    out = nullptr;
+    if (!physics) {
+        if (f == "physics_gravity" || f == "physics_raycast") out = json::array();
+        if (f == "physics_overlap") out = json::array();
+        return true;
+    }
+    if (f == "physics_gravity") {
+        Vec2 g = physics->gravity();
+        out = {g.x, g.y};
+    } else if (f == "physics_set_gravity") {
+        physics->setGravity({a[0].get<float>(), a[1].get<float>()});
+    } else if (f == "physics_raycast") {
+        Vec2 dir{a[2].get<float>(), a[3].get<float>()};
+        float len = dir.length();
+        RaycastHit h = len > 0.f ? physics->raycast({a[0].get<float>(), a[1].get<float>()}, dir * (1.f / len),
+                                                    a[4].get<float>(), queryFilter(a[5]))
+                                 : RaycastHit{};
+        out = {h.hit ? 1.0 : 0.0, double(h.hit ? shapeEntity(h.shape) : 0), h.point.x, h.point.y,
+               h.normal.x, h.normal.y, h.fraction};
+    } else if (f == "physics_overlap") {
+        // kind 0: point (x, y); 1: rect (x, y, w, h); 2: circle (x, y, radius).
+        int kind = a[0].get<int>();
+        float x = a[1].get<float>(), y = a[2].get<float>(), z = a[3].get<float>(), w = a[4].get<float>();
+        CollisionFilter filter = queryFilter(a[5]);
+        PhysicsShape shapes[256];
+        int32_t n = kind == 0 ? physics->overlapPoint({x, y}, filter, shapes, 256)
+                  : kind == 1 ? physics->overlapAABB({x, y, z, w}, filter, shapes, 256)
+                              : physics->overlapCircle({x, y}, z, filter, shapes, 256);
+        std::vector<EntityId> found;
+        for (int32_t i = 0; i < n; ++i) {
+            EntityId e = shapeEntity(shape_to_u64(shapes[i]));
+            if (e != 0 && std::find(found.begin(), found.end(), e) == found.end()) found.push_back(e);
+        }
+        std::sort(found.begin(), found.end());
+        out = found;
+    } else if (f == "physics_push") {
+        // kind 0: impulse, 1: force, 2: torque, 3: angular impulse.
+        EntityId e = a[1].get<EntityId>();
+        auto it = bridge ? bridge->entityToBody.find(e) : std::unordered_map<EntityId, PhysicsBody>::iterator{};
+        if (bridge && it != bridge->entityToBody.end()) {
+            Vec2 v{a[2].get<float>(), a[3].get<float>()};
+            switch (a[0].get<int>()) {
+                case 0: physics->applyImpulse(it->second, v); break;
+                case 1: physics->applyForce(it->second, v); break;
+                case 2: physics->applyTorque(it->second, v.x); break;
+                case 3: physics->applyAngularImpulse(it->second, v.x); break;
+            }
+        }
+    } else if (f == "physics_debug") {
+        PhysicsDebugDraw d = physics->debugDraw();
+        d.enabled = a[0].get<bool>();
+        physics->setDebugDraw(d);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool gameplay(const std::string& f, const json& a, json& out) {
+    return gameplayInput(f, a, out) || gameplayPhysics(f, a, out);
+}
+
 json service(const std::string& f, const json& a) {
     json answer;
     if (procgen(f, a, answer)) return answer;
     if (presentation(f, a, answer)) return answer;
     if (images(f, a, answer)) return answer;
     if (hierarchyService(f, a, answer)) return answer;
+    if (gameplay(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {
@@ -1462,7 +1707,9 @@ json service(const std::string& f, const json& a) {
     if (f == "mouse_vec") {
         Vec2 v{};
         int which = a[0].get<int>();
-        if (in) {
+        if (in && which == 3) {
+            v = {in->mouseWheelDelta(), 0.f};
+        } else if (in) {
             v = which == 2 ? in->mouseDelta() : in->mousePosition();
             if (which == 1) {
                 if (auto* r = res<RendererResource>()) v = r->screenToWorld(v);
@@ -1725,10 +1972,13 @@ private:
             loaded_ = true;
         }
         if (auto* cb = a.getResource<CollisionBridge>()) {
-            for (int i = 0; i < cb->collisionStartCount(); ++i) drift_host_contact(0, cb->collisionStartA(i), cb->collisionStartB(i));
-            for (int i = 0; i < cb->collisionEndCount(); ++i) drift_host_contact(1, cb->collisionEndA(i), cb->collisionEndB(i));
-            for (int i = 0; i < cb->sensorStartCount(); ++i) drift_host_contact(2, cb->sensorStartA(i), cb->sensorStartB(i));
-            for (int i = 0; i < cb->sensorEndCount(); ++i) drift_host_contact(3, cb->sensorEndA(i), cb->sensorEndB(i));
+            for (int i = 0; i < cb->collisionStartCount(); ++i) {
+                Vec2 p = cb->collisionStartPoint(i), n = cb->collisionStartNormal(i);
+                drift_host_contact(0, cb->collisionStartA(i), cb->collisionStartB(i), p.x, p.y, n.x, n.y);
+            }
+            for (int i = 0; i < cb->collisionEndCount(); ++i) drift_host_contact(1, cb->collisionEndA(i), cb->collisionEndB(i), 0, 0, 0, 0);
+            for (int i = 0; i < cb->sensorStartCount(); ++i) drift_host_contact(2, cb->sensorStartA(i), cb->sensorStartB(i), 0, 0, 0, 0);
+            for (int i = 0; i < cb->sensorEndCount(); ++i) drift_host_contact(3, cb->sensorEndA(i), cb->sensorEndB(i), 0, 0, 0, 0);
         }
         offerDownloads();
         auto* time = a.getResource<Time>();

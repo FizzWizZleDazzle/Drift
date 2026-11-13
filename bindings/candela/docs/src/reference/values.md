@@ -57,6 +57,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | Constant | Value |
 |----------|-------|
 | `FLOOR`, `WALL`, `DOOR` | 0, 1, 2: the cell values the generators write |
+| `ALL_CATEGORIES` | 65535: every collider category, the default `mask` of colliders and physics queries |
 | `ALL_LAYERS` | Every world layer, 0 to 30: the default `layer_mask` of cameras and lights |
 | `PI`, `TAU` | Half a turn and a whole turn, in radians |
 

@@ -12,12 +12,16 @@ public:
     struct Entry {
         EntityId a = InvalidEntityId;
         EntityId b = InvalidEntityId;
+        Vec2 point;    // collision starts: first contact point
+        Vec2 normal;   // collision starts: from a to b
     };
 
     // Collision start events
     int collisionStartCount() const { return static_cast<int>(starts_.size()); }
     EntityId collisionStartA(int i) const { return (i >= 0 && i < (int)starts_.size()) ? starts_[i].a : InvalidEntityId; }
     EntityId collisionStartB(int i) const { return (i >= 0 && i < (int)starts_.size()) ? starts_[i].b : InvalidEntityId; }
+    Vec2 collisionStartPoint(int i) const { return (i >= 0 && i < (int)starts_.size()) ? starts_[i].point : Vec2{}; }
+    Vec2 collisionStartNormal(int i) const { return (i >= 0 && i < (int)starts_.size()) ? starts_[i].normal : Vec2{}; }
 
     // Collision end events
     int collisionEndCount() const { return static_cast<int>(ends_.size()); }
@@ -42,7 +46,9 @@ public:
         sensorEnds_.clear();
     }
 
-    void addCollisionStart(EntityId a, EntityId b) { starts_.push_back({a, b}); }
+    void addCollisionStart(EntityId a, EntityId b, Vec2 point = {}, Vec2 normal = {}) {
+        starts_.push_back({a, b, point, normal});
+    }
     void addCollisionEnd(EntityId a, EntityId b) { ends_.push_back({a, b}); }
     void addSensorStart(EntityId a, EntityId b) { sensorStarts_.push_back({a, b}); }
     void addSensorEnd(EntityId a, EntityId b) { sensorEnds_.push_back({a, b}); }

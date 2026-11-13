@@ -16,13 +16,14 @@ Device state and [input actions](../guides/input.md#actions).
 
 | Method | Returns |
 |--------|---------|
-| `key_down(k)`, `key_pressed(k)`, `key_released(k)` | Held now, went down this frame, went up this frame |
+| `key_down(k)`, `key_pressed(k)`, `key_released(k)` | Held now, went down this frame, went up this frame. A tap shorter than a frame is both pressed and released that frame |
 | `mouse_position()`, `mouse_world()` | Logical screen position; world position through the main camera |
 | `mouse_delta()`, `mouse_wheel()` | Movement and wheel this frame |
 | `mouse_down(b)`, `mouse_pressed(b)`, `mouse_released(b)` | Mouse buttons |
 | `gamepad_connected(pad)`, `gamepad_axis(pad, axis)` | Pads 0 to 3; sticks read -1 to 1 (Y down), triggers 0 to 1 |
 | `gamepad_down(pad, b)`, `gamepad_pressed(pad, b)`, `gamepad_released(pad, b)` | Gamepad buttons, Xbox layout: `South` is A |
 | `bind_key(action, k)`, `bind_mouse(action, b)`, `bind_button(action, b)` | Add a binding to an action |
+| `bind(action, text)` | Add a binding in text form, as `drift.toml` writes them: `"key:Space"`, `"mouse:Left"`, `"button:South"`, `"axis:+LeftX"` |
 | `bind_axis(name, negative, positive)` | A 1D axis from two keys, -1 to 1 |
 | `bind_axis2d(name, left, right, up, down)` | A 2D axis from four keys; up is -Y. Calling it again adds another set |
 | `bind_stick(name, x_axis, y_axis)` | A gamepad stick as a 2D axis |
@@ -33,6 +34,8 @@ Device state and [input actions](../guides/input.md#actions).
 | `set_action_tuning(dead_zone, press_threshold, pad)` | Stick dead zone, the analog value that counts as held, and the gamepad actions read (-1 for any) |
 | `bindings_json()`, `load_bindings_json(text)` | Save and restore every binding |
 | `send_key(k, down)`, `send_mouse_move(pos)`, `send_mouse_button(pos, b, down)` | Queue input as if from the device, for tests and demo playback; it arrives next frame |
+| `start_text_input()`, `stop_text_input()`, `text()` | Typed text, for name entry and chat: `text()` is what was typed this frame. Starting text input brings up the on-screen keyboard on phones |
+| `touches()` | `Touch[]`: the fingers on a touch screen, each with `id`, `position`, `start`, `delta`, `pressed` and `released` |
 
 ## Window
 
@@ -170,8 +173,12 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` a
 |--------|------|
 | `gravity()`, `set_gravity(g)` | World gravity in pixels per second squared; `drift.toml [physics]` sets where it starts |
 | `raycast(origin, direction, distance)` | A `RayHit`: `hit`, `entity`, `point`, `normal`, `fraction`. Sensors count |
-| `overlap_point(p)`, `overlap_rect(r)` | Entities whose colliders cover the point or touch the rect |
-| `apply_impulse(e, i)`, `apply_force(e, f)` | On dynamic bodies |
+| `raycast_mask(origin, direction, distance, mask)` | The same, seeing only colliders whose `category` is in `mask` |
+| `overlap_point(p)`, `overlap_circle(center, radius)` | `Entity[]` whose colliders contain the point or touch the circle |
+| `overlap_circle_mask(center, radius, mask)` | The same for the categories in `mask` |
+| `overlap_rect(r)` | `Entity[]` whose colliders' bounding boxes touch the rect |
+| `apply_impulse(e, i)`, `apply_force(e, f)`, `apply_torque(e, t)`, `apply_angular_impulse(e, i)` | On dynamic bodies |
+| `set_debug_draw(on)` | Outlines every collider over the game |
 
 ## Effects
 

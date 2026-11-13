@@ -192,3 +192,34 @@ void playerMovement(Res<InputResource> input, Res<Time> time,
     });
 }
 ```
+
+## Text Input
+
+Typed text arrives as UTF-8, with the keyboard layout and dead keys applied, which key codes cannot give you. Turn it on while a text field has focus:
+
+```cpp
+void startTextInput();
+void stopTextInput();
+bool textInputActive() const;
+const std::string& textInput() const;  // text typed this frame
+```
+
+On phones and tablets `startTextInput` also brings up the on-screen keyboard. Key events keep arriving while text input is on, so read `Key::Backspace` and `Key::Return` for editing and confirming.
+
+```cpp
+void nameEntry(ResMut<InputResource> input, ResMut<PlayerName> name) {
+    name->value += input->textInput();
+    if (input->keyPressed(Key::Backspace) && !name->value.empty()) name->value.pop_back();
+    if (input->keyPressed(Key::Return)) input->stopTextInput();
+}
+```
+
+## Touch
+
+```cpp
+const std::vector<Touch>& touches() const;
+```
+
+Each `Touch` is one finger: `id` (stable while it stays down), `position`, `start` (where it went down) and `delta` (movement this frame), all in logical screen coordinates, plus `pressed` and `released` for the frame it went down or up. A finger stays in the list for the frame it lifted, with `released` set.
+
+The first finger also drives the mouse, so a game that reads the mouse works on touch screens without changes. Read `touches()` for multi-touch: two-finger pinch, a virtual stick under one thumb and a button under the other.

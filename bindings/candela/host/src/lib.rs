@@ -238,7 +238,9 @@ struct System {
 enum Focus {
     None,
     Entity(u64),
-    Contact(u64, u64),
+    /// a, b, point and normal, and whether a and b were swapped from the
+    /// engine's order (the normal then points the other way).
+    Contact(u64, u64, [f64; 4], bool),
     Message(Value),
 }
 
@@ -274,7 +276,9 @@ struct Host {
     resources: HashMap<String, Value>,
     messages: Vec<(u64, String, Value)>,
     next_seq: u64,
-    contacts: Vec<(i32, u64, u64)>,
+    /// This frame's collisions: kind, a, b, and for contacts that began the
+    /// first point and the normal from a to b.
+    contacts: Vec<(i32, u64, u64, [f64; 4])>,
     started: bool,
     reported: HashSet<String>,
     /// run_if conditions by function name, as systems with parameters.
@@ -438,6 +442,8 @@ impl Host {
                     "Input" | "Assets" | "Window" | "Effects" | "Save" | "Random" | "Camera2D" | "Draw" => {
                         Ok(Param::Engine(*id))
                     }
+                    // The gameplay half's engine resources.
+                    "Physics" => Ok(Param::Engine(*id)),
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
                 }
             }
@@ -516,6 +522,18 @@ impl Host {
         } else if self.reported.insert(format!("bundle:{name}")) {
             log(1, &format!("{name} is not a component: mark it @drift::component"));
         }
+    }
+
+    /// A Contact<A, B> (or ContactEnd, Overlap, OverlapEnd) value: the two
+    /// entities, and where the struct has them, the point and normal.
+    fn contact_value(&self, id: u16, a: u64, b: u64, pn: [f64; 4], swapped: bool) -> Value {
+        let s = if swapped { -1.0 } else { 1.0 };
+        let j = json!({
+            "a": { "id": a }, "b": { "id": b },
+            "point": { "x": pn[0], "y": pn[1] },
+            "normal": { "x": pn[2] * s, "y": pn[3] * s },
+        });
+        self.types.from_json(&j, &DataType::Struct(id))
     }
 
     fn entity_value(&self, e: u64) -> Value {
@@ -603,24 +621,17 @@ impl Host {
                 Param::Contacts { name, kind, a, b } => {
                     let row = self.types.struct_name(*name).to_owned();
                     let mut out = Vec::new();
-                    for &(k, x, y) in &self.contacts {
+                    for &(k, x, y, pn) in &self.contacts {
                         if k != *kind {
                             continue;
                         }
-                        let pair = if self.has(x, a) && self.has(y, b) {
-                            Some((x, y))
+                        if self.has(x, a) && self.has(y, b) {
+                            out.push(self.contact_value(*name, x, y, pn, false));
                         } else if self.has(y, a) && self.has(x, b) {
-                            Some((y, x))
-                        } else {
-                            None
-                        };
-                        if let Some((ea, eb)) = pair {
-                            out.push(Value::Struct {
-                                name: row.clone(),
-                                fields: vec![("a".into(), self.entity_value(ea)), ("b".into(), self.entity_value(eb))],
-                            });
+                            out.push(self.contact_value(*name, y, x, pn, true));
                         }
                     }
+                    let _ = row;
                     Value::Array(out)
                 }
                 Param::Commands(id) => Value::Struct { name: self.types.struct_name(*id).to_owned(), fields: vec![("id".into(), Value::Int(0))] },
@@ -643,11 +654,8 @@ impl Host {
                     self.entity_value(*e)
                 }
                 Param::OneContact { name, .. } => {
-                    let Focus::Contact(a, b) = focus else { return None };
-                    Value::Struct {
-                        name: self.types.struct_name(*name).to_owned(),
-                        fields: vec![("a".into(), self.entity_value(*a)), ("b".into(), self.entity_value(*b))],
-                    }
+                    let Focus::Contact(a, b, pn, swapped) = focus else { return None };
+                    self.contact_value(*name, *a, *b, *pn, *swapped)
                 }
                 Param::OneMessage(_) => {
                     let Focus::Message(v) = focus else { return None };
@@ -821,14 +829,14 @@ impl Host {
             match p {
                 Param::OneContact { kind, a, b, .. } => {
                     let mut out = Vec::new();
-                    for &(k, x, y) in &self.contacts {
+                    for &(k, x, y, pn) in &self.contacts {
                         if k != *kind {
                             continue;
                         }
                         if self.has(x, a) && self.has(y, b) {
-                            out.push(Focus::Contact(x, y));
+                            out.push(Focus::Contact(x, y, pn, false));
                         } else if self.has(y, a) && self.has(x, b) {
-                            out.push(Focus::Contact(y, x));
+                            out.push(Focus::Contact(y, x, pn, true));
                         }
                     }
                     return out;
@@ -1185,6 +1193,40 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("hier_to_world", vec![I, F, F], af()),
         ("hier_to_local", vec![I, F, F], af()),
     ]
+    .into_iter()
+    .chain(gameplay_forwarded())
+    .collect()
+}
+
+// ---- Gameplay: input, physics, audio, scenes, app ----
+
+/// The gameplay half's engine functions, passed through like `forwarded`.
+fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
+    use HostType::{Bool as B, Float as F, Int as I, String as S, Unit as U};
+    let af = || HostType::Array(Box::new(F));
+    let as_ = || HostType::Array(Box::new(S));
+    vec![
+        // Input.
+        ("pad_connected", vec![I], B),
+        ("bind_axis_keys", vec![S, I, I], U),
+        ("action_axis", vec![S], F),
+        ("input_bindings", vec![S, I], as_()),
+        ("input_rebind", vec![S, I, I, S], U),
+        ("input_capture", vec![], S),
+        ("input_tuning", vec![F, F, I], U),
+        ("input_bindings_json", vec![], S),
+        ("input_load_bindings", vec![S], I),
+        ("input_send", vec![I, I, B, F, F], U),
+        ("text_input", vec![I], S),
+        ("touch_list", vec![], af()),
+        // Physics. Masks pick the collider categories a query sees.
+        ("physics_gravity", vec![], af()),
+        ("physics_set_gravity", vec![F, F], U),
+        ("physics_raycast", vec![F, F, F, F, F, I], af()),
+        ("physics_overlap", vec![I, F, F, F, F, I], HostType::Array(Box::new(I))),
+        ("physics_push", vec![I, I, F, F], U),
+        ("physics_debug", vec![B], U),
+    ]
 }
 
 // ---- Rendering and presentation ----
@@ -1526,12 +1568,13 @@ pub extern "C" fn drift_host_error() -> *const c_char {
 }
 
 /// Records a collision event of this frame. kind: 0 contact began, 1 ended,
-/// 2 sensor overlap began, 3 ended.
+/// 2 sensor overlap began, 3 ended. A contact that began also brings its
+/// first point and the normal from a to b.
 #[no_mangle]
-pub extern "C" fn drift_host_contact(kind: i32, a: u64, b: u64) {
+pub extern "C" fn drift_host_contact(kind: i32, a: u64, b: u64, px: f32, py: f32, nx: f32, ny: f32) {
     HOST.with(|h| {
         if let Some(host) = h.borrow_mut().as_mut() {
-            host.contacts.push((kind, a, b));
+            host.contacts.push((kind, a, b, [px as f64, py as f64, nx as f64, ny as f64]));
         }
     });
 }

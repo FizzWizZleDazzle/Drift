@@ -3,7 +3,10 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace drift {
 
@@ -52,6 +55,15 @@ struct InputResource::Impl {
 
     // Logical resolution scaling
     std::function<Vec2(Vec2)> toLogical;
+
+    // Text typed this frame, UTF-8.
+    std::string text;
+    bool textActive = false;
+
+    // Touches: those down now, and those that ended this frame.
+    std::vector<Touch> touches;
+
+    Vec2 logical(Vec2 p) const { return toLogical ? toLogical(p) : p; }
 
     // Gamepads
     GamepadState gamepads[MAX_GAMEPADS] = {};
@@ -106,6 +118,17 @@ void InputResource::beginFrame()
     std::memset(impl_->key_up, 0, sizeof(impl_->key_up));
     std::memset(impl_->mouse_buttons_down, 0, sizeof(impl_->mouse_buttons_down));
     std::memset(impl_->mouse_buttons_up, 0, sizeof(impl_->mouse_buttons_up));
+
+    impl_->text.clear();
+
+    // Touches that ended last frame go; the rest start a new frame.
+    auto& touches = impl_->touches;
+    touches.erase(std::remove_if(touches.begin(), touches.end(), [](const Touch& t) { return t.released; }),
+                  touches.end());
+    for (Touch& t : touches) {
+        t.pressed = false;
+        t.delta = {};
+    }
 
     // Reset per-frame mouse accumulators
     impl_->mouse_delta.x     = 0.0f;
@@ -238,6 +261,40 @@ void InputResource::processEvent(const SDL_Event& event)
         }
     } break;
 
+    // ----- Text -----------------------------------------------------------
+    case SDL_EVENT_TEXT_INPUT: {
+        if (event.text.text) impl_->text += event.text.text;
+    } break;
+
+    // ----- Touch ----------------------------------------------------------
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_UP: {
+        // Finger positions are 0..1 across the window.
+        Vec2 size{1.f, 1.f};
+        if (SDL_Window* w = SDL_GetWindowFromID(event.tfinger.windowID)) {
+            int ww = 0, wh = 0;
+            SDL_GetWindowSize(w, &ww, &wh);
+            size = {float(ww), float(wh)};
+        }
+        Vec2 pos = impl_->logical({event.tfinger.x * size.x, event.tfinger.y * size.y});
+        int64_t id = static_cast<int64_t>(event.tfinger.fingerID);
+        auto& touches = impl_->touches;
+        auto it = std::find_if(touches.begin(), touches.end(),
+                               [id](const Touch& t) { return t.id == id && !t.released; });
+        if (event.type == SDL_EVENT_FINGER_DOWN) {
+            Touch t;
+            t.id = id;
+            t.position = t.start = pos;
+            t.pressed = true;
+            touches.push_back(t);
+        } else if (it != touches.end()) {
+            it->delta += pos - it->position;
+            it->position = pos;
+            if (event.type == SDL_EVENT_FINGER_UP) it->released = true;
+        }
+    } break;
+
     default:
         break;
     }
@@ -356,6 +413,48 @@ bool InputResource::gamepadButtonReleased(int32_t index, int32_t button) const
     if (button < 0 || button >= MAX_GAMEPAD_BTNS) return false;
     if (!impl_->gamepads[index].gamepad)           return false;
     return impl_->gamepads[index].buttons_up[button];
+}
+
+// ---------------------------------------------------------------------------
+// Text and touch
+// ---------------------------------------------------------------------------
+
+namespace {
+SDL_Window* inputWindow() {
+    if (SDL_Window* w = SDL_GetKeyboardFocus()) return w;
+    int count = 0;
+    SDL_Window** windows = SDL_GetWindows(&count);
+    SDL_Window* w = windows && count > 0 ? windows[0] : nullptr;
+    SDL_free(windows);
+    return w;
+}
+} // namespace
+
+void InputResource::startTextInput()
+{
+    if (SDL_Window* w = inputWindow()) SDL_StartTextInput(w);
+    impl_->textActive = true;
+}
+
+void InputResource::stopTextInput()
+{
+    if (SDL_Window* w = inputWindow()) SDL_StopTextInput(w);
+    impl_->textActive = false;
+}
+
+bool InputResource::textInputActive() const
+{
+    return impl_->textActive;
+}
+
+const std::string& InputResource::textInput() const
+{
+    return impl_->text;
+}
+
+const std::vector<Touch>& InputResource::touches() const
+{
+    return impl_->touches;
 }
 
 } // namespace drift

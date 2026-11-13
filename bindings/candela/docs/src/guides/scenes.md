@@ -92,4 +92,4 @@ fn save_level(input: Input, cmd: Commands) {
 
 ## Reloading
 
-In dev builds, Drift watches the scene files it loaded. Save one in an editor and the entities spawned from it update in place: they keep their ids, their components follow the file, new entities spawn and removed ones despawn. Spawn options apply again. Physics bodies keep the shape and body kind they were created with. The [dev overlay](debugging.md#the-dev-overlay) also has a Scene panel to save, spawn and reload files by hand.
+In dev builds, Drift watches the scene files it loaded. Save one in an editor and the entities spawned from it update in place: they keep their ids, their components follow the file, new entities spawn and removed ones despawn. Spawn options apply again. Physics bodies follow the new collider and body settings. The [dev overlay](debugging.md#the-dev-overlay) also has a Scene panel to save, spawn and reload files by hand.

@@ -64,7 +64,7 @@ void playerControl(Res<InputActions> actions, QueryMut<Transform2D, With<Player>
 
 | Query | Returns |
 |-------|---------|
-| `pressed(name)` | True on the frame the action becomes held |
+| `pressed(name)` | True on the frame the action becomes held, even when it is let go within the same frame |
 | `held(name)` | True while held |
 | `released(name)` | True on the frame it stops being held |
 | `value(name)` | Actions: 0..1. 1D axes: -1..1. 2D axes: the vector's length |

@@ -654,6 +654,20 @@ TEST(input_actions_keys) {
     CHECK(actions.released("jump"));
     CHECK(!actions.held("jump"));
 
+    // A tap that goes down and up inside one frame is still a press.
+    frame(input, actions);
+    keyEvent(input, actions, SDL_SCANCODE_SPACE, true);
+    keyEvent(input, actions, SDL_SCANCODE_SPACE, false);
+    CHECK(input.keyPressed(Key::Space));
+    CHECK(input.keyReleased(Key::Space));
+    CHECK(!input.keyHeld(Key::Space));
+    CHECK(actions.pressed("jump"));
+    CHECK(actions.released("jump"));
+    CHECK(!actions.held("jump"));
+    frame(input, actions);
+    CHECK(!input.keyPressed(Key::Space));
+    CHECK(!actions.pressed("jump"));
+
     frame(input, actions);
     keyEvent(input, actions, SDL_SCANCODE_RIGHT, true);
     CHECK_NEAR(actions.axis("turn"), 1.f, 1e-6);

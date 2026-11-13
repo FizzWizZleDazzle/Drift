@@ -110,6 +110,26 @@ struct PhysicsResource::Impl {
     std::vector<ContactEvent> sensorBegin;
     std::vector<ContactEvent> sensorEnd;
 
+    // The first manifold point and normal (A to B) of the contact between
+    // two shapes that just began touching.
+    std::vector<b2ContactData> contactScratch;
+    void contactPoint(b2ShapeId a, b2ShapeId b, ContactEvent& ce) {
+        int capacity = b2Shape_GetContactCapacity(a);
+        if (capacity <= 0) return;
+        contactScratch.resize(static_cast<size_t>(capacity));
+        int n = b2Shape_GetContactData(a, contactScratch.data(), capacity);
+        for (int i = 0; i < n; ++i) {
+            const b2ContactData& d = contactScratch[static_cast<size_t>(i)];
+            bool forward = B2_ID_EQUALS(d.shapeIdA, a) && B2_ID_EQUALS(d.shapeIdB, b);
+            bool reverse = B2_ID_EQUALS(d.shapeIdA, b) && B2_ID_EQUALS(d.shapeIdB, a);
+            if (!forward && !reverse) continue;
+            if (d.manifold.pointCount > 0) ce.point = from_b2_vec2(d.manifold.points[0].point);
+            Vec2 n2 = from_b2_vec2(d.manifold.normal);
+            ce.normal = forward ? n2 : Vec2{-n2.x, -n2.y};
+            return;
+        }
+    }
+
     // Cache contact events from b2ContactEvents.
     void cacheContactEvents() {
         contactBegin.clear();
@@ -123,6 +143,7 @@ struct PhysicsResource::Impl {
             ContactEvent ce;
             ce.shapeA = shape_to_u64(e.shapeIdA);
             ce.shapeB = shape_to_u64(e.shapeIdB);
+            contactPoint(e.shapeIdA, e.shapeIdB, ce);
             contactBegin.push_back(ce);
         }
 
@@ -299,6 +320,34 @@ void PhysicsResource::applyImpulse(PhysicsBody body, Vec2 impulse) {
     b2Body_ApplyLinearImpulseToCenter(id, to_b2_vec2(impulse), true);
 }
 
+void PhysicsResource::applyTorque(PhysicsBody body, float torque) {
+    b2BodyId id = to_b2(body);
+    if (!b2Body_IsValid(id)) return;
+    b2Body_ApplyTorque(id, torque, true);
+}
+
+void PhysicsResource::applyAngularImpulse(PhysicsBody body, float impulse) {
+    b2BodyId id = to_b2(body);
+    if (!b2Body_IsValid(id)) return;
+    b2Body_ApplyAngularImpulse(id, impulse, true);
+}
+
+float PhysicsResource::getBodyAngularVelocity(PhysicsBody body) const {
+    b2BodyId id = to_b2(body);
+    if (!b2Body_IsValid(id)) return 0.f;
+    return b2Body_GetAngularVelocity(id);
+}
+
+void PhysicsResource::setBodyAngularVelocity(PhysicsBody body, float omega) {
+    b2BodyId id = to_b2(body);
+    if (!b2Body_IsValid(id)) return;
+    b2Body_SetAngularVelocity(id, omega);
+}
+
+bool PhysicsResource::bodyValid(PhysicsBody body) const {
+    return b2Body_IsValid(to_b2(body));
+}
+
 void PhysicsResource::setGravityScale(PhysicsBody body, float scale) {
     b2BodyId id = to_b2(body);
     if (!b2Body_IsValid(id)) return;
@@ -448,6 +497,7 @@ RaycastHit PhysicsResource::raycast(Vec2 origin, Vec2 direction, float distance,
 
     if (rayResult.hit) {
         result.hit      = true;
+        result.shape    = shape_to_u64(rayResult.shapeId);
         result.point    = from_b2_vec2(rayResult.point);
         result.normal   = from_b2_vec2(rayResult.normal);
         result.fraction = rayResult.fraction;
@@ -490,6 +540,154 @@ int32_t PhysicsResource::overlapAABB(Rect aabb, CollisionFilter filter,
     b2World_OverlapAABB(impl_->worldId, b2Aabb, qf, overlapCallback, &ctx);
 
     return ctx.count;
+}
+
+namespace {
+struct OverlapCollect {
+    PhysicsShape* out;
+    int32_t count = 0;
+    int32_t max;
+    bool usePoint = false;
+    b2Vec2 point{};
+};
+
+bool collectOverlap(b2ShapeId shapeId, void* context) {
+    auto* c = static_cast<OverlapCollect*>(context);
+    if (c->count >= c->max) return false;
+    if (c->usePoint && !b2Shape_TestPoint(shapeId, c->point)) return true;
+    PhysicsShape s;
+    std::memcpy(&s, &shapeId, sizeof(s));
+    c->out[c->count++] = s;
+    return true;
+}
+} // namespace
+
+int32_t PhysicsResource::overlapCircle(Vec2 center, float radius, CollisionFilter filter,
+                                       PhysicsShape* outShapes, int32_t maxShapes) const {
+    if (B2_IS_NULL(impl_->worldId) || !outShapes || maxShapes <= 0) return 0;
+    b2QueryFilter qf = b2DefaultQueryFilter();
+    qf.categoryBits = filter.category;
+    qf.maskBits     = filter.mask;
+    b2Circle circle{{0.f, 0.f}, radius};
+    b2Transform xf{to_b2_vec2(center), b2Rot_identity};
+    OverlapCollect ctx{outShapes, 0, maxShapes};
+    b2World_OverlapCircle(impl_->worldId, &circle, xf, qf, collectOverlap, &ctx);
+    return ctx.count;
+}
+
+int32_t PhysicsResource::overlapPoint(Vec2 point, CollisionFilter filter,
+                                      PhysicsShape* outShapes, int32_t maxShapes) const {
+    if (B2_IS_NULL(impl_->worldId) || !outShapes || maxShapes <= 0) return 0;
+    b2QueryFilter qf = b2DefaultQueryFilter();
+    qf.categoryBits = filter.category;
+    qf.maskBits     = filter.mask;
+    b2AABB box{{point.x - 0.01f, point.y - 0.01f}, {point.x + 0.01f, point.y + 0.01f}};
+    OverlapCollect ctx{outShapes, 0, maxShapes, true, to_b2_vec2(point)};
+    b2World_OverlapAABB(impl_->worldId, box, qf, collectOverlap, &ctx);
+    return ctx.count;
+}
+
+// =============================================================================
+// Joints
+// =============================================================================
+
+static inline b2JointId to_b2(PhysicsJoint joint) {
+    b2JointId id;
+    std::memcpy(&id, &joint, sizeof(id));
+    return id;
+}
+
+PhysicsJoint PhysicsResource::createJoint(const JointDef& def) {
+    PhysicsJoint out{};
+    if (B2_IS_NULL(impl_->worldId)) return out;
+    b2BodyId a = to_b2(def.bodyA), b = to_b2(def.bodyB);
+    if (!b2Body_IsValid(a) || !b2Body_IsValid(b)) return out;
+    b2JointId id = b2_nullJointId;
+    switch (def.type) {
+        case JointType::Distance: {
+            b2DistanceJointDef d = b2DefaultDistanceJointDef();
+            d.bodyIdA = a;
+            d.bodyIdB = b;
+            d.localAnchorA = to_b2_vec2(def.anchorA);
+            d.localAnchorB = to_b2_vec2(def.anchorB);
+            d.length = std::max(def.length, 0.01f);
+            if (def.maxLength > def.minLength) {
+                d.enableLimit = true;
+                d.minLength = def.minLength;
+                d.maxLength = def.maxLength;
+            }
+            d.enableSpring = def.stiffness > 0.f;
+            d.hertz = def.stiffness;
+            d.dampingRatio = def.damping;
+            d.enableMotor = def.motor;
+            d.motorSpeed = def.motorSpeed;
+            d.maxMotorForce = def.maxMotorForce;
+            d.collideConnected = def.collideConnected;
+            id = b2CreateDistanceJoint(impl_->worldId, &d);
+        } break;
+        case JointType::Revolute: {
+            b2RevoluteJointDef d = b2DefaultRevoluteJointDef();
+            d.bodyIdA = a;
+            d.bodyIdB = b;
+            d.localAnchorA = to_b2_vec2(def.anchorA);
+            d.localAnchorB = to_b2_vec2(def.anchorB);
+            d.enableLimit = def.limit;
+            d.lowerAngle = def.lower;
+            d.upperAngle = def.upper;
+            d.enableMotor = def.motor;
+            d.motorSpeed = def.motorSpeed;
+            d.maxMotorTorque = def.maxMotorForce;
+            d.enableSpring = def.stiffness > 0.f;
+            d.hertz = def.stiffness;
+            d.dampingRatio = def.damping;
+            d.collideConnected = def.collideConnected;
+            id = b2CreateRevoluteJoint(impl_->worldId, &d);
+        } break;
+        case JointType::Prismatic: {
+            b2PrismaticJointDef d = b2DefaultPrismaticJointDef();
+            d.bodyIdA = a;
+            d.bodyIdB = b;
+            d.localAnchorA = to_b2_vec2(def.anchorA);
+            d.localAnchorB = to_b2_vec2(def.anchorB);
+            d.localAxisA = b2Normalize(to_b2_vec2(def.axis));
+            d.enableLimit = def.limit;
+            d.lowerTranslation = def.lower;
+            d.upperTranslation = def.upper;
+            d.enableMotor = def.motor;
+            d.motorSpeed = def.motorSpeed;
+            d.maxMotorForce = def.maxMotorForce;
+            d.enableSpring = def.stiffness > 0.f;
+            d.hertz = def.stiffness;
+            d.dampingRatio = def.damping;
+            d.collideConnected = def.collideConnected;
+            id = b2CreatePrismaticJoint(impl_->worldId, &d);
+        } break;
+        case JointType::Weld: {
+            b2WeldJointDef d = b2DefaultWeldJointDef();
+            d.bodyIdA = a;
+            d.bodyIdB = b;
+            d.localAnchorA = to_b2_vec2(def.anchorA);
+            d.localAnchorB = to_b2_vec2(def.anchorB);
+            d.referenceAngle = b2Rot_GetAngle(b2Body_GetRotation(b)) - b2Rot_GetAngle(b2Body_GetRotation(a));
+            d.linearHertz = def.stiffness;
+            d.angularHertz = def.stiffness;
+            d.linearDampingRatio = def.damping;
+            d.angularDampingRatio = def.damping;
+            d.collideConnected = def.collideConnected;
+            id = b2CreateWeldJoint(impl_->worldId, &d);
+        } break;
+    }
+    std::memcpy(&out, &id, sizeof(out));
+    return out;
+}
+
+void PhysicsResource::destroyJoint(PhysicsJoint joint) {
+    b2JointId id = to_b2(joint);
+    if (b2Joint_IsValid(id)) b2DestroyJoint(id);
+}
+
+bool PhysicsResource::jointValid(PhysicsJoint joint) const {
+    return b2Joint_IsValid(to_b2(joint));
 }
 
 // =============================================================================

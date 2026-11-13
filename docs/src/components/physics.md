@@ -88,6 +88,32 @@ struct Velocity2D {
 | `linear` | `Vec2` | `{0, 0}` | Linear velocity in pixels per second. |
 | `angular` | `float` | `0.f` | Angular velocity in radians per second. |
 
+### Joint2D
+
+Joins the entity's body to another entity's body, or pins it to the world when `target` is `InvalidEntityId`. The joint is made once both bodies exist and made again when a field changes; removing the component or either body removes it.
+
+```cpp
+cmd.spawn().insert(
+    Transform2D{.position = {560, 50}},
+    RigidBody2D{},
+    CircleCollider2D{.radius = 8},
+    Velocity2D{},
+    Joint2D{.type = JointType::Distance, .targetAnchor = {500, 50}});   // a pendulum
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `type` | `Revolute` | `Distance` keeps the anchors `length` apart (a spring when `stiffness` > 0); `Revolute` is a hinge; `Prismatic` slides along `axis`; `Weld` glues the bodies |
+| `target` | invalid | The other entity; invalid pins to the world |
+| `anchor`, `targetAnchor` | `{0, 0}` | Attachment points in each body's local space; with no target, `targetAnchor` is a world point |
+| `length` | `0` | Distance: 0 or less keeps the distance the bodies have when the joint is made |
+| `minLength`, `maxLength` | `0` | Distance: with `maxLength` above `minLength`, the length may vary in that range, like a rope |
+| `stiffness`, `damping` | `0` | Spring frequency in Hz and damping ratio for Distance, Revolute, Prismatic and Weld; 0 stiffness is rigid |
+| `limit`, `lower`, `upper` | off | Revolute: angle range in radians; Prismatic: travel range |
+| `motor`, `motorSpeed`, `maxMotorForce` | off | Drives the joint; torque for Revolute |
+| `axis` | `{1, 0}` | Prismatic: slide direction in this body's local space |
+| `collideConnected` | `false` | Whether the two joined bodies collide with each other |
+
 ## Collision events
 
 The physics system emits events when collisions begin and end. Read them with `EventReader`:
@@ -96,6 +122,8 @@ The physics system emits events when collisions begin and end. Read them with `E
 struct CollisionStart {
     EntityId entityA = InvalidEntityId;
     EntityId entityB = InvalidEntityId;
+    Vec2 point;    // the first contact point
+    Vec2 normal;   // from A to B
 };
 
 struct CollisionEnd {
@@ -327,6 +355,7 @@ int main() {
 ## Notes
 
 - Physics bodies require a `Transform2D` on the same entity. The physics system reads the initial position from it and writes back every frame.
+- Changing a `RigidBody2D` or collider field on an entity that already has a body makes the body again with the new settings, at its current position and velocity.
 - Do not manually move a `Dynamic` body's `Transform2D` each frame: let the physics engine control it through velocity and forces. To teleport a body, set its position once via `Commands::entity().insert<Transform2D>(...)`.
 - Collision events are delivered via the event system. Events from frame N are readable on frame N+1. See the [Events](../concepts/events.md) chapter for details on `EventReader` and `EventWriter`.
 - Body type meanings: `Static` = never moves (walls, floor); `Dynamic` = fully simulated (players, projectiles); `Kinematic` = programmatically moved (moving platforms, elevators).

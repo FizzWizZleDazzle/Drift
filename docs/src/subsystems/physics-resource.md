@@ -65,10 +65,17 @@ void  setBodyVelocity(PhysicsBody body, Vec2 vel);
 
 void  applyForce(PhysicsBody body, Vec2 force);
 void  applyImpulse(PhysicsBody body, Vec2 impulse);
+void  applyTorque(PhysicsBody body, float torque);
+void  applyAngularImpulse(PhysicsBody body, float impulse);
+float getBodyAngularVelocity(PhysicsBody body) const;
+void  setBodyAngularVelocity(PhysicsBody body, float omega);
 void  setGravityScale(PhysicsBody body, float scale);
+bool  bodyValid(PhysicsBody body) const;
 ```
 
 **Forces** are continuous and accumulate over a frame. **Impulses** are instantaneous velocity changes. Use forces for engines and thrusters; use impulses for jumps and knockback.
+
+On an entity with a `Velocity2D`, the component is the body's velocity, but it is only written to the body when your code changed it since the last step. An impulse or force applied to the body directly therefore takes effect, and the new velocity shows up in `Velocity2D` after the step.
 
 ```cpp
 void jump(ResMut<PhysicsResource> physics, Res<InputResource> input,
@@ -170,6 +177,8 @@ const std::vector<HitEvent>&     hitEvents() const;
 struct ContactEvent {
     uint64_t shapeA;
     uint64_t shapeB;
+    Vec2 point;    // begin events: the first contact point, world space
+    Vec2 normal;   // begin events: from shape A to shape B
 };
 
 struct HitEvent {
@@ -197,8 +206,11 @@ struct RaycastHit {
     Vec2 normal;     // surface normal at hit point
     float fraction;  // 0..1 along the ray
     bool hit;        // true if something was hit
+    uint64_t shape;  // the shape hit; its user data is the entity for ECS bodies
 };
 ```
+
+`filter.mask` picks the collider categories the ray can hit. Sensors count as hits.
 
 ### Example: Line of Sight
 
@@ -243,6 +255,35 @@ void explosionDamage(Res<PhysicsResource> physics, Vec2 center, float radius) {
     }
 }
 ```
+
+## Circle and Point Queries
+
+```cpp
+int32_t overlapCircle(Vec2 center, float radius, CollisionFilter filter,
+                      PhysicsShape* outShapes, int32_t maxShapes) const;
+int32_t overlapPoint(Vec2 point, CollisionFilter filter,
+                     PhysicsShape* outShapes, int32_t maxShapes) const;
+```
+
+Unlike `overlapAABB`, which tests bounding boxes, these test the shapes themselves: `overlapCircle` finds shapes touching a circle (an explosion radius, a melee swing) and `overlapPoint` finds shapes containing a point (what is under the mouse). Bodies made from components keep their `EntityId` as shape user data:
+
+```cpp
+PhysicsShape shapes[32];
+int32_t n = physics->overlapPoint(mouseWorld, CollisionFilter{}, shapes, 32);
+for (int32_t i = 0; i < n; ++i) {
+    auto e = static_cast<EntityId>(reinterpret_cast<uintptr_t>(physics->getShapeUserData(shapes[i])));
+}
+```
+
+## Joints
+
+```cpp
+PhysicsJoint createJoint(const JointDef& def);
+void destroyJoint(PhysicsJoint joint);
+bool jointValid(PhysicsJoint joint) const;
+```
+
+`JointDef` joins `bodyA` and `bodyB` at local anchors, with the same fields as the `Joint2D` component (see [Physics components](../components/physics.md#joint2d)). Destroying a body destroys its joints. For entities, add a `Joint2D` component instead; the physics plugin makes and removes the joint for you.
 
 ## Gravity
 

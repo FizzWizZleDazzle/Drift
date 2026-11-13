@@ -46,10 +46,11 @@ These run inside the engine, on its worker threads, so a game with many moving t
 | Component | Fields |
 |-----------|--------|
 | `RigidBody` | `kind` (`BodyKind::Dynamic`), `fixed_rotation`, `gravity_scale`, `linear_damping`, `angular_damping`. Add a collider too |
-| `BoxCollider` | `half_size`, `offset`, `sensor`, `density`, `friction`, `restitution`, `category`, `mask` |
+| `BoxCollider` | `half_size`, `offset`, `sensor`, `density`, `friction`, `restitution`, `category` (1), `mask` (65535) |
 | `CircleCollider` | `radius`, `offset`, and the rest as `BoxCollider` |
+| `Joint` | `kind` (`JointKind::Revolute`), `target` (no entity: pinned to the world), `anchor`, `target_anchor`, `length`, `min_length`, `max_length`, `stiffness`, `damping`, `limit`, `lower`, `upper`, `motor`, `motor_speed`, `max_motor_force`, `axis`, `collide_connected`. See [Physics](../guides/physics.md#joints) |
 
-A collider without a `RigidBody` is static. Body settings are read when the body is created, at the end of the frame the components are added; to change them later, remove and insert the `RigidBody`.
+A collider without a `RigidBody` is static. The body is created at the end of the frame the components are added; changing a `RigidBody` or collider field later makes it again with the new settings.
 
 ## Effects, light and sound
 

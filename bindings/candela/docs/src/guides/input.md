@@ -19,6 +19,7 @@ fn controls(input: Input, window: Window) {
 ```
 
 - `key_down` is true while a key is held; `key_pressed` and `key_released` are true only in the frame it changed. A tap that goes down and up between two frames reads as both pressed and released in the next frame, so quick taps are never lost. Mouse buttons, gamepad buttons and actions work the same way.
+- `mouse_wheel()` is the wheel movement this frame, positive when the wheel turns away from the player.
 - `mouse_position()` is in logical screen coordinates, letterbox bars accounted for. `mouse_world()` is the same point through the main camera.
 - Gamepads use slots 0 to 3 and the Xbox layout: `GamepadButton::South` is A. Sticks read -1 to 1 with Y down; triggers read 0 to 1.
 
@@ -86,6 +87,53 @@ fn rebind_jump(input: Input, menu: Menu, save: Save) {
 - `rebind(name, slot, index, text)` replaces one binding, or adds one when `index` is past the end.
 - Actions have slot 0. A 1D axis has slots 0 and 1 for its negative and positive sides; a 2D axis has 0 to 3 for left, right, up and down.
 - `bindings_json()` and `load_bindings_json(text)` save and restore every binding. Load the saved ones after binding the defaults in startup.
+
+## Typed text
+
+Key codes say which key went down; for names, chat and passwords you want the text, with the keyboard layout applied. Turn text input on while a text field has focus and read `text()` every frame:
+
+```rust
+@resource
+struct NameEntry { name: string = "" }
+
+@system(schedule: Schedule::Startup)
+fn start_typing(input: Input) {
+    input.start_text_input();
+}
+
+@system
+fn type_name(input: Input, entry: NameEntry) {
+    entry.name = entry.name + input.text();
+    if input.key_pressed(Key::Backspace) && entry.name.len() > 0 {
+        entry.name = entry.name[..entry.name.len() - 1];
+    }
+    if input.key_pressed(Key::Return) {
+        input.stop_text_input();
+    }
+}
+```
+
+On phones, starting text input brings up the on-screen keyboard. Keys still arrive as usual while it is on, so a game that also reads letter keys should ignore them while the player types.
+
+## Touch
+
+The first finger on a touch screen also moves and clicks the mouse, so a game that reads the mouse works on phones as it is. For several fingers, read `touches()`:
+
+```rust
+@system
+fn twin_sticks(input: Input, window: Window) {
+    for t in input.touches() {
+        if t.position.x < window.width / 2.0 {
+            let stick = t.position - t.start;   // drag from where the thumb landed
+            log("move " + string(stick.x));
+        } else if t.pressed {
+            log("fire");
+        }
+    }
+}
+```
+
+Each `Touch` has an `id` that stays the same while the finger is down, its `position`, `start` (where it went down) and `delta` (movement this frame) in logical screen coordinates, and `pressed` and `released` for the frame it went down or up.
 
 ## Input for tests and replays
 

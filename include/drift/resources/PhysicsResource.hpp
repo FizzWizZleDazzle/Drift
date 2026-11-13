@@ -2,6 +2,7 @@
 
 #include <drift/Resource.hpp>
 #include <drift/Types.hpp>
+#include <drift/components/Physics.hpp>
 
 #include <vector>
 
@@ -10,6 +11,30 @@ namespace drift {
 // Physics handles are direct Box2D aliases (not generational pool handles).
 struct PhysicsBody { int32_t index; int16_t world; uint16_t revision; };
 struct PhysicsShape { int32_t index; int16_t world; uint16_t revision; };
+struct PhysicsJoint { int32_t index; int16_t world; uint16_t revision; };
+
+// A joint between two bodies; see Joint2D for the fields. Anchors are in
+// each body's local space.
+struct JointDef {
+    JointType type = JointType::Revolute;
+    PhysicsBody bodyA{};
+    PhysicsBody bodyB{};
+    Vec2 anchorA;
+    Vec2 anchorB;
+    float length = 1.f;
+    float minLength = 0.f;
+    float maxLength = 0.f;
+    float stiffness = 0.f;
+    float damping = 0.f;
+    bool limit = false;
+    float lower = 0.f;
+    float upper = 0.f;
+    bool motor = false;
+    float motorSpeed = 0.f;
+    float maxMotorForce = 0.f;
+    Vec2 axis = {1.f, 0.f};
+    bool collideConnected = false;
+};
 
 class RendererResource;
 
@@ -46,6 +71,11 @@ public:
     void setBodyVelocity(PhysicsBody body, Vec2 vel);
     void applyForce(PhysicsBody body, Vec2 force);
     void applyImpulse(PhysicsBody body, Vec2 impulse);
+    void applyTorque(PhysicsBody body, float torque);
+    void applyAngularImpulse(PhysicsBody body, float impulse);
+    float getBodyAngularVelocity(PhysicsBody body) const;
+    void setBodyAngularVelocity(PhysicsBody body, float omega);
+    bool bodyValid(PhysicsBody body) const;
     void setGravityScale(PhysicsBody body, float scale);
     void setBodyUserData(PhysicsBody body, void* data);
     void* getBodyUserData(PhysicsBody body) const;
@@ -58,6 +88,11 @@ public:
     void setShapeUserData(PhysicsShape shape, void* data);
     void* getShapeUserData(PhysicsShape shape) const;
 
+    // Joints. Destroying a body destroys its joints.
+    PhysicsJoint createJoint(const JointDef& def);
+    void destroyJoint(PhysicsJoint joint);
+    bool jointValid(PhysicsJoint joint) const;
+
     // Contact events
     const std::vector<ContactEvent>& contactBeginEvents() const;
     const std::vector<ContactEvent>& contactEndEvents() const;
@@ -66,8 +101,15 @@ public:
     const std::vector<ContactEvent>& sensorEndEvents() const;
 
     // Queries
+    // The closest shape along the ray; `filter.mask` picks the categories it
+    // can hit. Sensors count.
     RaycastHit raycast(Vec2 origin, Vec2 direction, float distance, CollisionFilter filter = {}) const;
+    // Shapes whose bounding boxes touch the rect.
     int32_t overlapAABB(Rect aabb, CollisionFilter filter, PhysicsShape* outShapes, int32_t maxShapes) const;
+    // Shapes that touch a circle, and shapes that contain a point (exact).
+    int32_t overlapCircle(Vec2 center, float radius, CollisionFilter filter, PhysicsShape* outShapes,
+                          int32_t maxShapes) const;
+    int32_t overlapPoint(Vec2 point, CollisionFilter filter, PhysicsShape* outShapes, int32_t maxShapes) const;
 
     int32_t bodyCount() const;
 

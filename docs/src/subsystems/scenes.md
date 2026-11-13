@@ -123,4 +123,4 @@ bool reload(SceneHandle scene);
 
 Scene files are tracked by the `AssetServer`, so hot reload picks up edits on disk without any code; see [Asset Server](asset-server.md#hot-reload).
 
-Physics bodies keep the collider shape and body type they were created with; a reload changes the components but the physics sync does not rebuild existing bodies.
+Physics bodies follow the reloaded components: a body whose collider or `RigidBody2D` settings changed is made again.
