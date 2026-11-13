@@ -47,7 +47,7 @@
 - [Engine Resources](reference/resources.md)
 - [Values and Enums](reference/values.md)
 - [drift/ui](reference/ui.md)
-- [drift/gameplay and drift/control](reference/gameplay.md)
+- [drift/gameplay, control and screens](reference/gameplay.md)
 - [The drift Command](reference/cli.md)
 - [Errors](reference/errors.md)
 

@@ -1,0 +1,206 @@
+// drift/screens: a title screen, play, pause and game over, with fades
+// and wipes between them.
+//
+// `import "drift/screens" { * };` adds the Screen state (Title, Playing,
+// GameOver), the Screens resource that changes it behind a transition, a
+// pause that freezes game time and shows a menu, and helpers for the
+// title and game-over screens. Mark game systems with
+// `in_state: [Screen::Playing], run_if: [running]` so they stop on other
+// screens and while paused.
+
+import "drift" { * };
+import "drift/ui" { * };
+
+// Which screen the game is on. Title first.
+@state
+enum Screen { Title, Playing, GameOver }
+
+enum TransitionKind { Fade, Wipe, Cut }
+
+// Changes screens behind a transition: go() covers the window, switches
+// the Screen state once it is covered, then uncovers it. drift.toml
+// [screens] can set `color`, `seconds` (each way) and `kind`.
+@settings(section: "screens")
+struct Screens {
+    color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+    seconds: float = 0.35,
+    kind: TransitionKind = TransitionKind::Fade,
+    target: Screen = Screen::Title,
+    phase: int = 0,
+    t: float = 0.0,
+}
+
+impl Screens {
+    // To `to` with the default transition (a fade).
+    fn go(self, to: Screen) { self.go_with(to, self.kind); }
+    fn fade_to(self, to: Screen) { self.go_with(to, TransitionKind::Fade); }
+    fn wipe_to(self, to: Screen) { self.go_with(to, TransitionKind::Wipe); }
+    fn go_with(self, to: Screen, kind: TransitionKind) {
+        if self.phase == 1 {
+            self.target = to;
+            return;
+        }
+        self.target = to;
+        self.kind = kind;
+        self.phase = 1;
+        self.t = 0.0;
+        if kind == TransitionKind::Cut {
+            self.t = 1.0;
+        }
+    }
+    // Whether a transition is running.
+    fn busy(self) -> bool { return self.phase != 0; }
+}
+
+@system
+fn scr_transition(screens: Screens, state: State<Screen>, time: Time, win: Window, draw: Draw) {
+    if screens.phase == 0 {
+        return;
+    }
+    let step = 1.0;
+    if screens.seconds > 0.0 {
+        step = time.real_dt / screens.seconds;
+    }
+    if screens.phase == 1 {
+        screens.t = min(1.0, screens.t + step);
+        if screens.t >= 1.0 {
+            state.set(screens.target);
+            screens.phase = 2;
+        }
+    } else {
+        screens.t = max(0.0, screens.t - step);
+        if screens.t <= 0.0 {
+            screens.phase = 0;
+        }
+    }
+    draw.hud();
+    draw.at_z(100000.0);
+    let k = screens.t;
+    if screens.kind == TransitionKind::Wipe {
+        // Covers from the left, then uncovers to the right.
+        let w = win.width * k;
+        let x = 0.0;
+        if screens.phase == 2 {
+            x = win.width - w;
+        }
+        draw.rect(Rect { x: x, y: 0.0, w: w, h: win.height }, screens.color);
+    } else {
+        draw.rect(Rect { x: 0.0, y: 0.0, w: win.width, h: win.height }, screens.color.alpha(screens.color.a * k));
+    }
+}
+
+// Despawns the entity when the game leaves `screen`: menus and anything
+// else that belongs to one screen.
+@component
+struct OnlyIn { screen: Screen = Screen::Title }
+
+@system
+fn scr_only_in(e: Entity, o: OnlyIn, state: State<Screen>, cmd: Commands) {
+    if state.now != o.screen {
+        cmd.despawn(e);
+    }
+}
+
+// ---- Pause ----
+
+// Whether the game is paused. Escape, P and the gamepad's Start button
+// pause and resume while the Screen is Playing; pausing freezes game time
+// and shows a menu with Resume and Quit. `menu` off pauses without it.
+@resource
+struct Pause { on: bool = false, menu: bool = true, allowed: bool = true, title: string = "Paused" }
+
+// A run_if condition: true unless paused.
+fn running(p: Pause) -> bool { return !p.on; }
+
+impl Pause {
+    fn set(self, on: bool, time: Time) {
+        self.on = on;
+        if on {
+            time.set_scale(0.0);
+        } else {
+            time.set_scale(1.0);
+        }
+    }
+}
+
+// The pause menu's widgets.
+@component
+struct PauseMenu {}
+
+fn pause_pressed(input: Input) -> bool {
+    return input.key_pressed(Key::Escape) || input.key_pressed(Key::P) || input.gamepad_pressed(0, GamepadButton::Start);
+}
+
+@system(in_state: [Screen::Playing])
+fn scr_pause_keys(pause: Pause, input: Input, time: Time, screens: Screens) {
+    if pause.allowed && !screens.busy() && pause_pressed(input) {
+        pause.set(!pause.on, time);
+    }
+}
+
+@system(after: [scr_pause_keys])
+fn scr_pause_menu(pause: Pause, theme: Theme, menus: (Entity, PauseMenu)[], focus: UiFocus, cmd: Commands) {
+    let want = pause.on && pause.menu;
+    if want && menus.len() == 0 {
+        let a = cmd.spawn(panel(theme, anchor(CENTER, 0.0, 0.0), vec2(theme.widget_width + 80.0, 220.0)));
+        cmd.insert(a, PauseMenu {});
+        let t = cmd.spawn(label(theme.sized(theme.text_size * 1.4), pause.title, anchor(CENTER, 0.0, -64.0)));
+        cmd.insert(t, PauseMenu {});
+        cmd.insert(button(cmd, theme, anchor(CENTER, 0.0, 0.0), "resume", "Resume", 0), PauseMenu {});
+        cmd.insert(button(cmd, theme, anchor(CENTER, 0.0, 56.0), "title", "Quit", 1), PauseMenu {});
+        focus.index = 0;
+    }
+    if !want && menus.len() > 0 {
+        for (e, _) in menus {
+            cmd.despawn(e);
+        }
+    }
+}
+
+// Leaving Playing ends a pause.
+@system(on_exit: Screen::Playing)
+fn scr_unpause(pause: Pause, time: Time) {
+    if pause.on {
+        pause.set(false, time);
+    }
+}
+
+// The buttons the screens put up: "play" and "retry" start a game,
+// "title" goes back to the title, "resume" ends a pause.
+@system
+fn scr_buttons(p: ButtonPressed, screens: Screens, pause: Pause, time: Time) {
+    if p.id == "play" || p.id == "retry" {
+        screens.go(Screen::Playing);
+    } else if p.id == "title" {
+        screens.go(Screen::Title);
+    } else if p.id == "resume" {
+        pause.set(false, time);
+    }
+}
+
+// ---- Title and game over ----
+
+// A title, a line under it and a Play button, gone when the title screen
+// ends. Call it from an `on_enter: Screen::Title` system.
+fn title_screen(cmd: Commands, theme: Theme, title: string, subtitle: string) {
+    let only = OnlyIn { screen: Screen::Title };
+    cmd.spawn(plus(label(theme.sized(theme.text_size * 2.6), title, anchor(CENTER, 0.0, -90.0)), [only]));
+    if subtitle != "" {
+        cmd.spawn(plus(label(theme.colored(theme.text_color.alpha(0.7)), subtitle, anchor(CENTER, 0.0, -30.0)), [only]));
+    }
+    cmd.insert(button(cmd, theme, anchor(CENTER, 0.0, 40.0), "play", "Play", 0), only);
+}
+
+// A heading, a line of detail (the score) and Play again and Title
+// buttons, gone when the screen ends. Call it from an
+// `on_enter: Screen::GameOver` system.
+fn game_over_screen(cmd: Commands, theme: Theme, title: string, detail: string) {
+    let only = OnlyIn { screen: Screen::GameOver };
+    cmd.spawn(plus(panel(theme, anchor(CENTER, 0.0, 0.0), vec2(theme.widget_width + 140.0, 280.0)), [only]));
+    cmd.spawn(plus(label(theme.sized(theme.text_size * 1.8), title, anchor(CENTER, 0.0, -90.0)), [only]));
+    if detail != "" {
+        cmd.spawn(plus(label(theme, detail, anchor(CENTER, 0.0, -36.0)), [only]));
+    }
+    cmd.insert(button(cmd, theme, anchor(CENTER, 0.0, 24.0), "retry", "Play again", 0), only);
+    cmd.insert(button(cmd, theme, anchor(CENTER, 0.0, 80.0), "title", "Title", 1), only);
+}

@@ -1,4 +1,4 @@
-# drift/gameplay and drift/control
+# drift/gameplay, drift/control and drift/screens
 
 Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../guides/building-blocks.md) guide shows them in use.
 
@@ -61,3 +61,17 @@ Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../
 | `Landed { entity }` | It lands |
 
 All three bring a `Velocity` with them.
+
+## drift/screens
+
+| Item | What it is |
+|------|------------|
+| `Screen` | State enum: `Title`, `Playing`, `GameOver` |
+| `Screens` | Settings from `[screens]`: `color`, `seconds`, `kind` (`TransitionKind::Fade`, `Wipe`, `Cut`). `go(to)`, `fade_to(to)`, `wipe_to(to)`, `go_with(to, kind)`, `busy()` |
+| `Pause` | Resource: `on`, `menu`, `allowed`, `title`; `set(on, time)` |
+| `running(pause)` | `run_if` condition: true while not paused |
+| `OnlyIn { screen }` | Component: despawns the entity when the game leaves `screen` |
+| `title_screen(cmd, theme, title, subtitle)` | Heading and a Play button on the title screen |
+| `game_over_screen(cmd, theme, title, detail)` | Heading, detail and Play again and Title buttons on the game-over screen |
+
+Button ids the module answers: `"play"` and `"retry"` go to `Playing`, `"title"` to `Title`, `"resume"` ends a pause.

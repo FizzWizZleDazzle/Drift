@@ -7,7 +7,7 @@ import "drift" { * };
 import "drift/gameplay" { * };
 ```
 
-Each part only runs for entities that have its components; the ones a game does not use cost nothing. `drift/control` has movement controllers, and `drift/ui` the HUD widgets in [HUD and Menus](hud.md).
+Each part only runs for entities that have its components; the ones a game does not use cost nothing. `drift/control` has movement controllers, `drift/screens` the flow from title to game over, and `drift/ui` the HUD widgets in [HUD and Menus](hud.md).
 
 ## Prefabs
 
@@ -162,3 +162,46 @@ cmd.spawn([at(480.0, 270.0), Sprite { .. }, ShipController { .. }, WrapAround { 
 - It sends `Jumped { entity, air }` and `Landed { entity }`, for sounds and dust; `grounded` and `facing` are on the component.
 
 `ShipController` turns with Left and Right at `turn_speed` radians per second, thrusts along its facing with Up, and drifts, slowed by `drag`, up to `max_speed`. At rotation 0 the ship faces right. `thrusting` is true while thrust is held, for a flame.
+
+## Screens, pausing and transitions
+
+`import "drift/screens" { * };` gives a game a title screen, play, pause and game over, with fades and wipes between them. It brings `drift/ui` along for its menus.
+
+```rust
+import "drift" { * };
+import "drift/ui" { * };
+import "drift/screens" { * };
+
+@system(on_enter: Screen::Title)
+fn title(cmd: Commands, theme: Theme) {
+    title_screen(cmd, theme, "Bat Cave", "Arrows to move, Space to jump");
+}
+
+@system(on_enter: Screen::Playing)
+fn new_game(cmd: Commands, score: Score, game: Game) {
+    score.reset();
+    game.player = cmd.spawn(plus(player(), [OnlyIn { screen: Screen::Playing }]));
+}
+
+@system(in_state: [Screen::Playing], run_if: [running])
+fn shoot(input: Input, cmd: Commands) { ... }
+
+@system
+fn lose(d: Died, game: Game, screens: Screens) {
+    if d.entity == game.player {
+        screens.wipe_to(Screen::GameOver);
+    }
+}
+
+@system(on_enter: Screen::GameOver)
+fn over(cmd: Commands, theme: Theme, score: Score) {
+    game_over_screen(cmd, theme, "Game Over", "Score " + string(score.value));
+}
+```
+
+- `Screen` is a state enum: `Title` (first), `Playing` and `GameOver`. Use it in `in_state`, `on_enter` and `on_exit` like your own.
+- `Screens.go(to)` covers the window, switches the state once it is covered, then uncovers it. `fade_to` and `wipe_to` pick the transition; `go_with(to, TransitionKind::Cut)` switches at once. `[screens]` in `drift.toml` sets `color`, `seconds` (each way) and `kind`.
+- `title_screen(cmd, theme, title, subtitle)` and `game_over_screen(cmd, theme, title, detail)` put up a heading and buttons: Play on the title; Play again and Title after a game. Their buttons send `"play"`, `"retry"` and `"title"`, which the module answers; your own buttons can use those ids too.
+- `OnlyIn { screen }` despawns an entity when the game leaves that screen, so a new game starts clean.
+- While `Playing`, Escape, P or the Start button pause: game time freezes (`Time.scale` 0) and a menu offers Resume and Quit. `Pause` is the resource: `on`, `menu` (false pauses without the menu), `allowed` (false turns the keys off), `title`, and `set(on, time)` to pause from code. `running` is a `run_if` condition that is true while not paused, for systems that read input.
+- Transitions, menus and HUD animations use the frame time before the time scale, so they work while paused.
