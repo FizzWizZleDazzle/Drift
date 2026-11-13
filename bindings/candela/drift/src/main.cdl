@@ -158,6 +158,18 @@ host "drift" {
     fade_to(float, float, float, float, float, float);
     lighting(string, float[]);
     tween_speed(float);
+    // The window, fonts, shaders and materials.
+    float[] window_op(string, float[], string);
+    string window_backend();
+    int font_load(string, float);
+    float[] text_measure(...);
+    float font_line_height(int, float);
+    font_fallback(int, int);
+    int shader_load(string);
+    int shader_create(string, string);
+    int material_create(int);
+    material_param(int, int, float, float, float, float);
+    material_texture(int, int, int);
 
     // Hierarchy: answers about the engine's current Transforms.
     int hier_parent(int);
@@ -362,6 +374,7 @@ struct Sprite {
     layer: int = 0,
     visible: bool = true,
     blend: Blend = Blend::Alpha,
+    material: Material = Material { .. },   // a custom shader; Material {} draws as usual
 }
 
 struct Rectangle {
@@ -2527,3 +2540,116 @@ impl Systems {
     fn disable(self, system: string) { drift::system_switch(system, false); }
     fn enabled(self, system: string) -> bool { return drift::system_enabled(system); }
 }
+
+// ---- Fonts and text ----
+
+impl Font {
+    // Widest line and height of `s` in this font at `size`.
+    fn measure(self, s: string, size: float) -> Vec2 {
+        let m = drift::text_measure(s, Text { size: size, font: self, .. });
+        return Vec2 { x: m[0], y: m[1] };
+    }
+    fn line_height(self, size: float) -> float { return drift::font_line_height(self.id, size); }
+    // Characters this font lacks come from `other`; every font falls back to
+    // the built-in one until this changes it.
+    fn set_fallback(self, other: Font) { drift::font_fallback(self.id, other.id); }
+}
+impl Text {
+    // The size this text covers as drawn, outline and shadow left out.
+    fn measure(self) -> Vec2 {
+        let m = drift::text_measure(self.value, self);
+        return Vec2 { x: m[0], y: m[1] };
+    }
+}
+
+// ---- Shaders and materials ----
+
+// A fragment shader: WGSL for the WebGPU backend and GLSL for OpenGL and
+// the browser's WebGL2.
+struct Shader { id: int = 0 }
+// A shader with its settings: eight vec4 parameters and up to three extra
+// textures. Sprites and post effects use materials.
+struct Material { id: int = 0 }
+impl Material {
+    // Parameter 0 to 7, `material.params[i]` in the shader.
+    fn set_param(self, i: int, x: float, y: float, z: float, w: float) { drift::material_param(self.id, i, x, y, z, w); }
+    fn set_color(self, i: int, c: Color) { drift::material_param(self.id, i, c.r, c.g, c.b, c.a); }
+    // Texture slot 1 to 3; slot 0 is what is being drawn.
+    fn set_texture(self, slot: int, t: Texture) { drift::material_texture(self.id, slot, t.id); }
+}
+
+impl Assets {
+    // A TrueType, OpenType or BMFont font. `size` is the size a Text with
+    // size 0 uses.
+    fn font(self, path: string, size: float) -> Font {
+        let id = drift::font_load(path, size);
+        if id == 0 {
+            throw "drift_load_failed: " + path;
+        }
+        return Font { id: id };
+    }
+    // `path` without an extension finds path.wgsl and path.frag.glsl.
+    fn shader(self, path: string) -> Shader {
+        let id = drift::shader_load(path);
+        if id == 0 {
+            throw "drift_load_failed: " + path;
+        }
+        return Shader { id: id };
+    }
+    // A shader from source: the body of `fn fragment` in WGSL, the `main` of
+    // a GLSL fragment shader, or both. Empty for the one you do not have.
+    fn create_shader(self, wgsl: string, glsl: string) -> Shader {
+        let id = drift::shader_create(wgsl, glsl);
+        if id == 0 {
+            throw "drift_shader_failed";
+        }
+        return Shader { id: id };
+    }
+    fn create_material(self, s: Shader) -> Material { return Material { id: drift::material_create(s.id) }; }
+}
+
+impl Effects {
+    // A post effect running a material's shader over the picture, which
+    // arrives as its texture0.
+    fn add_material(self, m: Material, order: int) -> Effect { return Effect { id: drift::effect_material(m.id, order) }; }
+}
+
+// ---- The window ----
+
+enum ScaleMode { Letterbox, Stretch, Integer, Expand }
+enum Cursor { Default, Pointer, Text, Crosshair, Move, Wait, NotAllowed }
+
+impl Window {
+    fn op(self, name: string, nums: float[], text: string) -> float[] { return drift::window_op(name, nums, text); }
+    fn set_title(self, title: string) { self.op("title", [], title); }
+    fn set_clear_color(self, c: Color) { self.op("clear_color", color_list(c), ""); }
+    fn set_scale_mode(self, m: ScaleMode) {
+        let code = match m { ScaleMode::Letterbox => 0.0, ScaleMode::Stretch => 1.0, ScaleMode::Integer => 2.0, ScaleMode::Expand => 3.0 };
+        self.op("scale_mode", [code], "");
+    }
+    // The logical resolution the game draws at.
+    fn set_logical_size(self, w: int, h: int) { self.op("logical_size", [float(w), float(h)], ""); }
+    // The window's own size in pixels; in the browser, the canvas.
+    fn size(self) -> Vec2 {
+        let v = self.op("size", [], "");
+        return Vec2 { x: v[0], y: v[1] };
+    }
+    fn set_size(self, w: int, h: int) { self.op("set_size", [float(w), float(h)], ""); }
+    fn fullscreen(self) -> bool { return self.op("fullscreen", [], "")[0] > 0.5; }
+    // Browsers allow fullscreen only from a key press or click.
+    fn set_fullscreen(self, on: bool) { self.op("set_fullscreen", [flag(on)], ""); }
+    fn show_cursor(self, visible: bool) { self.op("show_cursor", [flag(visible)], ""); }
+    fn set_cursor(self, c: Cursor) {
+        let code = match c {
+            Cursor::Default => 0.0, Cursor::Pointer => 1.0, Cursor::Text => 2.0, Cursor::Crosshair => 3.0,
+            Cursor::Move => 4.0, Cursor::Wait => 5.0, Cursor::NotAllowed => 6.0,
+        };
+        self.op("cursor", [code], "");
+    }
+    // Draw calls and sprites in the last frame.
+    fn draw_calls(self) -> int { return int(self.op("stats", [], "")[0]); }
+    fn sprite_count(self) -> int { return int(self.op("stats", [], "")[1]); }
+    // "gl" or "webgpu".
+    fn backend(self) -> string { return drift::window_backend(); }
+}
+

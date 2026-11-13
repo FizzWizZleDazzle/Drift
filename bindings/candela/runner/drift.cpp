@@ -26,7 +26,6 @@
 #include <drift/resources/FontResource.hpp>
 #include <drift/resources/ParticleSystemResource.hpp>
 #include <drift/resources/SpriteResource.hpp>
-#include <drift/resources/UIResource.hpp>
 #include <drift/components/CameraController.hpp>
 #include <drift/components/Name.hpp>
 #include <drift/components/ParticleEmitter.hpp>
@@ -1891,6 +1890,116 @@ bool effects(const std::string& f, const json& a, json& out) {
     return false;
 }
 
+// ---- Window, fonts and shaders ----
+
+SDL_Window* sdlWindow() { return g_app ? static_cast<SDL_Window*>(g_app->sdlWindow()) : nullptr; }
+
+bool windowAndAssets(const std::string& f, const json& a, json& out) {
+    out = nullptr;
+    auto* r = res<RendererResource>();
+    if (f == "window_op") {
+        // op, numbers, text
+        std::string op = a[0].get<std::string>();
+        const json& n = a[1];
+        SDL_Window* win = sdlWindow();
+        out = json::array();
+        if (op == "title") {
+            g_app->config().window.title = a[2].get<std::string>();
+            if (win) SDL_SetWindowTitle(win, g_app->config().title().c_str());
+        } else if (op == "clear_color") {
+            ColorF c{num(n, 0), num(n, 1), num(n, 2), num(n, 3, 1.f)};
+            g_app->config().render.clearColor = c;
+            if (r) r->setClearColor(c);
+        } else if (op == "scale_mode") {
+            auto m = static_cast<ScaleMode>(std::clamp(static_cast<int>(num(n, 0)), 0, 3));
+            g_app->config().window.scaleMode = m;
+            if (r) r->setScaleMode(m);
+        } else if (op == "logical_size") {
+            if (r && num(n, 0) >= 1.f && num(n, 1) >= 1.f) r->setLogicalSize(static_cast<int>(num(n, 0)), static_cast<int>(num(n, 1)));
+        } else if (op == "size") {
+            int w = 0, h = 0;
+            if (win) SDL_GetWindowSize(win, &w, &h);
+            out = {w, h};
+        } else if (op == "set_size") {
+            if (win) SDL_SetWindowSize(win, static_cast<int>(num(n, 0)), static_cast<int>(num(n, 1)));
+        } else if (op == "fullscreen") {
+            out = {win && (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN) ? 1.0 : 0.0};
+        } else if (op == "set_fullscreen") {
+            g_app->config().window.fullscreen = num(n, 0) > 0.5f;
+            if (win) SDL_SetWindowFullscreen(win, g_app->config().window.fullscreen);
+        } else if (op == "show_cursor") {
+            if (num(n, 0) > 0.5f) SDL_ShowCursor();
+            else SDL_HideCursor();
+        } else if (op == "cursor") {
+            static const SDL_SystemCursor kinds[] = {SDL_SYSTEM_CURSOR_DEFAULT, SDL_SYSTEM_CURSOR_POINTER,
+                                                     SDL_SYSTEM_CURSOR_TEXT, SDL_SYSTEM_CURSOR_CROSSHAIR,
+                                                     SDL_SYSTEM_CURSOR_MOVE, SDL_SYSTEM_CURSOR_WAIT,
+                                                     SDL_SYSTEM_CURSOR_NOT_ALLOWED};
+            static SDL_Cursor* made[7] = {};
+            int k = std::clamp(static_cast<int>(num(n, 0)), 0, 6);
+            if (!made[k]) made[k] = SDL_CreateSystemCursor(kinds[k]);
+            if (made[k]) SDL_SetCursor(made[k]);
+        } else if (op == "stats") {
+            out = {r ? r->drawCalls() : 0, r ? r->spriteCount() : 0};
+        } else {
+            DRIFT_LOG_WARN("Candela: Window has no '%s'", op.c_str());
+        }
+        return true;
+    }
+    if (f == "window_backend") {
+        out = std::string(r ? r->backendName() : "none");
+        return true;
+    }
+    if (f == "font_load") {
+        auto* assets = res<AssetServer>();
+        out = assets ? assets->loadFont(a[0].get<std::string>().c_str(), static_cast<int>(a[1].get<float>())).id : 0u;
+        return true;
+    }
+    if (f == "text_measure") {
+        // text, Text style
+        auto* fonts = res<FontResource>();
+        Vec2 size = fonts ? fonts->measureText(FontHandle{idOf(a[1].value("font", json()))}, a[0].get<std::string>(),
+                                               textStyle(a[1]))
+                          : Vec2{};
+        out = {size.x, size.y};
+        return true;
+    }
+    if (f == "font_line_height") {
+        auto* fonts = res<FontResource>();
+        out = fonts ? fonts->lineHeight(FontHandle{a[0].get<uint32_t>()}, a[1].get<float>()) : 0.f;
+        return true;
+    }
+    if (f == "font_fallback") {
+        if (auto* fonts = res<FontResource>()) fonts->setFallbackFont(FontHandle{a[0].get<uint32_t>()}, FontHandle{a[1].get<uint32_t>()});
+        return true;
+    }
+    if (f == "shader_load") {
+        out = r ? r->loadShader(a[0].get<std::string>().c_str()).id : 0u;
+        return true;
+    }
+    if (f == "shader_create") {
+        ShaderDesc d;
+        d.wgsl = a[0].get<std::string>();
+        d.glslFragment = a[1].get<std::string>();
+        out = r ? r->createShader(d).id : 0u;
+        return true;
+    }
+    if (f == "material_create") {
+        out = r ? r->createMaterial(ShaderHandle{a[0].get<uint32_t>()}).id : 0u;
+        return true;
+    }
+    if (f == "material_param") {
+        if (r) r->setMaterialParam(MaterialHandle{a[0].get<uint32_t>()}, a[1].get<int>(),
+                                   Vec4{a[2].get<float>(), a[3].get<float>(), a[4].get<float>(), a[5].get<float>()});
+        return true;
+    }
+    if (f == "material_texture") {
+        if (r) r->setMaterialTexture(MaterialHandle{a[0].get<uint32_t>()}, a[1].get<int>(), TextureHandle{a[2].get<uint32_t>()});
+        return true;
+    }
+    return false;
+}
+
 // ---- Services ----
 
 int state(bool held, bool pressed, bool released, int which) {
@@ -2226,6 +2335,7 @@ json service(const std::string& f, const json& a) {
     if (gameplay(f, a, answer)) return answer;
     if (effects(f, a, answer)) return answer;
     if (animService(f, a, answer)) return answer;
+    if (windowAndAssets(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {

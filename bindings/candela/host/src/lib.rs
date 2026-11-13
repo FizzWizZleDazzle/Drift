@@ -1408,6 +1408,17 @@ fn presentation_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("fade_to", vec![F, F, F, F, F, F], U),
         ("lighting", vec![S, af()], U),
         ("tween_speed", vec![F], U),
+        // The window, fonts, shaders and materials.
+        ("window_op", vec![S, af(), S], af()),
+        ("window_backend", vec![], S),
+        ("font_load", vec![S, F], I),
+        ("font_line_height", vec![I, F], F),
+        ("font_fallback", vec![I, I], U),
+        ("shader_load", vec![S], I),
+        ("shader_create", vec![S, S], I),
+        ("material_create", vec![I], I),
+        ("material_param", vec![I, I, F, F, F, F], U),
+        ("material_texture", vec![I, I, I], U),
     ]
 }
 
@@ -1420,6 +1431,7 @@ fn presentation_values() -> Vec<(&'static str, HostType)> {
         ("draw_sprite", HostType::Unit),
         ("effect_add", HostType::Int),
         ("effect_set", HostType::Unit),
+        ("text_measure", HostType::Array(Box::new(HostType::Float))),
     ]
 }
 

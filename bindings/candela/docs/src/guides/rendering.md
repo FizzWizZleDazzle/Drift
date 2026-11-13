@@ -167,6 +167,26 @@ scale_mode = "integer"
 | `Integer` | Pixel perfect: scales by whole numbers |
 | `Expand` | Keeps pixels square and grows the logical size, so wider screens see more |
 
-`Window` changes the mode and size while the game runs, and its `width` and `height` report the size in effect. The background color is `clear_color` in `[render]`.
+`Window` changes the mode and size while the game runs, and its `width` and `height` report the size in effect. It also sets the title, the background color, fullscreen and the mouse cursor. The background color is `clear_color` in `[render]`.
+
+## Shaders
+
+A sprite with a `material` draws through a shader of your own: a hit flash, a dissolve, water. Write the fragment stage in GLSL, the `main` of a shader that sets `o_color`; the engine adds the inputs `v_uv`, `v_color`, `v_world`, the textures `u_texture0` to `u_texture3`, and `material.params[0]` to `[7]`. The browser and desktop OpenGL run GLSL; add a `.wgsl` file beside it for the WebGPU backend.
+
+```rust
+const FLASH: string = "void main() {
+    vec4 c = texture(u_texture0, v_uv) * v_color;
+    o_color = vec4(mix(c.rgb, material.params[0].rgb, material.params[0].a), c.a);
+}";
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    let flash = assets.create_material(assets.create_shader("", FLASH));
+    flash.set_color(0, rgba(255, 255, 255, 180));
+    cmd.spawn([at(200.0, 200.0), Sprite { image: texture("assets/enemy.png"), material: flash, .. }]);
+}
+```
+
+`assets.shader("shaders/flash")` loads `shaders/flash.frag.glsl` and `shaders/flash.wgsl` instead. A material can also run over the whole picture as a post effect with `effects.add_material(material, order)`; the picture arrives as `u_texture0`.
 
 See [Engine Components](../reference/components.md#drawing) for every field.

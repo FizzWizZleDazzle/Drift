@@ -317,11 +317,11 @@ void UIResource::image(TextureHandle texture, Rect rect, Rect srcRect) {
     impl_->endWidgetWindow();
 }
 
-bool UIResource::slider(const char* label, float* value, float minVal, float maxVal) {
+bool UIResource::slider(const char* label, float* value, float minVal, float maxVal, Rect rect) {
     if (!impl_->initialised || !label || !value) return false;
     impl_->beginWidgetWindow(label);
-    ImGui::SetCursorScreenPos(ImVec2(impl_->theme.padding, impl_->theme.padding));
-    ImGui::PushItemWidth(200.f);
+    ImGui::SetCursorScreenPos(ImVec2(rect.x, rect.y));
+    ImGui::PushItemWidth(rect.w > 0.f ? rect.w : 200.f);
     bool changed = ImGui::SliderFloat(label, value, minVal, maxVal);
     ImGui::PopItemWidth();
     impl_->endWidgetWindow();

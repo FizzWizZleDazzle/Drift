@@ -22,6 +22,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `PlayOptions` | `volume` (1), `pan` (-1 left to 1 right), `pitch` (1), `looping`, `bus` (the sfx bus when unset), `fade_in` (seconds), `priority` (higher keeps its voice when all are busy). For `Sound.play_with` |
 | `Timer`, `Cooldown` | See [Timers and Save Data](../guides/timers-and-saves.md) |
 | `Image` | Pixels to change from code; see [Image](resources.md#image) |
+| `Shader`, `Material` | A fragment shader, and a shader with its parameters and textures; from `Assets` |
 | `Spritesheet` | A texture cut into equal frames: `texture`, `frame_w`, `frame_h`, `columns`, `rows`. `frame(col, row)`, `frame_at(i)` (left to right, top to bottom from 0), `frames(first, count)`, `count()`. Built with `assets.spritesheet(texture, frame_w, frame_h)` |
 | `GlobalTransform` | `position`, `rotation`, `scale`: a transform in world space, from `world_transform(e)` |
 | `Spring`, `Spring2`, `AngleSpring` | Damped springs for a float, a `Vec2` and a rotation: `value`, `velocity`, `update(target, stiffness, damping, dt)`; `Spring` and `Spring2` also `smooth(target, seconds, dt)`. See [Procedural Animation](../guides/procedural-animation.md#springs) |
@@ -96,6 +97,7 @@ The structs `Effects.add` takes; every field has a default.
 |------|--------|
 | `Schedule` | `Startup`, `Update` |
 | `ScaleMode` | `Letterbox`, `Stretch`, `Integer`, `Expand` |
+| `Cursor` | `Default`, `Pointer`, `Text`, `Crosshair`, `Move`, `Wait`, `NotAllowed` |
 | `Blend` | `Alpha`, `Additive`, `Multiply`, `Screen`, `Premultiplied`, `Opaque` |
 | `Filter` | `Nearest`, `Linear` |
 | `Align` | `Left`, `Center`, `Right` |

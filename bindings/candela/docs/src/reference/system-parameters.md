@@ -71,7 +71,7 @@ Each element has `a` and `b`, the two entities, in the order the type names them
 | `Camera2D` | Converting between screen and world positions through the main camera |
 | `Save` | The save slot named after `[project]` in `drift.toml` |
 | `Random` | The game's seed and a random generator per purpose |
-| `Draw` | Immediate debug shapes for this frame |
+| `Draw` | Immediate shapes, text and images for this frame |
 | `Systems` | Turning systems on and off |
 
 Their fields and methods are in [Engine Resources](resources.md).

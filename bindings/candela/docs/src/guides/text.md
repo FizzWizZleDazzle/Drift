@@ -70,4 +70,16 @@ fn load_fonts(cmd: Commands, assets: Assets) {
 
 TrueType and OpenType fonts stay smooth at any `size`. BMFont files suit pixel-art fonts drawn at their own size.
 
+## Measuring
+
+`font.measure(s, size)` gives the width of the widest line and the height of a string, and `text.measure()` the same for a `Text` with its own font, size, wrap and spacing; use them to fit a box around a label or center a menu. `font.line_height(size)` is the distance between lines. Characters a font lacks come from the built-in font, or from another with `font.set_fallback(other)`.
+
+```rust
+let size = fonts.title.measure("Game Over", 48.0);
+draw.hud();
+draw.rect(rect(320.0 - size.x * 0.5 - 8.0, 100.0, size.x + 16.0, size.y), rgba(0, 0, 0, 160));
+```
+
+`Draw.text_styled(s, pos, style)` draws a string for one frame with any `Text` value as the style.
+
 See [Engine Components](../reference/components.md#drawing) for every field.

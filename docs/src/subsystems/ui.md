@@ -89,14 +89,14 @@ ui->label("Level 3", Vec2{20, 20});
 ### Slider
 
 ```cpp
-bool slider(const char* label, float* value, float minVal, float maxVal);
+bool slider(const char* label, float* value, float minVal, float maxVal, Rect rect);
 ```
 
-A horizontal slider that modifies `value` in place. Returns `true` when the value changes.
+A horizontal slider that modifies `value` in place, at `rect`'s position and `rect.w` wide (200 when 0), with its label to the right. Returns `true` when the value changes.
 
 ```cpp
 static float volume = 0.5f;
-if (ui->slider("Volume", &volume, 0.f, 1.f)) {
+if (ui->slider("Volume", &volume, 0.f, 1.f, Rect{20, 60, 200, 0})) {
     audio->setBusVolume(audio->musicBus(), volume);
 }
 ```
@@ -239,12 +239,12 @@ void pauseMenu(ResMut<UIResource> ui, Res<InputResource> input,
     ui->label("PAUSED", Vec2{120, 30});
 
     static float musicVol = 0.5f;
-    if (ui->slider("Music", &musicVol, 0.f, 1.f)) {
+    if (ui->slider("Music", &musicVol, 0.f, 1.f, Rect{50, 80, 200, 0})) {
         audio->setBusVolume(audio->musicBus(), musicVol);
     }
 
     static float sfxVol = 0.8f;
-    if (ui->slider("SFX", &sfxVol, 0.f, 1.f)) {
+    if (ui->slider("SFX", &sfxVol, 0.f, 1.f, Rect{50, 120, 200, 0})) {
         audio->setBusVolume(audio->sfxBus(), sfxVol);
     }
 

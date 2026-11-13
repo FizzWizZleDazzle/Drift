@@ -46,7 +46,11 @@ Device state and [input actions](../guides/input.md#actions).
 | Member | Meaning |
 |--------|---------|
 | `width`, `height` | The logical resolution this frame |
-| `set_title(s)`, `set_clear_color(c)`, `set_scale_mode(m)`, `set_logical_size(w, h)` | Change the window while running; `drift.toml` sets where they start |
+| `set_title(s)`, `set_clear_color(c)`, `set_scale_mode(m)`, `set_logical_size(w, h)` | Change the window while running; `drift.toml` sets where they start. In the browser the title is the page's |
+| `size()`, `set_size(w, h)` | The window's own size in pixels; in the browser, the canvas |
+| `fullscreen()`, `set_fullscreen(on)` | Fullscreen. Browsers allow it only from a key press or click, so call it from the system that reads one |
+| `show_cursor(visible)`, `set_cursor(c)` | Hide the mouse cursor, or pick a `Cursor`: `Default`, `Pointer`, `Text`, `Crosshair`, `Move`, `Wait`, `NotAllowed` |
+| `draw_calls()`, `sprite_count()`, `backend()` | Last frame's draw calls and sprites, and `"gl"` or `"webgpu"` |
 | `quit()` | Ends the game after this frame |
 | `screenshot(path)` | Saves the next presented frame as a PNG |
 | `download(path)` | Offers a file the game wrote as a download in the browser, such as a screenshot (once it is written) |
@@ -55,6 +59,9 @@ Device state and [input actions](../guides/input.md#actions).
 if input.key_pressed(Key::F12) {
     window.screenshot("shot.png");
     window.download("shot.png");
+}
+if input.key_pressed(Key::F) {
+    window.set_fullscreen(!window.fullscreen());
 }
 ```
 
@@ -69,7 +76,9 @@ Images and sounds load with the free functions `texture(path)`, `sound(path)` an
 | `create_image(w, h, fill)`, `image(path)` | An `Image` to change from code: blank, or an image file's pixels. See [Image](#image) |
 | `spritesheet(texture, frame_w, frame_h)`, `aseprite(path)` | A `Spritesheet`: `frame(col, row)`, `frame_at(i)`, `frames(first, count)`, `frame_count()`, `tag(name)` (the frames of an Aseprite tag), `texture` |
 | `create_sound(samples: float[], rate)` | A mono `Sound` from samples in -1 to 1 |
-| `font(path, size)` | A `Font`: TrueType, OpenType or BMFont. `Font {}` is the built-in font |
+| `font(path, size)` | A `Font`: TrueType, OpenType or BMFont. `Font {}` is the built-in font. `measure(s, size)` gives the size of a string, `line_height(size)` the distance between lines, `set_fallback(other)` where missing characters come from |
+| `shader(path)`, `create_shader(wgsl, glsl)` | A `Shader`: from `path.wgsl` and `path.frag.glsl` beside each other, or from source. The browser runs the GLSL; see [Shaders](../guides/rendering.md#shaders) |
+| `create_material(shader)` | A `Material` for `Sprite.material` or `Effects.add_material`: `set_param(i, x, y, z, w)` and `set_color(i, c)` set `material.params[i]` (0 to 7), `set_texture(slot, t)` sets extra textures 1 to 3 |
 | `tilemap(path)`, `ldtk_level(path, level)` | A `Map` from Tiled or LDtk |
 | `create_tilemap(width, height, tile_size, tileset, layers: string[])` | An empty `Map` of tile layers over one tileset image, for levels made in code |
 | `scene(path)` | A `Scene` from a scene or prefab file |
@@ -197,6 +206,7 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `muted()`, `set_p
 | `add(settings)`, `add_at(settings, order)` | A post effect from its settings struct: `Bloom`, `ColorGrading`, `Blur`, `Pixelate`, `Grayscale`, `Sepia`, `Vignette` or `Crt` (see [Values](values.md#post-effect-settings)). Each kind has its own place in the chain; `add_at` picks one |
 | `bloom(threshold, intensity)`, `vignette(intensity, radius)`, `crt(curvature, scanlines)`, `grayscale(amount)`, `sepia(amount)`, `pixelate(size)`, `blur(radius, iterations)` | The same with the most used settings and the rest at their defaults |
 | `set_ambient(color)`, `set_lighting(on)` | Light everywhere before any light adds to it, and lighting on or off, when drift.toml has a `[lighting]` section |
+| `add_material(material, order)` | A post effect of your own: the material's shader runs over the whole picture, which arrives as its `texture0` |
 | `set_tween_speed(s)` | Multiplies time for every tween; 0 freezes them |
 
 Every post effect call returns an `Effect`: `set(settings)` changes it (settings of the kind it was added with), `set_enabled(on)` and `enabled()` switch it, `set_order(order)` moves it in the chain, and `remove()` deletes it.

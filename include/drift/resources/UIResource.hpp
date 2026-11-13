@@ -32,7 +32,9 @@ public:
     bool button(const char* label, Rect rect);
     void label(const char* text, Vec2 pos);
     void image(TextureHandle texture, Rect rect, Rect srcRect);
-    bool slider(const char* label, float* value, float minVal, float maxVal);
+    // A slider at rect's position, rect.w wide (200 when 0), its label to
+    // the right. Returns true when the value changes.
+    bool slider(const char* label, float* value, float minVal, float maxVal, Rect rect);
     void progressBar(float fraction, Rect rect);
 
     // Panels
