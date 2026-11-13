@@ -77,7 +77,7 @@ function(drift_candela_web_game target)
 endfunction()
 
 # Game folders outside this tree to build as web pages too, each as the
-# target <folder name>_cdl: -DDRIFT_CANDELA_WEB_GAMES="/path/to/game;...".
+# target play_<folder name>: -DDRIFT_CANDELA_WEB_GAMES="/path/to/game;...".
 set(DRIFT_CANDELA_WEB_GAMES "" CACHE STRING "Candela game folders to build as web pages")
 
 if(EMSCRIPTEN)
@@ -86,10 +86,10 @@ if(EMSCRIPTEN)
     foreach(game IN LISTS DRIFT_CANDELA_WEB_GAMES)
         get_filename_component(name ${game} NAME)
         string(MAKE_C_IDENTIFIER ${name} name)
-        if(TARGET ${name}_cdl)
-            message(FATAL_ERROR "DRIFT_CANDELA_WEB_GAMES: two games would build as ${name}_cdl")
+        if(TARGET play_${name})
+            message(FATAL_ERROR "DRIFT_CANDELA_WEB_GAMES: two games would build as play_${name}")
         endif()
-        drift_candela_web_game(${name}_cdl PROJECT ${game})
+        drift_candela_web_game(play_${name} PROJECT ${game})
     endforeach()
     return()
 endif()
