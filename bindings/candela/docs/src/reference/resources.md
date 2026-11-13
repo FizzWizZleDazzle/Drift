@@ -56,13 +56,14 @@ Images and sounds load with the free functions `texture(path)` and `sound(path)`
 | `create_sound(samples: float[], rate)` | A mono `Sound` from samples in -1 to 1 |
 | `font(path, size)` | A `Font`: TrueType, OpenType or BMFont. `Font {}` is the built-in font |
 | `tilemap(path)`, `ldtk_level(path, level)` | A `Map` from Tiled or LDtk |
+| `create_tilemap(width, height, tile_size, tileset, layers: string[])` | An empty `Map` of tile layers over one tileset image, for levels made in code |
 | `scene(path)` | A `Scene` from a scene or prefab file |
 
 `Texture` has `size()` and `set_filter(Filter)`; `Sound` has `play()`, `play_with(PlayOptions)` and `duration()`.
 
 ### Map
 
-A loaded Tiled map or LDtk level. Layers are numbered from 0 at the bottom; cells are `Cell { x, y }`.
+A loaded Tiled map or LDtk level, or a map made with `create_tilemap`. Layers are numbered from 0 at the bottom; cells are `Cell { x, y }`.
 
 | Method | Returns |
 |--------|---------|
@@ -74,6 +75,8 @@ A loaded Tiled map or LDtk level. Layers are numbered from 0 at the bottom; cell
 | `int_grid(layer, cell)`, `set_int_grid(layer, cell, value)` | LDtk IntGrid values |
 | `tile_at(layer, world_pos)` | The tile id under a world position |
 | `world_to_tile(pos, layer)`, `tile_to_world(cell, layer)` | Coordinates; `tile_to_world` gives the cell's top-left |
+| `fill(layer, grid, tiles: int[], at)`, `to_grid(layer)` | Write a [grid](../guides/procedural-generation.md#grids) into a tile layer through a tile id per value; read a layer back as a grid |
+| `destroy()` | Free the map once no `Tilemap` entity shows it |
 | `objects(kind)` | `MapObject[]` of a Tiled class or LDtk entity identifier; `""` for all |
 | `property(name)`, `object_property(object, name)` | Map or level properties and object properties, as strings; `""` when missing |
 
@@ -90,6 +93,15 @@ A loaded scene or prefab file. Spawn it through `Commands`:
 | `cmd.save_prefab(path, root)` | Writes `root` and its children |
 
 A `SceneInstance` has `entities` and `roots` (`Entity[]`, in file order) and `find(name)`, which returns `Some(entity)` for the first with that `Name`. The entities exist for the systems that run after this one.
+
+## Random
+
+The game's seed from `drift.toml` `[random]`; see [Procedural Generation](../guides/procedural-generation.md#the-games-seed).
+
+| Method | Returns |
+|--------|---------|
+| `seed()` | The seed in use; with `seed = 0` a new one is picked each run and logged |
+| `stream(name)` | An `Rng` for one purpose: the same for the same seed and name, independent of other names |
 
 ## Audio
 

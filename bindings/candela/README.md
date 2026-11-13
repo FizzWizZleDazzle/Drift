@@ -36,10 +36,11 @@ fn steer(ship: Ship, velocity: Velocity, input: Input) {
 
 - `examples/flappy_bird`: states, per-entity systems, sensor overlaps, settings from `drift.toml`.
 - `examples/coin_dash`: input actions, physics contacts, particles, tweens, save data, sound made from samples.
+- `examples/cave_walk`: generated caves and dungeons in a tilemap made in code, seeded random numbers, Poisson-disk spawns from a weighted table, flow-field chasers.
 
 ## Limitations
 
-Scripts are not reloaded while the game runs yet, and the `drift check`, `drift build` and `drift new` commands are not built. Several engine resources the book describes (Audio, Physics, Draw, Camera2D) are not in the `drift` module yet.
+Scripts are not reloaded while the game runs yet, and the `drift check`, `drift build` and `drift new` commands are not built. Several engine resources the book describes (Audio, Physics, Draw, Camera2D) are not in the `drift` module yet, and maps do not list their objects (`Map.objects`, `object_property`).
 
 ## Documentation
 

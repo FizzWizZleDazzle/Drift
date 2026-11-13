@@ -32,7 +32,7 @@ drift run
 - **Change it while it runs.** Saving a script, an image or `drift.toml` updates the running game and keeps its state.
 - **Little to write.** A system that takes one component runs once per entity, a collision handler is a system that takes one collision, and game phases are an enum the systems name.
 - **Checked before it runs.** The compiler checks your attributes and system parameters, so mistakes show up as errors with a line number rather than as wrong behavior.
-- **Batteries included.** Sprites and spritesheets, text, input actions with rebinding, Box2D physics, audio with buses and music, tilemaps from Tiled and LDtk, lights and shadows, post effects, scenes and prefabs, save data, and an in-game inspector.
+- **Batteries included.** Sprites and spritesheets, text, input actions with rebinding, Box2D physics, audio with buses and music, tilemaps from Tiled and LDtk, procedural generation and pathfinding, lights and shadows, post effects, scenes and prefabs, save data, and an in-game inspector.
 
 ## How to read this book
 

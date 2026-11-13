@@ -25,7 +25,7 @@ An entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`.
 | `Text` | `value`, `size`, `color`, `align`, `valign`, `wrap` (width, 0 for none), `line_spacing`, `outline`, `outline_color`, `shadow_offset` (zero for none), `shadow_color`, `rich_text` (inline color tags), `font`, `z`, `layer`, `visible`. Holds up to 511 bytes |
 | `Camera` | `zoom`, `rotation`, `active`, `order`, `viewport` (normalized rect, for split screen), `layer_mask`, `target` (a render target texture), `clear`, `clear_color`. *Engine*: `zoom` under a tween, position under `CameraFollow` and shake |
 | `CameraFollow` | `target`, `smoothing`, `offset`, `dead_zone` |
-| `Tilemap` | `map`, `z`, `layer`, `colliders` (build static colliders from solid layers). Parallax comes from the map's layer settings |
+| `Tilemap` | `map`, `z`, `layer`, `colliders` (build static colliders from solid layers), `visible`. The map's top-left sits at the entity's `Transform`. Parallax comes from the map's layer settings |
 
 ## Motion and behavior
 

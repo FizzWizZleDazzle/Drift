@@ -23,6 +23,19 @@ fn load_level(cmd: Commands, assets: Assets) {
 
 The map draws at its entity's `Transform`, with `z` and `layer` from the `Tilemap` component. Parallax comes from each layer's settings in the editor.
 
+## Maps made in code
+
+`assets.create_tilemap(width, height, tile_size, tileset, layers)` makes an empty map of tile layers over one tileset image, for levels your systems build, such as [generated](procedural-generation.md) ones. Tile ids count from 1 at the image's top-left, left to right and then down. Fill it tile by tile with `set_tile`, or a whole [grid](procedural-generation.md#grids) at once with `fill`:
+
+```rust
+let map = assets.create_tilemap(60, 32, 16, art.tiles, ["Ground", "Walls"]);
+map.fill(1, level_grid, [0, 3], cell(0, 0));   // value 0 stays empty, value 1 becomes tile 3
+map.set_layer_solid(1, true, [3]);
+cmd.spawn([at(0.0, 0.0), Tilemap { map: map, .. }]);
+```
+
+`fill(layer, grid, tiles, at)` writes the grid with its top-left at cell `at`; a cell holding value v becomes tile `tiles[v]`, and values past the end of `tiles` leave the cell empty. `to_grid(layer)` reads a layer back as a grid. When a level is replaced, despawn its `Tilemap` entity and call `map.destroy()` to free the old map.
+
 ## Layers
 
 Layers are numbered from 0 at the bottom, in both formats. Find one by name:

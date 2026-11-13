@@ -24,6 +24,14 @@
 #include <drift/components/Shape.hpp>
 #include <drift/components/Sprite.hpp>
 #include <drift/components/Text.hpp>
+#include <drift/components/Tilemap.hpp>
+#include <drift/gameplay/Pathfinding.hpp>
+#include <drift/math/Noise.hpp>
+#include <drift/plugins/RandomPlugin.hpp>
+#include <drift/procgen/Generators.hpp>
+#include <drift/procgen/TilemapFill.hpp>
+#include <drift/procgen/Wfc.hpp>
+#include <drift/resources/TilemapResource.hpp>
 #include <drift/effects/PostEffects.hpp>
 #include <drift/gameplay/InputActions.hpp>
 #include <drift/plugins/DefaultPlugins.hpp>
@@ -38,6 +46,8 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <span>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -498,6 +508,25 @@ const std::vector<Codec>& codecs() {
          },
          [](EntityId e) { world().removeComponent(e, cid<Name>()); },
          [] { return cid<Name>(); }},
+        {"Tilemap",
+         [](EntityId e) { return get<Tilemap>(e) != nullptr; },
+         [](EntityId e) {
+             const Tilemap& t = *get<Tilemap>(e);
+             return json{{"map", {{"id", t.map.id}}}, {"z", t.zOrder}, {"layer", t.renderLayer},
+                         {"colliders", t.colliders}, {"visible", t.visible}};
+         },
+         [](EntityId e, const json& j) {
+             Tilemap t;
+             if (const Tilemap* cur = get<Tilemap>(e)) t = *cur;
+             t.map = TilemapHandle{j.value("map", json::object()).value("id", 0u)};
+             t.zOrder = j.value("z", 0.f);
+             t.renderLayer = layer(j);
+             t.colliders = j.value("colliders", true);
+             t.visible = j.value("visible", true);
+             put(e, t);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<Tilemap>()); },
+         [] { return cid<Tilemap>(); }},
     };
     return list;
 }
@@ -511,6 +540,349 @@ const Codec* codec(const char* component) {
         if (n == c.name) return &c;
     }
     return nullptr;
+}
+
+// ---- Random numbers, noise, generators, pathfinding and tilemaps ----
+
+// A candela Rng is the engine's generator state as (hi, lo, inc).
+Rng rngOf(const json& a) {
+    uint64_t hi = static_cast<uint32_t>(a[0].get<int64_t>()), lo = static_cast<uint32_t>(a[1].get<int64_t>());
+    return Rng::fromState((hi << 32) | lo, static_cast<uint64_t>(a[2].get<int64_t>()));
+}
+void pushState(json& out, const Rng& r) {
+    out.push_back(static_cast<int64_t>(r.state() >> 32));
+    out.push_back(static_cast<int64_t>(r.state() & 0xffffffffu));
+}
+json stateOf(const Rng& r) {
+    json out = json::array();
+    pushState(out, r);
+    out.push_back(static_cast<int64_t>(r.increment()));
+    return out;
+}
+
+Grid gridOf(const json& w, const json& h, const json& cells) {
+    Grid g(w.get<int32_t>(), h.get<int32_t>());
+    for (size_t i = 0; i < g.cells.size() && i < cells.size(); ++i) g.cells[i] = cells[i].get<int32_t>();
+    return g;
+}
+// [hi, lo] of the generator, then the grid's width, height and cells.
+json gridAnswer(const Rng& r, const Grid& g) {
+    json out = json::array();
+    pushState(out, r);
+    out.push_back(g.width);
+    out.push_back(g.height);
+    for (int32_t v : g.cells) out.push_back(v);
+    return out;
+}
+std::vector<int32_t> ints(const json& j) {
+    std::vector<int32_t> v;
+    for (const auto& x : j) v.push_back(x.get<int32_t>());
+    return v;
+}
+
+// Noise fields by seed; a field builds its permutation table once.
+const Noise& noiseFor(int64_t seed) {
+    static std::unordered_map<int64_t, Noise> cache;
+    auto it = cache.find(seed);
+    if (it == cache.end()) it = cache.emplace(seed, Noise(static_cast<uint32_t>(seed))).first;
+    return it->second;
+}
+NoiseOptions noiseOptions(const json& a) {
+    NoiseOptions o;
+    o.type = static_cast<NoiseType>(std::clamp(a[1].get<int>(), 0, 2));
+    o.frequency = a[2].get<float>();
+    o.octaves = a[3].get<int>();
+    o.lacunarity = a[4].get<float>();
+    o.gain = a[5].get<float>();
+    o.warp = a[6].get<float>();
+    o.warpFrequency = a[7].get<float>();
+    return o;
+}
+
+TilemapHandle mapOf(const json& j) { return TilemapHandle{j.get<uint32_t>()}; }
+
+bool procgen(const std::string& f, const json& a, json& out) {
+    if (f == "rng_seed") {
+        uint64_t stream = static_cast<uint64_t>(a[1].get<int64_t>());
+        out = stateOf(stream ? Rng(static_cast<uint64_t>(a[0].get<int64_t>()), stream)
+                             : Rng(static_cast<uint64_t>(a[0].get<int64_t>())));
+        return true;
+    }
+    if (f == "rng_int") {
+        Rng r = rngOf(a);
+        std::string op = a[3].get<std::string>();
+        int64_t x = a[4].get<int64_t>(), y = a[5].get<int64_t>();
+        json vals = json::array();
+        if (op == "next_int") vals.push_back(r.nextU32());
+        else if (op == "below") vals.push_back(r.below(static_cast<uint32_t>(std::max<int64_t>(0, x))));
+        else if (op == "range") vals.push_back(r.range(static_cast<int32_t>(x), static_cast<int32_t>(y)));
+        else if (op == "shuffle") {
+            std::vector<int32_t> order(static_cast<size_t>(std::max<int64_t>(0, x)));
+            for (size_t i = 0; i < order.size(); ++i) order[i] = static_cast<int32_t>(i);
+            r.shuffle(std::span<int32_t>(order));
+            for (int32_t i : order) vals.push_back(i);
+        } else if (op == "split") {
+            vals = stateOf(r.split());
+        }
+        out = json::array();
+        pushState(out, r);
+        for (auto& v : vals) out.push_back(v);
+        return true;
+    }
+    if (f == "rng_float") {
+        Rng r = rngOf(a);
+        std::string op = a[3].get<std::string>();
+        float x = a[4].get<float>(), y = a[5].get<float>();
+        json vals = json::array();
+        if (op == "next_float") vals.push_back(r.next01());
+        else if (op == "range") vals.push_back(r.range(x, y));
+        else if (op == "chance") vals.push_back(r.chance(x) ? 1.0 : 0.0);
+        else if (op == "sign") vals.push_back(r.sign());
+        else if (op == "angle") vals.push_back(r.angle());
+        else if (op == "unit_vector" || op == "inside_circle") {
+            Vec2 v = op == "unit_vector" ? r.unitVector() : r.insideCircle(x);
+            vals.push_back(v.x);
+            vals.push_back(v.y);
+        } else if (op == "normal") vals.push_back(r.normal(x, y));
+        out = json::array();
+        pushState(out, r);
+        for (auto& v : vals) out.push_back(v);
+        return true;
+    }
+    if (f == "rng_weighted") {
+        Rng r = rngOf(a);
+        std::vector<float> w;
+        for (const auto& x : a[3]) w.push_back(x.get<float>());
+        int32_t i = r.weightedIndex(w);
+        out = json::array();
+        pushState(out, r);
+        out.push_back(i);
+        return true;
+    }
+    if (f == "hash_text") {
+        out = static_cast<int64_t>(Rng::hash(a[0].get<std::string>()));
+        return true;
+    }
+    if (f == "random_seed" || f == "random_stream") {
+        auto* random = res<Random>();
+        if (f == "random_seed") out = random ? static_cast<int64_t>(random->seed()) : int64_t(0);
+        else out = stateOf(random ? random->stream(a[0].get<std::string>()) : Rng());
+        return true;
+    }
+    if (f == "noise_sample") {
+        out = noiseFor(a[0].get<int64_t>()).sample(noiseOptions(a), a[8].get<float>(), a[9].get<float>());
+        return true;
+    }
+    if (f == "noise_grid") {
+        const Noise& n = noiseFor(a[0].get<int64_t>());
+        NoiseOptions o = noiseOptions(a);
+        float x0 = a[8].get<float>(), y0 = a[9].get<float>(), step = a[12].get<float>();
+        int w = a[10].get<int>(), h = a[11].get<int>();
+        out = json::array();
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) out.push_back(n.sample(o, x0 + x * step, y0 + y * step));
+        return true;
+    }
+    if (f == "noise_cells") {
+        Grid g = gridFromNoise(static_cast<uint32_t>(a[0].get<int64_t>()), a[8].get<int32_t>(), a[9].get<int32_t>(),
+                               noiseOptions(a), a[10].get<float>(), a[11].get<int32_t>(), a[12].get<int32_t>());
+        out = g.cells;
+        return true;
+    }
+    if (f == "gen_cave") {
+        Rng r = rngOf(a);
+        CaveOptions o;
+        o.fill = a[5].get<float>();
+        o.steps = a[6].get<int32_t>();
+        o.birth = a[7].get<int32_t>();
+        o.survive = a[8].get<int32_t>();
+        o.solidEdges = a[9].get<bool>();
+        o.keepLargest = a[10].get<bool>();
+        Grid g = generateCave(r, a[3].get<int32_t>(), a[4].get<int32_t>(), o);
+        out = gridAnswer(r, g);
+        return true;
+    }
+    if (f == "gen_dungeon") {
+        Rng r = rngOf(a);
+        DungeonOptions o;
+        o.minRoom = a[5].get<int32_t>();
+        o.maxRoom = a[6].get<int32_t>();
+        o.padding = a[7].get<int32_t>();
+        o.corridorWidth = a[8].get<int32_t>();
+        o.extraCorridors = a[9].get<int32_t>();
+        o.doors = a[10].get<bool>();
+        Dungeon d = generateDungeon(r, a[3].get<int32_t>(), a[4].get<int32_t>(), o);
+        out = gridAnswer(r, d.grid);
+        out.push_back(d.rooms.size());
+        for (const GridRect& room : d.rooms) {
+            out.push_back(room.x);
+            out.push_back(room.y);
+            out.push_back(room.w);
+            out.push_back(room.h);
+        }
+        return true;
+    }
+    if (f == "gen_walk") {
+        Rng r = rngOf(a);
+        WalkOptions o;
+        o.coverage = a[5].get<float>();
+        o.walkers = a[6].get<int32_t>();
+        o.turnChance = a[7].get<float>();
+        o.brush = a[8].get<int32_t>();
+        o.start = {a[9].get<int32_t>(), a[10].get<int32_t>()};
+        Grid g = randomWalk(r, a[3].get<int32_t>(), a[4].get<int32_t>(), o);
+        out = gridAnswer(r, g);
+        return true;
+    }
+    if (f == "gen_poisson" || f == "gen_poisson_grid") {
+        Rng r = rngOf(a);
+        std::vector<Vec2> pts;
+        if (f == "gen_poisson") {
+            Rect area{a[3].get<float>(), a[4].get<float>(), a[5].get<float>(), a[6].get<float>()};
+            pts = poissonDisk(r, area, a[7].get<float>(), a[8].get<int32_t>());
+        } else {
+            Grid g = gridOf(a[3], a[4], a[5]);
+            pts = poissonDiskOnGrid(r, g, a[6].get<int32_t>(), a[7].get<float>(), a[8].get<int32_t>());
+        }
+        out = json::array();
+        pushState(out, r);
+        for (Vec2 p : pts) {
+            out.push_back(p.x);
+            out.push_back(p.y);
+        }
+        return true;
+    }
+    if (f == "gen_wfc") {
+        Rng r = rngOf(a);
+        Grid sample = gridOf(a[3], a[4], a[5]);
+        int32_t w = a[6].get<int32_t>(), h = a[7].get<int32_t>();
+        WfcOptions o;
+        o.attempts = a[8].get<int32_t>();
+        o.periodic = a[9].get<bool>();
+        if (a[10].size() == static_cast<size_t>(w) * static_cast<size_t>(h)) o.preset = gridOf(json(w), json(h), a[10]);
+        Grid g = generateWfc(r, WfcRules::fromSample(sample, o.periodic), w, h, o);
+        out = gridAnswer(r, g);
+        return true;
+    }
+    if (f == "grid_op") {
+        Grid g = gridOf(a[0], a[1], a[2]);
+        std::string op = a[3].get<std::string>();
+        int32_t x = a[4].get<int32_t>(), y = a[5].get<int32_t>(), z = a[6].get<int32_t>();
+        if (op == "keep_largest") keepLargestRegion(g, x, y);
+        else if (op == "remove_small") removeSmallRegions(g, x, static_cast<size_t>(std::max(0, y)), z);
+        else if (op == "connect") connectRegions(g, x, y);
+        else if (op == "flood") g = floodFill(g, {x, y});
+        else if (op == "regions") {
+            out = json::array();
+            for (const auto& region : findRegions(g, x)) out.push_back(region.size());
+            return true;
+        }
+        out = g.cells;
+        return true;
+    }
+    if (f == "path_find") {
+        Grid g = gridOf(a[0], a[1], a[2]);
+        NavGrid nav = navGridFrom(g, ints(a[3]));
+        PathOptions o;
+        o.diagonal = a[8].get<bool>() ? DiagonalMode::NoCornerCutting : DiagonalMode::Never;
+        out = json::array();
+        for (GridPoint p : findPath(nav, {a[4].get<int32_t>(), a[5].get<int32_t>()},
+                                    {a[6].get<int32_t>(), a[7].get<int32_t>()}, o)) {
+            out.push_back(p.x);
+            out.push_back(p.y);
+        }
+        return true;
+    }
+    if (f == "flow_field") {
+        Grid g = gridOf(a[0], a[1], a[2]);
+        NavGrid nav = navGridFrom(g, ints(a[3]));
+        std::vector<GridPoint> goals;
+        for (size_t i = 0; i + 1 < a[4].size(); i += 2) goals.push_back({a[4][i].get<int32_t>(), a[4][i + 1].get<int32_t>()});
+        FlowField field(nav, goals, a[5].get<bool>() ? DiagonalMode::NoCornerCutting : DiagonalMode::Never);
+        out = json::array();
+        for (int32_t y = 0; y < g.height; ++y)
+            for (int32_t x = 0; x < g.width; ++x) {
+                GridPoint n = field.next({x, y});
+                out.push_back(n == GridPoint{x, y} ? -1 : n.y * g.width + n.x);
+            }
+        for (int32_t y = 0; y < g.height; ++y)
+            for (int32_t x = 0; x < g.width; ++x) {
+                float c = field.cost({x, y});
+                out.push_back(std::isfinite(c) ? c : -1.f);
+            }
+        return true;
+    }
+    if (f.rfind("map_", 0) != 0) return false;
+    auto* maps = res<TilemapResource>();
+    if (!maps) {
+        out = nullptr;
+        return true;
+    }
+    if (f == "map_load") {
+        std::string level = a[1].get<std::string>();
+        out = maps->loadTilemap(a[0].get<std::string>().c_str(), level.empty() ? nullptr : level.c_str()).id;
+    } else if (f == "map_create") {
+        TilemapDesc d;
+        d.width = a[0].get<int32_t>();
+        d.height = a[1].get<int32_t>();
+        d.tileWidth = a[2].get<int32_t>();
+        d.tileHeight = a[3].get<int32_t>();
+        d.tileset = TextureHandle{a[4].get<uint32_t>()};
+        d.layers.clear();
+        for (const auto& n : a[5]) d.layers.push_back(n.get<std::string>());
+        if (d.layers.empty()) d.layers.push_back("Tiles");
+        out = maps->createTilemap(d).id;
+    } else if (f == "map_info") {
+        TilemapHandle m = mapOf(a[0]);
+        Rect b = maps->bounds(m);
+        Vec2 o = maps->origin(m);
+        out = {maps->mapWidth(m), maps->mapHeight(m), maps->tileWidth(m), maps->tileHeight(m),
+               o.x + b.x, o.y + b.y, b.w, b.h, maps->layerCount(m)};
+    } else if (f == "map_layer") {
+        out = maps->findLayer(mapOf(a[0]), a[1].get<std::string>());
+    } else if (f == "map_layer_name") {
+        out = std::string(maps->layerName(mapOf(a[0]), a[1].get<int32_t>()));
+    } else if (f == "map_layer_visible") {
+        maps->setLayerVisible(mapOf(a[0]), a[1].get<int32_t>(), a[2].get<bool>());
+        out = nullptr;
+    } else if (f == "map_layer_solid") {
+        maps->setLayerCollision(mapOf(a[0]), a[1].get<int32_t>(), a[2].get<bool>(), ints(a[3]));
+        out = nullptr;
+    } else if (f == "map_tile") {
+        TilemapHandle m = mapOf(a[0]);
+        int32_t l = a[1].get<int32_t>(), x = a[2].get<int32_t>(), y = a[3].get<int32_t>();
+        out = a[4].get<int>() == 1 ? maps->getIntGrid(m, l, x, y) : static_cast<int32_t>(maps->getTile(m, l, x, y));
+    } else if (f == "map_set_tile") {
+        TilemapHandle m = mapOf(a[0]);
+        int32_t l = a[1].get<int32_t>(), x = a[2].get<int32_t>(), y = a[3].get<int32_t>(), v = a[4].get<int32_t>();
+        if (a[5].get<int>() == 1) maps->setIntGrid(m, l, x, y, v);
+        else maps->setTile(m, l, x, y, static_cast<uint32_t>(v));
+        out = nullptr;
+    } else if (f == "map_tile_at") {
+        out = static_cast<int32_t>(maps->tileAt(mapOf(a[0]), a[1].get<int32_t>(), {a[2].get<float>(), a[3].get<float>()}));
+    } else if (f == "map_world_to_tile") {
+        TileCoord c = maps->worldToTile(mapOf(a[0]), {a[1].get<float>(), a[2].get<float>()}, a[3].get<int32_t>());
+        out = {c.x, c.y};
+    } else if (f == "map_tile_to_world") {
+        Vec2 p = maps->tileToWorld(mapOf(a[0]), {a[1].get<int32_t>(), a[2].get<int32_t>()}, a[3].get<int32_t>());
+        out = {p.x, p.y};
+    } else if (f == "map_fill") {
+        Grid g = gridOf(a[2], a[3], a[4]);
+        std::vector<uint32_t> tiles;
+        for (const auto& t : a[5]) tiles.push_back(static_cast<uint32_t>(std::max(0, t.get<int32_t>())));
+        fillTilemapLayer(*maps, mapOf(a[0]), a[1].get<int32_t>(), g, tiles, {a[6].get<int32_t>(), a[7].get<int32_t>()});
+        out = nullptr;
+    } else if (f == "map_read") {
+        out = gridFromTilemapLayer(*maps, mapOf(a[0]), a[1].get<int32_t>()).cells;
+    } else if (f == "map_destroy") {
+        maps->destroyTilemap(mapOf(a[0]));
+        out = nullptr;
+    } else if (f == "map_property") {
+        out = maps->properties(mapOf(a[0])).getString(a[1].get<std::string>());
+    } else {
+        return false;
+    }
+    return true;
 }
 
 // ---- Services ----
@@ -527,6 +899,8 @@ EffectId fade() {
 }
 
 json service(const std::string& f, const json& a) {
+    json answer;
+    if (procgen(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {

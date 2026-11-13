@@ -100,7 +100,7 @@ Each example runs from its own folder (`cd examples/<name> && ../../build/<name>
 | `audio` | Positional sound sources, bus volume controls, music crossfades and playlists |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, save data |
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
-| `flappy_bird`, `coin_dash` (candela) | Complete games in candela. Run with `drift run` from `bindings/candela/examples/<name>`; see `bindings/candela/README.md` |
+| `flappy_bird`, `coin_dash`, `cave_walk` (candela) | Complete games in candela. Run with `drift run` from `bindings/candela/examples/<name>`; see `bindings/candela/README.md` |
 
 Run the engine tests with `ctest --test-dir build`.
 

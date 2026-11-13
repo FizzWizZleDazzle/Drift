@@ -10,7 +10,7 @@
 //! is kept.
 
 use candela::{
-    AttributeTable, AttributeTarget, AttributeValue, DataType, Diagnostic, Engine, HostError, Program,
+    AttributeTable, AttributeTarget, AttributeValue, DataType, Diagnostic, Engine, HostError, HostType, Program,
     Value,
 };
 use serde_json::{json, Map as JsonMap, Value as Json};
@@ -435,7 +435,7 @@ impl Host {
                 match bare(&name) {
                     "Commands" => Ok(Param::Commands(*id)),
                     "Time" => Ok(Param::Time(*id)),
-                    "Input" | "Assets" | "Window" | "Effects" | "Save" => Ok(Param::Engine(*id)),
+                    "Input" | "Assets" | "Window" | "Effects" | "Save" | "Random" => Ok(Param::Engine(*id)),
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
                 }
             }
@@ -1111,7 +1111,87 @@ fn engine(module_dir: &str) -> Engine {
         call("shake", json!([c, s]));
     });
     e.register_host_fn("drift", "log_message", |level: i64, m: String| log(level as i32, &m));
+    for (name, args, ret) in forwarded() {
+        forward(&mut e, name, args, ret);
+    }
     e
+}
+
+/// Engine functions the host only passes through: the arguments go to the
+/// engine as JSON and its JSON answer comes back as the declared type.
+fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
+    use HostType::{Bool as B, Float as F, Int as I, String as S, Unit as U};
+    let ai = || HostType::Array(Box::new(I));
+    let af = || HostType::Array(Box::new(F));
+    let rng = || vec![I, I, I];
+    let with = |mut a: Vec<HostType>, b: Vec<HostType>| {
+        a.extend(b);
+        a
+    };
+    let noise = || vec![I, I, F, I, F, F, F, F];
+    vec![
+        // Random numbers: the generator state crosses as (hi, lo, inc).
+        ("rng_seed", vec![I, I], ai()),
+        ("rng_int", with(rng(), vec![S, I, I]), ai()),
+        ("rng_float", with(rng(), vec![S, F, F]), af()),
+        ("rng_weighted", with(rng(), vec![af()]), ai()),
+        ("hash_text", vec![S], I),
+        ("random_seed", vec![], I),
+        ("random_stream", vec![S], ai()),
+        // Noise: seed, type, frequency, octaves, lacunarity, gain, warp, warp frequency.
+        ("noise_sample", with(noise(), vec![F, F]), F),
+        ("noise_grid", with(noise(), vec![F, F, I, I, F]), af()),
+        ("noise_cells", with(noise(), vec![I, I, F, I, I]), ai()),
+        // Generators.
+        ("gen_cave", with(rng(), vec![I, I, F, I, I, I, B, B]), ai()),
+        ("gen_dungeon", with(rng(), vec![I, I, I, I, I, I, I, B]), ai()),
+        ("gen_walk", with(rng(), vec![I, I, F, I, F, I, I, I]), ai()),
+        ("gen_poisson", with(rng(), vec![F, F, F, F, F, I]), af()),
+        ("gen_poisson_grid", with(rng(), vec![I, I, ai(), I, F, I]), af()),
+        ("gen_wfc", with(rng(), vec![I, I, ai(), I, I, I, B, ai()]), ai()),
+        ("grid_op", vec![I, I, ai(), S, I, I, I], ai()),
+        // Pathfinding over a grid's cells.
+        ("path_find", vec![I, I, ai(), ai(), I, I, I, I, B], ai()),
+        ("flow_field", vec![I, I, ai(), ai(), ai(), B], af()),
+        // Tilemaps.
+        ("map_load", vec![S, S], I),
+        ("map_create", vec![I, I, I, I, I, HostType::Array(Box::new(S))], I),
+        ("map_info", vec![I], af()),
+        ("map_layer", vec![I, S], I),
+        ("map_layer_name", vec![I, I], S),
+        ("map_layer_visible", vec![I, I, B], U),
+        ("map_layer_solid", vec![I, I, B, ai()], U),
+        ("map_tile", vec![I, I, I, I, I], I),
+        ("map_set_tile", vec![I, I, I, I, I, I], U),
+        ("map_tile_at", vec![I, I, F, F], I),
+        ("map_world_to_tile", vec![I, F, F, I], ai()),
+        ("map_tile_to_world", vec![I, I, I, I], af()),
+        ("map_fill", vec![I, I, I, I, ai(), ai(), I, I], U),
+        ("map_read", vec![I, I], ai()),
+        ("map_property", vec![I, S], S),
+        ("map_destroy", vec![I], U),
+    ]
+}
+
+fn forward(e: &mut Engine, name: &'static str, args: Vec<HostType>, ret: HostType) {
+    let shape = ret.clone();
+    e.register_host_fn_typed("drift", name, args, ret, move |a| {
+        let answer = call(name, Json::Array(a.iter().map(to_json).collect()));
+        Ok(host_value(&answer, &shape))
+    });
+}
+
+fn host_value(j: &Json, t: &HostType) -> Value {
+    match t {
+        HostType::Int => Value::Int(j.as_i64().or_else(|| j.as_f64().map(|f| f as i64)).unwrap_or(0)),
+        HostType::Float => Value::Float(j.as_f64().unwrap_or(0.0)),
+        HostType::Bool => Value::Bool(j.as_bool().unwrap_or(false)),
+        HostType::String => Value::String(j.as_str().unwrap_or("").to_owned()),
+        HostType::Array(elem) => {
+            Value::Array(j.as_array().map(|a| a.iter().map(|x| host_value(x, elem)).collect()).unwrap_or_default())
+        }
+        _ => Value::Null,
+    }
 }
 
 /// Compiles the game and builds its systems and resources.

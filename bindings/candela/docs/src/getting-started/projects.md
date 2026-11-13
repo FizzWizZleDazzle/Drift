@@ -42,6 +42,9 @@ ambient = [0.1, 0.1, 0.15]
 [input]                      # actions and their bindings
 jump = ["key:Space", "button:South"]
 
+[random]
+seed = 0                     # 0 picks a new seed each run and logs it
+
 [my_game]                    # your own section, read by a @settings struct
 lives = 3
 ```
@@ -57,6 +60,7 @@ lives = 3
 | `[lighting]` | `enabled`, `ambient`, `layer_mask`, `resolution_scale` |
 | `[hot_reload]` | `enabled`, `interval` |
 | `[input]` | One key per action, a list of bindings: `key:<name>`, `mouse:Left`, `button:South` |
+| `[random]` | `seed` for the `Random` resource; see [Procedural Generation](../guides/procedural-generation.md#the-games-seed) |
 
 Values apply in order: the default, then `drift.toml`, then your systems, then `DRIFT_<SECTION>_<KEY>` environment variables, then `--set section.key=value` on the command line. So `DRIFT_RENDER_BACKEND=webgpu drift run` tries the WebGPU backend for one run, and `drift run --set window.width=640` checks a smaller window.
 

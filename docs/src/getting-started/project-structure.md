@@ -260,7 +260,7 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `tilemap` | Tiled and LDtk levels, parallax, animated tiles, autotiling, merged colliders, object spawners |
 | `procgen` | Generated caves, dungeons, tunnels and WFC ruins in a tilemap made in code, Poisson-disk spawns from a weighted table, flow-field chasers |
 
-Games written in candela have their own examples, Flappy Bird and Coin Dash, in `bindings/candela/examples/`; see [Candela](../candela/overview.md).
+Games written in candela have their own examples, Flappy Bird, Coin Dash and Cave Walk, in `bindings/candela/examples/`; see [Candela](../candela/overview.md).
 
 ## Typical user project structure
 

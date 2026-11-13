@@ -96,6 +96,7 @@ set(DRIFT_CANDELA_WEB_GAMES "" CACHE STRING "Candela game folders to build as we
 if(EMSCRIPTEN)
     drift_candela_web_game(flappy_bird_cdl PROJECT ${CMAKE_CURRENT_SOURCE_DIR}/examples/flappy_bird)
     drift_candela_web_game(coin_dash_cdl PROJECT ${CMAKE_CURRENT_SOURCE_DIR}/examples/coin_dash)
+    drift_candela_web_game(cave_walk_cdl PROJECT ${CMAKE_CURRENT_SOURCE_DIR}/examples/cave_walk)
     foreach(game IN LISTS DRIFT_CANDELA_WEB_GAMES)
         get_filename_component(name ${game} NAME)
         string(MAKE_C_IDENTIFIER ${name} name)
@@ -109,3 +110,14 @@ endif()
 
 drift_candela_program(drift_run)
 set_target_properties(drift_run PROPERTIES OUTPUT_NAME drift)
+
+# Scripts that check the drift module against the engine's golden values;
+# each logs a line when every check passed.
+if(DRIFT_BUILD_TESTS)
+    add_test(NAME candela_procgen COMMAND drift_run run ${CMAKE_CURRENT_SOURCE_DIR}/tests/procgen.cdl)
+    set_tests_properties(candela_procgen PROPERTIES
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
+        PASS_REGULAR_EXPRESSION "procgen checks passed"
+        FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
+        TIMEOUT 60)
+endif()

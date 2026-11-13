@@ -30,6 +30,7 @@
 - [Animation, Tweens and Behaviors](guides/animation.md)
 - [Particles, Lights and Effects](guides/effects.md)
 - [Tilemaps](guides/tilemaps.md)
+- [Procedural Generation](guides/procedural-generation.md)
 - [Scenes and Prefabs](guides/scenes.md)
 - [Timers and Save Data](guides/timers-and-saves.md)
 - [Debugging](guides/debugging.md)
@@ -48,5 +49,6 @@
 
 - [Flappy Bird](examples/flappy-bird.md)
 - [Coin Dash](examples/coin-dash.md)
+- [Cave Walk](examples/cave-walk.md)
 
 [Limitations](limitations.md)

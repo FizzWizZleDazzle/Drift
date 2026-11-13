@@ -70,6 +70,7 @@ Each element has `a` and `b`, the two entities, in the order the type names them
 | `Effects` | Particle bursts, screen shake, flashes, fades and post effects |
 | `Camera2D` | Converting between screen and world positions through the main camera |
 | `Save` | The save slot named after `[project]` in `drift.toml` |
+| `Random` | The game's seed and a random generator per purpose |
 | `Draw` | Immediate debug shapes for this frame |
 | `Systems` | Turning systems on and off |
 

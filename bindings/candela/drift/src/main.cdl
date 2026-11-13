@@ -63,6 +63,52 @@ host "drift" {
     save_flush();
     shake(int, float);
     log_message(int, string);
+
+    // Random numbers. A generator crosses as its state (hi, lo) and
+    // increment; the answer starts with the new (hi, lo).
+    int[] rng_seed(int, int);
+    int[] rng_int(int, int, int, string, int, int);
+    float[] rng_float(int, int, int, string, float, float);
+    int[] rng_weighted(int, int, int, float[]);
+    int hash_text(string);
+    int random_seed();
+    int[] random_stream(string);
+
+    // Noise: seed, type, frequency, octaves, lacunarity, gain, warp, warp
+    // frequency, then the points.
+    float noise_sample(int, int, float, int, float, float, float, float, float, float);
+    float[] noise_grid(int, int, float, int, float, float, float, float, float, float, int, int, float);
+    int[] noise_cells(int, int, float, int, float, float, float, float, int, int, float, int, int);
+
+    // Generators answer (hi, lo) of the generator, then width, height and
+    // cells.
+    int[] gen_cave(int, int, int, int, int, float, int, int, int, bool, bool);
+    int[] gen_dungeon(int, int, int, int, int, int, int, int, int, int, bool);
+    int[] gen_walk(int, int, int, int, int, float, int, float, int, int, int);
+    float[] gen_poisson(int, int, int, float, float, float, float, float, int);
+    float[] gen_poisson_grid(int, int, int, int, int, int[], int, float, int);
+    int[] gen_wfc(int, int, int, int, int, int[], int, int, int, bool, int[]);
+    int[] grid_op(int, int, int[], string, int, int, int);
+    int[] path_find(int, int, int[], int[], int, int, int, int, bool);
+    float[] flow_field(int, int, int[], int[], int[], bool);
+
+    // Tilemaps.
+    int map_load(string, string);
+    int map_create(int, int, int, int, int, string[]);
+    float[] map_info(int);
+    int map_layer(int, string);
+    string map_layer_name(int, int);
+    map_layer_visible(int, int, bool);
+    map_layer_solid(int, int, bool, int[]);
+    int map_tile(int, int, int, int, int);
+    map_set_tile(int, int, int, int, int, int);
+    int map_tile_at(int, int, float, float);
+    int[] map_world_to_tile(int, float, float, int);
+    float[] map_tile_to_world(int, int, int, int);
+    map_fill(int, int, int, int, int[], int[], int, int);
+    int[] map_read(int, int);
+    string map_property(int, string);
+    map_destroy(int);
 }
 
 enum Schedule { Startup, Update }
@@ -528,6 +574,18 @@ impl Assets {
         return Texture { id: drift::texture_create(w, h, flat) };
     }
     fn create_sound(self, samples: float[], rate: int) -> Sound { return Sound { id: drift::sound_create(samples, rate) }; }
+    // A Tiled map (.tmj, .json) or the first level of an LDtk project.
+    fn tilemap(self, path: string) -> Map { return load_map(path, ""); }
+    fn ldtk_level(self, path: string, level: string) -> Map { return load_map(path, level); }
+    // An empty map of tile layers over one tileset image, for levels made in
+    // code. Tile ids count from 1 at the image's top-left, left to right.
+    fn create_tilemap(self, width: int, height: int, tile_size: int, tileset: Texture, layers: string[]) -> Map {
+        let id = drift::map_create(width, height, tile_size, tile_size, tileset.id, layers);
+        if id == 0 {
+            throw "drift_load_failed: create_tilemap";
+        }
+        return Map { id: id };
+    }
 }
 
 struct Effects { id: int = 0 }
@@ -582,4 +640,493 @@ impl Timer {
     fn finished(self) -> bool { return !self.repeating && self.left <= 0.0; }
     fn fraction(self) -> float { return 1.0 - self.left / self.seconds; }
     fn reset(self) { self.left = self.seconds; }
+}
+
+// ---- Random numbers ----
+
+// A seeded generator: the engine's PCG32, so a seed gives the same numbers
+// here, in C++ and in the browser. Keep one in a resource to carry on;
+// copy() it to replay a sequence later.
+struct Rng { hi: int = 0, lo: int = 0, inc: int = 1 }
+
+// A generator seeded with `seed`.
+fn rng(seed: int) -> Rng { return rng_state(drift::rng_seed(seed, 0)); }
+// Another sequence for the same seed: generators with different streams
+// do not repeat each other.
+fn rng_stream(seed: int, stream: int) -> Rng { return rng_state(drift::rng_seed(seed, stream)); }
+// A seed from text, for seeds players type: rng(seed_from("daily-2026-11-12")).
+fn seed_from(text: string) -> int { return drift::hash_text(text); }
+fn rng_state(s: int[]) -> Rng { return Rng { hi: s[0], lo: s[1], inc: s[2] }; }
+
+impl Rng {
+    fn ints(self, op: string, a: int, b: int) -> int[] {
+        let r = drift::rng_int(self.hi, self.lo, self.inc, op, a, b);
+        self.hi = r[0];
+        self.lo = r[1];
+        return r;
+    }
+    fn floats(self, op: string, a: float, b: float) -> float[] {
+        let r = drift::rng_float(self.hi, self.lo, self.inc, op, a, b);
+        self.hi = int(r[0]);
+        self.lo = int(r[1]);
+        return r;
+    }
+    // 32 random bits, 0 to 4294967295.
+    fn next_int(self) -> int { return self.ints("next_int", 0, 0)[2]; }
+    // 0.0 up to, not including, 1.0.
+    fn next_float(self) -> float { return self.floats("next_float", 0.0, 0.0)[2]; }
+    // 0 up to, not including, n.
+    fn below(self, n: int) -> int { return self.ints("below", n, 0)[2]; }
+    // lo to hi, both included.
+    fn range(self, lo: int, hi: int) -> int { return self.ints("range", lo, hi)[2]; }
+    // lo up to, not including, hi.
+    fn range_float(self, lo: float, hi: float) -> float { return self.floats("range", lo, hi)[2]; }
+    fn chance(self, p: float) -> bool { return self.floats("chance", p, 0.0)[2] > 0.5; }
+    // -1.0 or 1.0.
+    fn sign(self) -> float { return self.floats("sign", 0.0, 0.0)[2]; }
+    // Radians, 0 to tau.
+    fn angle(self) -> float { return self.floats("angle", 0.0, 0.0)[2]; }
+    fn unit_vector(self) -> Vec2 {
+        let r = self.floats("unit_vector", 0.0, 0.0);
+        return Vec2 { x: r[2], y: r[3] };
+    }
+    fn inside_circle(self, radius: float) -> Vec2 {
+        let r = self.floats("inside_circle", radius, 0.0);
+        return Vec2 { x: r[2], y: r[3] };
+    }
+    fn inside_rect(self, r: Rect) -> Vec2 {
+        let x = self.range_float(r.x, r.x + r.w);
+        return Vec2 { x: x, y: self.range_float(r.y, r.y + r.h) };
+    }
+    // A Gaussian sample.
+    fn normal(self, mean: float, stddev: float) -> float { return self.floats("normal", mean, stddev)[2]; }
+    // An index chosen in proportion to its weight; -1 when no weight is
+    // above zero.
+    fn weighted(self, weights: float[]) -> int {
+        let r = drift::rng_weighted(self.hi, self.lo, self.inc, weights);
+        self.hi = r[0];
+        self.lo = r[1];
+        return r[2];
+    }
+    // A random element. The array must not be empty.
+    fn pick<T>(self, items: T[]) -> T { return items[self.below(items.len())]; }
+    // The items in a random order.
+    fn shuffle<T>(self, items: T[]) -> T[] {
+        let order = self.ints("shuffle", items.len(), 0);
+        let out: T[] = [];
+        for i in range(items.len()) {
+            out.push(items[order[i + 2]]);
+        }
+        return out;
+    }
+    // A generator at the same point, to replay what this one produces next.
+    fn copy(self) -> Rng { return Rng { hi: self.hi, lo: self.lo, inc: self.inc }; }
+    // A new generator seeded from this one: its own sequence for a sub-task.
+    fn split(self) -> Rng {
+        let r = self.ints("split", 0, 0);
+        return Rng { hi: r[2], lo: r[3], inc: r[4] };
+    }
+}
+
+// The game's seed from drift.toml [random], and a generator per purpose.
+struct Random { id: int = 0 }
+impl Random {
+    fn seed(self) -> int { return drift::random_seed(); }
+    // The same name gives the same generator for the same seed.
+    fn stream(self, name: string) -> Rng { return rng_state(drift::random_stream(name)); }
+}
+
+// Items rolled by weight: loot, spawns, room types.
+struct WeightedTable<T> { items: T[], weights: float[] }
+fn weighted_table<T>() -> WeightedTable<T> {
+    let items: T[] = [];
+    let weights: float[] = [];
+    return WeightedTable { items: items, weights: weights };
+}
+impl WeightedTable<T> {
+    fn add(self, item: T, weight: float) -> WeightedTable<T> {
+        self.items.push(item);
+        self.weights.push(weight);
+        return self;
+    }
+    fn roll(self, rng: Rng) -> Option<T> {
+        let i = rng.weighted(self.weights);
+        if i < 0 {
+            return None;
+        }
+        return Some(self.items[i]);
+    }
+}
+
+// ---- Noise ----
+
+enum NoiseType { Value, Perlin, Simplex }
+
+// A noise recipe. Samples are -1.0 to 1.0; the same seed gives the same
+// field everywhere. `frequency` scales positions (0.05 makes features about
+// 20 units across), `octaves` layers finer detail, and `warp` bends the
+// field by up to that many units.
+struct Noise {
+    seed: int = 0,
+    kind: NoiseType = NoiseType::Simplex,
+    frequency: float = 1.0,
+    octaves: int = 1,
+    lacunarity: float = 2.0,
+    gain: float = 0.5,
+    warp: float = 0.0,
+    warp_frequency: float = 1.0,
+}
+fn noise(seed: int) -> Noise { return Noise { seed: seed, .. }; }
+impl Noise {
+    fn type_code(self) -> int {
+        return match self.kind { NoiseType::Value => 0, NoiseType::Perlin => 1, NoiseType::Simplex => 2 };
+    }
+    fn sample(self, x: float, y: float) -> float {
+        return drift::noise_sample(self.seed, self.type_code(), self.frequency, self.octaves, self.lacunarity,
+                                   self.gain, self.warp, self.warp_frequency, x, y);
+    }
+    // w x h samples, row by row, starting at `from` and `step` apart.
+    fn samples(self, from: Vec2, w: int, h: int, step: float) -> float[] {
+        return drift::noise_grid(self.seed, self.type_code(), self.frequency, self.octaves, self.lacunarity,
+                                 self.gain, self.warp, self.warp_frequency, from.x, from.y, w, h, step);
+    }
+    // A grid from the noise at each cell's center: `above` where it is at
+    // least `threshold`, `below` elsewhere.
+    fn grid(self, w: int, h: int, threshold: float, above: int, below: int) -> Grid {
+        let cells = drift::noise_cells(self.seed, self.type_code(), self.frequency, self.octaves, self.lacunarity,
+                                       self.gain, self.warp, self.warp_frequency, w, h, threshold, above, below);
+        return Grid { width: w, height: h, cells: cells };
+    }
+}
+
+// ---- Grids ----
+
+// The generators write FLOOR for open cells and WALL for solid ones;
+// dungeons add DOOR. Your own values can be anything.
+const FLOOR: int = 0;
+const WALL: int = 1;
+const DOOR: int = 2;
+
+struct Cell { x: int = 0, y: int = 0 }
+fn cell(x: int, y: int) -> Cell { return Cell { x: x, y: y }; }
+
+// A rectangle of integer cells, row by row from the top-left.
+struct Grid { width: int = 0, height: int = 0, cells: int[] = [] }
+fn grid(width: int, height: int, value: int) -> Grid {
+    let cells: int[] = [];
+    for i in range(width * height) {
+        cells.push(value);
+    }
+    return Grid { width: width, height: height, cells: cells };
+}
+impl Grid {
+    fn in_bounds(self, c: Cell) -> bool { return c.x >= 0 && c.y >= 0 && c.x < self.width && c.y < self.height; }
+    // The value at a cell; WALL outside the grid.
+    fn get(self, c: Cell) -> int {
+        if !self.in_bounds(c) {
+            return WALL;
+        }
+        return self.cells[c.y * self.width + c.x];
+    }
+    fn set(self, c: Cell, value: int) {
+        if self.in_bounds(c) {
+            self.cells[c.y * self.width + c.x] = value;
+        }
+    }
+    fn count(self, value: int) -> int {
+        let n = 0;
+        for v in self.cells {
+            if v == value {
+                n += 1;
+            }
+        }
+        return n;
+    }
+    // Every cell holding `value`, row by row.
+    fn cells_of(self, value: int) -> Cell[] {
+        let out: Cell[] = [];
+        for i in range(self.cells.len()) {
+            if self.cells[i] == value {
+                out.push(Cell { x: i % self.width, y: i / self.width });
+            }
+        }
+        return out;
+    }
+    fn op(self, name: string, a: int, b: int, c: int) {
+        self.cells = drift::grid_op(self.width, self.height, self.cells, name, a, b, c);
+    }
+    // Keeps the largest connected region of `value`; the others become `fill`.
+    fn keep_largest_region(self, value: int, fill: int) { self.op("keep_largest", value, fill, 0); }
+    // Regions of `value` under `min_size` cells become `fill`.
+    fn remove_small_regions(self, value: int, min_size: int, fill: int) { self.op("remove_small", value, min_size, fill); }
+    // Carves tunnels of `value` so every region of it is connected.
+    fn connect_regions(self, value: int, width: int) { self.op("connect", value, width, 0); }
+    // The sizes of the connected regions of `value`, in cells.
+    fn region_sizes(self, value: int) -> int[] {
+        return drift::grid_op(self.width, self.height, self.cells, "regions", value, 0, 0);
+    }
+    // 1 where `from` can reach through cells of its own value, 0 elsewhere.
+    fn flood_fill(self, from: Cell) -> Grid {
+        return Grid { width: self.width, height: self.height,
+                      cells: drift::grid_op(self.width, self.height, self.cells, "flood", from.x, from.y, 0) };
+    }
+}
+
+// ---- Generators ----
+
+fn grid_answer(rng: Rng, r: int[]) -> Grid {
+    rng.hi = r[0];
+    rng.lo = r[1];
+    let w = r[2];
+    let h = r[3];
+    return Grid { width: w, height: h, cells: r[4..4 + w * h] };
+}
+
+// Cellular-automata caves: random walls smoothed into caverns.
+struct CaveOptions {
+    fill: float = 0.45,          // chance a cell starts as wall
+    steps: int = 5,              // smoothing passes
+    birth: int = 5,              // walls among 8 neighbours that make a wall
+    survive: int = 4,            // walls among 8 neighbours that keep a wall
+    solid_edges: bool = true,
+    keep_largest: bool = true,   // fill every cavern but the largest
+}
+fn cave(rng: Rng, width: int, height: int, o: CaveOptions) -> Grid {
+    return grid_answer(rng, drift::gen_cave(rng.hi, rng.lo, rng.inc, width, height, o.fill, o.steps, o.birth,
+                                            o.survive, o.solid_edges, o.keep_largest));
+}
+
+// A rectangle of cells: a dungeon room.
+struct GridRect { x: int = 0, y: int = 0, w: int = 0, h: int = 0 }
+impl GridRect {
+    fn center(self) -> Cell { return Cell { x: self.x + self.w / 2, y: self.y + self.h / 2 }; }
+    fn contains(self, c: Cell) -> bool { return c.x >= self.x && c.y >= self.y && c.x < self.x + self.w && c.y < self.y + self.h; }
+}
+
+struct DungeonOptions {
+    min_room: int = 4,
+    max_room: int = 10,
+    padding: int = 1,             // wall kept around each room inside its partition
+    corridor_width: int = 1,
+    extra_corridors: int = 2,     // loops on top of the corridors that join every room
+    doors: bool = true,
+}
+struct Dungeon { grid: Grid, rooms: GridRect[] }
+
+// Rooms in a binary space partition, joined by corridors so every room is
+// reachable.
+fn dungeon(rng: Rng, width: int, height: int, o: DungeonOptions) -> Dungeon {
+    let r = drift::gen_dungeon(rng.hi, rng.lo, rng.inc, width, height, o.min_room, o.max_room, o.padding,
+                               o.corridor_width, o.extra_corridors, o.doors);
+    let g = grid_answer(rng, r);
+    let at = 4 + width * height;
+    let rooms: GridRect[] = [];
+    for i in range(r[at]) {
+        let k = at + 1 + i * 4;
+        rooms.push(GridRect { x: r[k], y: r[k + 1], w: r[k + 2], h: r[k + 3] });
+    }
+    return Dungeon { grid: g, rooms: rooms };
+}
+
+struct WalkOptions {
+    coverage: float = 0.4,        // stop once this share of the cells is floor
+    walkers: int = 1,
+    turn_chance: float = 0.4,
+    brush: int = 1,               // carves brush x brush cells per step
+    start: Cell = Cell { x: -1, y: -1 },   // -1, -1: the middle
+}
+// Walkers wander from the start and carve floor out of solid wall.
+fn random_walk(rng: Rng, width: int, height: int, o: WalkOptions) -> Grid {
+    return grid_answer(rng, drift::gen_walk(rng.hi, rng.lo, rng.inc, width, height, o.coverage, o.walkers,
+                                            o.turn_chance, o.brush, o.start.x, o.start.y));
+}
+
+fn points_answer(rng: Rng, r: float[]) -> Vec2[] {
+    rng.hi = int(r[0]);
+    rng.lo = int(r[1]);
+    let out: Vec2[] = [];
+    let n = (r.len() - 2) / 2;
+    for i in range(n) {
+        out.push(Vec2 { x: r[2 + i * 2], y: r[3 + i * 2] });
+    }
+    return out;
+}
+
+// Points in `area` no closer than `min_distance` to each other: even
+// spacing without a pattern, for trees, rocks and spawn points.
+fn poisson_disk(rng: Rng, area: Rect, min_distance: float) -> Vec2[] {
+    return points_answer(rng, drift::gen_poisson(rng.hi, rng.lo, rng.inc, area.x, area.y, area.w, area.h, min_distance, 30));
+}
+// The same over the cells of `g` holding `value`, in cell units: a point at
+// (3.5, 2.5) is the middle of cell (3, 2).
+fn poisson_on_grid(rng: Rng, g: Grid, value: int, min_distance: float) -> Vec2[] {
+    return points_answer(rng, drift::gen_poisson_grid(rng.hi, rng.lo, rng.inc, g.width, g.height, g.cells, value,
+                                                      min_distance, 30));
+}
+
+struct WfcOptions {
+    attempts: int = 10,       // restarts after a contradiction
+    periodic: bool = false,   // neighbours wrap around the edges
+    // Cells to fix before collapsing: a grid of the output size where a
+    // value from the sample forces that value and any other (such as -1)
+    // leaves the cell free. Empty for none.
+    preset: Grid = Grid { .. },
+}
+// Wave function collapse: a width x height grid where every pair of
+// neighbouring values also sits side by side somewhere in `sample`, with
+// values about as common as there. None when every attempt contradicted
+// itself.
+fn wfc(rng: Rng, sample: Grid, width: int, height: int, o: WfcOptions) -> Option<Grid> {
+    let g = grid_answer(rng, drift::gen_wfc(rng.hi, rng.lo, rng.inc, sample.width, sample.height, sample.cells,
+                                            width, height, o.attempts, o.periodic, o.preset.cells));
+    if g.width == 0 {
+        return None;
+    }
+    return Some(g);
+}
+
+// ---- Pathfinding ----
+
+// The cells from start to goal, both included, avoiding cells whose value
+// is in `blocked`; empty when there is no way. `diagonal` allows diagonal
+// steps that do not cut corners.
+fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], diagonal: bool) -> Cell[] {
+    let r = drift::path_find(g.width, g.height, g.cells, blocked, start.x, start.y, goal.x, goal.y, diagonal);
+    let out: Cell[] = [];
+    for i in range(r.len() / 2) {
+        out.push(Cell { x: r[i * 2], y: r[i * 2 + 1] });
+    }
+    return out;
+}
+
+// For every cell, the next step toward the nearest goal: one field steers
+// any number of chasers.
+struct FlowField { width: int = 0, height: int = 0, next: int[] = [], costs: float[] = [] }
+fn flow_field(g: Grid, goals: Cell[], blocked: int[], diagonal: bool) -> FlowField {
+    let flat: int[] = [];
+    for c in goals {
+        flat.push(c.x);
+        flat.push(c.y);
+    }
+    let r = drift::flow_field(g.width, g.height, g.cells, blocked, flat, diagonal);
+    let n = g.width * g.height;
+    let next: int[] = [];
+    for i in range(n) {
+        next.push(int(r[i]));
+    }
+    return FlowField { width: g.width, height: g.height, next: next, costs: r[n..n * 2] };
+}
+impl FlowField {
+    fn in_bounds(self, c: Cell) -> bool { return c.x >= 0 && c.y >= 0 && c.x < self.width && c.y < self.height; }
+    // Steps to the nearest goal; -1.0 when none is reachable.
+    fn cost(self, c: Cell) -> float {
+        if !self.in_bounds(c) {
+            return -1.0;
+        }
+        return self.costs[c.y * self.width + c.x];
+    }
+    // The neighbour one step closer; the cell itself at a goal or where no
+    // goal is reachable.
+    fn step(self, c: Cell) -> Cell {
+        if !self.in_bounds(c) {
+            return c;
+        }
+        let n = self.next[c.y * self.width + c.x];
+        if n < 0 {
+            return c;
+        }
+        return Cell { x: n % self.width, y: n / self.width };
+    }
+    // Unit vector toward the next step, for a cell.
+    fn direction(self, c: Cell) -> Vec2 {
+        let n = self.step(c);
+        return Vec2 { x: float(n.x - c.x), y: float(n.y - c.y) }.normalized();
+    }
+    // The same for a world position, with cells `cell_size` wide from the
+    // origin.
+    fn direction_at(self, p: Vec2, cell_size: float) -> Vec2 {
+        return self.direction(Cell { x: int((p.x / cell_size).floor()), y: int((p.y / cell_size).floor()) });
+    }
+}
+
+// ---- Tilemaps ----
+
+// A loaded or generated map. Layers count from 0 at the bottom.
+struct Map { id: int = 0 }
+
+fn load_map(path: string, level: string) -> Map {
+    let id = drift::map_load(path, level);
+    if id == 0 {
+        throw "drift_load_failed: " + path;
+    }
+    return Map { id: id };
+}
+
+impl Map {
+    // Size in cells.
+    fn size(self) -> Cell {
+        let i = drift::map_info(self.id);
+        return Cell { x: int(i[0]), y: int(i[1]) };
+    }
+    // Size of one cell in pixels.
+    fn tile_size(self) -> Cell {
+        let i = drift::map_info(self.id);
+        return Cell { x: int(i[2]), y: int(i[3]) };
+    }
+    // The world rect the map covers where its Tilemap entity puts it.
+    fn bounds(self) -> Rect {
+        let i = drift::map_info(self.id);
+        return Rect { x: i[4], y: i[5], w: i[6], h: i[7] };
+    }
+    fn layer_count(self) -> int { return int(drift::map_info(self.id)[8]); }
+    fn layer(self, name: string) -> int {
+        let l = drift::map_layer(self.id, name);
+        if l < 0 {
+            throw "drift_no_such_layer: " + name;
+        }
+        return l;
+    }
+    fn layer_name(self, layer: int) -> string { return drift::map_layer_name(self.id, layer); }
+    fn set_layer_visible(self, layer: int, visible: bool) { drift::map_layer_visible(self.id, layer, visible); }
+    // A solid layer becomes static colliders on its Tilemap entity: every
+    // tile (or IntGrid value) in `values`, or any when `values` is empty.
+    fn set_layer_solid(self, layer: int, solid: bool, values: int[]) { drift::map_layer_solid(self.id, layer, solid, values); }
+    fn tile(self, layer: int, c: Cell) -> int { return drift::map_tile(self.id, layer, c.x, c.y, 0); }
+    fn set_tile(self, layer: int, c: Cell, id: int) { drift::map_set_tile(self.id, layer, c.x, c.y, id, 0); }
+    fn int_grid(self, layer: int, c: Cell) -> int { return drift::map_tile(self.id, layer, c.x, c.y, 1); }
+    fn set_int_grid(self, layer: int, c: Cell, value: int) { drift::map_set_tile(self.id, layer, c.x, c.y, value, 1); }
+    fn tile_at(self, layer: int, p: Vec2) -> int { return drift::map_tile_at(self.id, layer, p.x, p.y); }
+    fn world_to_tile(self, p: Vec2, layer: int) -> Cell {
+        let c = drift::map_world_to_tile(self.id, p.x, p.y, layer);
+        return Cell { x: c[0], y: c[1] };
+    }
+    // The cell's top-left in the world.
+    fn tile_to_world(self, c: Cell, layer: int) -> Vec2 {
+        let p = drift::map_tile_to_world(self.id, c.x, c.y, layer);
+        return Vec2 { x: p[0], y: p[1] };
+    }
+    // Writes a grid into a tile layer from cell `at`: a cell holding value v
+    // becomes tile tiles[v]; 0, and values past the end of `tiles`, leave
+    // the cell empty.
+    fn fill(self, layer: int, g: Grid, tiles: int[], at: Cell) {
+        drift::map_fill(self.id, layer, g.width, g.height, g.cells, tiles, at.x, at.y);
+    }
+    // A tile layer's ids as a grid of the map's size.
+    fn to_grid(self, layer: int) -> Grid {
+        let s = self.size();
+        return Grid { width: s.x, height: s.y, cells: drift::map_read(self.id, layer) };
+    }
+    // A property of the Tiled map or LDtk level, as text; "" when missing.
+    fn property(self, name: string) -> string { return drift::map_property(self.id, name); }
+    // Frees the map. Despawn its Tilemap entities first.
+    fn destroy(self) { drift::map_destroy(self.id); }
+}
+
+// Puts a map in the world, its top-left at the entity's Transform.
+struct Tilemap {
+    map: Map = Map { .. },
+    z: float = 0.0,
+    layer: int = 0,
+    colliders: bool = true,   // static colliders from the solid layers
+    visible: bool = true,
 }
