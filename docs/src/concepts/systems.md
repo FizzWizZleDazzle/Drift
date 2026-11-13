@@ -194,7 +194,7 @@ The engine automatically parallelizes systems within the PreUpdate, Update, and 
 
 1. For each phase, it builds batches of non-conflicting systems.
 2. Two systems conflict if they access any overlapping type where at least one access is a write.
-3. Non-conflicting systems in a batch run simultaneously on the thread pool.
+3. Non-conflicting systems in a batch run simultaneously on the thread pool. A batch can hold more systems than there are threads; each thread, the main one included, keeps taking systems until the batch is done.
 4. Lambda systems and systems with no tracked dependencies are marked exclusive and always run alone. Nothing registered after an exclusive system runs before it.
 5. Ordering constraints (`.before()`/`.after()`) are respected: a system will not be batched until its predecessors complete.
 
@@ -206,11 +206,11 @@ The scheduler uses the function signature to determine access patterns:
 - `QueryMut<A, B>` declares writes on components `A` and `B`
 - `EventReader<T>` declares a read on `Events<T>`
 - `EventWriter<T>` declares a write on `Events<T>`
-- `Commands&` does not participate in conflict detection (each thread gets its own command buffer)
+- `Commands&` does not participate in conflict detection (each system in a batch gets its own command buffer)
 
 **Example:** If system A uses `Res<Time>` and `QueryMut<Transform2D>`, and system B uses `Res<Time>` and `Query<Health>`, they do not conflict (shared read on `Time`, disjoint component access) and can run in parallel. If system C uses `QueryMut<Transform2D>` and `QueryMut<Health>`, it conflicts with both A (overlapping write on `Transform2D`) and B (overlapping write on `Health`).
 
-Each worker thread gets its own `Commands` buffer. After a parallel batch completes, all per-thread command buffers are flushed in order.
+Each system in a parallel batch records into its own `Commands` buffer. After the batch completes, the buffers are flushed in order.
 
 ### Controlling Thread Count
 

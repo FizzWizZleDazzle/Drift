@@ -25,18 +25,21 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include <atomic>
+#include <chrono>
+#include <functional>
 
 namespace drift {
 
 namespace {
 
 // ---- Thread pool: runs a batch of tasks, main thread participates ----
+//
+// A batch may hold more tasks than there are threads: every thread, the
+// main one included, keeps taking tasks until none are left. Task 0 is the
+// main thread's, for a system that needs the main thread.
 class ThreadPool {
 public:
-    explicit ThreadPool(int numThreads)
-        : stop_(false)
-    {
+    explicit ThreadPool(int numThreads) {
         for (int i = 0; i < numThreads; ++i) {
             workers_.emplace_back([this] { workerLoop(); });
         }
@@ -46,48 +49,40 @@ public:
         {
             std::lock_guard<std::mutex> lock(mutex_);
             stop_ = true;
-            cv_.notify_all();
         }
+        cv_.notify_all();
         for (auto& t : workers_) {
             t.join();
         }
     }
 
-    // Run all tasks, blocking until complete. Main thread takes one task too.
+    // Run all tasks, blocking until complete. The main thread runs task 0,
+    // then helps with the rest.
     void runBatch(std::vector<std::function<void()>>& tasks) {
         if (tasks.empty()) return;
 
+        uint64_t gen;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            remaining_.store(static_cast<int>(tasks.size()), std::memory_order_relaxed);
             batchTasks_ = &tasks;
-            nextTask_.store(1, std::memory_order_relaxed);  // main takes index 0
-            batchGen_.fetch_add(1, std::memory_order_relaxed);
-            cv_.notify_all();
+            nextTask_ = 1;  // main takes index 0
+            remaining_ = tasks.size();
+            gen = ++batchGen_;
         }
+        cv_.notify_all();
 
-        // Main thread executes task 0
-        try {
-            tasks[0]();
-        } catch (const std::exception& e) {
-            DRIFT_LOG_ERROR("ThreadPool: main-thread task threw: %s", e.what());
-        } catch (...) {
-            DRIFT_LOG_ERROR("ThreadPool: main-thread task threw unknown exception");
-        }
-        remaining_.fetch_sub(1, std::memory_order_acq_rel);
+        runTask(tasks[0], "main-thread");
+        finishTask();
+        drain(gen);
 
-        // Wait for all tasks to complete (with deadlock detection)
+        // Wait for the tasks other threads took (with deadlock detection).
         std::unique_lock<std::mutex> lock(mutex_);
-        while (remaining_.load(std::memory_order_acquire) != 0) {
-            auto status = doneCv_.wait_for(lock, std::chrono::seconds(5));
-            if (status == std::cv_status::timeout && remaining_.load(std::memory_order_acquire) != 0) {
-                DRIFT_LOG_ERROR("ThreadPool: possible deadlock: remaining=%d, batchGen=%llu, tasks=%d",
-                                remaining_.load(std::memory_order_acquire),
-                                (unsigned long long)batchGen_.load(std::memory_order_relaxed),
-                                batchTasks_ ? (int)batchTasks_->size() : 0);
+        while (remaining_ != 0) {
+            if (!doneCv_.wait_for(lock, std::chrono::seconds(5), [this] { return remaining_ == 0; })) {
+                DRIFT_LOG_ERROR("ThreadPool: possible deadlock: remaining=%zu, batchGen=%llu, tasks=%zu",
+                                remaining_, (unsigned long long)batchGen_, tasks.size());
             }
         }
-
         batchTasks_ = nullptr;
     }
 
@@ -95,53 +90,62 @@ public:
 
 private:
     void workerLoop() {
-        uint64_t lastGen = 0;
+        uint64_t seen = 0;
         while (true) {
-            std::function<void()> task;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
-                cv_.wait(lock, [this, &lastGen] {
-                    return stop_ || (batchTasks_ != nullptr &&
-                                     batchGen_.load(std::memory_order_relaxed) != lastGen);
+                cv_.wait(lock, [this, &seen] {
+                    return stop_ || (batchTasks_ != nullptr && batchGen_ != seen);
                 });
-                if (stop_ && !batchTasks_) return;
-                if (!batchTasks_) continue;
-
-                int idx = nextTask_.fetch_add(1, std::memory_order_relaxed);
-                if (idx >= static_cast<int>(batchTasks_->size())) {
-                    lastGen = batchGen_.load(std::memory_order_relaxed);
-                    continue;
-                }
-                task = (*batchTasks_)[idx];
-                lastGen = batchGen_.load(std::memory_order_relaxed);
+                if (stop_) return;
+                seen = batchGen_;
             }
-
-            if (task) {
-                try {
-                    task();
-                } catch (const std::exception& e) {
-                    DRIFT_LOG_ERROR("ThreadPool: worker task threw: %s", e.what());
-                } catch (...) {
-                    DRIFT_LOG_ERROR("ThreadPool: worker task threw unknown exception");
-                }
-                int prev = remaining_.fetch_sub(1, std::memory_order_acq_rel);
-                if (prev == 1) {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    doneCv_.notify_one();
-                }
-            }
+            drain(seen);
         }
+    }
+
+    // Runs tasks of batch `gen` until none are left to take. A task is
+    // claimed under the lock while its batch is current, and the batch's
+    // vector outlives every claimed task, since runBatch waits for them.
+    void drain(uint64_t gen) {
+        while (true) {
+            std::function<void()>* task = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (batchTasks_ == nullptr || batchGen_ != gen || nextTask_ >= batchTasks_->size()) {
+                    return;
+                }
+                task = &(*batchTasks_)[nextTask_++];
+            }
+            runTask(*task, "worker");
+            finishTask();
+        }
+    }
+
+    static void runTask(std::function<void()>& task, const char* who) {
+        try {
+            task();
+        } catch (const std::exception& e) {
+            DRIFT_LOG_ERROR("ThreadPool: %s task threw: %s", who, e.what());
+        } catch (...) {
+            DRIFT_LOG_ERROR("ThreadPool: %s task threw unknown exception", who);
+        }
+    }
+
+    void finishTask() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (--remaining_ == 0) doneCv_.notify_one();
     }
 
     std::vector<std::thread> workers_;
     std::mutex mutex_;
     std::condition_variable cv_;
     std::condition_variable doneCv_;
-    bool stop_;
+    bool stop_ = false;
     std::vector<std::function<void()>>* batchTasks_ = nullptr;
-    std::atomic<int> nextTask_{0};
-    std::atomic<int> remaining_{0};
-    std::atomic<uint64_t> batchGen_{0};
+    size_t nextTask_ = 0;
+    size_t remaining_ = 0;
+    uint64_t batchGen_ = 0;
 };
 
 // ---- Thread-safe entity allocator wrapping World's allocator ----
@@ -469,7 +473,13 @@ struct App::Impl {
                 }
                 sys.lastDurationUs = (SDL_GetPerformanceCounter() - t0) * 1000000 / perfFrequency;
             } else {
-                // Multiple systems: dispatch in parallel
+                // Multiple systems: dispatch in parallel. Each task records
+                // commands into its own buffer; a batch can hold more
+                // systems than there are threads.
+                while (threadCommands.size() < batch.size()) {
+                    threadCommands.push_back(std::make_unique<Commands>(
+                        *tsAllocator, world.componentRegistry(), &world));
+                }
                 std::vector<std::function<void()>> tasks;
                 tasks.reserve(batch.size());
 
@@ -477,10 +487,7 @@ struct App::Impl {
                     auto& sys = systems[idx];
                     int threadSlot = static_cast<int>(tasks.size());
                     tasks.emplace_back([this, &sys, threadSlot]() {
-                        // Set thread-local commands pointer
-                        if (threadSlot < static_cast<int>(threadCommands.size())) {
-                            tl_commands = threadCommands[threadSlot].get();
-                        }
+                        tl_commands = threadCommands[threadSlot].get();
                         uint64_t t0 = SDL_GetPerformanceCounter();
                         if (sys.fn) {
                             sys.fn();
@@ -492,10 +499,7 @@ struct App::Impl {
 
                 threadPool->runBatch(tasks);
 
-                // Flush per-thread command buffers in system insertion order
-                for (int idx : batch) {
-                    (void)idx;
-                }
+                // Flush the command buffers in task order
                 for (auto& tc : threadCommands) {
                     tc->flush(world);
                 }
@@ -877,7 +881,8 @@ bool App::start() {
             // Create thread pool (tc-1 workers + main thread)
             s.threadPool = std::make_unique<ThreadPool>(tc - 1);
 
-            // Create per-thread command buffers
+            // Command buffers, one per task of a batch; a batch with more
+            // systems than this makes more.
             for (int i = 0; i < tc; ++i) {
                 s.threadCommands.push_back(
                     std::make_unique<Commands>(*s.tsAllocator, s.world.componentRegistry(), &s.world));

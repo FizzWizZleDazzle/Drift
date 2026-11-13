@@ -24,6 +24,7 @@
 #include <chrono>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 using namespace drift;
@@ -131,6 +132,56 @@ TEST(simulate_runs_on_the_caller) {
     CHECK(!app.lastSimulation().async);
     CHECK(app.getResource<BoundRes>()->ranOn == std::this_thread::get_id());
     CHECK(app.getResource<Seq>()->order.size() == 2);
+}
+
+namespace {
+
+// Systems that never conflict, more of them than the pool has threads.
+int g_flushed = 0;
+
+template<int I> struct Slot : Resource {
+    int runs = 0;
+};
+
+template<int I> void slotSystem(ResMut<Slot<I>> s, Commands& cmd) {
+    ++s->runs;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    cmd.queue([](World&) { ++g_flushed; });
+}
+
+constexpr const char* kSlotNames[] = {"slot0", "slot1", "slot2", "slot3",
+                                      "slot4", "slot5", "slot6", "slot7"};
+
+template<int... I> void addSlots(App& app, std::integer_sequence<int, I...>) {
+    (app.addResource<Slot<I>>(), ...);
+    (app.update<slotSystem<I>>(kSlotNames[I]), ...);
+}
+
+template<int... I> bool everySlotRan(App& app, int frames, std::integer_sequence<int, I...>) {
+    return ((app.getResource<Slot<I>>()->runs == frames) && ...);
+}
+
+} // namespace
+
+// A batch of parallel systems larger than the thread count: every thread
+// keeps taking systems until the batch is done, and every system's commands
+// apply. With two or three threads this used to hang the frame.
+TEST(batch_larger_than_the_pool) {
+    for (int threads : {2, 3}) {
+        g_flushed = 0;
+        App app;
+        testConfig(app);
+        app.config().app.threads = threads;
+        auto slots = std::make_integer_sequence<int, 8>{};
+        addSlots(app, slots);
+        REQUIRE(app.start());
+        for (int f = 0; f < 3; ++f) {
+            REQUIRE(app.beginFrame());
+            app.endFrame();
+        }
+        CHECK(everySlotRan(app, 3, slots));
+        CHECK(g_flushed == 8 * 3);
+    }
 }
 
 namespace {

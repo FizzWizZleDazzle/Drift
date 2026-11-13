@@ -448,8 +448,10 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_executable(drift_app_tests tests/main.cpp tests/test_app.cpp)
     target_link_libraries(drift_app_tests PRIVATE drift)
     add_test(NAME drift_app_tests COMMAND drift_app_tests)
+    # A scheduler that hangs fails the test instead of the whole run.
     set_tests_properties(drift_app_tests PROPERTIES
-        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy")
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
+        TIMEOUT 120)
 elseif(DRIFT_BUILD_TESTS)
     # The procedural generation tests under Node: seeded randomness, noise
     # and the generators must match the desktop's golden values on the web
