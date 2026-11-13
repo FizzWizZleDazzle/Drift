@@ -1,0 +1,65 @@
+// ANCHOR: all
+// Tails: three bodies dart back and forth along the same path, seen from
+// above, each dragging a verlet rope. Only the rope's stiffness differs: 0
+// trails like a string and curls up when the body turns back; 0.5 and 1.0
+// resist bending and swing round in wide arcs, like a tail.
+
+import "drift" { * };
+
+const POINTS: int = 14;
+const GAP: float = 7.0;
+const STIFFNESS: float[] = [0.0, 0.5, 1.0];
+
+// ANCHOR: tail
+@component
+struct Body {
+    center: Vec2 = Vec2 { .. },
+    tail: Rope = Rope { .. },
+}
+
+fn make_tail(start: Vec2, stiffness: float) -> Rope {
+    let r = rope(start, POINTS, GAP, PI);   // pointing left from the body
+    r.gravity = vec2(0.0, 0.0);             // seen from above: nothing pulls it down
+    r.damping = 0.9;
+    r.stiffness = stiffness;
+    return r;
+}
+
+// The body swings side to side and bobs up and down; the tail hangs from
+// it and follows.
+@system
+fn run(row: (Body, Transform), time: Time) {
+    let (b, t) = row;
+    t.position = b.center + vec2(sine_wave(time.elapsed, 0.5, 80.0, 0.0), sine_wave(time.elapsed, 1.0, 25.0, 0.0));
+    b.tail.update(t.position, time.dt);
+}
+// ANCHOR_END: tail
+
+// One circle per tail point, smaller toward the tip.
+@component struct Bit { body: Entity = Entity { .. }, index: int = 0 }
+
+@system(after: [run])
+fn place(row: (Bit, Transform), bodies: Lookup<Body>) {
+    let (bit, t) = row;
+    match bodies.get(bit.body) {
+        Some(b) => { t.position = b.tail.points[bit.index]; }
+        None => {}
+    }
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    for i in range(3) {
+        let center = vec2(120.0 + 240.0 * float(i), 115.0);
+        let body = cmd.spawn([at(center.x, center.y), Circle { radius: 13.0, color: rgb(120, 200, 140), z: 2.0, .. },
+                              Body { center: center, tail: make_tail(center, STIFFNESS[i]) }]);
+        for p in range(POINTS) {
+            cmd.spawn([at(center.x - GAP * float(p), center.y),
+                       Circle { radius: 9.0 - float(p) * 0.5, color: rgb(90, 160, 110), z: 1.0, .. },
+                       Bit { body: body, index: p }]);
+        }
+        cmd.spawn([at(center.x, 236.0), Text { value: format("stiffness {}", [STIFFNESS[i]]), size: 16.0,
+                                               align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

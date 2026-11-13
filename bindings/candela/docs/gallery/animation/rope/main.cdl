@@ -1,0 +1,71 @@
+// ANCHOR: all
+// Ropes: three chains hang from the ceiling under gravity, and a ball
+// sweeps through them, shoving the links it touches out of its way. The
+// middle one is tied at both ends, a rope bridge.
+
+import "drift" { * };
+
+const POINTS: int = 14;
+const GAP: float = 14.0;
+const RADIUS: float = 24.0;
+const TOPS: Vec2[] = [Vec2 { x: 130.0, y: 20.0 }, Vec2 { x: 290.0, y: 120.0 }, Vec2 { x: 600.0, y: 20.0 }];
+
+// ANCHOR: ropes
+@resource struct Ropes { all: Rope[] = [], tops: Vec2[] = [] }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, ropes: Ropes) {
+    for i in range(3) {
+        let top = TOPS[i];
+        let r = rope(top, POINTS, GAP, PI / 2.0);   // hanging straight down
+        if i == 1 {
+            r.pin(top + vec2(140.0, 0.0));          // tie the other end too
+        }
+        ropes.all.push(r);
+        ropes.tops.push(top);
+        spawn_links(cmd, i);
+    }
+    // Posts for the bridge.
+    for x in [TOPS[1].x, TOPS[1].x + 140.0] {
+        cmd.spawn([at(x, TOPS[1].y), Rectangle { size: vec2(10.0, 30.0), color: rgb(110, 90, 80), z: 3.0, .. }]);
+    }
+    cmd.spawn([at(-100.0, 200.0), Circle { radius: RADIUS, color: rgb(240, 150, 80), z: 2.0, .. }, Ball {}]);
+}
+
+@component struct Ball {}
+
+// The ball swings across and back; links inside it are moved to its edge,
+// and a verlet rope turns that move into speed of its own.
+@system
+fn sweep(ball: (Ball, Transform), ropes: Ropes, time: Time) {
+    let (_, t) = ball;
+    t.position = vec2(360.0 + sine_wave(time.elapsed, 0.25, 330.0, 0.0), 200.0);
+    for i in range(3) {
+        let r = ropes.all[i];
+        r.update(ropes.tops[i], time.dt);
+        for p in range(r.len()) {
+            let away = r.points[p] - t.position;
+            if away.length() < RADIUS && away.length() > 0.0 {
+                r.points[p] = t.position + away.normalized() * RADIUS;
+            }
+        }
+    }
+}
+// ANCHOR_END: ropes
+
+// One circle per link.
+@component struct Link { rope: int = 0, index: int = 0 }
+
+fn spawn_links(cmd: Commands, rope: int) {
+    for p in range(POINTS) {
+        cmd.spawn([at(-100.0, -100.0), Circle { radius: 5.0, color: rgb(200, 190, 170), z: 1.0, .. },
+                   Link { rope: rope, index: p }]);
+    }
+}
+
+@system(after: [sweep])
+fn place(row: (Link, Transform), ropes: Ropes) {
+    let (link, t) = row;
+    t.position = ropes.all[link.rope].points[link.index];
+}
+// ANCHOR_END: all

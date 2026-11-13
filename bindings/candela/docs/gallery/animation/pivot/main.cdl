@@ -1,0 +1,36 @@
+// ANCHOR: all
+// Pivots: one plank turning around its center, its left end and its bottom
+// edge. A sprite turns and scales around its anchor, the point of the image
+// that sits on the Transform's position: (0, 0) is the top-left corner,
+// (1, 1) the bottom-right.
+
+import "drift" { * };
+
+@component struct Spin {}
+
+// ANCHOR: pivot
+const ANCHORS: Vec2[] = [Vec2 { x: 0.5, y: 0.5 }, Vec2 { x: 0.0, y: 0.5 }, Vec2 { x: 0.5, y: 1.0 }];
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    // A plank drawn in code, darker at its right end.
+    let img = assets.create_image(90, 24, rgb(214, 160, 92));
+    img.fill_rect(rect(70.0, 0.0, 20.0, 24.0), rgb(150, 96, 52));
+    let plank = img.to_texture();
+    for i in range(3) {
+        let x = 120.0 + 240.0 * float(i);
+        cmd.spawn([at(x, 120.0), Sprite { image: plank, anchor: ANCHORS[i], .. }, Spin {}]);
+        // A dot on the Transform's position: the pivot.
+        cmd.spawn([at(x, 120.0), Circle { radius: 4.0, color: rgb(250, 250, 240), z: 1.0, .. }]);
+        cmd.spawn([at(x, 236.0), Text { value: format("anchor ({}, {})", [ANCHORS[i].x, ANCHORS[i].y]),
+                                        size: 16.0, align: Align::Center, .. }]);
+    }
+}
+
+@system
+fn spin(row: (Spin, Transform), time: Time) {
+    let (_, t) = row;
+    t.rotation += PI * time.dt;   // half a turn a second
+}
+// ANCHOR_END: pivot
+// ANCHOR_END: all

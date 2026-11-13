@@ -1,0 +1,54 @@
+// ANCHOR: all
+// A jump with a spin on a key, played by the engine: press Space and a
+// Tween lifts the block, turns it once and drops it. Press X during the
+// jump to cancel it: the tween is replaced by a short one back to the floor.
+
+import "drift" { * };
+
+@component struct Player {}
+@component struct KeyLight { key: Key = Key::Space }
+
+const FLOOR: Vec2 = Vec2 { x: 360.0, y: 190.0 };
+
+// ANCHOR: tween
+@system
+fn controls(player: (Entity, Player, Transform), input: Input, cmd: Commands) {
+    let (e, _, t) = player;
+    if input.key_pressed(Key::Space) {
+        // Fire and forget: the engine plays the steps in order.
+        t.rotation = 0.0;
+        cmd.insert(e, tween().move_by(vec2(0.0, -110.0), 0.3, Ease::OutQuad)
+                             .rotate_by(TAU, 0.35, Ease::InOutSine)
+                             .move_to(FLOOR, 0.3, Ease::InQuad));
+    }
+    if input.key_pressed(Key::X) {
+        // Inserting another tween replaces the one playing.
+        cmd.insert(e, tween().rotate_to(0.0, 0.12, Ease::OutQuad)
+                             .move_to(FLOOR, 0.35, Ease::OutBounce));
+    }
+}
+// ANCHOR_END: tween
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(360.0, 226.0), Rectangle { size: vec2(720.0, 24.0), color: rgb(70, 70, 90), .. }]);
+    cmd.spawn([at(FLOOR.x, FLOOR.y), Rectangle { size: vec2(48.0, 48.0), corner_radius: 10.0, color: rgb(240, 150, 80), .. },
+               Player {}]);
+    cmd.spawn([at(80.0, 40.0), Rectangle { size: vec2(110.0, 34.0), corner_radius: 6.0, color: rgb(60, 60, 80), .. },
+               KeyLight { key: Key::Space }]);
+    cmd.spawn([at(80.0, 30.0), Text { value: "Space: jump", size: 16.0, align: Align::Center, z: 1.0, .. }]);
+    cmd.spawn([at(640.0, 40.0), Rectangle { size: vec2(110.0, 34.0), corner_radius: 6.0, color: rgb(60, 60, 80), .. },
+               KeyLight { key: Key::X }]);
+    cmd.spawn([at(640.0, 30.0), Text { value: "X: cancel", size: 16.0, align: Align::Center, z: 1.0, .. }]);
+}
+
+// The key boxes light up while their key is held.
+@system
+fn light(row: (KeyLight, Rectangle), input: Input) {
+    let (k, r) = row;
+    r.color = rgb(60, 60, 80);
+    if input.key_down(k.key) {
+        r.color = rgb(230, 120, 70);
+    }
+}
+// ANCHOR_END: all

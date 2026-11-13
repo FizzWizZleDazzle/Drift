@@ -1,0 +1,10 @@
+[project]
+name = "Walkers"
+entry = "main.cdl"
+
+[window]
+width = 720
+height = 330
+
+[render]
+clear_color = [0.09, 0.08, 0.11]

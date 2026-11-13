@@ -1,0 +1,49 @@
+// ANCHOR: all
+// Turning toward the cursor: the left turret snaps to it with look_at, the
+// other two turn at most 8 and 2.5 radians a second with rotate_towards.
+
+import "drift" { * };
+
+// How fast a turret turns, in radians a second; 0 turns at once.
+@component struct Turret { speed: float = 0.0 }
+@component struct Cursor {}
+
+const SPEEDS: float[] = [0.0, 8.0, 2.5];
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    for i in range(3) {
+        let x = 120.0 + 240.0 * float(i);
+        cmd.spawn([at(x, 170.0), Circle { radius: 26.0, color: rgb(90, 100, 120), .. }]);
+        // The barrel turns around its left end, which sits on the base.
+        cmd.spawn([at(x, 170.0), Rectangle { size: vec2(52.0, 14.0), anchor: vec2(0.0, 0.5), corner_radius: 5.0,
+                                             color: rgb(230, 200, 120), z: 1.0, .. },
+                   Turret { speed: SPEEDS[i] }]);
+        let label = "look_at";
+        if SPEEDS[i] > 0.0 {
+            label = format("rotate_towards, {} rad/s", [SPEEDS[i]]);
+        }
+        cmd.spawn([at(x, 240.0), Text { value: label, size: 16.0, align: Align::Center, .. }]);
+    }
+    cmd.spawn([at(-50.0, -50.0), Circle { radius: 7.0, color: rgb(240, 90, 80), z: 2.0, .. }, Cursor {}]);
+}
+
+// ANCHOR: aim
+@system
+fn aim(row: (Turret, Transform), input: Input, time: Time) {
+    let (turret, t) = row;
+    let want = look_at(t.position, input.mouse_world());
+    if turret.speed == 0.0 {
+        t.rotation = want;
+    } else {
+        t.rotation = rotate_towards(t.rotation, want, turret.speed * time.dt);
+    }
+}
+// ANCHOR_END: aim
+
+@system
+fn follow_mouse(row: (Cursor, Transform), input: Input) {
+    let (_, t) = row;
+    t.position = input.mouse_world();
+}
+// ANCHOR_END: all

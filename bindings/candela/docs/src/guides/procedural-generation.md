@@ -2,7 +2,7 @@
 
 Random numbers you can replay, noise, level generators, weighted tables, and pathfinding over the levels they make. They are the engine's own: a seed gives the same numbers and the same levels in a Candela game, in a C++ game and in the browser.
 
-Each picture on this page comes from the program printed under it, a small game in [`bindings/candela/docs/gallery`](https://github.com/FizzWizZleDazzle/Drift/tree/main/bindings/candela/docs/gallery). Copy the code into a game folder and it draws the same picture; `scripts/procgen-gallery.js` makes the pictures again from those programs.
+Each picture on this page comes from the program printed under it, a small game in [`bindings/candela/docs/gallery/procgen`](https://github.com/FizzWizZleDazzle/Drift/tree/main/bindings/candela/docs/gallery/procgen). Copy the code into a game folder and it draws the same picture; `scripts/gallery.js` makes the pictures again from those programs.
 
 | Technique | Picture |
 |-----------|---------|
@@ -62,7 +62,7 @@ fn drop(loot: Loot, cmd: Commands) {
 A generator made from a seed produces the same numbers every time, so a level built from it comes out the same:
 
 ```rust
-{{#include ../../gallery/seeds/main.cdl:seeds}}
+{{#include ../../gallery/procgen/seeds/main.cdl:seeds}}
 ```
 
 Give each kind of content its own generator, from `rng_stream(seed, n)` or `random.stream(name)` below, so that an extra roll for loot does not change the next level.
@@ -71,7 +71,7 @@ Give each kind of content its own generator, from `rng_stream(seed, n)` or `rand
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/seeds/main.cdl:all}}
+{{#include ../../gallery/procgen/seeds/main.cdl:all}}
 ```
 
 </details>
@@ -101,7 +101,7 @@ fn setup(random: Random, level: Level) {
 A `Noise` is a recipe for a smooth random field, with samples from -1.0 to 1.0. `Image.noise` paints one into an image, from the first color where the noise is -1 to the second where it is 1:
 
 ```rust
-{{#include ../../gallery/noise/main.cdl:noise}}
+{{#include ../../gallery/procgen/noise/main.cdl:noise}}
 ```
 
 Value noise is blocky, Perlin and simplex are smoother. Each octave adds a layer of finer detail at half the strength of the last, which is fractal Brownian motion (fBm): one octave gives soft blobs, six give ragged, cloud-like edges.
@@ -120,7 +120,7 @@ Value noise is blocky, Perlin and simplex are smoother. Each octave adds a layer
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/noise/main.cdl:all}}
+{{#include ../../gallery/procgen/noise/main.cdl:all}}
 ```
 
 </details>
@@ -132,7 +132,7 @@ Value noise is blocky, Perlin and simplex are smoother. Each octave adds a layer
 `warp` moves every sample point along a second noise field before reading the first, which turns blobs into swirls, marble and winding rivers:
 
 ```rust
-{{#include ../../gallery/warp/main.cdl:warp}}
+{{#include ../../gallery/procgen/warp/main.cdl:warp}}
 ```
 
 A warp of a few units bends the shapes; a warp larger than the features themselves folds them into marble. A `warp_frequency` below 1.0 bends in broader sweeps.
@@ -141,7 +141,7 @@ A warp of a few units bends the shapes; a warp larger than the features themselv
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/warp/main.cdl:all}}
+{{#include ../../gallery/procgen/warp/main.cdl:all}}
 ```
 
 </details>
@@ -153,7 +153,7 @@ A warp of a few units bends the shapes; a warp larger than the features themselv
 Read the heights with `samples`, then color each one by the highest band it reaches. Lowering the height toward the edges of the map turns the noise into an island:
 
 ```rust
-{{#include ../../gallery/terrain/main.cdl:terrain}}
+{{#include ../../gallery/procgen/terrain/main.cdl:terrain}}
 ```
 
 `LEVELS` sets how much of the map each band covers: raise the first two for more sea. `frequency` sets the size of the land masses, and `octaves` how ragged their coasts are. The same heights work for a tilemap: write a grid of band numbers and [fill](#into-a-tilemap) a layer from it.
@@ -162,7 +162,7 @@ Read the heights with `samples`, then color each one by the highest band it reac
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/terrain/main.cdl:all}}
+{{#include ../../gallery/procgen/terrain/main.cdl:all}}
 ```
 
 </details>
@@ -202,7 +202,7 @@ let tunnels = random_walk(r, 60, 32, WalkOptions { walkers: 4, brush: 2, .. });
 **`cave`** fills the grid with random walls and smooths it with a cellular automaton into caverns. The pictures draw each cell as one pixel:
 
 ```rust
-{{#include ../../gallery/caves/main.cdl:cave}}
+{{#include ../../gallery/procgen/caves/main.cdl:cave}}
 ```
 
 `fill` is the knob that matters most: at 0.40 the cave is one wide hall with pillars, at 0.50 it is narrow winding passages. Every cavern but the largest is filled in, so the floor that is left is always connected.
@@ -219,7 +219,7 @@ let tunnels = random_walk(r, 60, 32, WalkOptions { walkers: 4, brush: 2, .. });
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/caves/main.cdl:all}}
+{{#include ../../gallery/procgen/caves/main.cdl:all}}
 ```
 
 </details>
@@ -231,7 +231,7 @@ let tunnels = random_walk(r, 60, 32, WalkOptions { walkers: 4, brush: 2, .. });
 **`dungeon`** splits the area into partitions (binary space partitioning, BSP), puts a room in each and joins them with corridors, so every room is reachable. It returns a `Dungeon` with the `grid` and the `rooms`, each a `GridRect` (`x`, `y`, `w`, `h`, `center()`, `contains(c)`):
 
 ```rust
-{{#include ../../gallery/dungeon/main.cdl:dungeon}}
+{{#include ../../gallery/procgen/dungeon/main.cdl:dungeon}}
 ```
 
 Small rooms fill the map with many little chambers; large ones give a few halls joined by long corridors.
@@ -248,7 +248,7 @@ Small rooms fill the map with many little chambers; large ones give a few halls 
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/dungeon/main.cdl:all}}
+{{#include ../../gallery/procgen/dungeon/main.cdl:all}}
 ```
 
 </details>
@@ -260,10 +260,10 @@ Small rooms fill the map with many little chambers; large ones give a few halls 
 **`random_walk`** starts from solid wall and lets walkers wander, carving floor, until a share of the cells is open. The animation walks the same seed again each step with a higher `coverage`, so you see the tunnels grow:
 
 ```rust
-{{#include ../../gallery/random_walk/main.cdl:walk}}
+{{#include ../../gallery/procgen/random_walk/main.cdl:walk}}
 ```
 
-One walker with a thin brush makes long, maze-like tunnels; several walkers with a wider brush make open, blobby caves. [Run it in the browser](../play/gallery/random_walk/).
+One walker with a thin brush makes long, maze-like tunnels; several walkers with a wider brush make open, blobby caves. [Run it in the browser](../play/gallery/procgen/random_walk/).
 
 | `WalkOptions` field | Default | Meaning |
 |---------------------|---------|---------|
@@ -277,7 +277,7 @@ One walker with a thin brush makes long, maze-like tunnels; several walkers with
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/random_walk/main.cdl:all}}
+{{#include ../../gallery/procgen/random_walk/main.cdl:all}}
 ```
 
 </details>
@@ -289,7 +289,7 @@ One walker with a thin brush makes long, maze-like tunnels; several walkers with
 `wfc(rng, sample, width, height, options)` builds a grid in which every pair of neighbouring values also sits side by side somewhere in `sample`, with values about as common as there. Draw a small example of the layout you want and it makes more of it:
 
 ```rust
-{{#include ../../gallery/wfc/main.cdl:wfc}}
+{{#include ../../gallery/procgen/wfc/main.cdl:wfc}}
 ```
 
 The sample never shows a roof without walls under it, or a wall without a roof above, so every house inside the map is whole; only the edges cut some off. Give each part of a structure its own value, as the roof and wall pieces here, and the output keeps the structure together.
@@ -306,7 +306,7 @@ It returns `None` when every attempt contradicted itself. It only learns which v
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/wfc/main.cdl:all}}
+{{#include ../../gallery/procgen/wfc/main.cdl:all}}
 ```
 
 </details>
@@ -318,7 +318,7 @@ It returns `None` when every attempt contradicted itself. It only learns which v
 `poisson_disk(rng, area, min_distance)` returns points in a `Rect` no closer than `min_distance` to each other: even, without a pattern, for trees, rocks and spawn points.
 
 ```rust
-{{#include ../../gallery/poisson/main.cdl:poisson}}
+{{#include ../../gallery/procgen/poisson/main.cdl:poisson}}
 ```
 
 The first panel has as many trees as the second, at plain random points: they overlap in places and leave gaps in others. `min_distance` sets the density.
@@ -335,7 +335,7 @@ for p in poisson_on_grid(r, level.grid, FLOOR, 4.0) {
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/poisson/main.cdl:all}}
+{{#include ../../gallery/procgen/poisson/main.cdl:all}}
 ```
 
 </details>
@@ -347,7 +347,7 @@ for p in poisson_on_grid(r, level.grid, FLOOR, 4.0) {
 A weighted table rolls an item in proportion to its weight:
 
 ```rust
-{{#include ../../gallery/loot/main.cdl:loot}}
+{{#include ../../gallery/procgen/loot/main.cdl:loot}}
 ```
 
 Weights are relative: 60, 25, 12 and 3 add up to 100, so a common item comes up about 60 times in 100 rolls. An entry with weight 0 or less never comes up, and `roll` returns `None` when no entry can. Items can be any type, such as strings or enum variants.
@@ -356,7 +356,7 @@ Weights are relative: 60, 25, 12 and 3 add up to 100, so a common item comes up 
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/loot/main.cdl:all}}
+{{#include ../../gallery/procgen/loot/main.cdl:all}}
 ```
 
 </details>
@@ -382,20 +382,20 @@ See [Levels and Tilemaps](levels-and-tilemaps.md#maps-made-in-code).
 The pieces together: a dungeon from the game's seed, written into a tilemap whose walls collide, coins on Poisson-disk points over the floor, and a player in the first room. All of it happens in one startup system:
 
 ```rust
-{{#include ../../gallery/level/main.cdl:level}}
+{{#include ../../gallery/procgen/level/main.cdl:level}}
 ```
 
-The rest of the program draws the three tiles, moves the player and counts the coins. `drift.toml` fixes the seed, so this level comes up every run; set `[random] seed` to 0 for a new one each time. [Play it in the browser](../play/gallery/level/), and see [Cave Walk](../examples/cave-walk.md) and [Roguelike](../examples/roguelike.md) for whole games built this way.
+The rest of the program draws the three tiles, moves the player and counts the coins. `drift.toml` fixes the seed, so this level comes up every run; set `[random] seed` to 0 for a new one each time. [Play it in the browser](../play/gallery/procgen/level/), and see [Cave Walk](../examples/cave-walk.md) and [Roguelike](../examples/roguelike.md) for whole games built this way.
 
 <details>
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/level/main.cdl:all}}
+{{#include ../../gallery/procgen/level/main.cdl:all}}
 ```
 
 ```toml
-{{#include ../../gallery/level/drift.toml}}
+{{#include ../../gallery/procgen/level/drift.toml}}
 ```
 
 </details>
@@ -409,7 +409,7 @@ The rest of the program draws the three tiles, moves the player and counts the c
 A flow field answers "which way to the goal" for every cell at once, so one field steers any number of chasers. The picture draws the `direction` of every open cell as an arrow and its `cost` as brightness:
 
 ```rust
-{{#include ../../gallery/flow_field/main.cdl:flow}}
+{{#include ../../gallery/procgen/flow_field/main.cdl:flow}}
 ```
 
 In a game, each chaser reads the direction of the cell it stands on:
@@ -433,7 +433,7 @@ Build the field again when the goal moves to another cell, not every frame. The 
 <summary>The whole program</summary>
 
 ```rust
-{{#include ../../gallery/flow_field/main.cdl:all}}
+{{#include ../../gallery/procgen/flow_field/main.cdl:all}}
 ```
 
 </details>

@@ -1,0 +1,50 @@
+// ANCHOR: all
+// One spring, six settings. Each ball chases a target that swaps sides every
+// second. Top row: stiffness 40, 160 and 640 with damping 6. Bottom row:
+// stiffness 160 with damping 4, 12 and 25.3, which is 2 * sqrt(160), the
+// quickest settle without overshoot.
+
+import "drift" { * };
+
+// ANCHOR: chaser
+@component
+struct Chaser {
+    stiffness: float = 160.0,
+    damping: float = 6.0,
+    left: float = 0.0,
+    right: float = 0.0,
+    x: Spring = Spring { .. },
+}
+
+@system
+fn chase(row: (Chaser, Transform), time: Time) {
+    let (c, t) = row;
+    let target = c.left;
+    if int(time.elapsed) % 2 == 1 {
+        target = c.right;
+    }
+    t.position.x = c.x.update(target, c.stiffness, c.damping, time.dt);
+}
+// ANCHOR_END: chaser
+
+const STIFFNESS: float[] = [40.0, 160.0, 640.0, 160.0, 160.0, 160.0];
+const DAMPING: float[] = [6.0, 6.0, 6.0, 4.0, 12.0, 25.3];
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    for i in range(6) {
+        let cx = 120.0 + 240.0 * float(i % 3);
+        let y = 70.0 + 150.0 * float(i / 3);
+        let left = cx - 60.0;
+        let right = cx + 60.0;
+        for side in [left, right] {
+            cmd.spawn([at(side, y), Rectangle { size: vec2(3.0, 34.0), color: rgb(240, 90, 80), .. }]);
+        }
+        cmd.spawn([at(cx, y), Rectangle { size: vec2(160.0, 2.0), color: rgb(70, 70, 90), .. }]);
+        cmd.spawn([at(left, y), Circle { radius: 12.0, color: rgb(110, 170, 240), z: 1.0, .. },
+                   Chaser { stiffness: STIFFNESS[i], damping: DAMPING[i], left: left, right: right, x: spring(left) }]);
+        cmd.spawn([at(cx, y + 30.0), Text { value: format("stiffness {}, damping {}", [STIFFNESS[i], DAMPING[i]]),
+                                            size: 14.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

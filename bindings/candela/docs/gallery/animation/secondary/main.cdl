@@ -1,0 +1,89 @@
+// ANCHOR: all
+// Secondary motion: a head glides after the cursor, and the parts on it
+// lag behind on springs. The antenna tips chase where they would sit on a
+// rigid head with soft Spring2s; the ears lean against the head's motion on
+// AngleSprings. Neither is animated by hand.
+
+import "drift" { * };
+
+@component struct Head { at: Spring2 = Spring2 { .. } }
+@component struct Cursor {}
+
+// ANCHOR: parts
+// An antenna tip: `offset` is where it would be on a rigid head.
+@component struct Tip { base: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. }, at: Spring2 = Spring2 { .. } }
+// The stalk from the head to a tip.
+@component struct Stalk { tip: Entity = Entity { .. }, base: Vec2 = Vec2 { .. } }
+// An ear, a child of the head, swinging around its root.
+@component struct Ear { rest: float = 0.0, lean: AngleSpring = AngleSpring { .. } }
+
+@resource struct Rig { head: Entity = Entity { .. }, velocity: Vec2 = Vec2 { .. } }
+
+// The head eases toward the cursor and keeps its velocity for the ears.
+@system
+fn glide(row: (Head, Transform), input: Input, rig: Rig, time: Time) {
+    let (h, t) = row;
+    t.position = h.at.smooth(input.mouse_world(), 0.3, time.dt);
+    rig.velocity = h.at.velocity;
+}
+
+@system(after: [glide])
+fn antenna(row: (Tip, Transform), rig: Rig, time: Time) {
+    let (tip, t) = row;
+    t.position = tip.at.update(to_world(rig.head, tip.offset), 90.0, 5.0, time.dt);
+}
+
+@system(after: [glide])
+fn ears(row: (Ear, Transform), rig: Rig, time: Time) {
+    let (ear, t) = row;
+    let lean = clamp(-rig.velocity.x * 0.002, -0.8, 0.8);
+    t.rotation = ear.lean.update(ear.rest + lean, 60.0, 3.0, time.dt);
+}
+// ANCHOR_END: parts
+
+// A stalk is a thin rectangle from its base on the head to its tip.
+@system(after: [antenna])
+fn stalks(row: (Stalk, Transform, Rectangle), rig: Rig, tips: Lookup<Tip>) {
+    let (stalk, t, r) = row;
+    match tips.get(stalk.tip) {
+        Some(tip) => {
+            let base = to_world(rig.head, stalk.base);
+            t.position = base;
+            t.rotation = look_at(base, tip.at.value);
+            r.size.x = (tip.at.value - base).length();
+        }
+        None => {}
+    }
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, rig: Rig) {
+    let start = vec2(360.0, 170.0);
+    let head = cmd.spawn([at(start.x, start.y), Circle { radius: 40.0, color: rgb(120, 200, 140), z: 2.0, .. },
+                          Head { at: spring2(start) }]);
+    for side in [-1.0, 1.0] {
+        cmd.spawn_child(head, [at(14.0 * side, -6.0), Circle { radius: 7.0, color: rgb(250, 250, 240), z: 3.0, .. }]);
+        cmd.spawn_child(head, [at(14.0 * side, -5.0), Circle { radius: 3.5, color: rgb(30, 30, 40), z: 4.0, .. }]);
+        // Ears hang from the sides of the head, pointing out and down.
+        let rest = PI / 2.0 - side * 1.1;
+        cmd.spawn_child(head, [Transform { position: vec2(34.0 * side, 4.0), rotation: rest, .. },
+                               Rectangle { size: vec2(46.0, 18.0), anchor: vec2(0.0, 0.5), corner_radius: 9.0,
+                                           color: rgb(90, 160, 110), z: 1.0, .. },
+                               Ear { rest: rest, lean: angle_spring(rest) }]);
+        let base = vec2(16.0 * side, -34.0);
+        let offset = vec2(40.0 * side, -90.0);
+        let tip = cmd.spawn([at(start.x + offset.x, start.y + offset.y), Circle { radius: 7.0, color: rgb(250, 210, 90), z: 2.0, .. },
+                             Tip { base: base, offset: offset, at: spring2(start + offset) }]);
+        cmd.spawn([Transform { .. }, Rectangle { size: vec2(60.0, 4.0), anchor: vec2(0.0, 0.5), color: rgb(90, 160, 110), z: 1.5, .. },
+                   Stalk { tip: tip, base: base }]);
+    }
+    rig.head = head;
+    cmd.spawn([at(-50.0, -50.0), Circle { radius: 6.0, color: rgb(240, 90, 80), z: 5.0, .. }, Cursor {}]);
+}
+
+@system
+fn follow_mouse(row: (Cursor, Transform), input: Input) {
+    let (_, t) = row;
+    t.position = input.mouse_world();
+}
+// ANCHOR_END: all

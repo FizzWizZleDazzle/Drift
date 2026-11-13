@@ -158,14 +158,16 @@ if(EMSCRIPTEN)
     drift_candela_web_game(save_load_cdl PROJECT ${CMAKE_CURRENT_SOURCE_DIR}/examples/save_load)
     drift_candela_web_game(star_catcher_cdl PROJECT ${CMAKE_CURRENT_SOURCE_DIR}/examples/star_catcher)
 
-    # The programs that draw the pictures in the book's procedural generation
-    # guide, each the page gallery_<folder>; scripts/procgen-gallery.js makes
-    # the pictures from them.
-    file(GLOB _gallery LIST_DIRECTORIES true CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/docs/gallery/*)
+    # The programs that draw the pictures in the book's guides, in
+    # docs/gallery/<guide>/<name>, each the page gallery_<guide>_<name>;
+    # scripts/gallery.js makes the pictures from them.
+    file(GLOB _gallery LIST_DIRECTORIES true CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/docs/gallery/*/*)
     foreach(dir IN LISTS _gallery)
         if(IS_DIRECTORY ${dir})
             get_filename_component(name ${dir} NAME)
-            drift_candela_web_game(gallery_${name} PROJECT ${dir})
+            get_filename_component(guide ${dir} DIRECTORY)
+            get_filename_component(guide ${guide} NAME)
+            drift_candela_web_game(gallery_${guide}_${name} PROJECT ${dir})
         endif()
     endforeach()
 

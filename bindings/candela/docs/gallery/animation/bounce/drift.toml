@@ -1,0 +1,10 @@
+[project]
+name = "Squash and Stretch"
+entry = "main.cdl"
+
+[window]
+width = 720
+height = 300
+
+[render]
+clear_color = [0.09, 0.08, 0.11]

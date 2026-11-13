@@ -1,0 +1,56 @@
+// ANCHOR: all
+// Motion from waves: a slime bobbing on a sine wave, a firefly circling on
+// a sine and a cosine, a blob breathing through squash, and a drone
+// hovering on wobble, smooth random motion.
+
+import "drift" { * };
+
+@component struct Bob {}
+@component struct Orbit2 { center: Vec2 = Vec2 { .. } }
+@component struct Breathe {}
+@component struct Hover { home: Vec2 = Vec2 { .. } }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(90.0, 120.0), Circle { radius: 26.0, color: rgb(120, 200, 140), .. }, Bob {}]);
+    cmd.spawn([at(270.0, 120.0), Circle { radius: 8.0, color: rgb(250, 220, 110), .. }, Orbit2 { center: vec2(270.0, 120.0) }]);
+    cmd.spawn([at(450.0, 120.0), Circle { radius: 34.0, color: rgb(230, 130, 160), .. }, Breathe {}]);
+    cmd.spawn([at(630.0, 120.0), Rectangle { size: vec2(56.0, 18.0), corner_radius: 9.0, color: rgb(110, 170, 240), .. },
+               Hover { home: vec2(630.0, 120.0) }]);
+    let names = ["sine_wave: bob", "sine + cosine: circle", "squash: breathe", "wobble: hover"];
+    for i in range(4) {
+        cmd.spawn([at(90.0 + 180.0 * float(i), 210.0), Text { value: names[i], size: 15.0, align: Align::Center, .. }]);
+    }
+}
+
+// ANCHOR: waves
+// Up and down 12 pixels, once a second.
+@system
+fn bob(row: (Bob, Transform), time: Time) {
+    let (_, t) = row;
+    t.position.y = 120.0 + sine_wave(time.elapsed, 1.0, 12.0, 0.0);
+}
+
+// A cosine for x and a sine for y with the same frequency go round a circle.
+@system
+fn circle(row: (Orbit2, Transform), time: Time) {
+    let (o, t) = row;
+    t.position = o.center + vec2(cosine_wave(time.elapsed, 0.5, 45.0, 0.0), sine_wave(time.elapsed, 0.5, 45.0, 0.0));
+}
+
+// A slow squash in and out keeps the area: taller and thinner, then wider.
+@system
+fn breathe(row: (Breathe, Transform), time: Time) {
+    let (_, t) = row;
+    t.scale = squash(sine_wave(time.elapsed, 0.5, 0.15, 0.0));
+}
+
+// Drifting about its home and tilting, never repeating.
+@system
+fn hover(row: (Hover, Transform), time: Time) {
+    let (h, t) = row;
+    t.position = h.home + wobble2(time.elapsed, 1.5, 14.0, 3);
+    t.rotation = wobble(time.elapsed, 2.0, 0.25, 9);
+}
+// ANCHOR_END: waves
+// ANCHOR_END: all

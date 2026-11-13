@@ -1,0 +1,66 @@
+// ANCHOR: all
+// Two arms reaching for the cursor with two-bone IK. They are the same but
+// for `bend`: 1.0 puts the elbow clockwise of the line from shoulder to
+// target, -1.0 counter-clockwise. The hand turns red when the cursor is out
+// of reach.
+
+import "drift" { * };
+
+const UPPER: float = 80.0;
+const LOWER: float = 75.0;
+
+// ANCHOR: arm
+// The shoulder; the bones are entities of their own, placed in world space.
+@component
+struct Arm {
+    bend: float = 1.0,
+    upper: Entity = Entity { .. },
+    lower: Entity = Entity { .. },
+    hand: Entity = Entity { .. },
+}
+
+fn bone(cmd: Commands, length: float, width: float, color: Color) -> Entity {
+    // Anchored at its start, pointing along +x, so its rotation aims it.
+    return cmd.spawn([Transform { .. }, Rectangle { size: vec2(length, width), anchor: vec2(0.0, 0.5),
+                                                    corner_radius: width / 2.0, color: color, z: 1.0, .. }]);
+}
+
+@system
+fn reach(row: (Arm, Transform), input: Input, cmd: Commands) {
+    let (arm, t) = row;
+    let pose = two_bone_ik(t.position, input.mouse_world(), UPPER, LOWER, arm.bend);
+    cmd.insert(arm.upper, Transform { position: t.position, rotation: pose.upper, .. });
+    cmd.insert(arm.lower, Transform { position: pose.joint, rotation: pose.lower, .. });
+    cmd.insert(arm.hand, Transform { position: pose.end, .. });
+    let color = rgb(240, 200, 90);
+    if !pose.reached {
+        color = rgb(240, 90, 80);
+    }
+    cmd.insert(arm.hand, Circle { radius: 11.0, color: color, z: 2.0, .. });
+}
+// ANCHOR_END: arm
+
+@component struct Cursor {}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    let bends = [1.0, -1.0];
+    let colors = [rgb(110, 170, 240), rgb(230, 130, 160)];
+    for i in range(2) {
+        let x = 300.0 + 120.0 * float(i);
+        let hand = cmd.spawn([Transform { .. }, Circle { radius: 11.0, color: rgb(240, 200, 90), z: 2.0, .. }]);
+        cmd.spawn([at(x, 140.0), Circle { radius: 14.0, color: rgb(90, 100, 120), z: 3.0, .. },
+                   Arm { bend: bends[i], upper: bone(cmd, UPPER, 18.0, colors[i]),
+                         lower: bone(cmd, LOWER, 14.0, colors[i]), hand: hand }]);
+        cmd.spawn([at(x, 270.0), Text { value: format("bend {}", [bends[i]]), size: 16.0, color: colors[i],
+                                        align: Align::Center, .. }]);
+    }
+    cmd.spawn([at(-50.0, -50.0), Circle { radius: 6.0, color: rgb(250, 250, 240), z: 4.0, .. }, Cursor {}]);
+}
+
+@system
+fn follow_mouse(row: (Cursor, Transform), input: Input) {
+    let (_, t) = row;
+    t.position = input.mouse_world();
+}
+// ANCHOR_END: all

@@ -1,0 +1,66 @@
+// ANCHOR: all
+// Springs chasing a target that jumps from corner to corner: a bead on a
+// rail follows its x with a Spring, a ball follows it with a Spring2, and a
+// needle points at it with an AngleSpring. Each lags, overshoots and
+// settles.
+
+import "drift" { * };
+
+// Where the springs are headed: one of four corners, a new one every 0.8 s.
+@resource struct Target { at: Vec2 = Vec2 { x: 120.0, y: 70.0 } }
+
+const CORNERS: Vec2[] = [Vec2 { x: 120.0, y: 70.0 }, Vec2 { x: 420.0, y: 70.0 },
+                         Vec2 { x: 420.0, y: 210.0 }, Vec2 { x: 120.0, y: 210.0 }];
+
+// ANCHOR: springs
+@component struct Bead { x: Spring = spring(120.0) }
+@component struct Ball { at: Spring2 = spring2(vec2(120.0, 70.0)) }
+@component struct Needle { turn: AngleSpring = angle_spring(0.0) }
+// ANCHOR_END: springs
+@component struct Marker {}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(270.0, 270.0), Rectangle { size: vec2(400.0, 4.0), color: rgb(80, 80, 100), .. }]);
+    cmd.spawn([at(120.0, 270.0), Circle { radius: 10.0, color: rgb(120, 200, 140), z: 1.0, .. }, Bead { .. }]);
+    cmd.spawn([at(120.0, 70.0), Circle { radius: 16.0, color: rgb(110, 170, 240), z: 1.0, .. }, Ball { .. }]);
+    cmd.spawn([at(600.0, 140.0), Circle { radius: 30.0, color: rgb(70, 75, 95), .. }]);
+    cmd.spawn([at(600.0, 140.0), Rectangle { size: vec2(70.0, 8.0), anchor: vec2(0.0, 0.5), corner_radius: 4.0,
+                                             color: rgb(240, 200, 100), z: 1.0, .. }, Needle { .. }]);
+    cmd.spawn([at(120.0, 70.0), Rectangle { size: vec2(14.0, 14.0), color: rgb(240, 90, 80), z: 2.0, .. }, Marker {}]);
+    cmd.spawn([at(270.0, 284.0), Text { value: "Spring", size: 14.0, align: Align::Center, .. }]);
+    cmd.spawn([at(270.0, 20.0), Text { value: "Spring2", size: 14.0, align: Align::Center, .. }]);
+    cmd.spawn([at(600.0, 220.0), Text { value: "AngleSpring", size: 14.0, align: Align::Center, .. }]);
+}
+
+@system
+fn move_target(target: Target, time: Time) {
+    target.at = CORNERS[int(time.elapsed / 0.8) % 4];
+}
+
+// ANCHOR: chase
+@system(after: [move_target])
+fn bead(row: (Bead, Transform), target: Target, time: Time) {
+    let (b, t) = row;
+    t.position.x = b.x.update(target.at.x, 120.0, 10.0, time.dt);
+}
+
+@system(after: [move_target])
+fn ball(row: (Ball, Transform), target: Target, time: Time) {
+    let (b, t) = row;
+    t.position = b.at.update(target.at, 120.0, 10.0, time.dt);
+}
+
+@system(after: [move_target])
+fn needle(row: (Needle, Transform), target: Target, time: Time) {
+    let (n, t) = row;
+    t.rotation = n.turn.update(look_at(t.position, target.at), 120.0, 10.0, time.dt);
+}
+// ANCHOR_END: chase
+
+@system(after: [move_target])
+fn marker(row: (Marker, Transform), target: Target) {
+    let (_, t) = row;
+    t.position = target.at;
+}
+// ANCHOR_END: all

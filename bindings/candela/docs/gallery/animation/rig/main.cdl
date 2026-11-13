@@ -1,0 +1,58 @@
+// ANCHOR: all
+// A rig: an arm of three parts, upper arm, forearm and hand, each a child
+// of the one before. Every joint swings on its own; the parts further out
+// follow the ones they hang from. The left arm is the same rig with its
+// shoulder's scale.x set to -1, which mirrors everything under it.
+
+import "drift" { * };
+
+// A joint swings `swing` radians either way of `rest`, out of step with the
+// others by `phase`.
+@component struct Joint { rest: float = 0.0, swing: float = 0.4, phase: float = 0.0 }
+
+const SKIN: Color = Color { r: 0.93, g: 0.73, b: 0.55, a: 1.0 };
+const SLEEVE: Color = Color { r: 0.33, g: 0.55, b: 0.85, a: 1.0 };
+
+// ANCHOR: rig
+fn spawn_arm(cmd: Commands, shoulder: Vec2, mirror: float) {
+    // The shoulder: nothing drawn, it only places and mirrors the arm.
+    let root = cmd.spawn([Transform { position: shoulder, scale: vec2(mirror, 1.0), .. }]);
+    // Each bone is anchored at its joint, (0, 0.5), and points along +x.
+    let upper = cmd.spawn_child(root, [
+        Transform { .. },
+        Rectangle { size: vec2(80.0, 20.0), anchor: vec2(0.0, 0.5), corner_radius: 10.0, color: SLEEVE, z: 1.0, .. },
+        Joint { rest: 0.5, swing: 0.5, phase: 0.0 },
+    ]);
+    // The forearm starts where the upper arm ends: 80 pixels along its +x.
+    let fore = cmd.spawn_child(upper, [
+        at(80.0, 0.0),
+        Rectangle { size: vec2(70.0, 16.0), anchor: vec2(0.0, 0.5), corner_radius: 8.0, color: SKIN, z: 2.0, .. },
+        Joint { rest: -1.0, swing: 0.6, phase: 1.2 },
+    ]);
+    cmd.spawn_child(fore, [
+        at(70.0, 0.0),
+        Rectangle { size: vec2(30.0, 24.0), anchor: vec2(0.0, 0.5), corner_radius: 8.0, color: SKIN, z: 3.0, .. },
+        Joint { rest: 0.3, swing: 0.5, phase: 2.4 },
+    ]);
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(360.0, 140.0), Rectangle { size: vec2(110.0, 150.0), corner_radius: 24.0, color: SLEEVE, .. }]);
+    cmd.spawn([at(360.0, 40.0), Circle { radius: 32.0, color: SKIN, .. }]);
+    spawn_arm(cmd, vec2(410.0, 90.0), 1.0);
+    spawn_arm(cmd, vec2(310.0, 90.0), -1.0);   // the mirror image
+    cmd.spawn([at(160.0, 270.0), Text { value: "scale (-1, 1)", size: 16.0, align: Align::Center, .. }]);
+    cmd.spawn([at(560.0, 270.0), Text { value: "scale (1, 1)", size: 16.0, align: Align::Center, .. }]);
+}
+// ANCHOR_END: rig
+
+// ANCHOR: swing
+// A joint's rotation counts from the part it hangs from.
+@system
+fn swing(row: (Joint, Transform), time: Time) {
+    let (j, t) = row;
+    t.rotation = j.rest + sine_wave(time.elapsed, 0.5, j.swing, j.phase);
+}
+// ANCHOR_END: swing
+// ANCHOR_END: all

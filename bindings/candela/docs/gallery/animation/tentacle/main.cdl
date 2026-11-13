@@ -1,0 +1,76 @@
+// ANCHOR: all
+// Two tentacles reaching for the cursor with FABRIK IK chains. The left one
+// bends freely and folds back on itself; the right one keeps every joint
+// within 0.35 radians of the segment before it, so it curls.
+
+import "drift" { * };
+
+const COUNT: int = 10;        // segments
+const LENGTH: float = 20.0;   // pixels each
+const ROOTS: Vec2[] = [Vec2 { x: 210.0, y: 310.0 }, Vec2 { x: 510.0, y: 310.0 }];
+
+// ANCHOR: chains
+@resource struct Tentacles { chains: IkChain[] = [] }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, tentacles: Tentacles) {
+    for i in range(2) {
+        // Straight up from the floor: -PI / 2 points up on screen.
+        let chain = ik_chain(ROOTS[i], COUNT, LENGTH, -PI / 2.0);
+        if i == 1 {
+            chain.limit_all(0.35);
+        }
+        tentacles.chains.push(chain);
+        spawn_segments(cmd, i);
+    }
+}
+
+@system
+fn reach(tentacles: Tentacles, input: Input) {
+    for i in range(2) {
+        tentacles.chains[i].solve(ROOTS[i], input.mouse_world());
+    }
+}
+// ANCHOR_END: chains
+
+// ANCHOR: segments
+// A segment is drawn from its joint toward the next one.
+@component struct Segment { chain: int = 0, index: int = 0 }
+
+@system(after: [reach])
+fn place(row: (Segment, Transform), tentacles: Tentacles) {
+    let (s, t) = row;
+    let chain = tentacles.chains[s.chain];
+    t.position = chain.joints[s.index];
+    t.rotation = chain.angle(s.index);
+}
+// ANCHOR_END: segments
+
+// One rectangle per segment, thinner toward the tip, and a label.
+fn spawn_segments(cmd: Commands, chain: int) {
+    for s in range(COUNT) {
+        let width = 22.0 - float(s) * 1.6;
+        cmd.spawn([Transform { .. }, Rectangle { size: vec2(LENGTH + width * 0.5, width), anchor: vec2(0.0, 0.5),
+                                                 corner_radius: width / 2.0, color: rgb(200, 110, 170), z: 1.0, .. },
+                   Segment { chain: chain, index: s }]);
+    }
+    let label = "no limits";
+    if chain == 1 {
+        label = "limit_all(0.35)";
+    }
+    cmd.spawn([at(ROOTS[chain].x, 20.0), Text { value: label, size: 16.0, align: Align::Center, .. }]);
+}
+
+@component struct Cursor {}
+
+@system(schedule: Schedule::Startup)
+fn spawn_cursor(cmd: Commands) {
+    cmd.spawn([at(-50.0, -50.0), Circle { radius: 6.0, color: rgb(250, 250, 240), z: 4.0, .. }, Cursor {}]);
+}
+
+@system
+fn follow_mouse(row: (Cursor, Transform), input: Input) {
+    let (_, t) = row;
+    t.position = input.mouse_world();
+}
+// ANCHOR_END: all

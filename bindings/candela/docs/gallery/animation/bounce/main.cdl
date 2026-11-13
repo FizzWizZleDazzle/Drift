@@ -1,0 +1,53 @@
+// ANCHOR: all
+// The same bounce twice: the left ball keeps its shape, the right one
+// stretches along the way it moves and squashes flat when it lands.
+
+import "drift" { * };
+
+@component struct Ball { center: float = 0.0, squashy: bool = false }
+
+const GROUND: float = 270.0;
+const RADIUS: float = 22.0;
+const HEIGHT: float = 190.0;   // how high it bounces
+const PERIOD: float = 1.0;     // seconds from one landing to the next
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(360.0, GROUND + 10.0), Rectangle { size: vec2(720.0, 20.0), color: rgb(70, 70, 90), .. }]);
+    for i in range(2) {
+        let x = 180.0 + 360.0 * float(i);
+        cmd.spawn([at(x, GROUND - RADIUS), Circle { radius: RADIUS, color: rgb(240, 150, 80), z: 1.0, .. },
+                   Ball { center: x, squashy: i == 1 }]);
+    }
+    cmd.spawn([at(180.0, 16.0), Text { value: "no squash", size: 16.0, align: Align::Center, .. }]);
+    cmd.spawn([at(540.0, 16.0), Text { value: "squash and stretch", size: 16.0, align: Align::Center, .. }]);
+}
+
+// ANCHOR: bounce
+@system
+fn bounce(row: (Ball, Transform), time: Time) {
+    let (b, t) = row;
+    // A parabola from the ground and back each PERIOD, drifting side to side.
+    let p = (time.elapsed % PERIOD) / PERIOD;
+    let lift = HEIGHT * 4.0 * p * (1.0 - p);
+    let velocity = vec2(cosine_wave(time.elapsed, 0.5, 80.0 * PI, 0.0), -HEIGHT * 4.0 * (1.0 - 2.0 * p) / PERIOD);
+    t.position = vec2(b.center + sine_wave(time.elapsed, 0.5, 80.0, 0.0), GROUND - RADIUS - lift);
+    if !b.squashy {
+        return;
+    }
+    // Near the ground it squashes, flattest at the moment it lands, and
+    // sits lower so it still touches the floor.
+    let near = 1.0 - min(p, 1.0 - p) / 0.08;
+    if near > 0.0 {
+        let s = squash(-0.4 * near);
+        t.rotation = 0.0;
+        t.scale = s;
+        t.position.y = GROUND - RADIUS * s.y - lift;
+    } else {
+        // In the air it stretches along its velocity.
+        t.rotation = velocity.angle();
+        t.scale = stretch(velocity, 0.0005, 0.35);
+    }
+}
+// ANCHOR_END: bounce
+// ANCHOR_END: all

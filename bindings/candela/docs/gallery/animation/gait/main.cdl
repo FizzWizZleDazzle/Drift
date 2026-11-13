@@ -1,0 +1,78 @@
+// ANCHOR: all
+// Walkers: a body moves smoothly back and forth, and its feet stay planted
+// until they stray too far from under the hip, then step there in an arc.
+// Two-bone IK bends each leg to reach its foot. The rows differ only in the
+// Gait's step distance: 14, 28 and 50 pixels.
+
+import "drift" { * };
+
+const THIGH: float = 30.0;
+const SHIN: float = 30.0;
+const HIP: float = 54.0;   // hip height above the ground
+const DISTANCES: float[] = [14.0, 28.0, 50.0];
+
+// ANCHOR: walker
+@component
+struct Walker {
+    ground: float = 0.0,
+    gait: Gait = Gait { .. },
+    feet: Foot[] = [],
+    bones: Entity[] = [],   // thigh, shin and foot of each leg
+}
+
+@system
+fn walk(row: (Walker, Transform), time: Time, cmd: Commands) {
+    let (w, t) = row;
+    // Back and forth across the screen; face the way it goes.
+    let x = 360.0 + sine_wave(time.elapsed, 0.125, 200.0, 0.0);
+    let facing = 1.0;
+    if cosine_wave(time.elapsed, 0.125, 1.0, 0.0) < 0.0 {
+        facing = -1.0;
+    }
+    let hip = vec2(x, w.ground - HIP);
+    t.position = hip + vec2(0.0, -16.0);
+    t.scale = vec2(facing, 1.0);
+    for i in range(2) {
+        let f = w.feet[i];
+        // Under the hip, a little apart; a foot may step only while the
+        // other one is planted, so they take turns.
+        let rest = vec2(x + 5.0 * float(i * 2 - 1), w.ground);
+        f.update(rest, w.gait, w.feet[1 - i].planted(), time.dt);
+        // The knee points the way the walker faces.
+        let pose = two_bone_ik(hip, f.position, THIGH, SHIN, -facing);
+        cmd.insert(w.bones[i * 3], Transform { position: hip, rotation: pose.upper, .. });
+        cmd.insert(w.bones[i * 3 + 1], Transform { position: pose.joint, rotation: pose.lower, .. });
+        cmd.insert(w.bones[i * 3 + 2], Transform { position: f.position, scale: vec2(facing, 1.0), .. });
+    }
+}
+// ANCHOR_END: walker
+
+fn limb(cmd: Commands, length: float, width: float, z: float) -> Entity {
+    return cmd.spawn([Transform { .. }, Rectangle { size: vec2(length, width), anchor: vec2(0.0, 0.5),
+                                                    corner_radius: width / 2.0, color: rgb(110, 170, 240), z: z, .. }]);
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    for row in range(3) {
+        let ground = 105.0 + 105.0 * float(row);
+        cmd.spawn([at(360.0, ground + 4.0), Rectangle { size: vec2(720.0, 8.0), color: rgb(70, 70, 90), .. }]);
+        let bones: Entity[] = [];
+        let feet: Foot[] = [];
+        for leg in range(2) {
+            let z = float(leg) * 2.0;   // the far leg behind the body, the near one in front
+            bones.push(limb(cmd, THIGH, 10.0, z));
+            bones.push(limb(cmd, SHIN, 8.0, z));
+            bones.push(cmd.spawn([Transform { .. }, Rectangle { size: vec2(16.0, 6.0), anchor: vec2(0.3, 1.0),
+                                                                corner_radius: 3.0, color: rgb(240, 200, 90), z: z, .. }]));
+            feet.push(foot(vec2(360.0, ground)));
+        }
+        let body = cmd.spawn([at(360.0, ground - HIP), Rectangle { size: vec2(40.0, 44.0), corner_radius: 14.0,
+                                                                  color: rgb(230, 130, 160), z: 1.0, .. },
+                              Walker { ground: ground, gait: Gait { distance: DISTANCES[row], duration: 0.1, height: 8.0, lead: 0.4, .. },
+                                       feet: feet, bones: bones }]);
+        cmd.spawn_child(body, [at(10.0, -6.0), Circle { radius: 4.0, color: rgb(30, 30, 40), z: 1.5, .. }]);
+        cmd.spawn([at(12.0, ground - 96.0), Text { value: format("distance {}", [DISTANCES[row]]), size: 14.0, .. }]);
+    }
+}
+// ANCHOR_END: all
