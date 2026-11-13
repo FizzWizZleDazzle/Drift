@@ -51,7 +51,7 @@ lives = 3
 
 | Section | Keys |
 |---------|------|
-| `[project]` | `name`, `organization`, `version`, `entry`, `assets` |
+| `[project]` | `name`, `organization`, `version`, `entry`, `assets`; `description` and `icon` (an image path) for the web page |
 | `[window]` | `title` (empty uses `project.name`), `width`, `height`, `fullscreen`, `resizable`, `high_dpi`, `scale_mode` |
 | `[render]` | `backend` (`"gl"` or `"webgpu"`), `vsync`, `clear_color` |
 | `[app]` | `threads` for the engine's scheduler: 0 picks for the machine, 1 runs everything on one thread |
@@ -61,6 +61,7 @@ lives = 3
 | `[hot_reload]` | `enabled`, `interval` |
 | `[input]` | One key per action, a list of bindings: `key:<name>`, `mouse:Left`, `button:South` |
 | `[random]` | `seed` for the `Random` resource; see [Procedural Generation](../guides/procedural-generation.md#the-games-seed) |
+| `[web]` | The web page: `orientation`, `background`, `fullscreen_button`, `touch_controls`, `touch_stick`, `touch_buttons`, `offline`; see [Web Games](../guides/web.md#the-page) |
 
 Values apply in order: the default, then `drift.toml`, then your systems, then `DRIFT_<SECTION>_<KEY>` environment variables, then `--set section.key=value` on the command line. So `DRIFT_RENDER_BACKEND=webgpu drift run` tries the WebGPU backend for one run, and `drift run --set window.width=640` checks a smaller window.
 
@@ -101,6 +102,6 @@ See [The drift Command](../reference/cli.md) for every option.
 
 ## Shipping
 
-For the browser, `drift build --web` writes `build/web/`, a page with the game packed beside the web runtime. Upload the folder to any static web host.
+For the browser, `drift build --web` writes `build/web/`, a page with the game packed beside the web runtime. Upload the folder to any static web host or to itch.io; [Web Games](../guides/web.md) covers hosting, phones and saves.
 
 `drift build` writes `build/<name>.cdlb`. Ship it with the `drift` program, `drift.toml` and the assets folder; `drift run build/<name>.cdlb` starts it without compiling anything.

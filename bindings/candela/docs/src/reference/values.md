@@ -30,6 +30,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `IkChain` | A FABRIK chain: `joints`, `lengths`, `min_angles`, `max_angles`, `base_angle`, `iterations`, `tolerance`. `solve(root, target)`, `limit_all(max_bend)`, `end()`, `angle(i)`, `len()` |
 | `Rope` | A verlet chain: `points`, `previous`, `segment`, `gravity`, `damping`, `iterations`, `stiffness`, `ground`. `update(anchor, dt)`, `pin(target)`, `release()`, `push(v)`, `angle(i)`, `len()` |
 | `Foot`, `Gait` | A stepping foot (`position`, `planted()`, `update(rest, gait, can_step, dt)`) and how it steps (`distance`, `duration`, `height`, `lead`, `up`) |
+| `LocalTime` | `year`, `month` (1 to 12), `day`, `hour`, `minute`, `second`, `weekday` (0 is Sunday), all ints, and `unix`, seconds since 1970 in UTC. From `Platform.local_time()` |
 | `Texture`, `Sound`, `Font`, `Map`, `Scene` | Assets from `Assets` |
 
 ## Post effect settings

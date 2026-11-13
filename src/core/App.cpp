@@ -1028,6 +1028,13 @@ bool App::pollFrame() {
         if (event.type == SDL_EVENT_QUIT) {
             s.running = false;
         }
+        // Back from hidden (a browser tab in the background gets no
+        // frames): the time away is not game time, so this frame advances
+        // one ordinary step instead of a burst.
+        if (event.type == SDL_EVENT_WINDOW_SHOWN && s.timeRes->delta > 1.f / 30.f) {
+            s.dt = 1.f / 60.f;
+            s.timeRes->delta = s.dt;
+        }
     }
 
     if (!s.running) return false;

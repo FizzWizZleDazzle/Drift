@@ -29,11 +29,13 @@ drift build --web path/to/game           # to path/to/game/build/web
 drift build --web path/to/game -o site   # to site/
 ```
 
-Writes the game as a web page: `index.html`, the web runtime `drift.js` and `drift.wasm`, and `game.pack`, which holds `drift.toml`, every `.cdl` script in the folder and its subfolders, and the assets folder. Hidden files and folders and build output folders (`build`, `build-*`) are left out. The page title is the `[project] name`. No compiler or SDK is needed; the runtime comes with `drift`.
+Writes the game as a web page: `index.html`, the web runtime `drift.js` and `drift.wasm`, and `game.pack`, which holds `drift.toml`, every `.cdl` script in the folder and its subfolders, and the assets folder. Hidden files and folders and build output folders (`build`, `build-*`) are left out. No compiler or SDK is needed; the runtime comes with `drift`.
+
+The page takes its title, description and icon from `[project]` and its touch controls, orientation, colors and offline mode from `[web]` in `drift.toml`. With `[project] icon` it also writes the icon beside `index.html`; with `[web] offline = true`, `manifest.webmanifest` and `sw.js`. A `[web]` value it does not understand stops the build with a message naming the key. See [Web Games](../guides/web.md).
 
 Serve the folder over HTTP to play it, for example `python3 -m http.server` inside it; browsers do not run WebAssembly from `file://` pages.
 
-`drift build --web` reports an error and writes nothing when the folder has no entry script.
+`drift build --web` reports an error and writes nothing when the folder has no entry script, and stops before writing `index.html` when `[project] icon` names a missing file.
 
 ## drift build
 

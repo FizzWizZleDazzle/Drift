@@ -230,6 +230,17 @@ host "drift" {
     music_playlist(int[], float, bool, bool, float);
     int audio_bus(string, int);
     float bus_op(int, int, float, float);
+
+    // The browser page and the platform.
+    window_lock_pointer(bool);
+    float pixel_ratio();
+    open_url(string);
+    clipboard_set(string);
+    string clipboard_get();
+    string page_query(string);
+    float[] local_time();
+    bool is_web();
+    bool is_touch();
 }
 
 enum Schedule { Startup, Update }
@@ -664,6 +675,12 @@ impl Time {
 struct Window { width: float = 0.0, height: float = 0.0 }
 impl Window {
     fn quit(self) { drift::quit(); }
+    // Hides the cursor and keeps it in the window; Input.mouse_delta() still
+    // reports movement. For mouse-look and aiming. In a browser it needs a
+    // tap, click or key first; asked for without one, it waits for the next.
+    fn lock_pointer(self, on: bool) { drift::window_lock_pointer(on); }
+    // Screen pixels per window unit: 2 on most phones, 1 on most monitors.
+    fn pixel_ratio(self) -> float { return drift::pixel_ratio(); }
 }
 
 enum Key {
@@ -810,6 +827,45 @@ impl Save {
     fn flush(self) { drift::save_flush(self.name); }
     // Another slot in the same directory, such as "slot2".
     fn slot(self, name: string) -> Save { return Save { name: name }; }
+}
+
+// ---- Platform ----
+
+// The local date and time. month counts from 1, weekday from 0 (Sunday).
+struct LocalTime {
+    year: int = 0, month: int = 0, day: int = 0,
+    hour: int = 0, minute: int = 0, second: int = 0,
+    weekday: int = 0,
+    // Seconds since 1970-01-01 UTC.
+    unix: float = 0.0,
+}
+
+// What the game runs on, and the browser page around it.
+struct Platform { id: int = 0 }
+impl Platform {
+    // True in a browser.
+    fn is_web(self) -> bool { return drift::is_web(); }
+    // True when the device has a touch screen.
+    fn is_touch(self) -> bool { return drift::is_touch(); }
+    // Opens a link in a new tab or the default browser. Browsers block it
+    // unless the player tapped, clicked or pressed a key just before.
+    fn open_url(self, url: string) { drift::open_url(url); }
+    // Puts text on the clipboard.
+    fn copy(self, text: string) { drift::clipboard_set(text); }
+    // The clipboard's text. In a browser: the text the player last pasted
+    // into the page, since pages cannot read the clipboard unasked.
+    fn pasted(self) -> string { return drift::clipboard_get(); }
+    // A value from the page address: query("level") is "3" for
+    // index.html?level=3, "" when absent, and always "" on the desktop.
+    fn query(self, name: string) -> string { return drift::page_query(name); }
+    fn local_time(self) -> LocalTime {
+        let t = drift::local_time();
+        return LocalTime {
+            year: int(t[0]), month: int(t[1]), day: int(t[2]),
+            hour: int(t[3]), minute: int(t[4]), second: int(t[5]),
+            weekday: int(t[6]), unix: t[7],
+        };
+    }
 }
 
 // ---- Timers ----
@@ -2643,7 +2699,8 @@ impl Window {
     }
     fn set_size(self, w: int, h: int) { self.op("set_size", [float(w), float(h)], ""); }
     fn fullscreen(self) -> bool { return self.op("fullscreen", [], "")[0] > 0.5; }
-    // Browsers allow fullscreen only from a key press or click.
+    // Browsers allow fullscreen only right after a tap, click or key; asked
+    // for at another time, it waits for the next one.
     fn set_fullscreen(self, on: bool) { self.op("set_fullscreen", [flag(on)], ""); }
     fn show_cursor(self, visible: bool) { self.op("show_cursor", [flag(visible)], ""); }
     fn set_cursor(self, c: Cursor) {

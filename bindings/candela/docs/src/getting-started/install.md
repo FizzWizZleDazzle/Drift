@@ -49,7 +49,7 @@ drift build --web path/to/game
 cd path/to/game/build/web && python3 -m http.server 8000   # open http://localhost:8000
 ```
 
-`drift build --web` writes a page that runs the game: `index.html`, the web runtime (`drift.js`, `drift.wasm`) and `game.pack`, which holds `drift.toml`, every `.cdl` script in the game folder at its path in the folder, and the assets folder. Hidden folders and build output folders (`build`, `build-*`) are left out. The page compiles the scripts when it loads, so a game split across subfolders runs as it does on the desktop. Serve the folder over HTTP; browsers do not run WebAssembly from `file://` pages. `-o <folder>` writes the page somewhere other than `build/web`.
+`drift build --web` writes a page that runs the game: `index.html`, the web runtime (`drift.js`, `drift.wasm`) and `game.pack`, which holds `drift.toml`, every `.cdl` script in the game folder at its path in the folder, and the assets folder. Hidden folders and build output folders (`build`, `build-*`) are left out. The page compiles the scripts when it loads, so a game split across subfolders runs as it does on the desktop. Serve the folder over HTTP; browsers do not run WebAssembly from `file://` pages. `-o <folder>` writes the page somewhere other than `build/web`. [Web Games](../guides/web.md) covers hosting, itch.io, phones, offline play and saves.
 
 ## Building from source
 

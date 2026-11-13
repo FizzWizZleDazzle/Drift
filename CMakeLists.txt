@@ -349,14 +349,18 @@ if(DRIFT_DEV)
     target_compile_definitions(drift PUBLIC DRIFT_DEV=1)
 endif()
 
-# Browser build: WebGL2, growable memory, no threads.
+# Browser build: WebGL2, growable memory, no threads, and the page behaviour
+# in cmake/drift_web.js (audio unlock, background tabs, fullscreen, touch).
 if(EMSCRIPTEN)
     target_link_options(drift PUBLIC
         -sMIN_WEBGL_VERSION=2
         -sMAX_WEBGL_VERSION=2
         -sALLOW_MEMORY_GROWTH=1
         -sSTACK_SIZE=1048576
+        "--pre-js=${CMAKE_CURRENT_SOURCE_DIR}/cmake/drift_web.js"
     )
+    # Relink games when it changes (CMake 3.27 and later).
+    set_property(TARGET drift APPEND PROPERTY INTERFACE_LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/drift_web.js)
 endif()
 
 # Platform libraries

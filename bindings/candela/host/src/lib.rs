@@ -497,6 +497,8 @@ impl Host {
                     }
                     // The gameplay half's engine resources.
                     "Physics" | "Audio" | "Systems" => Ok(Param::Engine(*id)),
+                    // The browser page and the platform.
+                    "Platform" => Ok(Param::Engine(*id)),
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
                 }
             }
@@ -1323,6 +1325,16 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("anim_fabrik", vec![af(), af(), F, F, I, F, F, af(), af()], af()),
         ("anim_verlet", vec![af(), af(), F, F, F, F, F, F, F, I, F, F, B, F, F], af()),
         ("anim_foot", vec![F, F, F, F, F, F, F, F, F, F, F, F, F, F, F, F, B], af()),
+        // The browser page and the platform.
+        ("window_lock_pointer", vec![B], U),
+        ("pixel_ratio", vec![], F),
+        ("open_url", vec![S], U),
+        ("clipboard_set", vec![S], U),
+        ("clipboard_get", vec![], S),
+        ("page_query", vec![S], S),
+        ("local_time", vec![], af()),
+        ("is_web", vec![], B),
+        ("is_touch", vec![], B),
     ]
     .into_iter()
     .chain(gameplay_forwarded())

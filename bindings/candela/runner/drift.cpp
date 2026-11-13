@@ -56,6 +56,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include <emscripten/html5.h>
 #else
 #include "web_pack.hpp"
 #endif
@@ -68,6 +69,8 @@
 #include <span>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -1615,6 +1618,122 @@ bool images(const std::string& f, const json& a, json& out) {
     return true;
 }
 
+// ---- Browser and platform ----
+//
+// The page around a web game (cmake/drift_web.js and the shell page) and the
+// matching desktop calls: pointer lock, links, the clipboard, the page's
+// query string, local time. Window's fullscreen goes through the page too.
+
+#ifdef __EMSCRIPTEN__
+EM_JS(void, web_set_fullscreen, (int on), { if (Module['driftSetFullscreen']) Module['driftSetFullscreen'](!!on); });
+EM_JS(int, web_is_fullscreen, (), { return Module['driftIsFullscreen'] ? Module['driftIsFullscreen']() : 0; });
+EM_JS(void, web_lock_pointer, (int on), { if (Module['driftLockPointer']) Module['driftLockPointer'](!!on); });
+EM_JS(int, web_touch_screen, (), { return Module['driftTouchScreen'] ? 1 : 0; });
+EM_JS(void, web_copy, (const char* text), {
+    var t = UTF8ToString(text);
+    var fallback = function () {
+        var area = document.createElement('textarea');
+        area.value = t;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        area.remove();
+        if (Module['canvas']) Module['canvas'].focus();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(fallback);
+    else fallback();
+});
+EM_JS(char*, web_pasted, (), { return stringToNewUTF8(Module['driftPasted'] || ''); });
+EM_JS(char*, web_query, (const char* name), {
+    var v = new URLSearchParams(window.location.search).get(UTF8ToString(name));
+    return stringToNewUTF8(v === null ? '' : v);
+});
+EM_JS(void, web_show_error, (const char* text), {
+    if (Module['driftError']) Module['driftError'](UTF8ToString(text));
+});
+
+std::string takeString(char* s) {
+    std::string out = s ? s : "";
+    free(s);
+    return out;
+}
+#endif
+
+SDL_Window* sdlWindow();
+
+bool platform(const std::string& f, const json& a, json& out) {
+    if (f == "window_lock_pointer") {
+#ifdef __EMSCRIPTEN__
+        web_lock_pointer(a[0].get<bool>());
+#else
+        if (SDL_Window* w = sdlWindow()) SDL_SetWindowRelativeMouseMode(w, a[0].get<bool>());
+#endif
+        out = nullptr;
+    } else if (f == "pixel_ratio") {
+#ifdef __EMSCRIPTEN__
+        out = emscripten_get_device_pixel_ratio();
+#else
+        SDL_Window* w = sdlWindow();
+        out = w ? SDL_GetWindowDisplayScale(w) : 1.f;
+#endif
+    } else if (f == "open_url") {
+        if (!SDL_OpenURL(a[0].get<std::string>().c_str())) DRIFT_LOG_WARN("open_url: %s", SDL_GetError());
+        out = nullptr;
+    } else if (f == "clipboard_set") {
+#ifdef __EMSCRIPTEN__
+        web_copy(a[0].get<std::string>().c_str());
+#else
+        SDL_SetClipboardText(a[0].get<std::string>().c_str());
+#endif
+        out = nullptr;
+    } else if (f == "clipboard_get") {
+#ifdef __EMSCRIPTEN__
+        out = takeString(web_pasted());
+#else
+        char* text = SDL_GetClipboardText();
+        out = std::string(text ? text : "");
+        SDL_free(text);
+#endif
+    } else if (f == "page_query") {
+#ifdef __EMSCRIPTEN__
+        out = takeString(web_query(a[0].get<std::string>().c_str()));
+#else
+        out = "";
+#endif
+    } else if (f == "local_time") {
+        // year, month (1-12), day, hour, minute, second, weekday (0 is
+        // Sunday), seconds since 1970 UTC.
+        std::time_t now = std::time(nullptr);
+        std::tm t{};
+#ifdef _WIN32
+        localtime_s(&t, &now);
+#else
+        localtime_r(&now, &t);
+#endif
+        out = {t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, t.tm_wday, double(now)};
+    } else if (f == "is_web") {
+#ifdef __EMSCRIPTEN__
+        out = true;
+#else
+        out = false;
+#endif
+    } else if (f == "is_touch") {
+#ifdef __EMSCRIPTEN__
+        out = web_touch_screen() != 0;
+#else
+        int n = 0;
+        SDL_TouchID* touch = SDL_GetTouchDevices(&n);
+        SDL_free(touch);
+        out = n > 0;
+#endif
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // ---- Post effects, lights and trails ----
 
 EffectId fade();
@@ -1923,10 +2042,19 @@ bool windowAndAssets(const std::string& f, const json& a, json& out) {
         } else if (op == "set_size") {
             if (win) SDL_SetWindowSize(win, static_cast<int>(num(n, 0)), static_cast<int>(num(n, 1)));
         } else if (op == "fullscreen") {
+#ifdef __EMSCRIPTEN__
+            out = {web_is_fullscreen() ? 1.0 : 0.0};
+#else
             out = {win && (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN) ? 1.0 : 0.0};
+#endif
         } else if (op == "set_fullscreen") {
             g_app->config().window.fullscreen = num(n, 0) > 0.5f;
+#ifdef __EMSCRIPTEN__
+            // The page's fullscreen, which waits for a gesture when it has to.
+            web_set_fullscreen(g_app->config().window.fullscreen);
+#else
             if (win) SDL_SetWindowFullscreen(win, g_app->config().window.fullscreen);
+#endif
         } else if (op == "show_cursor") {
             if (num(n, 0) > 0.5f) SDL_ShowCursor();
             else SDL_HideCursor();
@@ -1998,6 +2126,16 @@ bool windowAndAssets(const std::string& f, const json& a, json& out) {
         return true;
     }
     return false;
+}
+
+// Tells the player the game cannot start: on the web, on the page instead
+// of a black canvas.
+void showStartError(const char* text) {
+#ifdef __EMSCRIPTEN__
+    web_show_error(text);
+#else
+    (void)text;
+#endif
 }
 
 // ---- Services ----
@@ -2400,6 +2538,7 @@ json service(const std::string& f, const json& a) {
     if (effects(f, a, answer)) return answer;
     if (animService(f, a, answer)) return answer;
     if (windowAndAssets(f, a, answer)) return answer;
+    if (platform(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {
@@ -2673,6 +2812,7 @@ private:
         if (!loaded_) {
             if (!drift_host_load(entry_.c_str(), moduleDir_.c_str())) {
                 DRIFT_LOG_ERROR("%s", drift_host_error());
+                showStartError(drift_host_error());
                 failed_ = true;
                 g_loadFailed = true;
                 a.quit();

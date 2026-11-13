@@ -208,6 +208,8 @@ drift_web_app(my_game)                                # drift.toml and assets/ f
 
 `PROJECT <dir>` is the folder holding `drift.toml`; it defaults to the current source directory. The asset folder packaged is the one `assets` in the `[project]` section names (`assets` by default), under the same path, so the game loads the same relative paths as on desktop. `ASSETS <dir>...` packages other folders at `assets/` instead. `PRELOAD <src>@<dst>` maps any other directory into the virtual file system. A custom `SHELL` page must contain a `<canvas id="canvas">` and the `{{{ SCRIPT }}}` placeholder; start from `cmake/drift_shell.html`.
 
+The default page shows the game's name and a progress bar while it downloads, and an error panel instead of a black canvas when the game stops before it starts. Every Drift web build, with any page, also gets the browser behaviour in `cmake/drift_web.js`: sound starts on the player's first tap, click or key, a tab in the background goes quiet and pauses without a time jump on return, and a page that sets `window.DRIFT_PAGE` gets on-screen touch controls, an orientation notice and a fullscreen button (the top of `cmake/drift_web.js` describes it). The [Candela book's Web Games guide](https://fizzwizzledazzle.github.io/Drift/candela-book/guides/web.html) covers hosting, itch.io and phones; it applies to C++ games too, apart from `drift build --web` and `[web]`.
+
 ## Shader translation (optional)
 
 Custom shaders written in WGSL are translated to GLSL at build time by [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga). You only need it if your game uses `drift_add_shaders`:

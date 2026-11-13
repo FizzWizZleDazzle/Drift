@@ -2,25 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Drift</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-  canvas { display: block; width: 100vw; height: 100vh; outline: none; }
-  #status { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-            color: #aaa; font: 14px sans-serif; pointer-events: none; }
+  html, body { margin: 0; height: 100%; background: var(--drift-background, #000); overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; outline: none; touch-action: none; }
+  #drift-loader, #drift-error { position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; font: 15px system-ui, sans-serif; color: #bbb; }
+  #drift-loader { pointer-events: none; }
+  #drift-title { font-size: 22px; color: #eee; }
+  #drift-bar { width: min(320px, 70vw); height: 6px; border-radius: 3px; background: rgba(255,255,255,0.15); overflow: hidden; }
+  #drift-fill { width: 0; height: 100%; background: #ddd; transition: width 0.15s; }
+  #drift-error { display: none; background: #141418; padding: 24px; box-sizing: border-box; }
+  #drift-error h1 { margin: 0; font-size: 20px; font-weight: 600; color: #f0f0f0; }
+  #drift-error pre { margin: 0; max-width: min(900px, 100%); max-height: 70vh; overflow: auto; padding: 16px;
+    box-sizing: border-box; background: #000; color: #f3b0a8; border-radius: 6px; font: 13px ui-monospace, monospace;
+    white-space: pre-wrap; user-select: text; }
 </style>
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
-<div id="status">Loading...</div>
+<div id="drift-loader">
+  <div id="drift-title"></div>
+  <div id="drift-bar"><div id="drift-fill"></div></div>
+  <div id="drift-status">Loading...</div>
+</div>
+<div id="drift-error"><h1>The game could not start</h1><pre></pre></div>
 <script>
+  // The loading screen until the game's first frame, and an error screen
+  // instead of a black canvas when it cannot start.
+  document.getElementById('drift-title').textContent = document.title;
   var Module = {
     canvas: document.getElementById('canvas'),
-    setStatus: function (text) { document.getElementById('status').textContent = text; },
+    // Emscripten reports downloads as "<what> (<done>/<total>)".
+    setStatus: function (text) {
+      if (!text) return;
+      var m = /\((\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\)/.exec(text);
+      if (m) Module.driftProgress(+m[1], +m[2]);
+      document.getElementById('drift-status').textContent = text.replace(/\s*\(.*\)$/, '');
+    },
+    driftProgress: function (done, total) {
+      if (total > 0) document.getElementById('drift-fill').style.width = Math.min(100, 100 * done / total) + '%';
+    },
+    driftError: function (text) {
+      document.getElementById('drift-loader').style.display = 'none';
+      var panel = document.getElementById('drift-error');
+      panel.querySelector('pre').textContent = text;
+      panel.style.display = 'flex';
+      Module.canvas.style.display = 'none';
+    },
+    onAbort: function (what) { Module.driftError(String(what || 'The game stopped.')); },
     onRuntimeInitialized: function () {
-      document.getElementById('status').style.display = 'none';
-      document.getElementById('canvas').focus();
+      document.getElementById('drift-loader').style.display = 'none';
+      Module.canvas.focus();
     },
     print: function (text) { console.log(text); },
     printErr: function (text) { console.error(text); }

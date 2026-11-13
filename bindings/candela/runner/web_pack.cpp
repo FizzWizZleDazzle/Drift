@@ -4,7 +4,9 @@
 #include <toml++/toml.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -26,7 +28,40 @@ struct Project {
     std::string entry = "main.cdl";
     std::string assets = "assets";
     std::string name;
+    std::string description;
+    std::string icon;
 };
+
+// [web]: the page around the game. drift_web.js reads the touch and
+// orientation part as window.DRIFT_PAGE.
+struct WebPage {
+    std::string orientation;           // "", "landscape" or "portrait"
+    std::string background = "#000000";
+    bool fullscreenButton = false;
+    bool offline = false;              // installable, plays without a connection
+    std::string touchControls = "auto";
+    std::vector<std::string> stick;    // KeyboardEvent codes: up, left, down, right
+    nlohmann::json buttons = nlohmann::json::array();   // [{"code", "label"}]
+};
+
+// Drift's key names (the drift module's Key enum) as KeyboardEvent codes.
+std::string keyCode(const std::string& name) {
+    if (name.size() == 1 && name[0] >= 'A' && name[0] <= 'Z') return "Key" + name;
+    if (name.size() == 4 && name.rfind("Num", 0) == 0 && name[3] >= '0' && name[3] <= '9') return "Digit" + name.substr(3);
+    if (name.size() >= 2 && name[0] == 'F' && std::all_of(name.begin() + 1, name.end(), ::isdigit)) {
+        int n = std::stoi(name.substr(1));
+        return n >= 1 && n <= 12 ? name : "";
+    }
+    static const std::pair<const char*, const char*> named[] = {
+        {"Return", "Enter"}, {"Escape", "Escape"}, {"Backspace", "Backspace"}, {"Tab", "Tab"},
+        {"Space", "Space"}, {"Right", "ArrowRight"}, {"Left", "ArrowLeft"}, {"Down", "ArrowDown"},
+        {"Up", "ArrowUp"}, {"LCtrl", "ControlLeft"}, {"LShift", "ShiftLeft"}, {"LAlt", "AltLeft"},
+        {"RCtrl", "ControlRight"}, {"RShift", "ShiftRight"}, {"RAlt", "AltRight"}};
+    for (const auto& [from, to] : named) {
+        if (name == from) return to;
+    }
+    return "";
+}
 
 bool readFile(const fs::path& path, std::string& out) {
     std::ifstream in(path, std::ios::binary);
@@ -50,16 +85,59 @@ bool buildOutput(const fs::path& name) {
     return n == "build" || n.rfind("build-", 0) == 0;
 }
 
-bool readProject(const fs::path& file, Project& p, std::string& error) {
+bool readProject(const fs::path& file, Project& p, WebPage& web, std::string& error) {
     if (!fs::is_regular_file(file)) return true;
+    toml::table t;
     try {
-        toml::table t = toml::parse_file(file.string());
-        if (auto v = t["project"]["entry"].value<std::string>()) p.entry = *v;
-        if (auto v = t["project"]["assets"].value<std::string>()) p.assets = *v;
-        if (auto v = t["project"]["name"].value<std::string>()) p.name = *v;
+        t = toml::parse_file(file.string());
     } catch (const toml::parse_error& e) {
         error = file.string() + ": " + std::string(e.description());
         return false;
+    }
+    if (auto v = t["project"]["entry"].value<std::string>()) p.entry = *v;
+    if (auto v = t["project"]["assets"].value<std::string>()) p.assets = *v;
+    if (auto v = t["project"]["name"].value<std::string>()) p.name = *v;
+    if (auto v = t["project"]["description"].value<std::string>()) p.description = *v;
+    if (auto v = t["project"]["icon"].value<std::string>()) p.icon = *v;
+
+    auto w = t["web"];
+    auto bad = [&](const std::string& key, const std::string& why) {
+        error = file.string() + ": [web] " + key + ": " + why;
+        return false;
+    };
+    if (auto v = w["orientation"].value<std::string>()) {
+        if (*v != "any" && *v != "landscape" && *v != "portrait") return bad("orientation", "takes \"any\", \"landscape\" or \"portrait\"");
+        web.orientation = *v == "any" ? "" : *v;
+    }
+    if (auto v = w["background"].value<std::string>()) {
+        bool hex = v->size() == 7 && (*v)[0] == '#' && std::all_of(v->begin() + 1, v->end(), ::isxdigit);
+        if (!hex) return bad("background", "takes a color as \"#rrggbb\"");
+        web.background = *v;
+    }
+    if (auto v = w["fullscreen_button"].value<bool>()) web.fullscreenButton = *v;
+    if (auto v = w["offline"].value<bool>()) web.offline = *v;
+    if (auto v = w["touch_controls"].value<std::string>()) {
+        if (*v != "auto" && *v != "always" && *v != "never") return bad("touch_controls", "takes \"auto\", \"always\" or \"never\"");
+        web.touchControls = *v;
+    }
+    if (auto v = w["touch_stick"].value<std::string>()) {
+        if (*v == "arrows") web.stick = {"ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"};
+        else if (*v == "wasd") web.stick = {"KeyW", "KeyA", "KeyS", "KeyD"};
+        else if (!v->empty()) return bad("touch_stick", "takes \"arrows\", \"wasd\" or \"\"");
+    }
+    if (auto* list = w["touch_buttons"].as_array()) {
+        for (const auto& item : *list) {
+            std::string key, label;
+            if (auto s = item.value<std::string>()) {
+                key = *s;
+            } else if (auto* tbl = item.as_table()) {
+                key = (*tbl)["key"].value_or(std::string());
+                label = (*tbl)["label"].value_or(std::string());
+            }
+            std::string code = keyCode(key);
+            if (code.empty()) return bad("touch_buttons", "\"" + key + "\" is not a key name (Space, Z, Return, Up, ...)");
+            web.buttons.push_back({{"code", code}, {"label", label.empty() ? key : label}});
+        }
     }
     return true;
 }
@@ -76,6 +154,71 @@ std::string escapeHtml(const std::string& s) {
         }
     }
     return out;
+}
+
+// JSON safe inside a <script> element, in ASCII.
+std::string scriptJson(const nlohmann::json& j) {
+    std::string s = j.dump(-1, ' ', true);
+    for (size_t at = s.find("</"); at != std::string::npos; at = s.find("</", at + 2)) s.replace(at, 2, "<\\/");
+    return s;
+}
+
+// "<width>x<height>" of a PNG image, from its header; "any" for other images.
+std::string imageSizes(const std::string& data) {
+    if (data.size() < 24 || data.compare(1, 3, "PNG") != 0) return "any";
+    auto u32 = [&](size_t i) {
+        return uint32_t(uint8_t(data[i])) << 24 | uint32_t(uint8_t(data[i + 1])) << 16 |
+               uint32_t(uint8_t(data[i + 2])) << 8 | uint32_t(uint8_t(data[i + 3]));
+    };
+    return std::to_string(u32(16)) + "x" + std::to_string(u32(20));
+}
+
+uint64_t fnv1a(uint64_t h, const std::string& data) {
+    for (unsigned char c : data) {
+        h ^= c;
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
+// The service worker of an offline page: on install it stores every file of
+// the page in a cache named after `version`, then answers every request it
+// can from that cache, so the game starts without a connection. A new build
+// has a new version; its worker replaces the old one and its cache.
+std::string serviceWorker(const std::string& version, const std::vector<std::string>& files) {
+    std::string list = scriptJson(files);
+    return "// Written by `drift build --web` for [web] offline = true.\n"
+           "// Caches are per page, so games on one site keep their own.\n"
+           "const PAGE = 'drift ' + self.registration.scope + ' ';\n"
+           "const CACHE = PAGE + '" + version + "';\n"
+           "const FILES = " + list + ";\n"
+           "self.addEventListener('install', e => {\n"
+           "  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));\n"
+           "});\n"
+           "self.addEventListener('activate', e => {\n"
+           "  e.waitUntil(caches.keys()\n"
+           "    .then(keys => Promise.all(keys.filter(k => k.startsWith(PAGE) && k !== CACHE).map(k => caches.delete(k))))\n"
+           "    .then(() => self.clients.claim()));\n"
+           "});\n"
+           "self.addEventListener('fetch', e => {\n"
+           "  if (e.request.method !== 'GET') return;\n"
+           "  e.respondWith(caches.open(CACHE)\n"
+           "    .then(c => c.match(e.request, {ignoreSearch: true}))\n"
+           "    .then(hit => hit || fetch(e.request)));\n"
+           "});\n";
+}
+
+// Takes the place of an offline page's worker when the page is built
+// without `offline`.
+std::string retiredServiceWorker() {
+    return "// Written by `drift build --web`: this page is no longer offline.\n"
+           "const PAGE = 'drift ' + self.registration.scope + ' ';\n"
+           "self.addEventListener('install', () => self.skipWaiting());\n"
+           "self.addEventListener('activate', e => {\n"
+           "  e.waitUntil(caches.keys()\n"
+           "    .then(keys => Promise.all(keys.filter(k => k.startsWith(PAGE)).map(k => caches.delete(k))))\n"
+           "    .then(() => self.registration.unregister()));\n"
+           "});\n";
 }
 
 void putU32(std::string& out, uint32_t v) {
@@ -107,7 +250,8 @@ bool buildWebPage(const std::string& folderArg, const std::string& outArg, const
     }
 
     Project project;
-    if (!readProject(folder / "drift.toml", project, error)) return false;
+    WebPage web;
+    if (!readProject(folder / "drift.toml", project, web, error)) return false;
     fs::path assets = fs::path(project.assets).lexically_normal();
     if (!assets.has_filename()) assets = assets.parent_path();   // "assets/"
 
@@ -209,14 +353,119 @@ bool buildWebPage(const std::string& folderArg, const std::string& outArg, const
         size_t at = page.find(title);
         if (at != std::string::npos) page.replace(at, title.size(), "<title>" + escapeHtml(project.name) + "</title>");
     }
+
+    // What the page's <head> says about the game, from [project] and [web].
+    std::string head;
+    std::vector<std::string> extras;   // files written beside index.html
+    if (!project.description.empty()) {
+        head += "<meta name=\"description\" content=\"" + escapeHtml(project.description) + "\">\n";
+        head += "<meta property=\"og:description\" content=\"" + escapeHtml(project.description) + "\">\n";
+    }
+    if (!project.name.empty()) head += "<meta property=\"og:title\" content=\"" + escapeHtml(project.name) + "\">\n";
+    head += "<meta property=\"og:type\" content=\"website\">\n";
+    head += "<meta name=\"theme-color\" content=\"" + web.background + "\">\n";
+    head += "<style>:root { --drift-background: " + web.background + "; }</style>\n";
+
+    std::string iconName, iconType, iconSizes;
+    if (!project.icon.empty()) {
+        fs::path icon = folder / project.icon;
+        std::string data;
+        if (!readFile(icon, data)) {
+            error = icon.string() + ": cannot read; drift.toml [project] icon names the page's icon";
+            return false;
+        }
+        std::string ext = icon.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        iconType = ext == ".png" ? "image/png" : ext == ".svg" ? "image/svg+xml" : ext == ".ico" ? "image/x-icon"
+                 : ext == ".webp" ? "image/webp" : (ext == ".jpg" || ext == ".jpeg") ? "image/jpeg" : "";
+        if (iconType.empty()) {
+            error = icon.string() + ": the page icon must be .png, .svg, .ico, .webp or .jpg";
+            return false;
+        }
+        iconSizes = imageSizes(data);
+        iconName = "icon" + ext;
+        if (!writeFile(out / iconName, data)) {
+            error = (out / iconName).string() + ": cannot write";
+            return false;
+        }
+        extras.push_back(iconName);
+        head += "<link rel=\"icon\" href=\"" + iconName + "\" type=\"" + iconType + "\">\n";
+        head += "<link rel=\"apple-touch-icon\" href=\"" + iconName + "\">\n";
+    }
+
+    nlohmann::json config = {{"orientation", web.orientation},
+                             {"fullscreen_button", web.fullscreenButton},
+                             {"touch", {{"show", web.touchControls}, {"stick", web.stick}, {"buttons", web.buttons}}},
+                             {"sizes", {{"drift.wasm", fs::file_size(out / "drift.wasm", ec)},
+                                        {"game.pack", pack.size()}}}};
+    head += "<script>window.DRIFT_PAGE = " + scriptJson(config) + ";</script>\n";
+
+    if (web.offline) {
+        std::string name = project.name.empty() ? "Drift" : project.name;
+        nlohmann::json icons = nlohmann::json::array();
+        if (!iconName.empty()) {
+            icons.push_back({{"src", iconName}, {"type", iconType},
+                             {"sizes", iconSizes}});
+        }
+        nlohmann::json manifest = {{"name", name}, {"short_name", name}, {"start_url", "./"}, {"scope", "./"},
+                                   {"display", "fullscreen"}, {"background_color", web.background},
+                                   {"theme_color", web.background}, {"icons", icons}};
+        if (!project.description.empty()) manifest["description"] = project.description;
+        if (!web.orientation.empty()) manifest["orientation"] = web.orientation;
+        if (!writeFile(out / "manifest.webmanifest", manifest.dump(2) + "\n")) {
+            error = (out / "manifest.webmanifest").string() + ": cannot write";
+            return false;
+        }
+        // The worker keeps a copy of every file of the page under a name
+        // that changes with them, so a new build replaces the old copy.
+        std::vector<std::string> cached = {"./", "index.html", "drift.js", "drift.wasm", "game.pack",
+                                           "manifest.webmanifest"};
+        cached.insert(cached.end(), extras.begin(), extras.end());
+        uint64_t version = 1469598103934665603ull;
+        for (const std::string& name : {std::string("game.pack"), std::string("drift.js"), std::string("drift.wasm")}) {
+            std::string data;
+            readFile(out / name, data);
+            version = fnv1a(version, data);
+        }
+        version = fnv1a(version, page + head);
+        char tag[17];
+        std::snprintf(tag, sizeof(tag), "%016llx", static_cast<unsigned long long>(version));
+        if (!writeFile(out / "sw.js", serviceWorker(tag, cached))) {
+            error = (out / "sw.js").string() + ": cannot write";
+            return false;
+        }
+        head += "<link rel=\"manifest\" href=\"manifest.webmanifest\">\n";
+        head += "<script>if ('serviceWorker' in navigator && location.protocol !== 'file:') "
+                "navigator.serviceWorker.register('sw.js');</script>\n";
+        extras.push_back("manifest.webmanifest");
+        extras.push_back("sw.js");
+    } else if (fs::exists(out / "sw.js")) {
+        // This folder was an offline page before. Players who opened it
+        // still run its worker, which would keep serving the old copy; this
+        // one takes its place, drops the copy and unregisters itself.
+        fs::remove(out / "manifest.webmanifest", ec);
+        if (!writeFile(out / "sw.js", retiredServiceWorker())) {
+            error = (out / "sw.js").string() + ": cannot write";
+            return false;
+        }
+        extras.push_back("sw.js");
+    }
+
+    size_t at = page.find("</head>");
+    if (at == std::string::npos) {
+        error = (runtime / "drift.html").string() + ": no </head>";
+        return false;
+    }
+    page.insert(at, head);
     if (!writeFile(out / "index.html", page)) {
         error = (out / "index.html").string() + ": cannot write";
         return false;
     }
 
-    summary = out.string() + ": index.html, drift.js, drift.wasm and game.pack (" +
-              std::to_string(files.size() - assetCount) + " scripts and settings, " +
-              std::to_string(assetCount) + " assets)";
+    std::string written = "index.html, drift.js, drift.wasm, game.pack";
+    for (const std::string& e : extras) written += ", " + e;
+    summary = out.string() + ": " + written + " (" + std::to_string(files.size() - assetCount) +
+              " scripts and settings, " + std::to_string(assetCount) + " assets)";
     return true;
 }
 

@@ -48,11 +48,13 @@ Device state and [input actions](../guides/input.md#actions).
 | `width`, `height` | The logical resolution this frame |
 | `set_title(s)`, `set_clear_color(c)`, `set_scale_mode(m)`, `set_logical_size(w, h)` | Change the window while running; `drift.toml` sets where they start. In the browser the title is the page's |
 | `size()`, `set_size(w, h)` | The window's own size in pixels; in the browser, the canvas |
-| `fullscreen()`, `set_fullscreen(on)` | Fullscreen. Browsers allow it only from a key press or click, so call it from the system that reads one |
+| `fullscreen()`, `set_fullscreen(on)` | Fullscreen. Browsers allow it only right after a tap, click or key: called from the system that reads one, it happens at once; called otherwise, it waits for the next ([Web Games](../guides/web.md#fullscreen-and-pointer-lock)) |
 | `show_cursor(visible)`, `set_cursor(c)` | Hide the mouse cursor, or pick a `Cursor`: `Default`, `Pointer`, `Text`, `Crosshair`, `Move`, `Wait`, `NotAllowed` |
 | `draw_calls()`, `sprite_count()`, `backend()` | Last frame's draw calls and sprites, and `"gl"` or `"webgpu"` |
 | `quit()` | Ends the game after this frame |
 | `screenshot(path)` | Saves the next presented frame as a PNG |
+| `lock_pointer(on)` | Hides the cursor and keeps it in the window; `Input.mouse_delta()` still reports movement |
+| `pixel_ratio()` | Screen pixels per window unit: 2 or 3 on phones, 1 on most monitors |
 | `download(path)` | Offers a file the game wrote as a download in the browser, such as a screenshot (once it is written) |
 
 ```rust
@@ -256,8 +258,21 @@ The save slot `<user data>/<organization>/<name>/save.json`, named after `[proje
 | `get_int(key, fallback)`, `get_float`, `get_string`, `get_bool` | Read a value |
 | `set_int(key, v)`, `set_float`, `set_string`, `set_bool` | Write a value |
 | `has(key)`, `erase(key)`, `clear()` | |
-| `flush()` | Write the slot to disk |
+| `flush()` | Write the slot to disk; in a browser, to the site's storage |
 | `slot(name)` | Another slot in the same directory |
+
+## Platform
+
+What the game runs on, and the browser page around it. See [Web Games](../guides/web.md#the-browser-from-a-game).
+
+| Method | Returns or does |
+|--------|-----------------|
+| `is_web()`, `is_touch()` | Running in a browser; the device has a touch screen |
+| `open_url(url)` | Opens a link in a new tab, or the default browser on the desktop |
+| `copy(text)` | Puts text on the clipboard |
+| `pasted()` | The text last pasted into the page; on the desktop, the clipboard's text |
+| `query(name)` | A value from the page address (`?name=value`), `""` when absent or on the desktop |
+| `local_time()` | The local date and time as a `LocalTime` |
 
 ## Draw
 

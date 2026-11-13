@@ -76,6 +76,8 @@ A syntax error is logged with its line and column, and the file is ignored. A va
 | `version` | string | `"0.1.0"` | The game's version. |
 | `entry` | string | `""` | The script a scripting host runs. |
 | `assets` | string | `"assets"` | The directory the web build packages. |
+| `description` | string | `""` | One line about the game: the description of a Candela game's web page, for search engines and link previews. |
+| `icon` | string | `""` | An image in the game folder: a Candela game's page icon. |
 | **[window]** | | | |
 | `title` | string | `""` | Window title; empty uses `project.name`. |
 | `width`, `height` | integer | `1280`, `720` | The logical resolution the game draws in, and the initial window size. |

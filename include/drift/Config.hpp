@@ -20,13 +20,17 @@ struct ProjectConfig {
     std::string version = "0.1.0";
     std::string entry;                   // script a scripting host runs (`drift run`)
     std::string assets = "assets";       // directory the web build packages
+    std::string description;             // one line; the web page's description for search and link previews
+    std::string icon;                    // image file, relative to the game folder; the web page's icon
 
     static void describe(reflect::TypeBuilder<ProjectConfig>& t) {
         t.field("name", &ProjectConfig::name)
          .field("organization", &ProjectConfig::organization)
          .field("version", &ProjectConfig::version)
          .field("entry", &ProjectConfig::entry)
-         .field("assets", &ProjectConfig::assets);
+         .field("assets", &ProjectConfig::assets)
+         .field("description", &ProjectConfig::description)
+         .field("icon", &ProjectConfig::icon);
     }
 };
 
