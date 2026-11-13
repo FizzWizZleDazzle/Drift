@@ -11,6 +11,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace drift {
@@ -119,5 +120,24 @@ private:
     std::vector<float> cost_;
     std::vector<int32_t> next_;   // index of the next cell, -1 for none
 };
+
+// ---- Sight on a grid ----
+//
+// For roguelikes, stealth and fog of war: which cells an observer sees, and
+// whether one cell sees another. `opaque` says which cells block sight;
+// cells outside the grid are opaque. A wall is seen itself, so the room's
+// walls show around the floor that is in view.
+
+// The cells visible from `origin` within `radius` cells (Euclidean),
+// origin included, by symmetric shadowcasting: when a sees b, b sees a.
+std::vector<GridPoint> fieldOfView(int32_t width, int32_t height, GridPoint origin, int32_t radius,
+                                   const std::function<bool(GridPoint)>& opaque);
+
+// Whether nothing opaque lies strictly between a and b on the line of
+// cells joining them.
+bool lineOfSight(GridPoint a, GridPoint b, const std::function<bool(GridPoint)>& opaque);
+
+// The cells of the line from a to b, both included (Bresenham).
+std::vector<GridPoint> gridLine(GridPoint a, GridPoint b);
 
 } // namespace drift

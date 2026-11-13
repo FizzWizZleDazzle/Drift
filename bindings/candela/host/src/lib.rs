@@ -496,7 +496,7 @@ impl Host {
                         Ok(Param::Engine(*id))
                     }
                     // The gameplay half's engine resources.
-                    "Physics" | "Audio" | "Systems" => Ok(Param::Engine(*id)),
+                    "Physics" | "Audio" | "Systems" | "Spatial" => Ok(Param::Engine(*id)),
                     // The browser page and the platform.
                     "Platform" => Ok(Param::Engine(*id)),
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
@@ -1375,6 +1375,11 @@ fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("map_object_property", vec![I, I, I, S], S),
         ("map_tile_property", vec![I, I, S], S),
         ("map_autotile", vec![I, I, I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, B], U),
+        // Spatial index and sight on grids.
+        ("spatial_query", vec![I, F, F, F, F, I], HostType::Array(Box::new(I))),
+        ("grid_fov", vec![I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, I, I], HostType::Array(Box::new(I))),
+        ("grid_los", vec![I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, I, I, I], B),
+        ("grid_line", vec![I, I, I, I], HostType::Array(Box::new(I))),
         // Audio.
         ("voice_play", vec![I, I, F, F, F, B, F, I], I),
         ("voice_op", vec![I, I, F, F], F),

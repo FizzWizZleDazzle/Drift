@@ -83,6 +83,7 @@ The structs `Effects.add` takes; every field has a default.
 | `cave(rng, w, h, o)`, `dungeon(rng, w, h, o)`, `random_walk(rng, w, h, o)`, `wfc(rng, sample, w, h, o)` | Level generators; see [Procedural Generation](../guides/procedural-generation.md#generators) |
 | `poisson_disk(rng, area, min_distance)`, `poisson_on_grid(rng, g, value, min_distance)` | Evenly spread points |
 | `find_path(g, start, goal, blocked, diagonal)`, `flow_field(g, goals, blocked, diagonal)` | Pathfinding over a grid |
+| `field_of_view(g, from, radius, opaque)`, `line_of_sight(g, a, b, opaque)`, `grid_line(a, b)` | Sight on a grid; see [Procedural Generation](../guides/procedural-generation.md#seeing) |
 
 ## Constants
 

@@ -251,4 +251,96 @@ float pathCost(const NavGrid& grid, const std::vector<GridPoint>& path) {
     return total;
 }
 
+// ---- Sight on a grid ----
+
+namespace {
+
+// Symmetric shadowcasting (Albert Ford), one quadrant at a time. Rows go
+// out from the origin; a row's columns span the slopes start..end.
+struct FovScan {
+    int32_t width, height, radius;
+    GridPoint origin;
+    const std::function<bool(GridPoint)>& opaque;
+    std::vector<uint8_t>& seen;
+    int quadrant = 0;
+
+    GridPoint cell(int32_t depth, int32_t col) const {
+        switch (quadrant) {
+            case 0: return {origin.x + col, origin.y - depth};   // north
+            case 1: return {origin.x + depth, origin.y + col};   // east
+            case 2: return {origin.x + col, origin.y + depth};   // south
+            default: return {origin.x - depth, origin.y + col};  // west
+        }
+    }
+    bool inside(GridPoint p) const { return p.x >= 0 && p.y >= 0 && p.x < width && p.y < height; }
+    bool wall(GridPoint p) const { return !inside(p) || opaque(p); }
+    void reveal(GridPoint p) {
+        int64_t dx = p.x - origin.x, dy = p.y - origin.y;
+        if (inside(p) && dx * dx + dy * dy <= int64_t(radius) * radius) {
+            seen[size_t(p.y) * size_t(width) + size_t(p.x)] = 1;
+        }
+    }
+    void scan(int32_t depth, double start, double end) {
+        if (depth > radius) return;
+        int32_t minCol = int32_t(std::floor(depth * start + 0.5));
+        int32_t maxCol = int32_t(std::ceil(depth * end - 0.5));
+        int prev = -1;   // -1 none yet, 0 floor, 1 wall
+        for (int32_t col = minCol; col <= maxCol; ++col) {
+            GridPoint p = cell(depth, col);
+            bool isWall = wall(p);
+            bool symmetric = col >= depth * start && col <= depth * end;
+            if (isWall || symmetric) reveal(p);
+            if (prev == 1 && !isWall) start = (2.0 * col - 1.0) / (2.0 * depth);
+            if (prev == 0 && isWall) scan(depth + 1, start, (2.0 * col - 1.0) / (2.0 * depth));
+            prev = isWall ? 1 : 0;
+        }
+        if (prev == 0) scan(depth + 1, start, end);
+    }
+};
+
+} // namespace
+
+std::vector<GridPoint> fieldOfView(int32_t width, int32_t height, GridPoint origin, int32_t radius,
+                                   const std::function<bool(GridPoint)>& opaque) {
+    std::vector<GridPoint> out;
+    if (width <= 0 || height <= 0 || origin.x < 0 || origin.y < 0 || origin.x >= width || origin.y >= height) {
+        return out;
+    }
+    std::vector<uint8_t> seen(size_t(width) * size_t(height), 0);
+    seen[size_t(origin.y) * size_t(width) + size_t(origin.x)] = 1;
+    FovScan scan{width, height, std::max(0, radius), origin, opaque, seen};
+    for (int q = 0; q < 4; ++q) {
+        scan.quadrant = q;
+        scan.scan(1, -1.0, 1.0);
+    }
+    for (int32_t y = 0; y < height; ++y)
+        for (int32_t x = 0; x < width; ++x)
+            if (seen[size_t(y) * size_t(width) + size_t(x)]) out.push_back({x, y});
+    return out;
+}
+
+std::vector<GridPoint> gridLine(GridPoint a, GridPoint b) {
+    std::vector<GridPoint> out;
+    int32_t dx = std::abs(b.x - a.x), dy = -std::abs(b.y - a.y);
+    int32_t sx = a.x < b.x ? 1 : -1, sy = a.y < b.y ? 1 : -1;
+    int32_t err = dx + dy;
+    GridPoint p = a;
+    while (true) {
+        out.push_back(p);
+        if (p == b) break;
+        int32_t e2 = 2 * err;
+        if (e2 >= dy) { err += dy; p.x += sx; }
+        if (e2 <= dx) { err += dx; p.y += sy; }
+    }
+    return out;
+}
+
+bool lineOfSight(GridPoint a, GridPoint b, const std::function<bool(GridPoint)>& opaque) {
+    std::vector<GridPoint> line = gridLine(a, b);
+    for (size_t i = 1; i + 1 < line.size(); ++i) {
+        if (opaque(line[i])) return false;
+    }
+    return true;
+}
+
 } // namespace drift

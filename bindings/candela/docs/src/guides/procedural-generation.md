@@ -209,4 +209,25 @@ velocity.linear = level.field.direction(cell_of(t.position)) * 55.0;
 
 Build the field again when the goal moves to another cell, not every frame. The grid crosses to the engine on every `find_path` and `flow_field` call, so for large grids, compute paths when something changes rather than per entity per frame.
 
+## Seeing
+
+`field_of_view(g, from, radius, opaque)` returns a grid of the same size with 1 on every cell `from` sees within `radius` cells and 0 elsewhere. Cells whose value is in `opaque` block sight and are seen themselves, so the walls of a room show around its floor. The view is symmetric: when the player sees a monster, the monster sees the player.
+
+```rust
+@system
+fn fog_of_war(level: Level, players: (Player, Transform)[]) {
+    for (_, t) in players {
+        let at = cell(int(t.position.x / 16.0), int(t.position.y / 16.0));
+        let seen = field_of_view(level.grid, at, 8, [WALL]);
+        for i in range(seen.cells.len()) {
+            if seen.cells[i] == 1 {
+                level.explored.cells[i] = 1;   // remembered once seen
+            }
+        }
+    }
+}
+```
+
+`line_of_sight(g, a, b, opaque)` says whether one cell sees another, for a guard deciding whether it spotted the player, and `grid_line(a, b)` lists the cells of the straight line between two cells, for aiming and thrown objects on a grid.
+
 The [Cave Walk](../examples/cave-walk.md) example puts all of this together.

@@ -431,3 +431,29 @@ TEST(procgen_steering) {
     Vec2 w = steer::wander({1, 0}, angle, rng, 3.f);
     CHECK(w.length() <= 4.01f);
 }
+
+TEST(grid_sight) {
+    // A 9x5 room with a pillar at (4, 2).
+    Grid g(9, 5, GridFloor);
+    g.set(4, 2, GridWall);
+    auto opaque = [&](GridPoint p) { return g.get(p) == GridWall; };
+    auto seen = fieldOfView(g.width, g.height, {1, 2}, 20, opaque);
+    auto has = [&](GridPoint p) { return std::find(seen.begin(), seen.end(), p) != seen.end(); };
+    CHECK(has({1, 2}));
+    CHECK(has({4, 2}));    // the pillar itself is seen
+    CHECK(!has({7, 2}));   // behind it is not
+    CHECK(has({7, 0}));
+    // Symmetric: each visible cell sees the origin back.
+    for (GridPoint p : seen) {
+        if (opaque(p)) continue;
+        auto back = fieldOfView(g.width, g.height, p, 20, opaque);
+        CHECK(std::find(back.begin(), back.end(), GridPoint{1, 2}) != back.end());
+    }
+    CHECK(!lineOfSight({1, 2}, {7, 2}, opaque));
+    CHECK(lineOfSight({1, 0}, {7, 0}, opaque));
+    auto line = gridLine({0, 0}, {3, 1});
+    CHECK(line.size() == 4);
+    CHECK(line.front() == (GridPoint{0, 0}) && line.back() == (GridPoint{3, 1}));
+    // A radius limits the view.
+    CHECK(fieldOfView(g.width, g.height, {0, 0}, 1, opaque).size() == 3);
+}

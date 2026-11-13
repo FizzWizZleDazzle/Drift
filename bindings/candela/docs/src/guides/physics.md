@@ -126,6 +126,28 @@ fn line_of_sight(_: Guard, eye: Transform, physics: Physics,
 
 `set_debug_draw(true)` outlines every collider over the game.
 
+### Without colliders
+
+Things that only need "what is near here", such as pickups that home in on the nearest player or enemies that alert their neighbours, do not need physics bodies. Give them a `SpatialBounds` and ask the `Spatial` resource:
+
+```rust
+@system(schedule: Schedule::Startup)
+fn spawn_bats(cmd: Commands) {
+    cmd.spawn([at(300.0, 120.0), Bat { .. }, SpatialBounds { half_size: vec2(8.0, 8.0), .. }]);
+}
+
+@system
+fn alert(_: Bat, t: Transform, me: Entity, spatial: Spatial, cmd: Commands) {
+    for other in spatial.in_radius(t.position, 120.0) {
+        if other.id != me.id {
+            cmd.insert(other, Alerted {});
+        }
+    }
+}
+```
+
+`in_rect(r)` and `in_radius(center, radius)` return the entities whose bounds touch the area, and `nearest(p, max_distance, ignore)` the closest one, or `Entity {}`. The index is rebuilt at the start of every frame from where the entities were then.
+
 ## Joints
 
 A `Joint` joins an entity's body to another entity's body, or pins it to the world when `target` is left empty. Both entities need a body; the joint is made once they exist.

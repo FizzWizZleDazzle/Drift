@@ -198,6 +198,15 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `muted()`, `set_p
 | `apply_impulse(e, i)`, `apply_force(e, f)`, `apply_torque(e, t)`, `apply_angular_impulse(e, i)` | On dynamic bodies |
 | `set_debug_draw(on)` | Outlines every collider over the game |
 
+## Spatial
+
+The entities with a `SpatialBounds`, as they were at the start of the frame.
+
+| Method | Returns |
+|--------|---------|
+| `in_rect(r)`, `in_radius(center, radius)` | `Entity[]` whose bounds touch the area |
+| `nearest(p, max_distance, ignore)` | The closest entity within `max_distance` other than `ignore`; `Entity {}` when none |
+
 ## Effects
 
 | Method | Does |

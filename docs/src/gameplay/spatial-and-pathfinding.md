@@ -92,6 +92,25 @@ enemies.iter([&](const Transform2D& t, Velocity2D& v, const Enemy&) {
 
 Rebuild the field when the goal moves to another cell, not every frame. The [Procgen example](../examples/procgen.md) steers its slimes this way.
 
+## Sight on a grid
+
+For roguelikes, stealth and fog of war, `Pathfinding.hpp` also answers what a cell sees:
+
+```cpp
+auto opaque = [&](GridPoint p) { return level.get(p) == GridWall; };
+std::vector<GridPoint> visible = fieldOfView(level.width, level.height, playerCell, 8, opaque);
+bool spotted = lineOfSight(guardCell, playerCell, opaque);
+std::vector<GridPoint> ray = gridLine(from, to);
+```
+
+| Function | Returns |
+|----------|---------|
+| `fieldOfView(width, height, origin, radius, opaque)` | The cells visible from `origin` within `radius` cells, origin included. Symmetric shadowcasting: when a sees b, b sees a, so the player sees exactly the monsters that see the player. Opaque cells are seen themselves, so walls show around the visible floor; cells outside the grid are opaque |
+| `lineOfSight(a, b, opaque)` | Whether no opaque cell lies strictly between `a` and `b` on the line joining them |
+| `gridLine(a, b)` | The cells of the line from `a` to `b`, both included (Bresenham) |
+
+`fieldOfView` and `lineOfSight` can disagree on corner cases, because one sweeps whole octants and the other walks a single line: use one of them for a given question.
+
 ## Y-sort
 
 **Header:** `#include <drift/plugins/YSortPlugin.hpp>`

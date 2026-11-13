@@ -219,6 +219,12 @@ host "drift" {
     string map_tile_property(int, int, string);
     map_autotile(int, int, int, int, int[], int[], int, bool);
 
+    // Spatial index queries and sight on grids.
+    int[] spatial_query(int, float, float, float, float, int);
+    int[] grid_fov(int, int, int[], int[], int, int, int);
+    bool grid_los(int, int, int[], int[], int, int, int, int);
+    int[] grid_line(int, int, int, int);
+
     // Systems and restarts.
     system_switch(string, bool);
     bool system_enabled(string);
@@ -2876,4 +2882,52 @@ impl Spritesheet {
         let v = drift::sheet_tag(self.source, name);
         return AnimationClip { frames: rects_from(v, 2), frame_seconds: v[0], looping: v[1] > 0.5 };
     }
+}
+
+// ---- Spatial index ----
+
+// Puts the entity in the spatial index: a box of `half_size` around its
+// position plus `offset`; a zero size indexes the point.
+struct SpatialBounds { half_size: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. } }
+
+// "What is near here" over the entities with SpatialBounds, without
+// colliders. The index holds where they were at the start of the frame.
+struct Spatial { id: int = 0 }
+impl Spatial {
+    fn in_rect(self, r: Rect) -> Entity[] { return entity_list(drift::spatial_query(0, r.x, r.y, r.w, r.h, 0)); }
+    fn in_radius(self, center: Vec2, radius: float) -> Entity[] {
+        return entity_list(drift::spatial_query(1, center.x, center.y, radius, 0.0, 0));
+    }
+    // The closest within `max_distance`, skipping `ignore` (pass the
+    // asking entity); Entity {} when there is none.
+    fn nearest(self, p: Vec2, max_distance: float, ignore: Entity) -> Entity {
+        let r = drift::spatial_query(2, p.x, p.y, max_distance, 0.0, ignore.id);
+        if r.len() == 0 {
+            return Entity { .. };
+        }
+        return Entity { id: r[0] };
+    }
+}
+
+// ---- Sight on grids ----
+
+// The cells `from` sees within `radius` cells, as a grid of the same size:
+// 1 where visible, 0 elsewhere. Cells whose value is in `opaque` block
+// sight and are seen themselves. Symmetric: if a sees b, b sees a.
+fn field_of_view(g: Grid, from: Cell, radius: int, opaque: int[]) -> Grid {
+    return Grid { width: g.width, height: g.height,
+                  cells: drift::grid_fov(g.width, g.height, g.cells, opaque, from.x, from.y, radius) };
+}
+// Whether no opaque cell lies strictly between a and b.
+fn line_of_sight(g: Grid, a: Cell, b: Cell, opaque: int[]) -> bool {
+    return drift::grid_los(g.width, g.height, g.cells, opaque, a.x, a.y, b.x, b.y);
+}
+// The cells of the straight line from a to b, both included.
+fn grid_line(a: Cell, b: Cell) -> Cell[] {
+    let r = drift::grid_line(a.x, a.y, b.x, b.y);
+    let out: Cell[] = [];
+    for i in range(r.len() / 2) {
+        out.push(Cell { x: r[i * 2], y: r[i * 2 + 1] });
+    }
+    return out;
 }

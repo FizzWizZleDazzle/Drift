@@ -782,6 +782,15 @@ const std::vector<Codec>& codecs() {
          },
          [](EntityId e) { world().removeComponent(e, cid<AudioSource>()); },
          [] { return cid<AudioSource>(); }},
+        {"SpatialBounds",
+         [](EntityId e) { return get<SpatialBounds>(e) != nullptr; },
+         [](EntityId e) {
+             const SpatialBounds& b = *get<SpatialBounds>(e);
+             return json{{"half_size", vec(b.halfSize)}, {"offset", vec(b.offset)}};
+         },
+         [](EntityId e, const json& j) { put(e, SpatialBounds{vec(j.value("half_size", json())), vec(j.value("offset", json()))}); },
+         [](EntityId e) { world().removeComponent(e, cid<SpatialBounds>()); },
+         [] { return cid<SpatialBounds>(); }},
         {"AudioListener",
          [](EntityId e) { return get<AudioListener>(e) != nullptr; },
          [](EntityId e) { return json{{"active", get<AudioListener>(e)->active}}; },
@@ -2688,9 +2697,57 @@ bool gameplayTilemap(const std::string& f, const json& a, json& out) {
     return true;
 }
 
+bool gameplaySpatial(const std::string& f, const json& a, json& out) {
+    if (f == "spatial_query") {
+        out = json::array();
+        auto* index = res<SpatialIndex>();
+        if (!index) return true;
+        float x = a[1].get<float>(), y = a[2].get<float>(), z = a[3].get<float>(), w = a[4].get<float>();
+        std::vector<EntityId> found;
+        switch (a[0].get<int>()) {
+            case 0: index->queryRect({x, y, z, w}, found); break;
+            case 1: index->queryRadius({x, y}, z, found); break;
+            default: {
+                EntityId e = index->nearest({x, y}, z, a[5].get<EntityId>() ? a[5].get<EntityId>() : InvalidEntityId);
+                if (e != InvalidEntityId) found.push_back(e);
+            }
+        }
+        out = found;
+        return true;
+    }
+    if (f == "grid_fov" || f == "grid_los") {
+        Grid g = gridOf(a[0], a[1], a[2]);
+        std::vector<int32_t> opaqueValues = ints(a[3]);
+        auto opaque = [&](GridPoint p) {
+            return std::find(opaqueValues.begin(), opaqueValues.end(), g.get(p)) != opaqueValues.end();
+        };
+        if (f == "grid_los") {
+            out = lineOfSight({a[4].get<int32_t>(), a[5].get<int32_t>()}, {a[6].get<int32_t>(), a[7].get<int32_t>()},
+                              opaque);
+            return true;
+        }
+        std::vector<int32_t> cells(g.cells.size(), 0);
+        for (GridPoint p : fieldOfView(g.width, g.height, {a[4].get<int32_t>(), a[5].get<int32_t>()},
+                                       a[6].get<int32_t>(), opaque)) {
+            cells[size_t(p.y) * size_t(g.width) + size_t(p.x)] = 1;
+        }
+        out = cells;
+        return true;
+    }
+    if (f == "grid_line") {
+        out = json::array();
+        for (GridPoint p : gridLine({a[0].get<int32_t>(), a[1].get<int32_t>()}, {a[2].get<int32_t>(), a[3].get<int32_t>()})) {
+            out.push_back(p.x);
+            out.push_back(p.y);
+        }
+        return true;
+    }
+    return false;
+}
+
 bool gameplay(const std::string& f, const json& a, json& out) {
     return gameplayInput(f, a, out) || gameplayPhysics(f, a, out) || gameplayAudio(f, a, out) ||
-           gameplayTilemap(f, a, out);
+           gameplayTilemap(f, a, out) || gameplaySpatial(f, a, out);
 }
 
 json service(const std::string& f, const json& a) {

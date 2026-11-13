@@ -73,5 +73,6 @@ Each element has `a` and `b`, the two entities, in the order the type names them
 | `Random` | The game's seed and a random generator per purpose |
 | `Draw` | Immediate shapes, text and images for this frame |
 | `Systems` | Turning systems on and off |
+| `Spatial` | Entities near a point or in an area, from their `SpatialBounds` |
 
 Their fields and methods are in [Engine Resources](resources.md).
