@@ -1,0 +1,100 @@
+// The drift module's gameplay half against the engine: input sent as if
+// from the device, physics queries, impulses and joints, the spatial
+// index, sight on grids, steering, save slots and system switches. ctest
+// runs it with `drift run` and reads the log.
+
+import "drift" { * };
+
+@resource
+struct Checks { failed: int = 0, ball: Entity = Entity { .. }, bob: Entity = Entity { .. }, ticks: int = 0 }
+
+@component
+struct Ball {}
+
+fn expect(checks: Checks, what: string, ok: bool) {
+    if !ok {
+        checks.failed += 1;
+        warn("FAIL " + what);
+    }
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, physics: Physics, checks: Checks, save: Save) {
+    physics.set_gravity(vec2(0.0, 600.0));
+    expect(checks, "gravity", physics.gravity().y == 600.0);
+    cmd.spawn([at(320.0, 340.0), BoxCollider { half_size: vec2(320.0, 10.0), category: 2, .. }]);
+    checks.ball = cmd.spawn([at(100.0, 300.0), RigidBody { .. }, CircleCollider { radius: 10.0, .. }, Velocity { .. },
+                             Ball {}, SpatialBounds { .. }]);
+    checks.bob = cmd.spawn([at(560.0, 50.0), RigidBody { .. }, CircleCollider { radius: 8.0, mask: 1, .. },
+                            Velocity { .. }, Joint { kind: JointKind::Distance, target_anchor: vec2(500.0, 50.0), .. }]);
+
+    let g = grid(9, 5, FLOOR);
+    g.set(cell(4, 2), WALL);
+    let seen = field_of_view(g, cell(1, 2), 20, [WALL]);
+    expect(checks, "fov", seen.get(cell(4, 2)) == 1 && seen.get(cell(7, 2)) == 0 && seen.get(cell(7, 0)) == 1);
+    expect(checks, "los", !line_of_sight(g, cell(1, 2), cell(7, 2), [WALL]) && line_of_sight(g, cell(1, 0), cell(7, 0), [WALL]));
+    expect(checks, "grid line", grid_line(cell(0, 0), cell(3, 1)).len() == 4);
+
+    expect(checks, "seek", steer_seek(vec2(0.0, 0.0), vec2(0.0, 0.0), vec2(10.0, 0.0), 5.0).x == 5.0);
+    expect(checks, "truncate", (steer_truncate(vec2(3.0, 4.0), 1.0).length() - 1.0).abs() < 0.001);
+
+    save.set_bool("flag", true);
+    expect(checks, "save bool", save.get_bool("flag", false));
+    let other = save.slot("gameplay-test");
+    other.set_int("n", 7);
+    expect(checks, "save slot", other.get_int("n", 0) == 7 && !save.has("n"));
+    other.clear();
+    expect(checks, "save clear", !other.has("n"));
+}
+
+@system
+fn drive(time: Time, input: Input, physics: Physics, spatial: Spatial, checks: Checks, systems: Systems,
+         balls: (Entity, Ball, Velocity)[], bodies: Lookup<Transform>) {
+    checks.ticks += 1;
+    if checks.ticks == 2 {
+        input.send_key(Key::K, true);
+        systems.disable("counted");
+    }
+    if checks.ticks == 3 {
+        expect(checks, "sent key", input.key_pressed(Key::K) && input.key_down(Key::K));
+        expect(checks, "system off", !systems.enabled("counted"));
+        input.send_key(Key::K, false);
+    }
+    if checks.ticks == 60 {
+        let ray = physics.raycast(vec2(100.0, 0.0), vec2(0.0, 1.0), 500.0);
+        expect(checks, "raycast", ray.hit && ray.entity.id == checks.ball.id);
+        let floor = physics.raycast_mask(vec2(320.0, 0.0), vec2(0.0, 1.0), 500.0, 2);
+        expect(checks, "raycast mask", floor.hit && floor.point.y > 325.0 && floor.point.y < 335.0);
+        expect(checks, "overlap point", physics.overlap_point(vec2(320.0, 340.0)).len() == 1);
+        expect(checks, "overlap circle", physics.overlap_circle(vec2(100.0, 320.0), 30.0).len() == 2);
+        expect(checks, "spatial", spatial.in_radius(vec2(100.0, 320.0), 40.0).len() == 1);
+        physics.apply_impulse(checks.ball, vec2(0.0, -200000.0));
+    }
+    if checks.ticks == 62 {
+        for (_, _, v) in balls {
+            expect(checks, "impulse kept", v.linear.y < -100.0);
+        }
+        if bodies.get(checks.bob) is Some(t) {
+            expect(checks, "joint length", (t.position.distance(vec2(500.0, 50.0)) - 60.0).abs() < 2.0);
+        }
+    }
+}
+
+@resource
+struct Counter { n: int = 0 }
+
+@system
+fn counted(c: Counter, checks: Checks, window: Window) {
+    c.n += 1;
+    expect(checks, "disabled system ran", checks.ticks < 3);
+}
+
+@system(after: [drive])
+fn finish(checks: Checks, window: Window) {
+    if checks.ticks == 64 {
+        if checks.failed == 0 {
+            log("gameplay checks passed");
+        }
+        window.quit();
+    }
+}
