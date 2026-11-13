@@ -53,15 +53,19 @@ host "drift" {
     float[] window_size();
     flash(float, float, float, float, float);
     burst(...);
-    int save_get_int(string, int);
-    save_set_int(string, int);
-    float save_get_float(string, float);
-    save_set_float(string, float);
-    string save_get_string(string, string);
-    save_set_string(string, string);
-    bool save_has(string);
-    save_erase(string);
-    save_flush();
+    // Save data: the slot name ("" for the default slot) comes first.
+    int save_get_int(string, string, int);
+    save_set_int(string, string, int);
+    float save_get_float(string, string, float);
+    save_set_float(string, string, float);
+    string save_get_string(string, string, string);
+    save_set_string(string, string, string);
+    bool save_get_bool(string, string, bool);
+    save_set_bool(string, string, bool);
+    bool save_has(string, string);
+    save_erase(string, string);
+    save_clear(string);
+    save_flush(string);
     shake(int, float);
     log_message(int, string);
     // A field of the script's resources, by path ("Game.score"), as text.
@@ -185,6 +189,11 @@ host "drift" {
     int[] physics_overlap(int, float, float, float, float, int);
     physics_push(int, int, float, float);
     physics_debug(bool);
+
+    // Systems and restarts.
+    system_switch(string, bool);
+    bool system_enabled(string);
+    restart();
 
     // Audio. Voices, buses and sounds by handle id.
     int voice_play(int, int, float, float, float, bool, float, int);
@@ -578,6 +587,10 @@ impl Commands {
     fn insert_resource(self, r: any) { drift::insert_resource(r); }
     fn remove_resource<R>(self) { drift::remove_resource(drift_type_name<R>()); }
     fn send(self, message: any) { drift::send_message(message); }
+    // Starts the game over once this frame's systems have run: every entity
+    // the game spawned goes, resources and states return to their
+    // defaults, and the startup systems run again.
+    fn restart(self) { drift::restart(); }
 }
 
 // A bundle with more components after it, for prefabs with extras:
@@ -750,19 +763,26 @@ impl Effects {
     fn burst(self, pos: Vec2, emitter: ParticleEmitter, count: int) { drift::burst(pos, emitter, count); }
 }
 
-// The save slot named after [project] in drift.toml.
-struct Save { id: int = 0 }
+// A save slot in the per-user data directory named after [project] in
+// drift.toml: `save`, or the one `slot(name)` opens.
+struct Save { name: string = "" }
 impl Save {
-    fn get_int(self, key: string, fallback: int) -> int { return drift::save_get_int(key, fallback); }
-    fn set_int(self, key: string, v: int) { drift::save_set_int(key, v); }
-    fn get_float(self, key: string, fallback: float) -> float { return drift::save_get_float(key, fallback); }
-    fn set_float(self, key: string, v: float) { drift::save_set_float(key, v); }
-    fn get_string(self, key: string, fallback: string) -> string { return drift::save_get_string(key, fallback); }
-    fn set_string(self, key: string, v: string) { drift::save_set_string(key, v); }
-    fn has(self, key: string) -> bool { return drift::save_has(key); }
-    fn erase(self, key: string) { drift::save_erase(key); }
+    fn get_int(self, key: string, fallback: int) -> int { return drift::save_get_int(self.name, key, fallback); }
+    fn set_int(self, key: string, v: int) { drift::save_set_int(self.name, key, v); }
+    fn get_float(self, key: string, fallback: float) -> float { return drift::save_get_float(self.name, key, fallback); }
+    fn set_float(self, key: string, v: float) { drift::save_set_float(self.name, key, v); }
+    fn get_string(self, key: string, fallback: string) -> string { return drift::save_get_string(self.name, key, fallback); }
+    fn set_string(self, key: string, v: string) { drift::save_set_string(self.name, key, v); }
+    fn get_bool(self, key: string, fallback: bool) -> bool { return drift::save_get_bool(self.name, key, fallback); }
+    fn set_bool(self, key: string, v: bool) { drift::save_set_bool(self.name, key, v); }
+    fn has(self, key: string) -> bool { return drift::save_has(self.name, key); }
+    fn erase(self, key: string) { drift::save_erase(self.name, key); }
+    // Removes every key.
+    fn clear(self) { drift::save_clear(self.name); }
     // Writes the slot to disk.
-    fn flush(self) { drift::save_flush(); }
+    fn flush(self) { drift::save_flush(self.name); }
+    // Another slot in the same directory, such as "slot2".
+    fn slot(self, name: string) -> Save { return Save { name: name }; }
 }
 
 // ---- Timers ----
@@ -2154,3 +2174,14 @@ struct AudioSource {
 
 // The entity spatial sounds are heard from.
 struct AudioListener { active: bool = true }
+
+// ---- Systems ----
+
+// Turns systems on and off by function name, from the next system on: a
+// paused game turns off its gameplay systems and keeps its menu running.
+struct Systems { id: int = 0 }
+impl Systems {
+    fn enable(self, system: string) { drift::system_switch(system, true); }
+    fn disable(self, system: string) { drift::system_switch(system, false); }
+    fn enabled(self, system: string) -> bool { return drift::system_enabled(system); }
+}

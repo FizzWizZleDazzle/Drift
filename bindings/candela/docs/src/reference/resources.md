@@ -282,4 +282,4 @@ fn show_hitboxes(boxes: (BoxCollider, Transform)[], draw: Draw) {
 
 | Method | Does |
 |--------|------|
-| `enable(f)`, `disable(f)`, `enabled(f)` | Turn a system on or off by function; it takes effect next frame |
+| `enable(name)`, `disable(name)`, `enabled(name)` | Turn a system on or off by its function's name, such as `systems.disable("spawn_enemies")`; systems that run after this one see the change. A system that raised an error reads as disabled |

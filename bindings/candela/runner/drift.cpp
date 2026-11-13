@@ -68,6 +68,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -1796,6 +1797,19 @@ int state(bool held, bool pressed, bool released, int which) {
     return which == 1 ? pressed : which == 2 ? released : held;
 }
 
+// A save slot: "" is the SavePlugin's slot; others open in the same
+// directory the first time they are asked for.
+SaveData* saveSlot(const std::string& name) {
+    if (name.empty() || name == "save") return res<SaveData>();
+    static std::unordered_map<std::string, std::unique_ptr<SaveData>> slots;
+    auto& slot = slots[name];
+    if (!slot) {
+        const auto& project = g_app->config().project;
+        slot = std::make_unique<SaveData>(project.organization, project.name, name);
+    }
+    return slot.get();
+}
+
 EffectId fade() {
     auto* fx = res<PostEffects>();
     if (!fx) return {};
@@ -2249,23 +2263,26 @@ json service(const std::string& f, const json& a) {
         return nullptr;
     }
     if (f.rfind("save_", 0) == 0) {
-        auto* save = res<SaveData>();
+        SaveData* save = saveSlot(a[0].get<std::string>());
         if (!save) return f == "save_flush" ? json(false) : json(nullptr);
         if (f == "save_get") {
-            std::string k = a[0].get<std::string>();
-            if (a[1].is_number_integer()) return save->get<int64_t>(k, a[1].get<int64_t>());
-            if (a[1].is_number()) return save->get<double>(k, a[1].get<double>());
-            return save->get<std::string>(k, a[1].get<std::string>());
+            std::string k = a[1].get<std::string>();
+            if (a[2].is_boolean()) return save->get<bool>(k, a[2].get<bool>());
+            if (a[2].is_number_integer()) return save->get<int64_t>(k, a[2].get<int64_t>());
+            if (a[2].is_number()) return save->get<double>(k, a[2].get<double>());
+            return save->get<std::string>(k, a[2].get<std::string>());
         }
         if (f == "save_set") {
-            std::string k = a[0].get<std::string>();
-            if (a[1].is_number_integer()) save->set(k, a[1].get<int64_t>());
-            else if (a[1].is_number()) save->set(k, a[1].get<double>());
-            else save->set(k, a[1].get<std::string>());
+            std::string k = a[1].get<std::string>();
+            if (a[2].is_boolean()) save->set(k, a[2].get<bool>());
+            else if (a[2].is_number_integer()) save->set(k, a[2].get<int64_t>());
+            else if (a[2].is_number()) save->set(k, a[2].get<double>());
+            else save->set(k, a[2].get<std::string>());
             return nullptr;
         }
-        if (f == "save_has") return save->has(a[0].get<std::string>());
-        if (f == "save_erase") { save->erase(a[0].get<std::string>()); return nullptr; }
+        if (f == "save_has") return save->has(a[1].get<std::string>());
+        if (f == "save_erase") { save->erase(a[1].get<std::string>()); return nullptr; }
+        if (f == "save_clear") { save->clear(); return nullptr; }
         if (f == "save_flush") return save->flush();
     }
     if (f == "entity_alive") return a[0].get<EntityId>() != 0 && world().isAlive(a[0].get<EntityId>());

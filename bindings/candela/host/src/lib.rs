@@ -252,9 +252,17 @@ enum Command {
     InsertResource(Value),
     RemoveResource(String),
     Send(Value),
+    /// Turns a system on or off by function name.
+    Switch(String, bool),
+    /// Starts the game over once this frame's systems have run.
+    Restart,
 }
 
 thread_local! {
+    /// Entities the game spawned, for a restart to remove.
+    static SPAWNED: RefCell<BTreeSet<u64>> = const { RefCell::new(BTreeSet::new()) };
+    /// Whether each system is on, as of the start of this system's call.
+    static SWITCHES: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
     static QUEUE: RefCell<Vec<Command>> = const { RefCell::new(Vec::new()) };
     static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
     static ERROR: RefCell<CString> = RefCell::new(CString::default());
@@ -330,6 +338,11 @@ struct Host {
     states: HashMap<String, StateNow>,
     /// This frame's time scale and unscaled frame time.
     time_scale: (f64, f64),
+    /// What a restart puts back: resources as they were built, and whether
+    /// each system was on.
+    initial_resources: HashMap<String, Value>,
+    initial_enabled: Vec<bool>,
+    restart_pending: bool,
 }
 
 struct StateNow {
@@ -483,7 +496,7 @@ impl Host {
                         Ok(Param::Engine(*id))
                     }
                     // The gameplay half's engine resources.
-                    "Physics" | "Audio" => Ok(Param::Engine(*id)),
+                    "Physics" | "Audio" | "Systems" => Ok(Param::Engine(*id)),
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
                 }
             }
@@ -807,6 +820,13 @@ impl Host {
                     publish_resource(&name, None);
                     self.resources.remove(&name);
                 }
+                Command::Switch(name, on) => {
+                    for sys in self.systems.iter_mut().filter(|s| s.name == name) {
+                        sys.enabled = on;
+                    }
+                    SWITCHES.with(|w| w.borrow_mut().insert(name, on));
+                }
+                Command::Restart => self.restart_pending = true,
                 Command::Send(v) => {
                     if let Value::Struct { name, .. } = &v {
                         self.next_seq += 1;
@@ -926,6 +946,7 @@ impl Host {
                     QUEUE.with(|q| q.borrow_mut().clear());
                     log(2, &format!("{} raised {}: {}", sys.name, d.code, d.message));
                     self.systems[index].enabled = false;
+                    SWITCHES.with(|w| w.borrow_mut().insert(sys.name.clone(), false));
                     break;
                 }
             }
@@ -991,7 +1012,49 @@ impl Host {
         let oldest = self.systems.iter().filter(|s| !s.startup).map(|s| s.seen).min().unwrap_or(self.next_seq);
         self.messages.retain(|(seq, _, _)| *seq > oldest);
         self.contacts.clear();
+        if self.restart_pending {
+            self.restart();
+        }
         self.program.collect(2000);
+    }
+
+    /// Starts the game over: every entity the game spawned goes, resources
+    /// and states return to how they started, and the startup systems run
+    /// again at the next frame.
+    fn restart(&mut self) {
+        self.restart_pending = false;
+        let mut doomed: BTreeSet<u64> = SPAWNED.with(|s| std::mem::take(&mut *s.borrow_mut()));
+        for store in self.stores.values_mut() {
+            doomed.extend(store.keys().copied());
+            store.clear();
+        }
+        for e in doomed {
+            unsafe { drift_bridge_despawn(e) };
+        }
+        self.resources = self.initial_resources.clone();
+        for (name, st) in self.states.iter_mut() {
+            let first = self
+                .types
+                .table
+                .enums
+                .iter()
+                .find(|en| bare(&en.name) == name)
+                .and_then(|en| en.variants.first().cloned());
+            if let Some(first) = first {
+                st.now = first;
+            }
+            st.since = 0.0;
+            st.next = None;
+        }
+        self.messages.clear();
+        self.contacts.clear();
+        for (sys, on) in self.systems.iter_mut().zip(self.initial_enabled.iter()) {
+            sys.enabled = *on;
+            sys.seen = 0;
+        }
+        SWITCHES.with(|w| *w.borrow_mut() = self.systems.iter().map(|s| (s.name.clone(), s.enabled)).collect());
+        self.next_seq = 0;
+        self.started = false;
     }
 }
 
@@ -1067,7 +1130,16 @@ fn engine(module_dir: &str) -> Engine {
         e = e.with_lib_dir(dir);
     }
     let v = |args: &[Value], i: usize| args.get(i).cloned().unwrap_or(Value::Null);
-    e.register_host_fn("drift", "entity_new", || unsafe { drift_bridge_new() } as i64);
+    e.register_host_fn("drift", "entity_new", || {
+        let e = unsafe { drift_bridge_new() };
+        SPAWNED.with(|s| s.borrow_mut().insert(e));
+        e as i64
+    });
+    e.register_host_fn("drift", "system_switch", |name: String, on: bool| queue(Command::Switch(name, on)));
+    e.register_host_fn("drift", "system_enabled", |name: &str| {
+        SWITCHES.with(|w| w.borrow().get(name).copied().unwrap_or(false))
+    });
+    e.register_host_fn("drift", "restart", || queue(Command::Restart));
     e.register_host_fn_variadic("drift", "spawn_bundle", move |a| {
         let id = v(a, 0).as_i64().ok_or_else(|| host_error("spawn needs an entity"))? as u64;
         let bundle = match v(a, 1) {
@@ -1140,26 +1212,33 @@ fn engine(module_dir: &str) -> Engine {
         call("burst", json!([to_json(&v(a, 0)), to_json(&v(a, 1)), to_json(&v(a, 2))]));
         Ok(Value::Null)
     });
-    e.register_host_fn("drift", "save_get_int", move |k: String, d: i64| i(call("save_get", json!([k, d]))));
-    e.register_host_fn("drift", "save_set_int", |k: String, val: i64| {
-        call("save_set", json!([k, val]));
+    e.register_host_fn("drift", "save_get_int", move |s: String, k: String, d: i64| i(call("save_get", json!([s, k, d]))));
+    e.register_host_fn("drift", "save_set_int", |s: String, k: String, val: i64| {
+        call("save_set", json!([s, k, val]));
     });
-    e.register_host_fn("drift", "save_get_float", move |k: String, d: f64| f(call("save_get", json!([k, d]))));
-    e.register_host_fn("drift", "save_set_float", |k: String, val: f64| {
-        call("save_set", json!([k, val]));
+    e.register_host_fn("drift", "save_get_float", move |s: String, k: String, d: f64| f(call("save_get", json!([s, k, d]))));
+    e.register_host_fn("drift", "save_set_float", |s: String, k: String, val: f64| {
+        call("save_set", json!([s, k, val]));
     });
-    e.register_host_fn("drift", "save_get_string", |k: String, d: String| {
-        call("save_get", json!([k, d])).as_str().unwrap_or("").to_owned()
+    e.register_host_fn("drift", "save_get_string", |s: String, k: String, d: String| {
+        call("save_get", json!([s, k, d])).as_str().unwrap_or("").to_owned()
     });
-    e.register_host_fn("drift", "save_set_string", |k: String, val: String| {
-        call("save_set", json!([k, val]));
+    e.register_host_fn("drift", "save_set_string", |s: String, k: String, val: String| {
+        call("save_set", json!([s, k, val]));
     });
-    e.register_host_fn("drift", "save_has", move |k: &str| b(call("save_has", json!([k]))));
-    e.register_host_fn("drift", "save_erase", |k: &str| {
-        call("save_erase", json!([k]));
+    e.register_host_fn("drift", "save_get_bool", move |s: String, k: String, d: bool| b(call("save_get", json!([s, k, d]))));
+    e.register_host_fn("drift", "save_set_bool", |s: String, k: String, val: bool| {
+        call("save_set", json!([s, k, val]));
     });
-    e.register_host_fn("drift", "save_flush", || -> Result<(), HostError> {
-        if call("save_flush", json!([])).as_bool().unwrap_or(false) { Ok(()) } else { Err(host_error("drift_save_failed")) }
+    e.register_host_fn("drift", "save_has", move |s: String, k: String| b(call("save_has", json!([s, k]))));
+    e.register_host_fn("drift", "save_erase", |s: String, k: String| {
+        call("save_erase", json!([s, k]));
+    });
+    e.register_host_fn("drift", "save_clear", |s: String| {
+        call("save_clear", json!([s]));
+    });
+    e.register_host_fn("drift", "save_flush", |s: String| -> Result<(), HostError> {
+        if call("save_flush", json!([s])).as_bool().unwrap_or(false) { Ok(()) } else { Err(host_error("drift_save_failed")) }
     });
     e.register_host_fn("drift", "shake", |c: i64, s: f64| {
         call("shake", json!([c, s]));
@@ -1447,6 +1526,9 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         next_seq: 0,
         contacts: Vec::new(),
         started: false,
+        initial_resources: HashMap::new(),
+        initial_enabled: Vec::new(),
+        restart_pending: false,
         reported: HashSet::new(),
         conditions: HashMap::new(),
         condition_cache: HashMap::new(),
@@ -1576,6 +1658,9 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         return Err(errors.join("\n"));
     }
     host.systems = order(systems)?;
+    host.initial_resources = host.resources.clone();
+    host.initial_enabled = host.systems.iter().map(|s| s.enabled).collect();
+    SWITCHES.with(|w| *w.borrow_mut() = host.systems.iter().map(|s| (s.name.clone(), s.enabled)).collect());
     Ok(host)
 }
 
