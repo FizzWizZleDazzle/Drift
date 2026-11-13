@@ -24,6 +24,12 @@ Everything `import "drift/ui" { * };` brings in. The [HUD and Menus](../guides/h
 | `Typewriter` | `full`, `speed` (characters per second), `shown`, `finished`; `finish()` | `Typewriter { full: "Hello.", speed: 30.0, .. }` |
 | `DialogBox` | `id`, `pages`, `page` | Made by `dialog_box` |
 | `PartOf` | `owner`: the part goes when the owner goes | `PartOf { owner: e }` |
+| `FollowWorld` | `target`, `offset`: keeps an anchored widget over an entity | `FollowWorld { target: npc, offset: vec2(0.0, -40.0) }` |
+| `OffscreenArrow` | `target`, `color`, `size`, `margin` | `OffscreenArrow { target: exit, .. }` |
+| `Radar` | `center`, `range` (world units), `radius` (pixels), `color`, `ring` | `Radar { center: player, .. }` |
+| `RadarBlip` | `color`, `size` | `RadarBlip { .. }` |
+| `NineSlice` | `image`, `size`, `border` (left, top, right, bottom as x, y, w, h), `frame`, `color`, `z`, `visible` | `nine_slice_panel(tex, 6.0, anchor(TOP_RIGHT, -16.0, 16.0), vec2(260.0, 120.0))` |
+| `IconOf` | `icon`, `size` (0: the text's height), `gap` | Made by `icon_label` |
 
 ## Messages
 
@@ -48,6 +54,8 @@ Everything `import "drift/ui" { * };` brings in. The [HUD and Menus](../guides/h
 | `toggle(cmd, theme, anchor, id, text, on, order)` | Spawns a toggle; its entity |
 | `slider(cmd, theme, anchor, id, text, value, min, max, order)` | Spawns a slider; its entity |
 | `toast(cmd, theme, message)` | Shows a toast |
+| `nine_slice_panel(image, border, anchor, size)` | A bundle: a nine-slice panel |
+| `icon_label(cmd, theme, icon, text, anchor)` | Spawns an icon and text; the text's entity |
 | `dialog_box(cmd, theme, id, pages)` | Spawns a dialog box; its entity |
 | `row(start, gap, count)`, `column(start, gap, count)`, `grid_layout(start, cell, columns, count)` | Offsets for widgets in a line or a grid |
 | `resource_number(path)`, `resource_string(path)` | A resource field by path, as a number (0 when it is not one) or as text |

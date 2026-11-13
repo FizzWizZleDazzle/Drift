@@ -937,3 +937,175 @@ fn ui_dialogs(e: Entity, d: DialogBox, r: Rectangle, t: Transform, input: Input,
     }
     cmd.insert(d.text_part, Typewriter { full: d.pages[d.page], .. });
 }
+
+// ---- Widgets that follow the world ----
+
+// Keeps an anchored widget over an entity in the world: `offset` pixels
+// from where the camera shows the target. Floating names, prompts and
+// health bars over heads. The widget hides while the target is gone.
+@component
+struct FollowWorld { target: Entity = Entity { .. }, offset: Vec2 = Vec2 { x: 0.0, y: -32.0 } }
+
+fn screen_point_of(e: Entity, camera: Camera2D) -> Vec2 {
+    return camera.world_to_screen(world_transform(e).position);
+}
+
+@system(before: [ui_anchor])
+fn ui_follow_world(e: Entity, f: FollowWorld, a: Anchor, camera: Camera2D, win: Window, theme: Theme, cmd: Commands) {
+    if !f.target.alive() {
+        cmd.despawn(e);
+        return;
+    }
+    let p = screen_point_of(f.target, camera) + f.offset;
+    let m = theme.safe_margin;
+    a.to = Vec2 { .. };
+    a.offset = Vec2 { x: p.x - m.x, y: p.y - m.y };
+}
+
+// An arrow at the edge of the window pointing at `target` while the camera
+// does not show it: the way to the exit, a lost teammate, a boss.
+@component
+struct OffscreenArrow {
+    target: Entity = Entity { .. },
+    color: Color = Color { r: 1.0, g: 0.85, b: 0.3, a: 1.0 },
+    size: float = 14.0,
+    margin: float = 28.0,
+}
+
+@system
+fn ui_offscreen_arrows(a: OffscreenArrow, camera: Camera2D, win: Window, theme: Theme, draw: Draw) {
+    if !a.target.alive() {
+        return;
+    }
+    let p = screen_point_of(a.target, camera);
+    let m = a.margin;
+    let sm = theme.safe_margin;
+    let lo = Vec2 { x: sm.x + m, y: sm.y + m };
+    let hi = Vec2 { x: win.width - sm.x - m, y: win.height - sm.y - m };
+    if p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y {
+        return;
+    }
+    let c = Vec2 { x: win.width * 0.5, y: win.height * 0.5 };
+    let d = (p - c).normalized();
+    // Where the line from the middle toward the target crosses the margin.
+    let k = 1000000.0;
+    if d.x > 0.0001 {
+        k = min(k, (hi.x - c.x) / d.x);
+    }
+    if d.x < -0.0001 {
+        k = min(k, (lo.x - c.x) / d.x);
+    }
+    if d.y > 0.0001 {
+        k = min(k, (hi.y - c.y) / d.y);
+    }
+    if d.y < -0.0001 {
+        k = min(k, (lo.y - c.y) / d.y);
+    }
+    let tip = c + d * k;
+    let side = d.perp() * (a.size * 0.6);
+    let back = tip - d * a.size;
+    draw.hud();
+    draw.at_z(5000.0);
+    draw.triangle(tip, back + side, back - side, a.color);
+}
+
+// A round radar on the HUD at the anchor: entities with a RadarBlip within
+// `range` world units of `center` show as dots.
+@component
+struct Radar {
+    center: Entity = Entity { .. },
+    range: float = 600.0,
+    radius: float = 64.0,
+    color: Color = Color { r: 0.05, g: 0.08, b: 0.12, a: 0.75 },
+    ring: Color = Color { r: 0.35, g: 0.67, b: 1.0, a: 0.8 },
+}
+
+// Shows the entity on every Radar.
+@component
+struct RadarBlip { color: Color = Color { r: 1.0, g: 0.35, b: 0.4, a: 1.0 }, size: float = 3.0 }
+
+@system(after: [ui_anchor])
+fn ui_radars(r: Radar, t: Transform, blips: (Entity, RadarBlip)[], draw: Draw) {
+    let c = t.position;
+    draw.hud();
+    draw.at_z(4000.0);
+    draw.circle(c, r.radius, r.color);
+    draw.circle_lines(c, r.radius, r.ring, 1.5);
+    draw.circle(c, 2.5, r.ring);
+    if !r.center.alive() {
+        return;
+    }
+    let me = world_transform(r.center).position;
+    for (e, b) in blips {
+        let d = (world_transform(e).position - me) / r.range;
+        if d.length() <= 1.0 {
+            draw.circle(c + d * r.radius, b.size, b.color);
+        }
+    }
+}
+
+// A panel drawn from an image cut in nine: the corners keep their size and
+// the edges and middle stretch, so one small image frames any size.
+// `border` is the left, top, right and bottom margins in the image, as x,
+// y, w, h; `frame` picks part of the image (zero for all of it).
+@component
+struct NineSlice {
+    image: Texture = Texture { .. },
+    size: Vec2 = Vec2 { x: 200.0, y: 100.0 },
+    border: Rect = Rect { x: 8.0, y: 8.0, w: 8.0, h: 8.0 },
+    frame: Rect = Rect { .. },
+    color: Color = Color { .. },
+    z: float = 0.0,
+    visible: bool = true,
+}
+
+fn nine_slice_panel(image: Texture, border: float, at: Anchor, size: Vec2) -> any[] {
+    return [Transform { .. }, at,
+            NineSlice { image: image, size: size, border: Rect { x: border, y: border, w: border, h: border }, .. }];
+}
+
+@system(after: [ui_anchor])
+fn ui_nine_slices(n: NineSlice, a: Anchor, t: Transform, draw: Draw) {
+    if !n.visible {
+        return;
+    }
+    let corner = Vec2 { x: t.position.x - n.size.x * a.to.x, y: t.position.y - n.size.y * a.to.y };
+    draw.hud();
+    draw.at_z(n.z);
+    draw.nine_slice(n.image, Rect { x: corner.x, y: corner.y, w: n.size.x, h: n.size.y }, n.frame, n.border, n.color);
+}
+
+// An icon and text side by side, as one anchored line: coins, ammo, keys.
+// Answers the text's entity; the icon is a part of it.
+fn icon_label(cmd: Commands, theme: Theme, icon: Texture, text: string, at: Anchor) -> Entity {
+    let e = cmd.spawn([Transform { .. }, theme.text(text, Vec2 { x: 0.0, y: 0.5 }), at, IconOf { icon: icon, .. }]);
+    return e;
+}
+
+// Draws `icon` left of the entity's Text, `size` pixels tall.
+@component
+struct IconOf { icon: Texture = Texture { .. }, size: float = 0.0, gap: float = 8.0, part: Entity = Entity { .. } }
+
+@system(after: [ui_anchor])
+fn ui_icons(e: Entity, i: IconOf, text: Text, t: Transform, cmd: Commands) {
+    if i.part.id == 0 {
+        i.part = cmd.spawn([Transform { .. }, PartOf { owner: e }]);
+    }
+    let h = i.size;
+    if h <= 0.0 {
+        h = text.size * 1.1;
+    }
+    let s = i.icon.size();
+    let k = 1.0;
+    if s.y > 0.0 {
+        k = h / s.y;
+    }
+    // The text starts at the anchor; the icon sits before it.
+    let x = t.position.x;
+    let y = t.position.y;
+    if text.valign == VAlign::Top {
+        y += text.size * 0.6;
+    }
+    cmd.insert(i.part, Transform { position: Vec2 { x: x - i.gap - s.x * k * 0.5, y: y }, scale: Vec2 { x: k, y: k }, .. });
+    cmd.insert(i.part, Sprite { image: i.icon, z: text.z, layer: text.layer, visible: text.visible, .. });
+}

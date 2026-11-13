@@ -155,12 +155,36 @@ dialog_box(cmd, theme, "intro", ["The bridge is out.", "Find another way across.
 
 `Typewriter` is the typing on its own: put it on any `Text` with the `full` string and a `speed` in characters per second; `finished` turns true when all of it shows.
 
+## Over the world
+
+`FollowWorld { target, offset }` keeps an anchored widget where the camera shows an entity, plus `offset` pixels: names over heads, "Press E" prompts, bars over enemies. The widget goes when the target goes.
+
+```rust
+cmd.spawn(plus(label(theme.sized(16.0), "Shopkeeper", anchor(TOP_LEFT, 0.0, 0.0)),
+               [FollowWorld { target: npc, offset: vec2(0.0, -40.0) }]));
+```
+
+`OffscreenArrow { target }` draws an arrow at the edge of the window pointing at an entity while the camera does not show it; `color`, `size` and `margin` style it.
+
+`Radar { center, range, radius }` on an anchored entity draws a round radar: every entity with a `RadarBlip { color, size }` within `range` world units of `center` shows as a dot.
+
+```rust
+cmd.spawn([Transform { .. }, anchor(BOTTOM_LEFT, 90.0, -90.0), Radar { center: player, range: 1200.0, .. }]);
+cmd.spawn(plus(enemy(pos), [RadarBlip { .. }]));
+```
+
+## Images
+
+`nine_slice_panel(image, border, anchor, size)` frames a panel with an image cut in nine: the corners keep their size and the edges and middle stretch, so one small image frames any size. `NineSlice` is the component, with `frame` for part of an image, `border` for each side, `color` and `z`.
+
+`icon_label(cmd, theme, icon, text, anchor)` puts an icon before a line of text: coins, ammo, keys. Its `IconOf` component sets the icon's `size` and `gap`.
+
 ## Parts
 
 A widget made of several shapes (a bar's fill and trail, a button's label, a slider's knob) keeps them as part entities with `PartOf`. Despawn the widget's entity and its parts go with it.
 
 ## Limitations
 
-- Widgets are rectangles, circles and text. Nine-slice images for panels and buttons, icons inside buttons, a minimap and arrows toward off-screen targets are not there yet.
+- Buttons, toggles and sliders are rounded rectangles; they do not take nine-slice images or icons yet.
 - A HUD layout file that designers edit and that reloads while the game runs is not there yet; widgets are placed from code.
 - `safe_margin` is a fixed number; the page does not read the phone's own safe-area insets.
