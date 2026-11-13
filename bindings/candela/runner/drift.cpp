@@ -505,13 +505,14 @@ void stopTween(EntityId e) {
     g_tweens.erase(it);
 }
 
-// Starts the tween a candela Tween value describes; the same value again
-// leaves the running one alone.
+// Starts the tween a candela Tween value describes.
 void startTween(EntityId e, const json& j) {
-    auto it = g_tweens.find(e);
-    if (it != g_tweens.end() && it->second.value == j) return;
-    stopTween(e);
+    // The same value written back while it runs leaves it running; once it
+    // has finished, inserting it again plays it again.
     auto* tw = res<Tweens>();
+    auto it = g_tweens.find(e);
+    if (it != g_tweens.end() && it->second.value == j && tw && tw->isActive(it->second.id)) return;
+    stopTween(e);
     if (!tw) return;
     TweenBuilder b = tw->on(e);
     for (const auto& st : j.value("steps", json::array())) {
