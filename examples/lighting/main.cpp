@@ -33,8 +33,8 @@
 
 using namespace drift;
 
-// Moves an entity in a circle around `center`.
-struct Orbit {
+// Moves an entity along a flattened circle around `center`.
+struct EllipseOrbit {
     Vec2 center;
     float radius = 100.f;
     float speed = 1.f;
@@ -174,7 +174,7 @@ static void setup(ResMut<RendererResource> r, ResMut<PostEffects> fx, ResMut<Lig
     for (const L& l : lights) {
         cmd.spawn().insert(Transform2D{},
                            PointLight2D{.color = l.color, .intensity = 1.4f, .radius = l.radius},
-                           Orbit{{0.f, 0.f}, l.orbit, l.speed, l.phase},
+                           EllipseOrbit{{0.f, 0.f}, l.orbit, l.speed, l.phase},
                            Sprite{.texture = bulb, .origin = {16.f, 16.f},
                                   .tint = Color(255, 255, 255), .zOrder = 5.f, .blend = BlendMode::Additive});
     }
@@ -215,10 +215,10 @@ static void setup(ResMut<RendererResource> r, ResMut<PostEffects> fx, ResMut<Lig
 }
 
 static void animate(Res<Time> time, Res<InputResource> input, Res<RendererResource> r,
-                    QueryMut<Transform2D, Orbit> orbits, QueryMut<Transform2D, Sweep> sweeps,
+                    QueryMut<Transform2D, EllipseOrbit> orbits, QueryMut<Transform2D, Sweep> sweeps,
                     QueryMut<Transform2D, Spin> spins, QueryMut<Transform2D, MouseLight> mouse) {
     float t = static_cast<float>(time->elapsed);
-    orbits.iter([&](Transform2D& tr, Orbit& o) {
+    orbits.iter([&](Transform2D& tr, EllipseOrbit& o) {
         float a = o.phase + t * o.speed;
         tr.position = o.center + Vec2{std::cos(a), std::sin(a) * 0.7f} * o.radius;
     });
