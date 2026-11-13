@@ -20,8 +20,8 @@ An entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`.
 | Component | Fields |
 |-----------|--------|
 | `Sprite` | `image` (a `Texture`, from `Assets`), `frame` (part of the image as a `Rect`; zero size for all of it), `anchor` (0.5, 0.5: the point placed at the position, and the pivot it rotates and scales around), `color` (tint), `flip_x`, `flip_y`, `z`, `layer`, `visible`, `blend`, `material`. *Engine*: `frame` under an `Animator`, `color` under a tween |
-| `Rectangle` | `size`, `color`, `outline` (0 for filled), `corner_radius`, `anchor`, `z`, `layer`, `visible` |
-| `Circle` | `radius`, `color`, `outline`, `z`, `layer`, `visible` |
+| `Rectangle` | `size`, `color`, `outline` (0 for filled), `corner_radius`, `anchor` (the pivot it turns around), `z`, `layer`, `visible` |
+| `Circle` | `radius`, `color`, `outline`, `z`, `layer`, `visible`. A `Transform.scale` with uneven x and y draws an ellipse |
 | `Text` | `value`, `size`, `color`, `align`, `valign`, `wrap` (width, 0 for none), `line_spacing`, `outline`, `outline_color`, `shadow_offset` (zero for none), `shadow_color`, `rich_text` (inline color tags), `font`, `z`, `layer`, `visible`. Holds up to 511 bytes |
 | `Camera` | `zoom`, `rotation`, `active` (true), `order`, `viewport` (normalized rect, for split screen), `layer_mask` (`ALL_LAYERS`; build one with `layer_mask([0, 2])`), `target` (a render target texture), `clear`, `clear_color`. *Engine*: `zoom` under a tween, position under `CameraFollow`, `CameraBounds` and shake |
 | `CameraFollow` | `target`, `smoothing`, `offset`, `dead_zone` |

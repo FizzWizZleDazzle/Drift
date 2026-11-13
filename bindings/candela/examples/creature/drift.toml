@@ -1,0 +1,21 @@
+[project]
+name = "Creature"
+organization = "Drift Examples"
+entry = "main.cdl"
+
+[window]
+width = 960
+height = 540
+
+[render]
+clear_color = [0.07, 0.08, 0.1]
+
+[physics]
+gravity = [0, 0]
+
+# Tuning, read by the Tuning struct in main.cdl.
+[creature]
+speed = 170.0
+turn_speed = 5.0
+step_distance = 34.0
+step_time = 0.14

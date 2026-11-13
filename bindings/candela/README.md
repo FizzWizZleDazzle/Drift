@@ -47,6 +47,7 @@ fn steer(ship: Ship, velocity: Velocity, input: Input) {
 - `examples/flappy_bird`: states, per-entity systems, sensor overlaps, settings from `drift.toml`.
 - `examples/coin_dash`: input actions, physics contacts, particles, tweens, save data, sound made from samples.
 - `examples/cave_walk`: generated caves and dungeons in a tilemap made in code, seeded random numbers, Poisson-disk spawns from a weighted table, flow-field chasers.
+- `examples/creature`: a lizard animated entirely in code: a rig of parent and child parts, two-bone IK legs with stepping feet, a verlet tail, a head on a spring that watches the cursor, breathing.
 
 ## Limitations
 

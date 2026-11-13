@@ -13,7 +13,7 @@ struct Shape2D {
     float radius = 16.f;           // Circle
     Color color = Color::white();
     float outline = 0.f;           // 0 = filled; otherwise the line thickness
-    float cornerRadius = 0.f;      // Rectangle, filled and unrotated only
+    float cornerRadius = 0.f;      // Rectangle
     Vec2 anchor = {0.5f, 0.5f};    // Rectangle: the point on the position, 0..1
     float zOrder = 0.f;
     uint8_t layer = 0;             // render layer 0..30, or ScreenLayer
@@ -38,10 +38,10 @@ void setup(Commands& cmd) {
 }
 ```
 
-The transform's rotation turns rectangles; its scale scales both kinds (circles by `scale.x`). Inside a [hierarchy](hierarchy.md) the shape draws at the entity's `GlobalTransform2D`. Shapes sort with sprites by `layer` and `zOrder`, and a shape on `ScreenLayer` is in screen coordinates.
+The transform's rotation turns rectangles; its scale scales both kinds, and a circle scaled unevenly draws as an ellipse that turns with the rotation. A negative scale mirrors a rectangle around its anchor. Inside a [hierarchy](hierarchy.md) the shape draws at the entity's `GlobalTransform2D`. Shapes sort with sprites by `layer` and `zOrder`, and a shape on `ScreenLayer` is in screen coordinates.
 
 `Shape2D` is reflected, so it saves and loads in [scenes](../subsystems/scenes.md).
 
 ## Limitations
 
-Rounded corners apply to filled rectangles without rotation; a rotated or outlined rectangle draws square corners. For immediate shapes drawn for one frame, use the drawing calls on `RendererResource` (see [Rendering](../subsystems/rendering.md)).
+Rounded corners stay rounded when the rectangle turns, scales or is outlined. For immediate shapes drawn for one frame, use the drawing calls on `RendererResource` (see [Rendering](../subsystems/rendering.md)).

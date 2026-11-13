@@ -54,5 +54,6 @@
 - [Flappy Bird](examples/flappy-bird.md)
 - [Coin Dash](examples/coin-dash.md)
 - [Cave Walk](examples/cave-walk.md)
+- [Creature](examples/creature.md)
 
 [Limitations](limitations.md)

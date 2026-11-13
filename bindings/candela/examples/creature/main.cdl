@@ -1,0 +1,249 @@
+// Creature: a lizard made of shapes and animated entirely in code.
+//
+// It walks toward the mouse, or where the arrow keys or WASD point. Its four
+// legs reach for their feet with two-bone IK, and the feet stay planted
+// until they stray, then step in diagonal pairs. The tail is a verlet rope,
+// the head turns toward the cursor on a spring, the antennae lag behind on
+// springs of their own, and the body breathes.
+//
+// The book's Procedural Animation guide walks through this file.
+
+import "drift" { * };
+
+// ---- Tuning ----
+
+@settings(section: "creature")
+struct Tuning {
+    speed: float = 170.0,         // pixels a second at full stride
+    turn_speed: float = 5.0,      // radians a second the body turns
+    step_distance: float = 26.0,  // a foot steps when this far from its rest point
+    step_time: float = 0.14,      // seconds a step takes
+}
+
+// ---- Components ----
+
+// The body: the root every other part hangs from.
+@component struct Creature { velocity: Vec2 = Vec2 { .. }, use_mouse: bool = false }
+
+// The body's drawing, a child of its own so it can breathe without
+// scaling the legs and head with it.
+@component struct Breath {}
+
+@component struct Head { turn: AngleSpring = AngleSpring { .. } }
+@component struct Pupil {}
+
+// A leg: the thigh entity, a child of the body at `hip`. Its shin is a child
+// of the thigh, and the paw a child of the shin. `rest` is where the foot
+// stands when the body is still, in the body's space.
+@component
+struct Leg {
+    hip: Vec2 = Vec2 { .. },
+    rest: Vec2 = Vec2 { .. },
+    group: int = 0,               // legs in a group step together
+    bend: float = 1.0,            // which way the knee points
+    upper: float = 30.0,
+    lower: float = 30.0,
+    foot: Foot = Foot { .. },
+    // The pose IK found this frame, as world rotations.
+    thigh_angle: float = 0.0,
+    shin_angle: float = 0.0,
+}
+@component struct Shin { leg: Entity = Entity { .. } }
+
+@component struct TailBit { index: int = 0 }
+
+// An antenna tip: it lags behind where it would be on a rigid head.
+@component struct Antenna { base: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. }, tip: Spring2 = Spring2 { .. } }
+
+// ---- Resources ----
+
+@resource
+struct Rig {
+    body: Entity = Entity { .. },
+    head: Entity = Entity { .. },
+    tail: Rope = Rope { .. },
+}
+
+// ---- Building the creature ----
+
+const SKIN: Color = Color { r: 0.42, g: 0.75, b: 0.45, a: 1.0 };
+const DARK: Color = Color { r: 0.25, g: 0.5, b: 0.3, a: 1.0 };
+
+fn spawn_leg(cmd: Commands, body: Entity, start: Vec2, hip: Vec2, rest: Vec2, group: int, bend: float) {
+    let leg = Leg { hip: hip, rest: rest, group: group, bend: bend, foot: foot(start + rest), .. };
+    let thigh = cmd.spawn_child(body, [
+        Transform { position: hip, .. },
+        Rectangle { size: vec2(leg.upper, 8.0), anchor: vec2(0.0, 0.5), corner_radius: 4.0, color: DARK, z: 1.0, .. },
+        leg,
+    ]);
+    let shin = cmd.spawn_child(thigh, [
+        Transform { position: vec2(leg.upper, 0.0), .. },
+        Rectangle { size: vec2(leg.lower, 6.0), anchor: vec2(0.0, 0.5), corner_radius: 3.0, color: DARK, z: 1.1, .. },
+        Shin { leg: thigh },
+    ]);
+    cmd.spawn_child(shin, [at(leg.lower, 0.0), Circle { radius: 5.0, color: SKIN, z: 1.2, .. }]);
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input, rig: Rig) {
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+
+    let start = vec2(480.0, 270.0);
+    let body = cmd.spawn([Transform { position: start, .. }, Creature { .. }]);
+    cmd.spawn_child(body, [
+        at(0.0, 0.0),
+        Rectangle { size: vec2(58.0, 38.0), corner_radius: 18.0, color: SKIN, z: 2.0, .. },
+        Breath {},
+    ]);
+
+    // The head sits at the front; the eyes ride on it, the pupils on the eyes.
+    let head = cmd.spawn_child(body, [at(30.0, 0.0), Circle { radius: 15.0, color: SKIN, z: 3.0, .. }, Head { .. }]);
+    for side in [-1.0, 1.0] {
+        let eye = cmd.spawn_child(head, [at(6.0, 7.0 * side), Circle { radius: 5.0, color: rgb(250, 250, 240), z: 4.0, .. }]);
+        cmd.spawn_child(eye, [at(0.0, 0.0), Circle { radius: 2.5, color: rgb(20, 20, 30), z: 5.0, .. }, Pupil {}]);
+        cmd.spawn([at(start.x + 50.0, start.y + 14.0 * side), Circle { radius: 3.0, color: rgb(240, 200, 90), z: 3.5, .. },
+                   Antenna { base: vec2(8.0, 4.0 * side), offset: vec2(30.0, 16.0 * side), tip: spring2(start), .. }]);
+    }
+
+    // Four legs; the diagonal pairs share a group and step together.
+    spawn_leg(cmd, body, start, vec2(14.0, -12.0), vec2(36.0, -40.0), 0, -1.0);
+    spawn_leg(cmd, body, start, vec2(14.0, 12.0), vec2(36.0, 40.0), 1, 1.0);
+    spawn_leg(cmd, body, start, vec2(-14.0, -12.0), vec2(-26.0, -40.0), 1, 1.0);
+    spawn_leg(cmd, body, start, vec2(-14.0, 12.0), vec2(-26.0, 40.0), 0, -1.0);
+
+    // The tail: a rope of 12 points trailing behind, one circle per point.
+    rig.tail = rope(start + vec2(-26.0, 0.0), 12, 9.0, PI);
+    rig.tail.gravity = vec2(0.0, 0.0);     // seen from above: nothing pulls it down
+    rig.tail.damping = 0.85;
+    rig.tail.stiffness = 0.6;
+    for i in range(12) {
+        let r = 10.0 - float(i) * 0.7;
+        cmd.spawn([at(start.x - 26.0 - float(i) * 9.0, start.y), Circle { radius: r, color: SKIN, z: 1.5, .. }, TailBit { index: i }]);
+    }
+
+    rig.body = body;
+    rig.head = head;
+    cmd.spawn([at(16.0, 12.0), Text { value: "Move the mouse, or use the arrow keys", size: 18.0, color: rgb(200, 210, 200),
+                                      layer: hud_layer(), .. }]);
+}
+
+// ---- The body ----
+
+// Walks toward the mouse, or the way the keys point, and turns to face where
+// it is going.
+@system
+fn move_body(c: Creature, t: Transform, input: Input, time: Time, tuning: Tuning) {
+    let dir = Vec2 { .. };
+    let keys = input.axis2d("move");
+    if keys.length() > 0.1 {
+        c.use_mouse = false;
+        dir = keys.normalized();
+    } else if input.mouse_delta().length() > 0.0 {
+        c.use_mouse = true;
+    }
+    if c.use_mouse {
+        let to = input.mouse_world() - t.position;
+        // Slow down near the cursor and stop short of it.
+        let d = to.length();
+        if d > 50.0 {
+            dir = to.normalized() * min(1.0, (d - 50.0) / 100.0);
+        }
+    }
+    c.velocity = damp2(c.velocity, dir * tuning.speed, 6.0, time.dt);
+    t.position = t.position + c.velocity * time.dt;
+    if c.velocity.length() > 10.0 {
+        t.rotation = rotate_towards(t.rotation, c.velocity.angle(), tuning.turn_speed * time.dt);
+    }
+}
+
+// Breathing: a slow squash, plus a stretch along the way it moves.
+@system
+fn breathe(_: Breath, t: Transform, time: Time, rig: Rig, bodies: Lookup<Creature>) {
+    let breath = squash(sine_wave(time.elapsed, 0.6, 0.06, 0.0));
+    let speed = 0.0;
+    match bodies.get(rig.body) {
+        Some(c) => { speed = c.velocity.length(); }
+        None => {}
+    }
+    let s = 1.0 + min(speed * 0.0008, 0.12);
+    t.scale = vec2(breath.x * s, breath.y / s);
+}
+
+// ---- The head ----
+
+// Turns toward the cursor on a spring, never more than a radian off the
+// body's heading.
+@system(after: [move_body])
+fn look(h: Head, t: Transform, input: Input, time: Time, rig: Rig) {
+    let head = world_transform(rig.head);
+    let body = world_transform(rig.body);
+    let want = angle_diff(body.rotation, look_at(head.position, input.mouse_world()));
+    t.rotation = h.turn.update(clamp(want, -1.0, 1.0), 120.0, 12.0, time.dt);
+}
+
+// The pupils slide toward the cursor inside their eyes.
+@system(after: [look])
+fn watch(e: Entity, _: Pupil, t: Transform, input: Input) {
+    let eye = parent_of(e);
+    t.position = to_local(eye, input.mouse_world()).clamp_length(2.2);
+}
+
+// The antenna tips chase where they would be on a rigid head.
+@system(after: [look])
+fn antennae(a: Antenna, t: Transform, time: Time, rig: Rig, draw: Draw) {
+    let base = to_world(rig.head, a.base);
+    t.position = a.tip.update(to_world(rig.head, a.offset), 160.0, 7.0, time.dt);
+    draw.at_z(3.4);
+    draw.line(base, t.position, rgb(60, 110, 70), 2.0);
+}
+
+// ---- Legs ----
+
+// Each foot stays planted until it strays from its rest point, then steps;
+// a group steps only while the other group stands. IK bends each leg to
+// reach its foot.
+@system(after: [move_body])
+fn step_legs(legs: (Leg, Transform)[], rig: Rig, time: Time, tuning: Tuning) {
+    let gait = Gait { distance: tuning.step_distance, duration: tuning.step_time, height: 6.0, lead: 0.4, .. };
+    let standing = [true, true];
+    for (leg, _) in legs {
+        if !leg.foot.planted() {
+            standing[leg.group] = false;
+        }
+    }
+    let body = world_transform(rig.body);
+    for (leg, t) in legs {
+        let hip = to_world(rig.body, leg.hip);
+        leg.foot.update(to_world(rig.body, leg.rest), gait, standing[1 - leg.group], time.dt);
+        if !leg.foot.planted() {
+            standing[leg.group] = false;
+        }
+        let pose = two_bone_ik(hip, leg.foot.position, leg.upper, leg.lower, leg.bend);
+        leg.thigh_angle = pose.upper;
+        leg.shin_angle = pose.lower;
+        // The thigh is a child of the body: its rotation counts from the body's.
+        t.rotation = angle_diff(body.rotation, pose.upper);
+    }
+}
+
+// The shin turns relative to its thigh.
+@system(after: [step_legs])
+fn bend_shins(s: Shin, t: Transform, legs: Lookup<Leg>) {
+    match legs.get(s.leg) {
+        Some(leg) => { t.rotation = angle_diff(leg.thigh_angle, leg.shin_angle); }
+        None => {}
+    }
+}
+
+// ---- Tail ----
+
+@system(after: [move_body])
+fn swing_tail(rig: Rig, time: Time) {
+    rig.tail.update(to_world(rig.body, vec2(-26.0, 0.0)), time.dt);
+}
+
+@system(after: [swing_tail])
+fn place_tail(bit: TailBit, t: Transform, rig: Rig) {
+    t.position = rig.tail.points[bit.index];
+}

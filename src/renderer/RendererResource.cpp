@@ -1232,6 +1232,19 @@ void RendererResource::drawPolygonFilled(const Vec2* points, int32_t count, Colo
 
     std::vector<uint32_t> tris;
     tris.reserve((count - 2) * 3);
+    // A convex outline (circles, ellipses, rounded rectangles) is a fan;
+    // ear clipping stalls on its collinear and repeated points.
+    bool convex = true;
+    for (int32_t i = 0; i < count && convex; ++i) {
+        Vec2 a = points[poly[(i + count - 1) % count]], b = points[poly[i]], c = points[poly[(i + 1) % count]];
+        if (cross(a, b, c) < -1e-4f) convex = false;
+    }
+    if (convex) {
+        for (int32_t i = 1; i + 1 < count; ++i) tris.insert(tris.end(), {poly[0], poly[i], poly[i + 1]});
+        impl_->solid(points, static_cast<uint32_t>(count), tris.data(), static_cast<uint32_t>(tris.size()),
+                     color, zOrder);
+        return;
+    }
     int guard = count * count;
     while (poly.size() > 3 && guard-- > 0) {
         bool clipped = false;
