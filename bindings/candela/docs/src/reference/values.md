@@ -18,6 +18,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `GridRect`, `Dungeon` | A room (`x`, `y`, `w`, `h`, `center()`, `contains(c)`) and a dungeon's `grid` and `rooms` |
 | `CaveOptions`, `DungeonOptions`, `WalkOptions`, `WfcOptions` | Generator settings; every field has a default |
 | `FlowField` | `direction(c)`, `direction_at(pos, cell_size)`, `step(c)`, `cost(c)` |
+| `Burst` | `time`, `count`, `cycles` (0 forever), `interval`: particles at once, for `ParticleEmitter.bursts` |
 | `PlayOptions` | `volume` (1), `pan` (-1 left to 1 right), `pitch` (1), `looping`, `bus` (the sfx bus when unset), `fade_in` (seconds), `priority` (higher keeps its voice when all are busy). For `Sound.play_with` |
 | `Timer`, `Cooldown` | See [Timers and Save Data](../guides/timers-and-saves.md) |
 | `Texture`, `Sound`, `Font`, `Spritesheet`, `Map`, `Scene` | Assets from `Assets` |
@@ -33,6 +34,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `tween()` | An empty `Tween` to chain steps onto |
 | `ease(e, t)` | Eased progress for `t` from 0 to 1 |
 | `hud_layer()` | The screen-space layer, drawn last without a camera |
+| `layer_mask(layers: int[])` | A `Camera.layer_mask` drawing those world layers: `layer_mask([0, 1])` |
 | `timer(seconds)`, `repeating_timer(seconds)`, `cooldown(seconds)` | Timers |
 | `log(message)`, `warn(message)` | Write to the engine log |
 | `rng(seed)`, `rng_stream(seed, stream)`, `seed_from(text)` | Random generators and seeds |
@@ -46,6 +48,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | Constant | Value |
 |----------|-------|
 | `FLOOR`, `WALL`, `DOOR` | 0, 1, 2: the cell values the generators write |
+| `ALL_LAYERS` | Every world layer, 0 to 30: the default `layer_mask` of cameras and lights |
 
 ## Enums
 

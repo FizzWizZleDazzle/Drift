@@ -23,4 +23,12 @@ struct CameraFollow {
     Vec2 deadZone = {};         // don't move if target is within this range
 };
 
+// Keeps what the camera shows inside `area` (world units): the camera's
+// position is held so its view rect stays within the area, and centered on
+// an axis where the area is smaller than the view. Applies after
+// CameraFollow and before CameraShake. Rotation is not taken into account.
+struct CameraBounds {
+    Rect area = {};
+};
+
 } // namespace drift

@@ -15,6 +15,14 @@
 #include <drift/Log.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
 #include <drift/components/Behavior.hpp>
+#include <drift/components/Camera.hpp>
+#include <drift/components/Light2D.hpp>
+#include <drift/components/SpriteAnimator.hpp>
+#include <drift/components/TrailRenderer.hpp>
+#include <drift/resources/FontResource.hpp>
+#include <drift/resources/ParticleSystemResource.hpp>
+#include <drift/resources/SpriteResource.hpp>
+#include <drift/resources/UIResource.hpp>
 #include <drift/components/CameraController.hpp>
 #include <drift/components/Name.hpp>
 #include <drift/components/ParticleEmitter.hpp>
@@ -244,6 +252,25 @@ EmitterConfig emitterConfig(const json& j) {
     c.duration = j.value("duration", -1.f);
     c.looping = j.value("looping", true);
     c.zOrder = j.value("z", 10.f);
+    // A `_max` of 0 is the same as the minimum.
+    float s0max = j.value("size_start_max", 0.f), s1max = j.value("size_end_max", 0.f);
+    if (s0max > 0.f) c.sizeStart.max = s0max;
+    if (s1max > 0.f) c.sizeEnd.max = s1max;
+    c.srcRect = rectJ(j.value("frame", json()));
+    c.initialRotation = {j.value("rotation_min", 0.f), j.value("rotation_max", 0.f)};
+    c.angularVelocity = {j.value("spin_min", 0.f), j.value("spin_max", 0.f)};
+    c.velocityInheritance = j.value("inherit_velocity", 0.f);
+    c.space = j.value("local", false) ? ParticleSpace::Local : ParticleSpace::World;
+    c.preWarmTime = j.value("prewarm", 0.f);
+    Rect bounds = rectJ(j.value("bounds", json()));
+    if (bounds.w > 0.f && bounds.h > 0.f) {
+        c.boundsMin = {bounds.x, bounds.y};
+        c.boundsMax = {bounds.x + bounds.w, bounds.y + bounds.h};
+    }
+    c.seed = static_cast<uint32_t>(j.value("seed", int64_t(0)));
+    for (const auto& b : j.value("bursts", json::array())) {
+        c.bursts.push_back(BurstEntry{b.value("time", 0.f), b.value("count", 10), b.value("cycles", 1), b.value("interval", 0.f)});
+    }
     return c;
 }
 
@@ -251,7 +278,11 @@ json emitterJson(const ParticleEmitter& pe) {
     const EmitterConfig& c = pe.config;
     auto* r = res<RendererResource>();
     uint32_t tex = r && c.texture.id == r->whiteTexture().id ? 0u : c.texture.id;
-    return {{"rate", c.spawnRate}, {"lifetime_min", c.lifetime.min}, {"lifetime_max", c.lifetime.max},
+    json bursts = json::array();
+    for (const BurstEntry& b : c.bursts) {
+        bursts.push_back({{"time", b.time}, {"count", b.count}, {"cycles", b.cycles}, {"interval", b.interval}});
+    }
+    return json{{"rate", c.spawnRate}, {"lifetime_min", c.lifetime.min}, {"lifetime_max", c.lifetime.max},
             {"speed_min", c.speed.min}, {"speed_max", c.speed.max}, {"angle_min", c.angle.min},
             {"angle_max", c.angle.max}, {"size_start", c.sizeStart.min}, {"size_end", c.sizeEnd.min},
             {"color_start", colorF(c.colorStart)}, {"color_end", colorF(c.colorEnd)},
@@ -259,7 +290,18 @@ json emitterJson(const ParticleEmitter& pe) {
             {"blend", blendNames[int(c.blendMode)]}, {"texture", {{"id", tex}}},
             {"shape", shapeNames[int(c.shape)]}, {"shape_radius", c.shapeRadius},
             {"shape_extents", vec(c.shapeExtents)}, {"duration", c.duration}, {"looping", c.looping},
-            {"z", c.zOrder}, {"playing", pe.playing}};
+            {"z", c.zOrder}, {"playing", pe.playing},
+            {"frame", rectJ(c.srcRect)},
+            {"size_start_max", c.sizeStart.max == c.sizeStart.min ? 0.f : c.sizeStart.max},
+            {"size_end_max", c.sizeEnd.max == c.sizeEnd.min ? 0.f : c.sizeEnd.max},
+            {"rotation_min", c.initialRotation.min}, {"rotation_max", c.initialRotation.max},
+            {"spin_min", c.angularVelocity.min}, {"spin_max", c.angularVelocity.max},
+            {"inherit_velocity", c.velocityInheritance}, {"local", c.space == ParticleSpace::Local},
+            {"prewarm", c.preWarmTime},
+            {"bounds", c.boundsMin.x == c.boundsMax.x && c.boundsMin.y == c.boundsMax.y ? rectJ(Rect{})
+                                                  : rectJ(Rect{c.boundsMin.x, c.boundsMin.y, c.boundsMax.x - c.boundsMin.x,
+                                                                c.boundsMax.y - c.boundsMin.y})},
+            {"seed", c.seed}, {"bursts", bursts}};
 }
 
 const char* easeNames[] = {
@@ -316,8 +358,11 @@ void startTween(EntityId e, const json& j) {
 const char* textAligns[] = {"Left", "Center", "Right"};
 const char* textVAligns[] = {"Top", "Middle", "Bottom"};
 
+std::vector<Codec> presentationCodecs();
+
 const std::vector<Codec>& codecs() {
-    static const std::vector<Codec> list = {
+    static const std::vector<Codec> list = [] {
+    std::vector<Codec> l = {
         {"Transform",
          [](EntityId e) { return get<Transform2D>(e) != nullptr; },
          [](EntityId e) {
@@ -348,11 +393,12 @@ const std::vector<Codec>& codecs() {
                          {"z", s.zOrder},
                          {"layer", s.layer},
                          {"visible", s.visible},
-                         {"blend", blendNames[int(s.blend)]}};
+                         {"blend", blendNames[int(s.blend)]},
+                         {"material", {{"id", s.material.id}}}};
          },
          [](EntityId e, const json& j) {
              Sprite s;
-             if (const Sprite* cur = get<Sprite>(e)) s.material = cur->material;
+             s.material = MaterialHandle{j.value("material", json::object()).value("id", 0u)};
              s.texture = TextureHandle{j.value("image", json::object()).value("id", 0u)};
              s.srcRect = rectJ(j.value("frame", json()));
              Vec2 size = s.srcRect.w > 0 ? Vec2{s.srcRect.w, s.srcRect.h} : textureSize(s.texture);
@@ -535,6 +581,9 @@ const std::vector<Codec>& codecs() {
          [](EntityId e) { world().removeComponent(e, cid<Tilemap>()); },
          [] { return cid<Tilemap>(); }},
     };
+    for (Codec& c : presentationCodecs()) l.push_back(c);
+    return l;
+    }();
     return list;
 }
 
@@ -892,6 +941,226 @@ bool procgen(const std::string& f, const json& a, json& out) {
     return true;
 }
 
+// ---- Rendering and presentation ----
+//
+// Cameras as components, and the services behind Camera2D, Draw and the
+// particle controls of Effects.
+
+json entityJ(EntityId e) { return {{"id", e}}; }
+EntityId entityOf(const json& j) { return j.is_object() ? j.value("id", EntityId(0)) : EntityId(0); }
+uint32_t idOf(const json& j) { return j.is_object() ? j.value("id", 0u) : 0u; }
+uint32_t maskOf(const json& j) { return static_cast<uint32_t>(j.value("layer_mask", int64_t(AllWorldLayers))); }
+float num(const json& a, size_t i, float fallback = 0.f) {
+    return i < a.size() && a[i].is_number() ? a[i].get<float>() : fallback;
+}
+
+Camera cameraOf(const json& j) {
+    Camera c;
+    c.zoom = j.value("zoom", 1.f);
+    c.rotation = j.value("rotation", 0.f);
+    c.active = j.value("active", true);
+    c.viewport = j.contains("viewport") ? rectJ(j["viewport"]) : Rect{0.f, 0.f, 1.f, 1.f};
+    c.order = j.value("order", 0);
+    c.layerMask = maskOf(j);
+    c.target = TextureHandle{idOf(j.value("target", json()))};
+    c.clear = j.value("clear", false);
+    c.clearColor = colorF(j.value("clear_color", json()), {0.f, 0.f, 0.f, 1.f});
+    return c;
+}
+
+// A renderer camera that sees what a Camera entity sees, for conversions:
+// the main camera for entity 0 or one without a Camera.
+CameraHandle viewOf(EntityId e) {
+    auto* r = res<RendererResource>();
+    if (!r) return {};
+    const Camera* c = e ? get<Camera>(e) : nullptr;
+    if (!c) return r->getDefaultCamera();
+    static CameraHandle scratch;
+    CameraDesc d;
+    if (const auto* t = get<Transform2D>(e)) d.position = t->position;
+    d.zoom = c->zoom;
+    d.rotation = c->rotation;
+    d.viewport = c->viewport;
+    d.enabled = false;   // never drawn
+    if (!scratch.valid()) scratch = r->createCamera(d);
+    r->setCamera(scratch, d);
+    return scratch;
+}
+
+std::vector<Codec> presentationCodecs() {
+    return {
+        {"Camera",
+         [](EntityId e) { return get<Camera>(e) != nullptr; },
+         [](EntityId e) {
+             const Camera& c = *get<Camera>(e);
+             return json{{"zoom", c.zoom}, {"rotation", c.rotation}, {"active", c.active},
+                         {"viewport", rectJ(c.viewport)}, {"order", c.order}, {"layer_mask", c.layerMask},
+                         {"target", {{"id", c.target.id}}}, {"clear", c.clear}, {"clear_color", colorF(c.clearColor)}};
+         },
+         [](EntityId e, const json& j) { put(e, cameraOf(j)); },
+         [](EntityId e) { world().removeComponent(e, cid<Camera>()); },
+         [] { return cid<Camera>(); }},
+        {"CameraFollow",
+         [](EntityId e) { return get<CameraFollow>(e) != nullptr; },
+         [](EntityId e) {
+             const CameraFollow& f = *get<CameraFollow>(e);
+             return json{{"target", entityJ(f.target)}, {"smoothing", f.smoothing}, {"offset", vec(f.offset)},
+                         {"dead_zone", vec(f.deadZone)}};
+         },
+         [](EntityId e, const json& j) {
+             CameraFollow f;
+             f.target = entityOf(j.value("target", json()));
+             f.smoothing = j.value("smoothing", 5.f);
+             f.offset = vec(j.value("offset", json()));
+             f.deadZone = vec(j.value("dead_zone", json()));
+             put(e, f);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<CameraFollow>()); },
+         [] { return cid<CameraFollow>(); }},
+        {"CameraBounds",
+         [](EntityId e) { return get<CameraBounds>(e) != nullptr; },
+         [](EntityId e) { return json{{"area", rectJ(get<CameraBounds>(e)->area)}}; },
+         [](EntityId e, const json& j) { put(e, CameraBounds{rectJ(j.value("area", json()))}); },
+         [](EntityId e) { world().removeComponent(e, cid<CameraBounds>()); },
+         [] { return cid<CameraBounds>(); }},
+    };
+}
+
+// The style of a candela Text value, for drawing and measuring.
+TextStyle textStyle(const json& j) {
+    TextStyle t;
+    t.size = j.value("size", 24.f);
+    t.color = color(j.value("color", json()));
+    t.align = pick<TextAlign>(j.value("align", json()), {"Left", "Center", "Right"});
+    t.valign = pick<TextVAlign>(j.value("valign", json()), {"Top", "Middle", "Bottom"});
+    t.wrapWidth = j.value("wrap", 0.f);
+    t.lineSpacing = j.value("line_spacing", 1.f);
+    t.outlineWidth = j.value("outline", 0.f);
+    t.outlineColor = color(j.value("outline_color", json()), Color::black());
+    t.shadowOffset = vec(j.value("shadow_offset", json()));
+    t.shadowColor = color(j.value("shadow_color", json()), Color{0, 0, 0, 160});
+    t.richText = j.value("rich_text", false);
+    return t;
+}
+
+// Immediate draws on `layer`, leaving the renderer's own layer as it was.
+template <typename F> void onLayer(RendererResource& r, int layer, F&& draw) {
+    uint8_t before = r.layer();
+    r.setLayer(static_cast<uint8_t>(std::clamp(layer, 0, 31)));
+    draw();
+    r.setLayer(before);
+}
+
+void drawShape(RendererResource& r, const std::string& kind, float z, const json& n, Color c) {
+    auto p = [&](size_t i) { return Vec2{num(n, i), num(n, i + 1)}; };
+    auto points = [&](size_t from) {
+        std::vector<Vec2> out;
+        for (size_t i = from; i + 1 < n.size(); i += 2) out.push_back(p(i));
+        return out;
+    };
+    Rect rc{num(n, 0), num(n, 1), num(n, 2), num(n, 3)};
+    if (kind == "rect") r.drawRectFilled(rc, c, z);
+    else if (kind == "rect_lines") r.drawRect(rc, c, num(n, 4, 1.f), z);
+    else if (kind == "rounded_rect") r.drawRoundedRectFilled(rc, num(n, 4), c, z);
+    else if (kind == "circle") r.drawCircleFilled(p(0), num(n, 2), c, 0, z);
+    else if (kind == "circle_lines") r.drawCircle(p(0), num(n, 2), c, num(n, 3, 1.f), 0, z);
+    else if (kind == "arc") r.drawArc(p(0), num(n, 2), num(n, 3), num(n, 4), c, num(n, 5, 1.f), z);
+    else if (kind == "line") r.drawLine(p(0), p(2), c, num(n, 4, 1.f), z);
+    else if (kind == "triangle") r.drawTriangleFilled(p(0), p(2), p(4), c, z);
+    else if (kind == "polyline") {
+        std::vector<Vec2> pts = points(2);
+        r.drawPolyline(pts.data(), static_cast<int32_t>(pts.size()), c, num(n, 0, 1.f), num(n, 1) > 0.5f, z);
+    } else if (kind == "polygon") {
+        std::vector<Vec2> pts = points(0);
+        r.drawPolygonFilled(pts.data(), static_cast<int32_t>(pts.size()), c, z);
+    } else {
+        DRIFT_LOG_WARN("Candela: Draw has no shape '%s'", kind.c_str());
+    }
+}
+
+bool presentation(const std::string& f, const json& a, json& out) {
+    if (f == "camera_point" || f == "camera_view") {
+        auto* r = res<RendererResource>();
+        CameraHandle cam = viewOf(a[0].get<EntityId>());
+        if (!r) {
+            out = json::array();
+        } else if (f == "camera_view") {
+            Rect b = r->cameraWorldBounds(cam);
+            out = {b.x, b.y, b.w, b.h};
+        } else {
+            Vec2 p{a[2].get<float>(), a[3].get<float>()};
+            Vec2 v = a[1].get<int>() == 0 ? r->screenToWorld(cam, p) : r->worldToScreen(cam, p);
+            out = {v.x, v.y};
+        }
+        return true;
+    }
+    if (f.rfind("draw_", 0) == 0) {
+        out = nullptr;
+        auto* r = res<RendererResource>();
+        if (!r) return true;
+        if (f == "draw_shape") {
+            Color c = color(a[4].is_array() && a[4].size() == 4
+                                ? json{{"r", a[4][0]}, {"g", a[4][1]}, {"b", a[4][2]}, {"a", a[4][3]}}
+                                : json());
+            onLayer(*r, a[1].get<int>(), [&] { drawShape(*r, a[0].get<std::string>(), a[2].get<float>(), a[3], c); });
+        } else if (f == "draw_text") {
+            // text, position, Text style, layer, z
+            auto* fonts = res<FontResource>();
+            if (!fonts) return true;
+            TextStyle style = textStyle(a[2]);
+            style.layer = static_cast<uint8_t>(std::clamp(a[3].get<int>(), 0, 31));
+            style.zOrder = a[4].get<float>();
+            fonts->drawText(FontHandle{idOf(a[2].value("font", json()))}, a[0].get<std::string>(), vec(a[1]), style);
+        } else if (f == "draw_sprite") {
+            // Sprite, Transform, layer, z
+            const json& s = a[0];
+            const json& t = a[1];
+            SpriteDraw d;
+            d.texture = TextureHandle{idOf(s.value("image", json()))};
+            d.srcRect = rectJ(s.value("frame", json()));
+            Vec2 size = d.srcRect.w > 0 ? Vec2{d.srcRect.w, d.srcRect.h} : textureSize(d.texture);
+            Vec2 anchor = vec(s.value("anchor", json()), {0.5f, 0.5f});
+            d.origin = {anchor.x * size.x, anchor.y * size.y};
+            d.position = vec(t.value("position", json()));
+            d.rotation = t.value("rotation", 0.f);
+            d.scale = vec(t.value("scale", json()), {1, 1});
+            d.tint = color(s.value("color", json()));
+            d.flip = static_cast<Flip>((s.value("flip_x", false) ? int(Flip::H) : 0) | (s.value("flip_y", false) ? int(Flip::V) : 0));
+            d.blend = blend(s.value("blend", json()));
+            d.material = MaterialHandle{idOf(s.value("material", json()))};
+            d.layer = static_cast<uint8_t>(std::clamp(a[2].get<int>(), 0, 31));
+            d.zOrder = a[3].get<float>();
+            if (d.texture.valid()) r->draw(d);
+        } else if (f == "draw_nine") {
+            TextureHandle tex{a[0].get<uint32_t>()};
+            const json& n = a[1];
+            Rect dest{num(n, 0), num(n, 1), num(n, 2), num(n, 3)};
+            Rect src{num(n, 4), num(n, 5), num(n, 6), num(n, 7)};
+            if (src.w <= 0.f || src.h <= 0.f) {
+                Vec2 size = textureSize(tex);
+                src = {0.f, 0.f, size.x, size.y};
+            }
+            Vec4 border{num(n, 8), num(n, 9), num(n, 10), num(n, 11)};
+            const json& c = a[2];
+            Color tint = color(json{{"r", num(c, 0, 1.f)}, {"g", num(c, 1, 1.f)}, {"b", num(c, 2, 1.f)}, {"a", num(c, 3, 1.f)}});
+            onLayer(*r, a[3].get<int>(), [&] { r->drawNineSlice(tex, dest, src, border, tint, a[4].get<float>()); });
+        } else if (f == "draw_clip") {
+            if (a[0].size() == 4) r->pushClipRect({num(a[0], 0), num(a[0], 1), num(a[0], 2), num(a[0], 3)});
+            else r->popClipRect();
+        } else {
+            return false;
+        }
+        return true;
+    }
+    if (f == "particles_restart") {
+        // The emitter's run state goes; the particle system starts it again.
+        if (auto* p = res<ParticleSystemResource>()) p->emitters.erase(a[0].get<EntityId>());
+        out = nullptr;
+        return true;
+    }
+    return false;
+}
+
 // ---- Services ----
 
 int state(bool held, bool pressed, bool released, int which) {
@@ -908,6 +1177,7 @@ EffectId fade() {
 json service(const std::string& f, const json& a) {
     json answer;
     if (procgen(f, a, answer)) return answer;
+    if (presentation(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {

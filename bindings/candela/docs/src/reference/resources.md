@@ -127,6 +127,7 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` a
 | Method | Does |
 |--------|------|
 | `burst(pos, emitter, count)` | A one-off particle burst that cleans itself up |
+| `restart(emitter)` | Starts an emitter entity's run over: its bursts fire again and a finished one emits anew |
 | `shake(camera, intensity)` | Screen shake on a camera entity, dying away |
 | `flash(color, seconds)`, `fade_to(color, amount, seconds)` | Screen flashes and fades |
 | `bloom(threshold, intensity)`, `vignette(intensity, radius)`, `crt(curvature, scanlines)`, `grayscale(amount)`, `sepia(amount)`, `pixelate(size)`, `blur(radius, iterations)` | Post effects; each returns an `Effect` with `set_enabled(on)`, `enabled()` and `remove()` |
@@ -139,6 +140,16 @@ A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` a
 |--------|---------|
 | `screen_to_world(p)`, `world_to_screen(p)` | Through the main camera |
 | `visible()` | The world rect the main camera shows |
+| `screen_to_world_in(camera, p)`, `world_to_screen_in(camera, p)`, `visible_in(camera)` | The same through a camera entity, such as one half of a split screen |
+
+```rust
+@system
+fn crosshair(input: Input, cam: Camera2D, marks: (Crosshair, Transform)[]) {
+    for (_, t) in marks {
+        t.position = cam.screen_to_world(input.mouse_position());
+    }
+}
+```
 
 ## Save
 
@@ -154,15 +165,33 @@ The save slot `<user data>/<organization>/<name>/save.json`, named after `[proje
 
 ## Draw
 
-Shapes for this frame only, for debugging. They go on layer 0, or on the HUD after `hud()`.
+Shapes, text and images for this frame only, for debugging and for overlays that change every frame. They draw in world coordinates on layer 0 at z 1000, over entities, until the system switches with `hud()`, `on_layer(l)` or `at_z(z)`; the next system starts from the defaults again.
 
 | Method | Draws |
 |--------|-------|
-| `rect(r, c)`, `rect_lines(r, c, thickness)` | Rectangles |
+| `rect(r, c)`, `rect_lines(r, c, thickness)`, `rounded_rect(r, radius, c)` | Rectangles |
 | `circle(center, radius, c)`, `circle_lines(center, radius, c, thickness)` | Circles |
+| `arc(center, radius, start, end, c, thickness)` | Part of a circle, angles in radians from +x |
 | `line(a, b, c, thickness)`, `polyline(points, c, thickness, closed)` | Lines |
+| `triangle(a, b, c3, c)`, `polygon(points, c)` | Filled shapes; polygons may be concave |
 | `text(s, pos, size, c)` | Built-in font, top-left at `pos` |
-| `hud()`, `world()` | Switch between screen and world coordinates for the draws that follow |
+| `text_styled(s, pos, style: Text)` | Text styled by a `Text` value: font, size, alignment, wrap, outline, shadow, rich text |
+| `texture(t, pos)`, `sprite(s: Sprite, t: Transform)` | An image centered at `pos`; a sprite as an entity would draw it |
+| `nine_slice(t, dest, frame, border, c)` | An image cut in nine; `border` holds the left, top, right and bottom margins as `x`, `y`, `w`, `h` |
+| `push_clip(r)`, `pop_clip()` | Draws in between show only inside `r`, in screen pixels |
+| `hud()`, `world()`, `on_layer(l)`, `at_z(z)` | Where the draws that follow go |
+
+```rust
+@system
+fn show_hitboxes(boxes: (BoxCollider, Transform)[], draw: Draw) {
+    for (b, t) in boxes {
+        let p = t.position - b.half_size;
+        draw.rect_lines(rect(p.x, p.y, b.half_size.x * 2.0, b.half_size.y * 2.0), rgb(255, 80, 80), 1.0);
+    }
+    draw.hud();
+    draw.text("boxes: " + string(boxes.len()), vec2(8.0, 8.0), 16.0, rgb(255, 255, 255));
+}
+```
 
 ## Systems
 

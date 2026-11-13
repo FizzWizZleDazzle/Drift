@@ -6,8 +6,10 @@
 #include <drift/Reflect.hpp>
 #include <drift/components/Camera.hpp>
 #include <drift/components/CameraController.hpp>
+#include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
 
+#include <algorithm>
 #include <cmath>
 
 namespace drift {
@@ -44,6 +46,30 @@ inline void cameraFollowSystem(Res<Time> time,
         float t_val = 1.f - std::exp(-follow.smoothing * dt);
         camTransform.position.x += dx * t_val;
         camTransform.position.y += dy * t_val;
+    });
+}
+
+// The half size of the world rect a camera shows: its target (or the
+// logical screen) times its viewport, over its zoom.
+inline Vec2 cameraHalfView(const RendererResource& renderer, const Camera& cam) {
+    Vec2 size = cam.target.valid() ? renderer.textureSize(cam.target)
+                                   : Vec2{renderer.logicalWidth(), renderer.logicalHeight()};
+    float zoom = cam.zoom > 0.f ? cam.zoom : 1.f;
+    return {size.x * cam.viewport.w * 0.5f / zoom, size.y * cam.viewport.h * 0.5f / zoom};
+}
+
+inline void cameraBoundsSystem(Res<RendererResource> renderer,
+                               QueryMut<Transform2D, CameraBounds, Camera> cameras) {
+    cameras.iter([&](Transform2D& t, CameraBounds& bounds, Camera& cam) {
+        const Rect& a = bounds.area;
+        if (a.w <= 0.f || a.h <= 0.f) return;
+        Vec2 half = cameraHalfView(*renderer, cam);
+        auto hold = [](float p, float lo, float size, float h) {
+            if (size <= h * 2.f) return lo + size * 0.5f;
+            return std::clamp(p, lo + h, lo + size - h);
+        };
+        t.position.x = hold(t.position.x, a.x, a.w, half.x);
+        t.position.y = hold(t.position.y, a.y, a.h, half.y);
     });
 }
 
@@ -86,8 +112,11 @@ public:
             .field("decay", &CameraShake::decay)
             .field("frequency", &CameraShake::frequency)
             .field("elapsed", &CameraShake::elapsed);
+        reflect::component<CameraBounds>(app.world(), "CameraBounds")
+            .field("area", &CameraBounds::area);
         app.addSystem<cameraFollowSystem>("camera_follow", Phase::PostUpdate);
-        app.addSystem<cameraShakeSystem>("camera_shake", Phase::PostUpdate);
+        app.addSystem<cameraBoundsSystem>("camera_bounds", Phase::PostUpdate).after("camera_follow");
+        app.addSystem<cameraShakeSystem>("camera_shake", Phase::PostUpdate).after("camera_bounds");
     }
     DRIFT_PLUGIN(CameraPlugin)
 };

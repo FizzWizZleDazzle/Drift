@@ -109,6 +109,19 @@ host "drift" {
     int[] map_read(int, int);
     string map_property(int, string);
     map_destroy(int);
+
+    // ---- Rendering and presentation ----
+    // A camera entity (0: the main camera); 0 screen to world, 1 back.
+    float[] camera_point(int, int, float, float);
+    float[] camera_view(int);
+    // Immediate drawing: shape name, layer, z, numbers, color.
+    draw_shape(string, int, float, float[], float[]);
+    draw_text(...);
+    draw_sprite(...);
+    draw_nine(int, float[], float[], int, float);
+    draw_clip(float[]);
+    // Particles.
+    particles_restart(int);
 }
 
 enum Schedule { Startup, Update }
@@ -327,8 +340,12 @@ enum Ease {
 
 enum EmitShape { Point, Circle, Ring, Box, Line }
 
+// `count` particles at once, `time` seconds into the emitter's run, repeated
+// `cycles` times (0 forever) `interval` seconds apart.
+struct Burst { time: float = 0.0, count: int = 10, cycles: int = 1, interval: float = 0.0 }
+
 // Particles from the entity's position. `rate` per second; `duration` -1.0
-// emits forever.
+// emits forever. A `_max` of 0.0 is the same as its minimum.
 struct ParticleEmitter {
     rate: float = 20.0,
     lifetime_min: float = 0.5,
@@ -353,6 +370,19 @@ struct ParticleEmitter {
     looping: bool = true,
     z: float = 10.0,
     playing: bool = true,
+    frame: Rect = Rect { .. },           // part of `texture`; zero size for all of it
+    size_start_max: float = 0.0,
+    size_end_max: float = 0.0,
+    rotation_min: float = 0.0,           // radians at birth
+    rotation_max: float = 0.0,
+    spin_min: float = 0.0,               // radians per second
+    spin_max: float = 0.0,
+    inherit_velocity: float = 0.0,       // share of the emitter's own motion particles keep
+    local: bool = false,                 // particles move with the emitter
+    prewarm: float = 0.0,                // seconds simulated before the first frame
+    bounds: Rect = Rect { .. },          // particles stop at its edges; zero size for none
+    seed: int = 0,                       // 0 picks one
+    bursts: Burst[] = [],
 }
 
 // One step of a Tween; build them with tween() and its methods.
@@ -1129,4 +1159,157 @@ struct Tilemap {
     layer: int = 0,
     colliders: bool = true,   // static colliders from the solid layers
     visible: bool = true,
+}
+
+// ---- Rendering and presentation ----
+//
+// Cameras, render layers, immediate drawing and particle control.
+
+// ---- Render layers ----
+
+// Every world layer, 0 to 30: the default `layer_mask` of a camera or light.
+const ALL_LAYERS: int = 2147483647;
+
+// A layer mask holding `layers`, for `Camera.layer_mask`.
+fn layer_mask(layers: int[]) -> int {
+    let mask = 0;
+    for l in layers {
+        let bit = 1;
+        for i in range(l) {
+            bit = bit * 2;
+        }
+        mask = mask + bit;
+    }
+    return mask;
+}
+
+// ---- Cameras ----
+
+// A view of the world from the entity's Transform. Several active cameras
+// draw in ascending `order`: split screen, minimaps, picture in picture.
+// The first active one that draws to the window is the main camera.
+struct Camera {
+    zoom: float = 1.0,
+    rotation: float = 0.0,
+    active: bool = true,
+    viewport: Rect = Rect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 },   // part of the window, 0 to 1
+    order: int = 0,
+    layer_mask: int = ALL_LAYERS,
+    target: Texture = Texture { .. },    // a render target; Texture {} draws to the window
+    clear: bool = false,
+    clear_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+}
+
+// Moves the camera smoothly toward `target`, staying still while the target
+// is within `dead_zone` (half sizes) of the point it aims at.
+struct CameraFollow {
+    target: Entity = Entity { .. },
+    smoothing: float = 5.0,
+    offset: Vec2 = Vec2 { .. },
+    dead_zone: Vec2 = Vec2 { .. },
+}
+
+// Keeps what the camera shows inside `area`, such as the level's rect.
+struct CameraBounds { area: Rect = Rect { .. } }
+
+// Converting between screen and world positions.
+struct Camera2D { id: int = 0 }
+impl Camera2D {
+    fn convert(self, camera: Entity, dir: int, p: Vec2) -> Vec2 {
+        let v = drift::camera_point(camera.id, dir, p.x, p.y);
+        return Vec2 { x: v[0], y: v[1] };
+    }
+    // Through the main camera.
+    fn screen_to_world(self, p: Vec2) -> Vec2 { return self.convert(Entity { .. }, 0, p); }
+    fn world_to_screen(self, p: Vec2) -> Vec2 { return self.convert(Entity { .. }, 1, p); }
+    // The world rect the main camera shows.
+    fn visible(self) -> Rect { return self.visible_in(Entity { .. }); }
+    // The same through a camera entity of your own.
+    fn screen_to_world_in(self, camera: Entity, p: Vec2) -> Vec2 { return self.convert(camera, 0, p); }
+    fn world_to_screen_in(self, camera: Entity, p: Vec2) -> Vec2 { return self.convert(camera, 1, p); }
+    fn visible_in(self, camera: Entity) -> Rect {
+        let r = drift::camera_view(camera.id);
+        return Rect { x: r[0], y: r[1], w: r[2], h: r[3] };
+    }
+}
+
+// ---- Immediate drawing ----
+
+// Shapes, text and images for this frame only. They draw in world
+// coordinates on layer 0 at z 1000, over entities, until `hud()`,
+// `on_layer` or `at_z` says otherwise, for the rest of the system.
+struct Draw { layer: int = 0, z: float = 1000.0 }
+fn color_list(c: Color) -> float[] { return [c.r, c.g, c.b, c.a]; }
+impl Draw {
+    fn shape(self, kind: string, nums: float[], c: Color) { drift::draw_shape(kind, self.layer, self.z, nums, color_list(c)); }
+    // Screen coordinates on the HUD layer, drawn after post effects.
+    fn hud(self) { self.layer = 31; }
+    // World coordinates on layer 0.
+    fn world(self) { self.layer = 0; }
+    fn on_layer(self, layer: int) { self.layer = layer; }
+    fn at_z(self, z: float) { self.z = z; }
+    fn rect(self, r: Rect, c: Color) { self.shape("rect", [r.x, r.y, r.w, r.h], c); }
+    fn rect_lines(self, r: Rect, c: Color, thickness: float) { self.shape("rect_lines", [r.x, r.y, r.w, r.h, thickness], c); }
+    fn rounded_rect(self, r: Rect, radius: float, c: Color) { self.shape("rounded_rect", [r.x, r.y, r.w, r.h, radius], c); }
+    fn circle(self, center: Vec2, radius: float, c: Color) { self.shape("circle", [center.x, center.y, radius], c); }
+    fn circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
+        self.shape("circle_lines", [center.x, center.y, radius, thickness], c);
+    }
+    // From `start` to `end` radians, clockwise from +x.
+    fn arc(self, center: Vec2, radius: float, start: float, end: float, c: Color, thickness: float) {
+        self.shape("arc", [center.x, center.y, radius, start, end, thickness], c);
+    }
+    fn line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { self.shape("line", [a.x, a.y, b.x, b.y, thickness], c); }
+    fn polyline(self, points: Vec2[], c: Color, thickness: float, closed: bool) {
+        let nums: float[] = [thickness, 0.0];
+        if closed {
+            nums[1] = 1.0;
+        }
+        for p in points {
+            nums.push(p.x);
+            nums.push(p.y);
+        }
+        self.shape("polyline", nums, c);
+    }
+    fn triangle(self, a: Vec2, b: Vec2, d: Vec2, c: Color) { self.shape("triangle", [a.x, a.y, b.x, b.y, d.x, d.y], c); }
+    // A filled polygon, convex or not.
+    fn polygon(self, points: Vec2[], c: Color) {
+        let nums: float[] = [];
+        for p in points {
+            nums.push(p.x);
+            nums.push(p.y);
+        }
+        self.shape("polygon", nums, c);
+    }
+    // Text in the built-in font, its top-left at `pos`.
+    fn text(self, s: string, pos: Vec2, size: float, c: Color) {
+        drift::draw_text(s, pos, Text { size: size, color: c, .. }, self.layer, self.z);
+    }
+    // Text styled like a Text component: font, size, alignment, outline and
+    // the rest. Its `value`, `layer`, `z` and `visible` are not used.
+    fn text_styled(self, s: string, pos: Vec2, style: Text) { drift::draw_text(s, pos, style, self.layer, self.z); }
+    // An image centered at `pos`.
+    fn texture(self, t: Texture, pos: Vec2) {
+        drift::draw_sprite(Sprite { image: t, .. }, Transform { position: pos, .. }, self.layer, self.z);
+    }
+    // A sprite as an entity would draw it, without the entity.
+    fn sprite(self, s: Sprite, t: Transform) { drift::draw_sprite(s, t, self.layer, self.z); }
+    // An image cut in nine: the corners keep their size, the edges and middle
+    // stretch over `dest`. `border` holds the left, top, right and bottom
+    // margins of `frame` (zero size for the whole image) as x, y, w, h.
+    fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Rect, c: Color) {
+        drift::draw_nine(t.id, [dest.x, dest.y, dest.w, dest.h, frame.x, frame.y, frame.w, frame.h,
+                                border.x, border.y, border.w, border.h], color_list(c), self.layer, self.z);
+    }
+    // Draws after this only inside `r`, in screen pixels, until pop_clip().
+    fn push_clip(self, r: Rect) { drift::draw_clip([r.x, r.y, r.w, r.h]); }
+    fn pop_clip(self) { drift::draw_clip([]); }
+}
+
+// ---- Particles ----
+
+impl Effects {
+    // Starts an emitter's run over: its bursts fire again and a finished one
+    // emits anew.
+    fn restart(self, emitter: Entity) { drift::particles_restart(emitter.id); }
 }

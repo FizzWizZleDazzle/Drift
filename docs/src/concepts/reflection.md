@@ -86,7 +86,7 @@ These are described by the plugin that owns them:
 | `RigidBody2D`, `BoxCollider2D`, `CircleCollider2D`, `Velocity2D` | `PhysicsPlugin` |
 | `ParticleEmitter` (with `EmitterConfig`, `ValueRange`, `BurstEntry`) | `ParticlePlugin` |
 | `SpriteAnimator` (with `AnimationClip`) | `SpriteAnimationPlugin` |
-| `CameraFollow`, `CameraShake` | `CameraPlugin` |
+| `CameraFollow`, `CameraBounds`, `CameraShake` | `CameraPlugin` |
 | `TrailRenderer` | `TrailPlugin` |
 | `Shape2D` | `ShapePlugin` |
 | `Lifetime`, `Oscillate`, `Follow` | `BehaviorPlugin` |

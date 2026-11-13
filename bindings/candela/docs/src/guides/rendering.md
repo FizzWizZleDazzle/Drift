@@ -33,7 +33,7 @@ An entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`. For a
 
 ## Draw order and layers
 
-Every drawable has a `layer` and a `z`. Higher layers draw over lower ones; within a layer, higher `z` draws on top. World layers are 0 to 30, and cameras draw the layers in their `layer_mask`.
+Every drawable has a `layer` and a `z`. Higher layers draw over lower ones; within a layer, higher `z` draws on top. World layers are 0 to 30, and cameras draw the layers in their `layer_mask`, every world layer (`ALL_LAYERS`) by default. `layer_mask([0, 3])` builds a mask, for example for a minimap camera that leaves out the decoration on layer 2.
 
 `hud_layer()` is the screen layer. It draws last, after post effects, in screen coordinates without a camera: (0, 0) is the top-left of the window's logical area. Put scores, menus and health bars there:
 
@@ -58,7 +58,14 @@ let player = cmd.spawn([at(0.0, 0.0), Sprite { image: texture("assets/hero.png")
 cmd.spawn([at(0.0, 0.0), Camera { .. }, CameraFollow { target: player, smoothing: 5.0, .. }]);
 ```
 
-`Camera2D` converts between screen and world positions through the main camera, for example to aim at the mouse. `Effects` shakes a camera with `shake(camera, intensity)`.
+`CameraBounds` stops the camera at the edges of a level, so the view never shows what lies past them:
+
+```rust
+cmd.spawn([at(0.0, 0.0), Camera { .. }, CameraFollow { target: player, .. },
+           CameraBounds { area: rect(0.0, 0.0, 3200.0, 720.0) }]);
+```
+
+`Camera2D` converts between screen and world positions through the main camera, for example to aim at the mouse, and `visible()` gives the world rect on screen. The `_in` versions, such as `screen_to_world_in(camera, p)`, do the same through any camera entity. `Effects` shakes a camera with `shake(camera, intensity)`.
 
 ### Split screen
 

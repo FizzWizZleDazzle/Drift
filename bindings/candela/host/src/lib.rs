@@ -435,7 +435,9 @@ impl Host {
                 match bare(&name) {
                     "Commands" => Ok(Param::Commands(*id)),
                     "Time" => Ok(Param::Time(*id)),
-                    "Input" | "Assets" | "Window" | "Effects" | "Save" | "Random" => Ok(Param::Engine(*id)),
+                    "Input" | "Assets" | "Window" | "Effects" | "Save" | "Random" | "Camera2D" | "Draw" => {
+                        Ok(Param::Engine(*id))
+                    }
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
                 }
             }
@@ -543,6 +545,8 @@ impl Host {
                 let v = match (bare(&name), f.as_str()) {
                     ("Window", "width") => Value::Float(call("window_size", json!([]))[0].as_f64().unwrap_or(0.0)),
                     ("Window", "height") => Value::Float(call("window_size", json!([]))[1].as_f64().unwrap_or(0.0)),
+                    // Immediate draws go over entities unless a system asks otherwise.
+                    ("Draw", "z") => Value::Float(1000.0),
                     _ => self.types.from_json(&Json::Null, t),
                 };
                 (f.clone(), v)
@@ -1111,8 +1115,11 @@ fn engine(module_dir: &str) -> Engine {
         call("shake", json!([c, s]));
     });
     e.register_host_fn("drift", "log_message", |level: i64, m: String| log(level as i32, &m));
-    for (name, args, ret) in forwarded() {
+    for (name, args, ret) in forwarded().into_iter().chain(presentation_forwarded()) {
         forward(&mut e, name, args, ret);
+    }
+    for (name, ret) in presentation_values() {
+        forward_values(&mut e, name, ret);
     }
     e
 }
@@ -1171,6 +1178,45 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("map_property", vec![I, S], S),
         ("map_destroy", vec![I], U),
     ]
+}
+
+// ---- Rendering and presentation ----
+
+/// Engine functions for cameras, drawing, effects, assets, the window and
+/// UI widgets, passed through like `forwarded()`.
+fn presentation_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
+    use HostType::{Float as F, Int as I, String as S, Unit as U};
+    let af = || HostType::Array(Box::new(F));
+    vec![
+        ("camera_point", vec![I, I, F, F], af()),
+        ("camera_view", vec![I], af()),
+        ("draw_shape", vec![S, I, F, af(), af()], U),
+        ("draw_nine", vec![I, af(), af(), I, F], U),
+        ("draw_clip", vec![af()], U),
+        ("particles_restart", vec![I], U),
+    ]
+}
+
+/// Engine functions that take whole values (a Text style, a Sprite, the
+/// settings of a post effect): each argument goes as JSON, and a struct
+/// carries its type's name in `__type`.
+fn presentation_values() -> Vec<(&'static str, HostType)> {
+    vec![("draw_text", HostType::Unit), ("draw_sprite", HostType::Unit)]
+}
+
+fn typed_json(v: &Value) -> Json {
+    let mut j = to_json(v);
+    if let (Value::Struct { name, .. }, Json::Object(o)) = (v, &mut j) {
+        o.insert("__type".into(), json!(bare(name)));
+    }
+    j
+}
+
+fn forward_values(e: &mut Engine, name: &'static str, ret: HostType) {
+    e.register_host_fn_variadic("drift", name, move |a| {
+        let answer = call(name, Json::Array(a.iter().map(typed_json).collect()));
+        Ok(host_value(&answer, &ret))
+    });
 }
 
 fn forward(e: &mut Engine, name: &'static str, args: Vec<HostType>, ret: HostType) {

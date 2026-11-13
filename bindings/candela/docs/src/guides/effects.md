@@ -29,9 +29,11 @@ fn torch(cmd: Commands) {
 - `shape` picks where particles start: `EmitShape::Point`, `Circle` and `Ring` (with `shape_radius`), `Box` (with `shape_extents` as half-size) or `Line` (with `shape_extents` as direction).
 - `max_particles` caps how many are alive at once.
 - `duration` with `looping: false` makes an emitter that stops by itself.
-- `texture` draws each particle with an image; without one they are soft squares tinted by the colors.
+- `texture` draws each particle with an image (`frame` picks part of it); without one they are soft squares tinted by the colors.
+- `size_start_max`, `rotation_min`/`max` and `spin_min`/`max` vary each particle; `local: true` keeps particles moving with the emitter; `prewarm` starts an emitter as if it had already run that many seconds, so a torch is lit from the first frame.
+- `bursts` fire many particles at once at set times: `Burst { time: 0.0, count: 30, cycles: 3, interval: 0.5 }` fires 30 three times, half a second apart.
 
-Turn an emitter on and off by writing `playing`:
+Turn an emitter on and off by writing `playing`, and start one over, bursts and all, with `effects.restart(emitter)`:
 
 ```rust
 @system

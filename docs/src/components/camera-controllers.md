@@ -1,6 +1,6 @@
 # Camera Controllers
 
-Drift provides two components for common camera behavior: `CameraFollow` for smooth target tracking and `CameraShake` for screen shake effects. Both operate on entities that also have `Camera` and `Transform2D`.
+Drift provides three components for common camera behavior: `CameraFollow` for smooth target tracking, `CameraBounds` to keep the view inside a level, and `CameraShake` for screen shake effects. All operate on entities that also have `Camera` and `Transform2D`.
 
 ## CameraFollow
 
@@ -90,6 +90,27 @@ void switchTarget(QueryMut<CameraFollow> cameras, EntityId newTarget) {
         follow.target = newTarget;
     });
 }
+```
+
+## CameraBounds
+
+Keeps what the camera shows inside a world rect, so the view stops at the edges of a level instead of showing what lies past them.
+
+```cpp
+struct CameraBounds {
+    Rect area = {};   // world units; zero size = no limit
+};
+```
+
+Each frame, after `CameraFollow` and before `CameraShake`, the camera's position is held so its view rect (the logical screen, or its render target, times its viewport, over its zoom) stays inside `area`. On an axis where the area is smaller than the view, the camera centers on the area. Rotation is not taken into account.
+
+```cpp
+cmd.spawn().insert(
+    Transform2D{},
+    Camera{.active = true},
+    CameraFollow{.target = playerId},
+    CameraBounds{.area = {0.f, 0.f, 3200.f, 720.f}}
+);
 ```
 
 ## CameraShake
@@ -187,7 +208,7 @@ Both systems are provided by the `CameraPlugin`, which is included in `DefaultPl
 app.addPlugin<CameraPlugin>();
 ```
 
-The plugin registers both `CameraFollow` and `CameraShake` components and adds the follow and shake systems in `PostUpdate`.
+The plugin registers the `CameraFollow`, `CameraBounds` and `CameraShake` components and adds the follow, bounds and shake systems in `PostUpdate`, in that order.
 
 ## Complete example
 
@@ -270,7 +291,7 @@ int main() {
 
 ## Notes
 
-- Both `CameraFollow` and `CameraShake` require `Camera` and `Transform2D` on the same entity.
-- The follow system runs before the shake system within `PostUpdate`, so shake displacement is applied on top of the followed position.
+- `CameraFollow`, `CameraBounds` and `CameraShake` require `Camera` and `Transform2D` on the same entity.
+- The follow system runs first, then bounds, then shake, within `PostUpdate`, so shake displacement is applied on top of the followed and bounded position.
 - `CameraFollow` uses exponential smoothing rather than linear interpolation, which produces motion that feels responsive but not jerky. A `smoothing` value of about 5 is a good starting point.
 - Setting `CameraFollow::target` to `InvalidEntityId` disables following without removing the component.

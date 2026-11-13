@@ -18,7 +18,7 @@ fn show_aim(players: (Player, Transform)[], input: Input, draw: Draw) {
 }
 ```
 
-Draws are in world coordinates until `hud()` switches to screen coordinates; `world()` switches back.
+Draws are in world coordinates, over entities, until `hud()` switches to screen coordinates; `world()` switches back, and `on_layer` and `at_z` place them among entities. `Draw` also has arcs, polygons, styled text, images and nine-slices; see [Engine Resources](../reference/resources.md#draw).
 
 ## The log
 

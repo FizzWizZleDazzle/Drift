@@ -23,8 +23,9 @@ An entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`.
 | `Rectangle` | `size`, `color`, `outline` (0 for filled), `corner_radius`, `anchor`, `z`, `layer`, `visible` |
 | `Circle` | `radius`, `color`, `outline`, `z`, `layer`, `visible` |
 | `Text` | `value`, `size`, `color`, `align`, `valign`, `wrap` (width, 0 for none), `line_spacing`, `outline`, `outline_color`, `shadow_offset` (zero for none), `shadow_color`, `rich_text` (inline color tags), `font`, `z`, `layer`, `visible`. Holds up to 511 bytes |
-| `Camera` | `zoom`, `rotation`, `active`, `order`, `viewport` (normalized rect, for split screen), `layer_mask`, `target` (a render target texture), `clear`, `clear_color`. *Engine*: `zoom` under a tween, position under `CameraFollow` and shake |
+| `Camera` | `zoom`, `rotation`, `active` (true), `order`, `viewport` (normalized rect, for split screen), `layer_mask` (`ALL_LAYERS`; build one with `layer_mask([0, 2])`), `target` (a render target texture), `clear`, `clear_color`. *Engine*: `zoom` under a tween, position under `CameraFollow`, `CameraBounds` and shake |
 | `CameraFollow` | `target`, `smoothing`, `offset`, `dead_zone` |
+| `CameraBounds` | `area`: the world rect the camera's view stays inside, such as the level. Centers the view on an axis where the area is smaller than it |
 | `Tilemap` | `map`, `z`, `layer`, `colliders` (build static colliders from solid layers), `visible`. The map's top-left sits at the entity's `Transform`. Parallax comes from the map's layer settings |
 
 ## Motion and behavior
@@ -54,10 +55,27 @@ A collider without a `RigidBody` is static. Body settings are read when the body
 
 | Component | Fields |
 |-----------|--------|
-| `ParticleEmitter` | `rate`, `lifetime_min`/`max`, `speed_min`/`max`, `angle_min`/`max`, `size_start`, `size_end`, `color_start`, `color_end`, `gravity`, `drag`, `max_particles`, `blend`, `texture`, `shape`, `shape_radius`, `shape_extents`, `duration`, `looping`, `z`, `playing` |
+| `ParticleEmitter` | `rate`, `lifetime_min`/`max`, `speed_min`/`max`, `angle_min`/`max`, `size_start`, `size_end`, `size_start_max`, `size_end_max` (0 for the same as the minimum), `color_start`, `color_end`, `gravity`, `drag`, `max_particles`, `blend`, `texture`, `frame` (part of the texture), `shape`, `shape_radius`, `shape_extents`, `duration`, `looping`, `z`, `playing`, `rotation_min`/`max`, `spin_min`/`max` (radians per second), `inherit_velocity`, `local` (particles move with the emitter), `prewarm` (seconds simulated up front), `bounds` (a rect particles stop at), `seed`, `bursts` (`Burst { time, count, cycles, interval }`) |
 | `Trail` | `width`, `lifetime` (seconds a point lasts), `color_start`, `color_end`, `min_distance`, `max_points`, `z` |
 | `PointLight` | `color`, `intensity`, `radius`, `falloff`, `shadows`. Lights shine when drift.toml has a `[lighting]` section |
 | `SpotLight` | As `PointLight`, plus `direction`, `angle`, `softness` |
 | `LightOccluder` | `shape` (`OccluderShape`), `half_size`, `radius` |
 | `AudioSource` | `sound`, `bus`, `volume`, `pitch`, `looping`, `autoplay`, `spatial`, `min_distance`, `max_distance` |
 | `AudioListener` | none. Spatial sounds are heard from this entity, or from the main camera without one |
+
+A camera that follows the player and stops at the level's edges:
+
+```rust
+cmd.spawn([at(0.0, 0.0), Camera { zoom: 2.0, .. },
+           CameraFollow { target: player, smoothing: 6.0, .. },
+           CameraBounds { area: rect(0.0, 0.0, 3200.0, 720.0) }]);
+```
+
+An emitter that fires a ring of 30 sparks every half second, three times, and trickles in between:
+
+```rust
+cmd.spawn([at(400.0, 300.0), ParticleEmitter {
+    rate: 10.0, shape: EmitShape::Ring, shape_radius: 24.0, spin_min: -4.0, spin_max: 4.0,
+    bursts: [Burst { count: 30, cycles: 3, interval: 0.5, .. }], ..
+}]);
+```
