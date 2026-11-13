@@ -103,6 +103,7 @@ Plugins read their own sections:
 | `[lighting]` | `enabled`, `ambient`, `layer_mask`, `resolution_scale` | [Lighting](../components/lighting.md) |
 | `[hot_reload]` | `enabled`, `interval` (seconds between checks) | [Asset Server](../subsystems/asset-server.md#hot-reload) |
 | `[input]` | One key per action, a list of bindings: `jump = ["key:Space", "button:South"]` | [Input Actions](../gameplay/input-actions.md) |
+| `[random]` | `seed`, the game's seed; 0 (the default) picks one each run and logs it. Restart-only | [Random Numbers and Noise](../math/random-and-noise.md#the-games-seed) |
 
 Physics and audio settings are where the world and the mixer start; change them while the game runs through `PhysicsResource` and `AudioResource`. Lighting and hot reload read theirs every frame.
 

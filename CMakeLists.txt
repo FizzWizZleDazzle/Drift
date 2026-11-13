@@ -192,15 +192,28 @@ set(DRIFT_SOURCES
 )
 
 # Gameplay toolkit: tweens, timers, input actions, save data, spatial hash,
-# pathfinding, noise. Each unit stands alone; the core does not use them.
+# pathfinding, random numbers, noise and procedural generation. Each unit
+# stands alone; the core does not use them.
 set(DRIFT_GAMEPLAY_SOURCES
     src/gameplay/Tween.cpp
     src/gameplay/InputActions.cpp
     src/gameplay/SaveData.cpp
     src/gameplay/SpatialHash.cpp
     src/gameplay/Pathfinding.cpp
+    src/math/Random.cpp
     src/math/Noise.cpp
+    src/procgen/Grid.cpp
+    src/procgen/Generators.cpp
+    src/procgen/Wfc.cpp
+    src/procgen/TilemapFill.cpp
 )
+# Seeded randomness, noise, pathfinding and the generators must give the
+# same numbers on every platform; fused multiply-add would round
+# differently where the CPU has it.
+set_source_files_properties(
+    src/math/Random.cpp src/math/Noise.cpp src/gameplay/Pathfinding.cpp
+    src/procgen/Grid.cpp src/procgen/Generators.cpp src/procgen/Wfc.cpp
+    PROPERTIES COMPILE_OPTIONS "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-ffp-contract=off>")
 
 # ---------- Graphics backends ----------
 # Each backend adds its sources and the name of its register function.
@@ -411,6 +424,10 @@ if(DRIFT_BUILD_EXAMPLES)
     add_executable(tilemap examples/tilemap/main.cpp)
     target_link_libraries(tilemap PRIVATE drift)
     drift_web_app(tilemap PROJECT examples/tilemap)
+
+    add_executable(procgen examples/procgen/main.cpp)
+    target_link_libraries(procgen PRIVATE drift)
+    drift_web_app(procgen PROJECT examples/procgen)
 endif()
 
 # ---------- Tests ----------
@@ -423,7 +440,7 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
         DRIFT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     add_test(NAME audio COMMAND drift_audio_tests)
 
-    add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp tests/test_settings.cpp)
+    add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp tests/test_settings.cpp tests/test_procgen.cpp)
     target_link_libraries(drift_tests PRIVATE drift)
     add_test(NAME drift_tests COMMAND drift_tests)
 
@@ -433,6 +450,16 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME drift_app_tests COMMAND drift_app_tests)
     set_tests_properties(drift_app_tests PROPERTIES
         ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy")
+elseif(DRIFT_BUILD_TESTS)
+    # The procedural generation tests under Node: seeded randomness, noise
+    # and the generators must match the desktop's golden values on the web
+    # too. (The other suites write files and catch exceptions, which this
+    # build does not enable.)
+    enable_testing()
+    add_executable(drift_procgen_tests tests/main.cpp tests/test_procgen.cpp)
+    target_link_libraries(drift_procgen_tests PRIVATE drift)
+    target_link_options(drift_procgen_tests PRIVATE -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
+    add_test(NAME drift_procgen_tests COMMAND drift_procgen_tests)
 endif()
 
 # ---------- Candela package ----------

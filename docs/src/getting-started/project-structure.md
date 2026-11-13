@@ -12,7 +12,8 @@ drift/
     resources/             <-- Resource types (singletons)
     effects/               <-- Post effect library
     particles/             <-- Particle system types
-    gameplay/              <-- Gameplay toolkit: tweens, timers, input actions, save data, spatial hash, pathfinding
+    gameplay/              <-- Gameplay toolkit: tweens, timers, input actions, save data, spatial hash, pathfinding, steering
+    procgen/               <-- Procedural generation: grids, caves, dungeons, walks, WFC, Poisson disks, weighted tables
     math/                  <-- Vector helpers, intersection tests, random numbers, noise
   src/                     <-- implementation files (not public)
     core/                  <-- App, AssetServer, Log
@@ -33,7 +34,8 @@ drift/
     lighting/              <-- 2D lights, shadows and their shaders
     effects/               <-- post effect library and its shaders
     gameplay/              <-- Gameplay toolkit implementations
-    math/                  <-- Noise
+    math/                  <-- Random numbers, noise
+    procgen/               <-- Generators, tilemap fill
   examples/                <-- example programs
     hello_sprites/
     fireball/
@@ -45,6 +47,9 @@ drift/
     lighting/
     text/
     toolkit/
+    scene_editor/
+    tilemap/
+    procgen/
   bindings/
     candela/               <-- Candela games: the drift program (host/, runner/), the drift module, the book, examples
   tests/                   <-- engine tests (ctest)
@@ -179,7 +184,8 @@ Each header stands alone; use the ones your game needs. See the Gameplay chapter
 | `InputActions.hpp` | `InputActions`, `InputBinding` | Named actions and axes, rebinding, JSON round trip. |
 | `SaveData.hpp` | `SaveData` | Persistent JSON key-value store in the per-user directory. |
 | `SpatialHash.hpp` | `SpatialHash` | Uniform-grid neighbour and area queries. |
-| `Pathfinding.hpp` | `NavGrid`, `findPath` | Grid A* with weights and diagonal rules. |
+| `Pathfinding.hpp` | `NavGrid`, `findPath`, `FlowField` | Grid A* with weights and diagonal rules; flow fields toward shared goals. |
+| `Steering.hpp` | `steer::` functions | Seek, flee, arrive, pursue, evade, wander, flocking, path following. |
 
 #### `include/drift/math/`: Math utilities
 
@@ -187,8 +193,18 @@ Each header stands alone; use the ones your game needs. See the Gameplay chapter
 |--------|-------|-------------|
 | `Vector.hpp` | free functions | `lerp`, `clamp`, `cross`, `perp`, `rotate`, `angle`, `moveTowards`, `smoothDamp`, `approx`, and more. |
 | `Intersect.hpp` | `Circle`, `Segment`, `RayHit` | Overlap and intersection tests between rects, circles, segments and rays. |
-| `Random.hpp` | `Rng` | Seeded PCG32 generator: ranges, weighted pick, shuffle. |
-| `Noise.hpp` | `Noise` | Seeded 2D value, Perlin and simplex noise with fBm. |
+| `Random.hpp` | `Rng` | Seeded PCG32 generator: ranges, weighted pick, shuffle, saved state, streams. |
+| `Noise.hpp` | `Noise`, `NoiseOptions` | Seeded 2D value, Perlin and simplex noise with fBm and domain warp. |
+
+#### `include/drift/procgen/`: Procedural generation
+
+| Header | Types | Description |
+|--------|-------|-------------|
+| `Grid.hpp` | `Grid`, region tools, `navGridFrom` | Integer cell grids and connected regions. |
+| `Generators.hpp` | `generateCave`, `generateDungeon`, `randomWalk`, `poissonDisk`, `gridFromNoise` | Seeded level generators and scattering. |
+| `Wfc.hpp` | `WfcRules`, `generateWfc` | Wave function collapse over tiles, with rules learned from a sample. |
+| `WeightedTable.hpp` | `WeightedTable<T>` | Rolls items by weight. |
+| `TilemapFill.hpp` | `fillTilemapLayer`, `gridFromTilemapLayer` | Grids into tilemap layers and back. |
 
 ### `src/`: Implementation files
 
@@ -208,7 +224,8 @@ The `src/` directory mirrors the subsystem layout. Each subdirectory contains th
 - `src/lighting/`: `Lighting.cpp` and the light shader
 - `src/effects/`: `PostEffects.cpp` and the effect shaders
 - `src/gameplay/`: `Tween.cpp`, `InputActions.cpp`, `SaveData.cpp`, `SpatialHash.cpp`, `Pathfinding.cpp`
-- `src/math/`: `Noise.cpp`
+- `src/math/`: `Random.cpp`, `Noise.cpp`
+- `src/procgen/`: `Grid.cpp`, `Generators.cpp`, `Wfc.cpp`, `TilemapFill.cpp`
 - `src/core/`: `App.cpp`, `AssetServer.cpp`, `Reflect.cpp`, `Log.cpp`
 - `src/ecs/`: `World.cpp`, `Commands.cpp`, `ScriptSystem.cpp`
 - `src/renderer/`: `RendererResource.cpp`, `RenderSnapshot.cpp`
@@ -241,6 +258,7 @@ Each example is a single `main.cpp` file demonstrating different engine features
 | `scene_editor` | JSON scenes, prefabs with overrides, the entity inspector, hot reload |
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
 | `tilemap` | Tiled and LDtk levels, parallax, animated tiles, autotiling, merged colliders, object spawners |
+| `procgen` | Generated caves, dungeons, tunnels and WFC ruins in a tilemap made in code, Poisson-disk spawns from a weighted table, flow-field chasers |
 
 Games written in candela have their own examples, Flappy Bird and Coin Dash, in `bindings/candela/examples/`; see [Candela](../candela/overview.md).
 

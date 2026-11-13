@@ -3,13 +3,18 @@
 // Seeded random number generator (PCG32). The same seed produces the same
 // sequence on every platform, so it suits procedural generation, replays
 // and tests. Not for cryptography.
+//
+// The integer outputs, next01(), angle() and range(float) are identical on
+// every platform. unitVector(), insideCircle() and normal() go through
+// the platform's sin, cos and log, whose last bits can differ between math
+// libraries; avoid them where two platforms must agree bit for bit.
 
 #include <drift/Types.hpp>
 #include <drift/math/Vector.hpp>
 
-#include <cmath>
 #include <cstdint>
 #include <span>
+#include <string_view>
 #include <utility>
 
 namespace drift {
@@ -26,6 +31,36 @@ public:
         nextU32();
         state_ += seed;
         nextU32();
+    }
+
+    // The generator's position, to save and resume a sequence.
+    uint64_t state() const { return state_; }
+    uint64_t increment() const { return inc_; }
+    // A generator that continues from a saved state() and increment().
+    static Rng fromState(uint64_t state, uint64_t increment) {
+        Rng r;
+        r.state_ = state;
+        r.inc_ = increment | 1u;
+        return r;
+    }
+
+    // A 64-bit seed from text (FNV-1a), for seeds a player types or
+    // generators named by purpose: Rng(Rng::hash("caves")).
+    static constexpr uint64_t hash(std::string_view text) {
+        uint64_t h = 0xcbf29ce484222325ULL;
+        for (char c : text) {
+            h ^= static_cast<uint8_t>(c);
+            h *= 0x100000001b3ULL;
+        }
+        return h;
+    }
+
+    // A new generator seeded from this one's next outputs: an independent
+    // sequence for a sub-task, still reproducible from the first seed.
+    Rng split() {
+        uint64_t seed = nextU64();
+        uint64_t stream = nextU64();
+        return Rng(seed, stream);
     }
 
     uint32_t nextU32() {
@@ -60,7 +95,7 @@ public:
     }
 
     // Uniform float in [lo, hi).
-    float range(float lo, float hi) { return lo + (hi - lo) * next01(); }
+    float range(float lo, float hi);
 
     // True with probability p.
     bool chance(float p) { return next01() < p; }
@@ -69,9 +104,9 @@ public:
     float sign() { return (nextU32() & 1u) ? 1.f : -1.f; }
 
     float angle() { return next01() * Tau; }
-    Vec2 unitVector() { return fromAngle(angle()); }
+    Vec2 unitVector();
     // Uniform point inside a circle of the given radius.
-    Vec2 insideCircle(float radius = 1.f) { return fromAngle(angle(), radius * std::sqrt(next01())); }
+    Vec2 insideCircle(float radius = 1.f);
     Vec2 insideRect(const Rect& r) { return {range(r.x, r.x + r.w), range(r.y, r.y + r.h)}; }
     Color color(uint8_t alpha = 255) {
         uint32_t v = nextU32();
@@ -79,11 +114,7 @@ public:
     }
 
     // Gaussian sample (Box-Muller).
-    float normal(float mean = 0.f, float stddev = 1.f) {
-        float u1 = 1.f - next01();   // (0, 1]
-        float u2 = next01();
-        return mean + stddev * std::sqrt(-2.f * std::log(u1)) * std::cos(Tau * u2);
-    }
+    float normal(float mean = 0.f, float stddev = 1.f);
 
     // Uniformly chosen element. The span must not be empty.
     template<typename T>
@@ -91,20 +122,7 @@ public:
 
     // Index chosen with probability proportional to its weight. Negative
     // weights count as zero; returns -1 if all weights are zero.
-    int32_t weightedIndex(std::span<const float> weights) {
-        float total = 0.f;
-        for (float w : weights) total += w > 0.f ? w : 0.f;
-        if (total <= 0.f) return -1;
-        float r = next01() * total;
-        int32_t last = -1;
-        for (size_t i = 0; i < weights.size(); ++i) {
-            if (weights[i] <= 0.f) continue;
-            last = static_cast<int32_t>(i);
-            if (r < weights[i]) return last;
-            r -= weights[i];
-        }
-        return last;   // float rounding: fall back to the last positive weight
-    }
+    int32_t weightedIndex(std::span<const float> weights);
 
     // Fisher-Yates shuffle in place.
     template<typename T>

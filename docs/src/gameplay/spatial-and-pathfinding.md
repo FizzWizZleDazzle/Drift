@@ -1,6 +1,6 @@
 # Spatial Queries, Pathfinding and Y-Sort
 
-Three tools for games with many things on a map: a spatial hash to find what is near a point, grid A* to find a way around obstacles, and Y-sort to draw top-down scenes in the right order.
+Three tools for games with many things on a map: a spatial hash to find what is near a point, grid A* and flow fields to find a way around obstacles, and Y-sort to draw top-down scenes in the right order.
 
 ## Spatial hash
 
@@ -66,7 +66,31 @@ for (GridPoint c : path) {
 auto path = findPath(grid, a, b, {.diagonal = DiagonalMode::Never});
 ```
 
-To walk a path, tween through the waypoints (see the [toolkit example](../examples/toolkit.md)) or steer toward the next cell each frame with `moveTowards`.
+To walk a path, tween through the waypoints (see the [toolkit example](../examples/toolkit.md)), steer along it with [`steer::followPath`](steering.md), or move toward the next cell each frame with `moveTowards`.
+
+A generated level becomes a `NavGrid` with `navGridFrom(grid, {GridWall}, cellSize)`; see [Procedural Generation](procedural-generation.md#grids).
+
+### Flow fields
+
+A flow field answers "which way to the goal" for every cell at once. Build it once from one or more goals, and any number of agents read their direction from it, where a path per agent would repeat the same search. It suits hordes chasing the player, units moving to a rally point, and fleeing (use the exits as goals).
+
+```cpp
+FlowField field(grid, {grid.worldToCell(playerPos)});
+
+enemies.iter([&](const Transform2D& t, Velocity2D& v, const Enemy&) {
+    v.linear = field.direction(t.position) * 60.f;   // unit vector toward the player
+});
+```
+
+| Member | Returns |
+|--------|---------|
+| `build(grid, goals, diagonal, maxCost)` | Recomputes the field. Cells costing more than `maxCost` to reach stay unreachable, which bounds the work |
+| `cost(cell)` | The cost to the nearest goal, with the same costs as `findPath`; infinity when unreachable |
+| `reachable(cell)` | Whether any goal can be reached |
+| `next(cell)` | The neighbour one step closer; the cell itself at a goal or when unreachable |
+| `direction(cell)`, `direction(worldPos)` | Unit vector toward `next`; zero at a goal or when unreachable. The world form uses the grid's `cellSize` and `origin` |
+
+Rebuild the field when the goal moves to another cell, not every frame. The [Procgen example](../examples/procgen.md) steers its slimes this way.
 
 ## Y-sort
 

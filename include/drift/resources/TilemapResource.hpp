@@ -116,6 +116,23 @@ struct TilemapDrawParams {
     bool         cull = true;
 };
 
+// ---- Maps made in code ----
+
+// An empty map for createTilemap: tile layers of width x height cells over
+// one tileset image. Tile ids count from 1 at the image's top-left, left to
+// right and then down, as in Tiled.
+struct TilemapDesc {
+    int32_t       width = 0;                // cells
+    int32_t       height = 0;
+    int32_t       tileWidth = 16;           // pixels per cell, and per tile in the image
+    int32_t       tileHeight = 16;
+    TextureHandle tileset;
+    int32_t       margin = 0;               // pixels around the image edge
+    int32_t       spacing = 0;              // pixels between tiles
+    std::vector<std::string> layers = {"Tiles"};   // bottom to top
+    std::string   name = "generated";
+};
+
 // ---- Object spawning hook ----
 
 struct ObjectSpawnContext {
@@ -146,6 +163,9 @@ public:
     TilemapHandle loadTilemap(const char* path, const char* level = nullptr);
     // Every level in an LDtk project (a Tiled map yields one handle).
     std::vector<TilemapHandle> loadLevels(const char* path);
+    // An empty map to fill with setTile, for generated levels. Returns an
+    // invalid handle when the size or tileset is missing.
+    TilemapHandle createTilemap(const TilemapDesc& desc);
     void destroyTilemap(TilemapHandle map);
 
     // ---- Map info ----

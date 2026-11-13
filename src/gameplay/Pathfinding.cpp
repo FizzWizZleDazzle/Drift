@@ -132,6 +132,116 @@ std::vector<GridPoint> findPath(const NavGrid& grid, GridPoint start, GridPoint 
     return path;
 }
 
+void FlowField::build(const NavGrid& grid, const std::vector<GridPoint>& goals, DiagonalMode diagonal,
+                      float maxCost) {
+    width_ = grid.width();
+    height_ = grid.height();
+    cellSize_ = grid.cellSize;
+    origin_ = grid.origin;
+    const size_t n = static_cast<size_t>(width_) * height_;
+    cost_.assign(n, std::numeric_limits<float>::infinity());
+    next_.assign(n, -1);
+    if (n == 0) return;
+
+    static constexpr int dx8[8] = {1, -1, 0, 0, 1, 1, -1, -1};
+    static constexpr int dy8[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+    const int dirs = diagonal == DiagonalMode::Never ? 4 : 8;
+    auto idx = [this](int32_t x, int32_t y) { return static_cast<uint32_t>(y) * width_ + x; };
+    // Whether a diagonal step between (x, y) and (x + dx, y + dy) is legal.
+    auto diagonalOk = [&](int32_t x, int32_t y, int dx, int dy) {
+        bool a = grid.walkable({x + dx, y}), b = grid.walkable({x, y + dy});
+        if (diagonal == DiagonalMode::NoCornerCutting) return a && b;
+        if (diagonal == DiagonalMode::AllowOneCorner) return a || b;
+        return true;
+    };
+
+    struct Item {
+        float cost;
+        uint32_t index;
+        bool operator>(const Item& o) const { return cost > o.cost || (cost == o.cost && index > o.index); }
+    };
+    std::priority_queue<Item, std::vector<Item>, std::greater<Item>> open;
+    for (GridPoint g : goals) {
+        if (!grid.walkable(g)) continue;
+        cost_[idx(g.x, g.y)] = 0.f;
+        open.push({0.f, idx(g.x, g.y)});
+    }
+
+    // Searching outward from the goals: a step from cell c to its
+    // neighbour costs what entering c costs, so the field holds the cost of
+    // walking from each cell to a goal.
+    while (!open.empty()) {
+        Item cur = open.top();
+        open.pop();
+        if (cur.cost > cost_[cur.index]) continue;
+        int32_t cx = static_cast<int32_t>(cur.index % width_), cy = static_cast<int32_t>(cur.index / width_);
+        float enter = grid.cost({cx, cy});
+        for (int d = 0; d < dirs; ++d) {
+            int32_t nx = cx + dx8[d], ny = cy + dy8[d];
+            if (!grid.walkable({nx, ny})) continue;
+            bool isDiag = d >= 4;
+            if (isDiag && !diagonalOk(nx, ny, -dx8[d], -dy8[d])) continue;
+            float c = cur.cost + enter * (isDiag ? kSqrt2 : 1.f);
+            if (c > maxCost) continue;
+            uint32_t ni = idx(nx, ny);
+            if (c < cost_[ni]) {
+                cost_[ni] = c;
+                open.push({c, ni});
+            }
+        }
+    }
+
+    // Each reachable cell points at the neighbour its cheapest way to a
+    // goal steps into (the first one, in neighbour order, on ties).
+    for (int32_t y = 0; y < height_; ++y)
+        for (int32_t x = 0; x < width_; ++x) {
+            uint32_t i = idx(x, y);
+            if (!std::isfinite(cost_[i]) || cost_[i] == 0.f) continue;
+            float best = std::numeric_limits<float>::infinity();
+            for (int d = 0; d < dirs; ++d) {
+                int32_t nx = x + dx8[d], ny = y + dy8[d];
+                if (!grid.walkable({nx, ny})) continue;
+                if (d >= 4 && !diagonalOk(x, y, dx8[d], dy8[d])) continue;
+                uint32_t ni = idx(nx, ny);
+                float total = cost_[ni] + grid.cost({nx, ny}) * (d >= 4 ? kSqrt2 : 1.f);
+                if (total < best) {
+                    best = total;
+                    next_[i] = static_cast<int32_t>(ni);
+                }
+            }
+        }
+}
+
+bool FlowField::reachable(GridPoint c) const {
+    return c.x >= 0 && c.y >= 0 && c.x < width_ && c.y < height_ &&
+           std::isfinite(cost_[static_cast<size_t>(c.y) * width_ + c.x]);
+}
+
+float FlowField::cost(GridPoint c) const {
+    if (c.x < 0 || c.y < 0 || c.x >= width_ || c.y >= height_) return std::numeric_limits<float>::infinity();
+    return cost_[static_cast<size_t>(c.y) * width_ + c.x];
+}
+
+GridPoint FlowField::next(GridPoint c) const {
+    if (c.x < 0 || c.y < 0 || c.x >= width_ || c.y >= height_) return c;
+    int32_t n = next_[static_cast<size_t>(c.y) * width_ + c.x];
+    if (n < 0) return c;
+    return {n % width_, n / width_};
+}
+
+Vec2 FlowField::direction(GridPoint c) const {
+    GridPoint n = next(c);
+    if (n == c) return {};
+    return Vec2{float(n.x - c.x), float(n.y - c.y)}.normalized();
+}
+
+Vec2 FlowField::direction(Vec2 world) const {
+    if (cellSize_ <= 0.f) return {};
+    GridPoint c{static_cast<int32_t>(std::floor((world.x - origin_.x) / cellSize_)),
+                static_cast<int32_t>(std::floor((world.y - origin_.y) / cellSize_))};
+    return direction(c);
+}
+
 float pathCost(const NavGrid& grid, const std::vector<GridPoint>& path) {
     float total = 0.f;
     for (size_t i = 1; i < path.size(); ++i) {

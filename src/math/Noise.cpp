@@ -108,4 +108,21 @@ float Noise::fbm(NoiseType type, float x, float y, int octaves, float lacunarity
     return norm > 0.f ? sum / norm : 0.f;
 }
 
+void Noise::warp(float& x, float& y, float strength, float frequency, NoiseType type, int octaves) const {
+    if (strength == 0.f) return;
+    // Two fields far apart in the same noise act as independent ones.
+    float fx = x * frequency, fy = y * frequency;
+    float dx = fbm(type, fx + 31.7f, fy + 47.3f, octaves);
+    float dy = fbm(type, fx - 53.1f, fy + 12.9f, octaves);
+    x += dx * strength;
+    y += dy * strength;
+}
+
+float Noise::sample(const NoiseOptions& o, float x, float y) const {
+    if (o.warp != 0.f) warp(x, y, o.warp, o.frequency * o.warpFrequency, o.type, 2);
+    int octaves = o.octaves < 1 ? 1 : o.octaves;
+    if (octaves == 1) return sample(o.type, x * o.frequency, y * o.frequency);
+    return fbm(o.type, x * o.frequency, y * o.frequency, octaves, o.lacunarity, o.gain);
+}
+
 } // namespace drift

@@ -59,6 +59,8 @@
 - [Input Actions](gameplay/input-actions.md)
 - [Save Data](gameplay/save-data.md)
 - [Spatial Queries, Pathfinding and Y-Sort](gameplay/spatial-and-pathfinding.md)
+- [Steering](gameplay/steering.md)
+- [Procedural Generation](gameplay/procedural-generation.md)
 
 # Candela
 
@@ -84,6 +86,7 @@
 - [Gameplay Toolkit](examples/toolkit.md)
 - [Scene Editor](examples/scene-editor.md)
 - [Tilemap](examples/tilemap.md)
+- [Procgen](examples/procgen.md)
 
 # Reference
 

@@ -1,0 +1,13 @@
+[project]
+name = "Procgen"
+organization = "Drift Examples"
+
+[window]
+title = "Drift - procedural generation"
+width = 1280
+height = 720
+
+# 0 rolls a new seed each run and logs it; put that number here to get the
+# same levels again.
+[random]
+seed = 0

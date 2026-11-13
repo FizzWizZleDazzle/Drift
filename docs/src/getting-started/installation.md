@@ -193,6 +193,8 @@ cd build-web && python3 -m http.server 8000
 # open http://localhost:8000/flappy_bird.html
 ```
 
+`ctest --test-dir build-web` runs the procedural generation tests under Node, which checks that seeded random numbers, noise and generators give the same results in the browser as on the desktop.
+
 ### Web builds of your own game
 
 Call `drift_web_app` on your game target. It packages the game's `drift.toml` and asset folder, sets the page template, and does nothing in desktop builds, so you can call it unconditionally:

@@ -15,7 +15,8 @@
 - **Sprite animation**: Spritesheet-based animation clips with Aseprite import support
 - **Tilemaps**: Tiled and LDtk levels with chunked rendering, parallax, animated tiles, autotiling, merged Box2D colliders, and object spawning
 - **Audio**: WAV, OGG and MP3 playback, mixer buses with fades, music crossfades and playlists, 2D spatial sound sources
-- **Gameplay toolkit**: tweens and easing, timers, behavior components (lifetime, oscillation, follow), rebindable input actions, save data, grid A* pathfinding, spatial hash queries, Y-sorting, seeded random numbers and noise
+- **Gameplay toolkit**: tweens and easing, timers, behavior components (lifetime, oscillation, follow), rebindable input actions, save data, grid A* pathfinding and flow fields, steering behaviors, spatial hash queries, Y-sorting, seeded random numbers and noise
+- **Procedural generation**: cellular-automata caves, BSP dungeons, random walks, wave function collapse, Poisson-disk sampling and weighted tables, the same for a seed on the desktop and in the browser, and written straight into tilemaps
 - **ImGui integration**: Built-in debug UI via Dear ImGui
 - **Scenes and prefabs**: Save and load entities as JSON through component reflection; spawn prefabs with per-copy overrides
 - **Dev tools**: In-game entity inspector, performance panel, physics debug drawing, and hot reload of textures and scenes

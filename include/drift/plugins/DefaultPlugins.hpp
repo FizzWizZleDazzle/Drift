@@ -20,6 +20,7 @@
 #include <drift/plugins/InputActionsPlugin.hpp>
 #include <drift/plugins/SpatialPlugin.hpp>
 #include <drift/plugins/YSortPlugin.hpp>
+#include <drift/plugins/RandomPlugin.hpp>
 #include <drift/plugins/ScenePlugin.hpp>
 #include <drift/plugins/BehaviorPlugin.hpp>
 #include <drift/plugins/ShapePlugin.hpp>
@@ -51,6 +52,7 @@ public:
         app.addPlugin<SpatialPlugin>();
         app.addPlugin<TweenPlugin>();
         app.addPlugin<YSortPlugin>();
+        app.addPlugin<RandomPlugin>();
         app.addPlugin<ScenePlugin>();
         app.addPlugin<BehaviorPlugin>();
         app.addPlugin<ShapePlugin>();

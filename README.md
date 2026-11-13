@@ -75,7 +75,8 @@ To use Drift from your own project, pull it in with `FetchContent` and link `dri
 - **Text**: UTF-8 text with wrapping, alignment, outlines and shadows; a built-in font plus TrueType and bitmap fonts.
 - **Audio**: WAV, OGG and MP3, mixer buses, music crossfades and playlists, positional sound.
 - **Sprites and particles**: spritesheet and Aseprite animation, configurable particle emitters, trails.
-- **Gameplay toolkit**: tweens, timers, behavior components (lifetime, oscillation, follow), rebindable input actions for keyboard, mouse and gamepad, save data, A* pathfinding, spatial queries, Y-sorting, random numbers and noise.
+- **Gameplay toolkit**: tweens, timers, behavior components (lifetime, oscillation, follow), rebindable input actions for keyboard, mouse and gamepad, save data, A* pathfinding and flow fields, steering behaviors, spatial queries, Y-sorting, seeded random numbers and noise.
+- **Procedural generation**: cellular-automata caves, BSP dungeons, random walks, wave function collapse, Poisson-disk sampling and weighted tables, the same for a seed on the desktop and in the browser, and written straight into tilemaps.
 - **Candela scripting**: write a game in [candela](https://candela.lumenfx.dev) instead of C++, as components and systems declared with attributes, on the desktop and in the browser.
 - **One settings file**: `drift.toml` holds the window, graphics backend, physics, audio, lighting and sections of your own game. Environment variables and `--set` flags override it for one run, and dev builds apply edits while the game runs.
 - **Scenes and dev tools**: JSON scenes and prefabs through component reflection, hot reload, and an in-game inspector, performance panel and physics debug view.
@@ -94,6 +95,7 @@ Each example runs from its own folder (`cd examples/<name> && ../../build/<name>
 | `render_showcase` | Shapes, nine-slice, minimap render target, light map, post effect, HUD layer |
 | `lighting` | Colored lights, spot light, shadows from walls and colliders, every library post effect |
 | `tilemap` | Tiled and LDtk levels: parallax, animated tiles, autotiling, colliders, object spawners |
+| `procgen` | Generated caves, dungeons, tunnels and wave-function-collapse ruins in a tilemap; Poisson-disk pickups, weighted spawns, flow-field chasers |
 | `text` | Built-in font, alignment, wrapping, UTF-8, outline and shadow, bitmap fonts |
 | `audio` | Positional sound sources, bus volume controls, music crossfades and playlists |
 | `toolkit` | Tweens, timers, input actions with rebinding, A* pathfinding, spatial queries, save data |

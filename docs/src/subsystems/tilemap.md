@@ -1,6 +1,6 @@
 # Tilemap
 
-`TilemapResource` loads levels made in [Tiled](https://www.mapeditor.org/) and [LDtk](https://ldtk.io/), draws them, answers tile queries, and turns their collision layers and objects into game entities. Put a map in the world with a `Tilemap` component and the `TilemapPlugin` handles drawing, colliders and object spawning.
+`TilemapResource` loads levels made in [Tiled](https://www.mapeditor.org/) and [LDtk](https://ldtk.io/) or built in code, draws them, answers tile queries, and turns their collision layers and objects into game entities. Put a map in the world with a `Tilemap` component and the `TilemapPlugin` handles drawing, colliders and object spawning.
 
 **Headers:** `#include <drift/resources/TilemapResource.hpp>`, `#include <drift/components/Tilemap.hpp>`
 
@@ -58,6 +58,32 @@ Only orthogonal maps are drawn correctly. Object templates and zstd-compressed l
 - Layer opacity, offsets and parallax factors; level fields and background color.
 
 LDtk auto-layer rules are not re-run at runtime: changing an IntGrid value with `setIntGrid` does not change the tiles. Use `autotile` for runtime terrain.
+
+### Maps made in code
+
+```cpp
+TilemapHandle createTilemap(const TilemapDesc& desc);
+
+struct TilemapDesc {
+    int32_t width = 0, height = 0;           // cells
+    int32_t tileWidth = 16, tileHeight = 16; // pixels per cell and per tile in the image
+    TextureHandle tileset;                   // one image of tiles
+    int32_t margin = 0, spacing = 0;         // pixels around the image edge and between tiles
+    std::vector<std::string> layers = {"Tiles"};   // tile layers, bottom to top
+    std::string name = "generated";
+};
+```
+
+`createTilemap` makes an empty map for levels built in code, such as [generated](../gameplay/procedural-generation.md) ones. Tile ids count from 1 at the image's top-left, left to right and then down, as in Tiled. Fill the layers with `setTile`, or write a whole `Grid` with `fillTilemapLayer`. Everything else on this page works the same as for a loaded map: put it in the world with a `Tilemap` component, mark layers solid with `setLayerCollision`, and autotile. It returns an invalid handle when the size or the tileset is missing.
+
+```cpp
+TilemapHandle map = maps->createTilemap({.width = 80, .height = 50, .tileset = tiles,
+                                         .layers = {"Floor", "Walls"}});
+const uint32_t wallTiles[] = {0, 3};   // GridFloor stays empty, GridWall is tile 3
+fillTilemapLayer(*maps, map, 1, cave, wallTiles);
+maps->setLayerCollision(map, 1, true, {3});
+cmd.spawn().insert(Transform2D{}, Tilemap{.map = map});
+```
 
 ## Putting a Map in the World
 

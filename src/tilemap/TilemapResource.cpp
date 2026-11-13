@@ -253,6 +253,45 @@ std::vector<TilemapHandle> TilemapResource::loadLevels(const char* path) {
     return out;
 }
 
+TilemapHandle TilemapResource::createTilemap(const TilemapDesc& desc) {
+    if (desc.width <= 0 || desc.height <= 0 || desc.tileWidth <= 0 || desc.tileHeight <= 0 ||
+        !desc.tileset.valid() || desc.layers.empty()) {
+        return {};
+    }
+    Vec2 size = impl_->renderer.textureSize(desc.tileset);
+    Tileset ts;
+    ts.name = desc.name;
+    ts.texture = desc.tileset;
+    ts.textureW = static_cast<int32_t>(size.x);
+    ts.textureH = static_cast<int32_t>(size.y);
+    ts.tileW = desc.tileWidth;
+    ts.tileH = desc.tileHeight;
+    ts.margin = desc.margin;
+    ts.spacing = desc.spacing;
+    int32_t stepX = desc.tileWidth + desc.spacing, stepY = desc.tileHeight + desc.spacing;
+    ts.columns = std::max(1, (ts.textureW - 2 * desc.margin + desc.spacing) / stepX);
+    int32_t rows = std::max(1, (ts.textureH - 2 * desc.margin + desc.spacing) / stepY);
+    ts.tileCount = static_cast<uint32_t>(ts.columns * rows);
+
+    MapData map;
+    map.name = desc.name;
+    map.width = desc.width;
+    map.height = desc.height;
+    map.tileW = desc.tileWidth;
+    map.tileH = desc.tileHeight;
+    map.pixelSize = {float(desc.width * desc.tileWidth), float(desc.height * desc.tileHeight)};
+    map.tilesets.push_back(std::move(ts));
+    for (const std::string& name : desc.layers) {
+        Layer l;
+        l.name = name;
+        l.kind = TilemapLayerKind::Tiles;
+        l.cellW = desc.tileWidth;
+        l.cellH = desc.tileHeight;
+        map.layers.push_back(std::move(l));
+    }
+    return impl_->add(std::move(map));
+}
+
 void TilemapResource::destroyTilemap(TilemapHandle map) {
     impl_->maps.destroy(map);
 }

@@ -12,6 +12,10 @@
 #include <drift/plugins/BehaviorPlugin.hpp>
 #include <drift/plugins/RendererPlugin.hpp>
 #include <drift/plugins/ShapePlugin.hpp>
+#include <drift/plugins/TilemapPlugin.hpp>
+#include <drift/procgen/Generators.hpp>
+#include <drift/procgen/TilemapFill.hpp>
+#include <drift/resources/TilemapResource.hpp>
 #include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
 
@@ -211,5 +215,48 @@ TEST(shape_component_draws) {
     // Draw calls are reported for the previous frame.
     REQUIRE(app.beginFrame());
     CHECK(app.getResource<RendererResource>()->drawCalls() > 0);
+    app.endFrame();
+}
+
+TEST(generated_tilemap_from_grid) {
+    App app;
+    testConfig(app);
+    app.addPlugin<RendererPlugin>();
+    app.addPlugin<TilemapPlugin>();
+    REQUIRE(app.start());
+    auto* renderer = app.getResource<RendererResource>();
+    auto* maps = app.getResource<TilemapResource>();
+    REQUIRE(renderer && maps);
+
+    // A 32x16 tileset: two 16x16 tiles, ids 1 and 2.
+    std::vector<uint8_t> px(32 * 16 * 4, 255);
+    TextureHandle tiles = renderer->createTextureFromPixels(px.data(), 32, 16);
+    TilemapDesc desc;
+    desc.width = 30;
+    desc.height = 20;
+    desc.tileset = tiles;
+    desc.layers = {"Ground", "Walls"};
+    TilemapHandle map = maps->createTilemap(desc);
+    REQUIRE(map.valid());
+    CHECK(maps->mapWidth(map) == 30);
+    CHECK(maps->layerCount(map) == 2);
+    CHECK(maps->findLayer(map, "Walls") == 1);
+    CHECK(!maps->createTilemap(TilemapDesc{}).valid());
+
+    Rng rng(12);
+    Grid cave = generateCave(rng, 30, 20);
+    const uint32_t wallTiles[] = {0, 2};   // floor empty, wall tile 2
+    fillTilemapLayer(*maps, map, 1, cave, wallTiles);
+    CHECK(maps->getTile(map, 1, 0, 0) == 2);
+    Grid back = gridFromTilemapLayer(*maps, map, 1);
+    for (size_t i = 0; i < cave.cells.size(); ++i) CHECK(back.cells[i] == (cave.cells[i] == GridWall ? 2 : 0));
+
+    // Wall tiles merge into collision boxes that cover exactly the walls.
+    maps->setLayerCollision(map, 1, true, {2});
+    float area = 0.f;
+    for (const Rect& r : maps->collisionRects(map)) area += r.w * r.h;
+    CHECK(area == float(cave.count(GridWall)) * 256.f);
+
+    REQUIRE(app.beginFrame());
     app.endFrame();
 }

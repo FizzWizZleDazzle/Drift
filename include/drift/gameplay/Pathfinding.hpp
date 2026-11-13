@@ -9,6 +9,7 @@
 
 #include <drift/Types.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -74,5 +75,49 @@ std::vector<GridPoint> findPath(const NavGrid& grid, GridPoint start, GridPoint 
 
 // Sum of entry costs along a path (diagonal steps cost sqrt(2) times more).
 float pathCost(const NavGrid& grid, const std::vector<GridPoint>& path);
+
+// A flow field: the cost to reach the nearest goal from every cell, and the
+// neighbour to step to. One field steers any number of agents toward the
+// same goals (a horde toward the player, units toward a rally point), where
+// a path per agent would repeat the same search.
+//
+//   FlowField field(grid, {playerCell});
+//   Vec2 dir = field.direction(enemy.position);   // unit vector, world space
+class FlowField {
+public:
+    FlowField() = default;
+    FlowField(const NavGrid& grid, const std::vector<GridPoint>& goals,
+              DiagonalMode diagonal = DiagonalMode::NoCornerCutting) {
+        build(grid, goals, diagonal);
+    }
+
+    // Recomputes the field (Dijkstra from every goal at once). Cells
+    // farther than maxCost stay unreachable, which bounds the work.
+    void build(const NavGrid& grid, const std::vector<GridPoint>& goals,
+               DiagonalMode diagonal = DiagonalMode::NoCornerCutting, float maxCost = INFINITY);
+
+    int32_t width() const { return width_; }
+    int32_t height() const { return height_; }
+    bool reachable(GridPoint cell) const;
+    // Cost to the nearest goal; infinity when unreachable.
+    float cost(GridPoint cell) const;
+    // The neighbour one step closer to a goal. A goal cell, an unreachable
+    // cell or one outside the grid returns itself.
+    GridPoint next(GridPoint cell) const;
+    // Unit vector from the cell's center toward next(cell); zero at a goal
+    // or where nothing is reachable.
+    Vec2 direction(GridPoint cell) const;
+    // The same for a world position, through the grid's cellSize and
+    // origin.
+    Vec2 direction(Vec2 world) const;
+
+private:
+    int32_t width_ = 0;
+    int32_t height_ = 0;
+    float cellSize_ = 1.f;
+    Vec2 origin_ = {};
+    std::vector<float> cost_;
+    std::vector<int32_t> next_;   // index of the next cell, -1 for none
+};
 
 } // namespace drift
