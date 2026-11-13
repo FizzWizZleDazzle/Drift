@@ -504,7 +504,7 @@
 "Lifetime": [{"fields": {"seconds": "float"}, "kind": "struct", "module": "drift", "sig": "struct Lifetime", "url": "reference/components.html#lifetime"}],
 "LightOccluder": [{"fields": {"half_size": "Vec2", "layer_mask": "int", "offset": "Vec2", "points": "Vec2[]", "radius": "float", "shadow_self": "bool", "shape": "OccluderShape"}, "kind": "struct", "module": "drift", "sig": "struct LightOccluder", "url": "reference/components.html#lightoccluder"}],
 "LocalTime": [{"fields": {"day": "int", "hour": "int", "minute": "int", "month": "int", "second": "int", "unix": "float", "weekday": "int", "year": "int"}, "kind": "struct", "module": "drift", "sig": "struct LocalTime", "url": "reference/values.html#localtime"}],
-"Lookup": [{"fields": {"ids": "int[]", "rows": "T[]"}, "kind": "struct", "module": "drift", "sig": "struct Lookup<T>", "url": "reference/system-parameters.html#lookup"}],
+"Lookup": [{"fields": {"ids": "int[]", "key": "int", "rows": "T[]", "slots": "{int: int}"}, "kind": "struct", "module": "drift", "sig": "struct Lookup<T>", "url": "reference/system-parameters.html#lookup"}],
 "Lookup.get": [{"kind": "method", "module": "drift", "sig": "fn get(self, e: Entity) -> Option<T>", "url": "reference/system-parameters.html#lookupget"}],
 "Lookup.has": [{"kind": "method", "module": "drift", "sig": "fn has(self, e: Entity) -> bool", "url": "reference/system-parameters.html#lookuphas"}],
 "Lookup.len": [{"kind": "method", "module": "drift", "sig": "fn len(self) -> int", "url": "reference/system-parameters.html#lookuplen"}],

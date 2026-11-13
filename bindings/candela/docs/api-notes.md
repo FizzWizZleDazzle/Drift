@@ -242,7 +242,7 @@ if input.key_pressed(Key::F5) { cmd.restart(); }
 
 ## Lookup
 
-Every component of type `T`, found by entity id. A query walks every match; a lookup answers for one entity, such as the other entity in a collision.
+Every component of type `T`, found by entity id. A query walks every match; a lookup answers for one entity, such as the other entity in a collision. Drift fetches an entity's component the first time `get` asks for it, so a lookup costs only the entities a system reads. The fields are Drift's bookkeeping; read through the methods.
 
 ```rust
 @system

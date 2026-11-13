@@ -112,15 +112,25 @@ fn to_json(v: &Value) -> Json {
 
 struct Types {
     table: AttributeTable,
+    /// Struct ids by name.
+    ids: HashMap<String, u16>,
 }
 
 impl Types {
+    fn new(table: AttributeTable) -> Self {
+        let mut ids = HashMap::new();
+        for (i, s) in table.structs.iter().enumerate() {
+            ids.entry(s.name.clone()).or_insert(i as u16);
+        }
+        Types { table, ids }
+    }
+
     fn struct_name(&self, id: u16) -> &str {
         &self.table.structs[id as usize].name
     }
 
     fn struct_id(&self, name: &str) -> Option<u16> {
-        self.table.structs.iter().position(|s| s.name == name).map(|i| i as u16)
+        self.ids.get(name).copied()
     }
 
     /// A value of type `ty` read from JSON; what JSON leaves out takes the
@@ -281,7 +291,8 @@ impl Types {
 enum Param {
     /// Rows of components; `entity` positions get the entity's id.
     Rows { row: u16, fields: Vec<(String, Option<String>)>, with: Vec<String>, without: Vec<String> },
-    Lookup { name: u16, component: String },
+    /// `key` names the component for the lookup functions.
+    Lookup { name: u16, key: i64 },
     Resource(String),
     Messages(String),
     Contacts { name: u16, kind: i32, a: String, b: String },
@@ -365,6 +376,49 @@ thread_local! {
     /// The script's resources by bare name, as of the last change, for
     /// `drift::resource_text` while a system runs.
     static RESOURCE_VIEW: RefCell<HashMap<String, Value>> = RefCell::new(HashMap::new());
+    /// Script components: type name -> entity -> value. Lookups read them
+    /// while a system runs.
+    static STORES: RefCell<HashMap<String, BTreeMap<u64, Value>>> = RefCell::new(HashMap::new());
+    /// The component each lookup key reads.
+    static LOOKUP_NAMES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// What each lookup handed out during the current call, by (key,
+    /// entity), to tell what the system changed.
+    static LOOKUP_SEEN: RefCell<HashMap<(i64, u64), Value>> = RefCell::new(HashMap::new());
+}
+
+/// Entity `e`'s component `name`: from the script's stores, or the engine.
+fn read_component(e: u64, name: &str) -> Option<Value> {
+    if let Some(found) = STORES.with(|s| s.borrow().get(name).map(|store| store.get(&e).cloned())) {
+        return found;
+    }
+    let j = engine_get(e, name)?;
+    TYPES.with(|t| {
+        let t = t.borrow();
+        let types = t.as_ref()?;
+        let id = types.struct_id(name)?;
+        Some(types.from_json(&j, &DataType::Struct(id)))
+    })
+}
+
+/// Whether entity `e` has component `name`.
+fn has_component(e: u64, name: &str) -> bool {
+    if let Some(found) = STORES.with(|s| s.borrow().get(name).map(|store| store.contains_key(&e))) {
+        return found;
+    }
+    let c = cstr(name);
+    unsafe { drift_bridge_has(e, c.as_ptr()) != 0 }
+}
+
+/// The entities with component `name`, in spawn order.
+fn entities_with(name: &str) -> Vec<u64> {
+    if let Some(found) = STORES.with(|s| s.borrow().get(name).map(|store| store.keys().copied().collect())) {
+        return found;
+    }
+    engine_list(name)
+}
+
+fn lookup_name(key: i64) -> Option<String> {
+    LOOKUP_NAMES.with(|l| l.borrow().get(key as usize).cloned())
 }
 
 fn publish_resource(name: &str, v: Option<&Value>) {
@@ -413,8 +467,6 @@ struct Host {
     components: HashSet<String>,
     messages_kinds: HashSet<String>,
     resource_kinds: HashSet<String>,
-    /// Script components: type name -> entity -> value.
-    stores: HashMap<String, BTreeMap<u64, Value>>,
     resources: HashMap<String, Value>,
     messages: Vec<(u64, String, Value)>,
     /// Messages sent with a delay: seconds left, then the message.
@@ -544,7 +596,17 @@ impl Host {
                 }
                 if let Some((base, args)) = generic(&name) {
                     if base == "Lookup" && args.len() == 1 {
-                        return Ok(Param::Lookup { name: *id, component: args[0].clone() });
+                        let key = LOOKUP_NAMES.with(|l| {
+                            let mut l = l.borrow_mut();
+                            match l.iter().position(|n| *n == args[0]) {
+                                Some(i) => i,
+                                None => {
+                                    l.push(args[0].clone());
+                                    l.len() - 1
+                                }
+                            }
+                        });
+                        return Ok(Param::Lookup { name: *id, key: key as i64 });
                     }
                     if base == "State" && args.len() == 1 {
                         let of = args[0].clone();
@@ -681,31 +743,15 @@ impl Host {
     }
 
     fn component(&self, e: u64, name: &str) -> Option<Value> {
-        if let Some(store) = self.stores.get(name) {
-            return store.get(&e).cloned();
-        }
-        let id = self.types.struct_id(name)?;
-        let j = engine_get(e, name)?;
-        Some(self.types.from_json(&j, &DataType::Struct(id)))
+        read_component(e, name)
     }
 
     fn has(&self, e: u64, name: &str) -> bool {
-        match self.stores.get(name) {
-            Some(store) => store.contains_key(&e),
-            None if self.components.contains(name) => false,
-            None => {
-                let c = cstr(name);
-                unsafe { drift_bridge_has(e, c.as_ptr()) != 0 }
-            }
-        }
+        has_component(e, name)
     }
 
     fn entities_with(&self, name: &str) -> Vec<u64> {
-        match self.stores.get(name) {
-            Some(store) => store.keys().copied().collect(),
-            None if self.components.contains(name) => Vec::new(),
-            None => engine_list(name),
-        }
+        entities_with(name)
     }
 
     fn set_component(&mut self, e: u64, value: Value) {
@@ -745,7 +791,7 @@ impl Host {
     fn insert_component(&mut self, e: u64, name: &str, value: Value) {
         let name = name.to_owned();
         if self.components.contains(&name) {
-            self.stores.entry(name).or_default().insert(e, value);
+            STORES.with(|s| s.borrow_mut().entry(name).or_default().insert(e, value));
         } else if is_engine(&name) {
             engine_set(e, &name, &to_json(&value));
         } else if self.reported.insert(format!("bundle:{name}")) {
@@ -819,21 +865,16 @@ impl Host {
                     }
                     Value::Array(rows)
                 }
-                Param::Lookup { name, component } => {
-                    let mut idv = Vec::new();
-                    let mut rows = Vec::new();
-                    for e in self.entities_with(component) {
-                        if let Some(v) = self.component(e, component) {
-                            idv.push(Value::Int(e as i64));
-                            rows.push(v);
-                            ids.push(e);
-                        }
-                    }
-                    Value::Struct {
-                        name: self.types.struct_name(*name).to_owned(),
-                        fields: vec![("ids".into(), Value::Array(idv)), ("rows".into(), Value::Array(rows))],
-                    }
-                }
+                // Empty: `get` fetches what the system reads (lookup_get).
+                Param::Lookup { name, key } => Value::Struct {
+                    name: self.types.struct_name(*name).to_owned(),
+                    fields: vec![
+                        ("key".into(), Value::Int(*key)),
+                        ("ids".into(), Value::Array(Vec::new())),
+                        ("rows".into(), Value::Array(Vec::new())),
+                        ("slots".into(), Value::Map(BTreeMap::new())),
+                    ],
+                },
                 Param::Resource(name) => self.resources.get(name)?.clone(),
                 Param::Messages(name) => Value::Array(
                     self.messages.iter().filter(|(seq, n, _)| *seq > sys.seen && n == name).map(|(_, _, v)| v.clone()).collect(),
@@ -918,13 +959,14 @@ impl Host {
                         self.write_row(fields, Some(old), Some(new), *e);
                     }
                 }
-                Param::Lookup { .. } => {
-                    let (Some(Value::Array(o)), Some(Value::Array(n))) = (field(old, "rows"), field(new, "rows")) else { continue };
-                    for (r, e) in entities[i].iter().enumerate() {
-                        if o.get(r) != n.get(r) {
-                            if let Some(v) = n.get(r) {
-                                self.set_component(*e, v.clone());
-                            }
+                Param::Lookup { key, .. } => {
+                    let (Some(Value::Array(ids)), Some(Value::Array(rows))) = (field(new, "ids"), field(new, "rows")) else { continue };
+                    for (id, row) in ids.iter().zip(rows) {
+                        let Value::Int(id) = id else { continue };
+                        let e = *id as u64;
+                        let changed = LOOKUP_SEEN.with(|seen| seen.borrow().get(&(*key, e)).is_some_and(|was| was != row));
+                        if changed {
+                            self.set_component(e, row.clone());
                         }
                     }
                 }
@@ -965,9 +1007,11 @@ impl Host {
     fn save_scene(&mut self, path: &str, root: u64) {
         let mut extra: BTreeSet<u64> = BTreeSet::new();
         if root == 0 {
-            for store in self.stores.values() {
-                extra.extend(store.keys().copied());
-            }
+            STORES.with(|s| {
+                for store in s.borrow().values() {
+                    extra.extend(store.keys().copied());
+                }
+            });
         }
         let answer = call("scene_serialize", json!([root, extra.into_iter().collect::<Vec<u64>>()]));
         let (Some(mut doc), Some(order)) = (answer.get("doc").cloned(), answer.get("order").and_then(Json::as_array).cloned()) else {
@@ -979,11 +1023,13 @@ impl Host {
         if let Some(ents) = doc.get_mut("entities").and_then(Json::as_array_mut) {
             for (i, e) in order.iter().enumerate() {
                 let Some(comps) = ents.get_mut(i).and_then(|x| x.get_mut("components")).and_then(Json::as_object_mut) else { continue };
-                for (name, store) in &self.stores {
-                    if let Some(v) = store.get(e) {
-                        comps.insert(bare(name).to_owned(), scene_json(v, &local));
+                STORES.with(|s| {
+                    for (name, store) in s.borrow().iter() {
+                        if let Some(v) = store.get(e) {
+                            comps.insert(bare(name).to_owned(), scene_json(v, &local));
+                        }
                     }
-                }
+                });
             }
         }
         if !call("scene_write", json!([path, doc.to_string()])).as_bool().unwrap_or(false) {
@@ -1003,17 +1049,18 @@ impl Host {
                 }
                 Command::Insert(e, v) => self.set_component(e, v),
                 Command::Remove(e, name) => {
-                    if let Some(store) = self.stores.get_mut(&name) {
-                        store.remove(&e);
-                    } else {
+                    let removed = STORES.with(|s| s.borrow_mut().get_mut(&name).map(|store| store.remove(&e)).is_some());
+                    if !removed {
                         let c = cstr(&name);
                         unsafe { drift_bridge_remove(e, c.as_ptr()) };
                     }
                 }
                 Command::Despawn(e) => {
-                    for store in self.stores.values_mut() {
-                        store.remove(&e);
-                    }
+                    STORES.with(|s| {
+                        for store in s.borrow_mut().values_mut() {
+                            store.remove(&e);
+                        }
+                    });
                     unsafe { drift_bridge_despawn(e) };
                 }
                 Command::InsertResource(v) => {
@@ -1172,6 +1219,7 @@ impl Host {
         let mark = self.next_seq;
         for focus in self.foci(&sys) {
             let Some((mut args, entities)) = self.arguments(&sys, time, &focus) else { continue };
+            LOOKUP_SEEN.with(|seen| seen.borrow_mut().clear());
             let before = args.clone();
             match self.program.call_in_out(&sys.name, &mut args) {
                 Ok(_) => {
@@ -1203,9 +1251,11 @@ impl Host {
         self.apply_scene_components();
         self.condition_cache.clear();
         // Entities the engine removed (a Lifetime ran out, a parent went).
-        for store in self.stores.values_mut() {
-            store.retain(|e, _| unsafe { drift_bridge_alive(*e) != 0 });
-        }
+        STORES.with(|s| {
+            for store in s.borrow_mut().values_mut() {
+                store.retain(|e, _| unsafe { drift_bridge_alive(*e) != 0 });
+            }
+        });
         for st in self.states.values_mut() {
             st.since += time.0;
         }
@@ -1263,10 +1313,12 @@ impl Host {
     fn restart(&mut self) {
         self.restart_pending = false;
         let mut doomed: BTreeSet<u64> = SPAWNED.with(|s| std::mem::take(&mut *s.borrow_mut()));
-        for store in self.stores.values_mut() {
-            doomed.extend(store.keys().copied());
-            store.clear();
-        }
+        STORES.with(|s| {
+            for store in s.borrow_mut().values_mut() {
+                doomed.extend(store.keys().copied());
+                store.clear();
+            }
+        });
         for e in doomed {
             unsafe { drift_bridge_despawn(e) };
         }
@@ -1405,6 +1457,24 @@ fn engine(module_dir: &str) -> Engine {
         queue(Command::Spawn(id, bundle));
         Ok(Value::Null)
     });
+    // A lookup's component of one entity, as [value] or [], noted so the
+    // host can tell what the system changed in it.
+    e.register_host_fn_variadic("drift", "lookup_get", move |a| {
+        let (Some(key), Some(id)) = (v(a, 0).as_i64(), v(a, 1).as_i64()) else { return Ok(Value::Array(Vec::new())) };
+        let Some(name) = lookup_name(key) else { return Ok(Value::Array(Vec::new())) };
+        let e = id as u64;
+        Ok(Value::Array(match read_component(e, &name) {
+            Some(row) => {
+                LOOKUP_SEEN.with(|seen| seen.borrow_mut().insert((key, e), row.clone()));
+                vec![row]
+            }
+            None => Vec::new(),
+        }))
+    });
+    e.register_host_fn("drift", "lookup_has", |key: i64, id: i64| {
+        lookup_name(key).is_some_and(|name| has_component(id as u64, &name))
+    });
+    e.register_host_fn("drift", "lookup_len", |key: i64| lookup_name(key).map_or(0, |name| entities_with(&name).len() as i64));
     e.register_host_fn_variadic("drift", "insert_component", move |a| {
         let id = v(a, 0).as_i64().unwrap_or(0) as u64;
         queue(Command::Insert(id, v(a, 1)));
@@ -1795,13 +1865,14 @@ fn host_value(j: &Json, t: &HostType) -> Value {
 
 /// Compiles the game and builds its systems and resources.
 fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
+    LOOKUP_NAMES.with(|l| l.borrow_mut().clear());
     let src = std::fs::read_to_string(entry).map_err(|e| format!("{entry}: {e}"))?;
     let main = if src.contains("fn main(") { String::new() } else { String::from("\nfn main() {}\n") };
 
     // First the game alone, for its attributes.
     let first = engine(module_dir).compile(&format!("{src}{main}"), entry).map_err(|d| report(&d, entry, &src))?;
     let table = first.attributes();
-    let types = std::rc::Rc::new(Types { table });
+    let types = std::rc::Rc::new(Types::new(table));
     let named = |n: &str| -> Vec<(u16, Option<String>)> {
         types
             .table
@@ -1860,7 +1931,6 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         components,
         messages_kinds,
         resource_kinds,
-        stores: HashMap::new(),
         resources: HashMap::new(),
         messages: Vec::new(),
         later: Vec::new(),
@@ -1887,9 +1957,7 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
             host.states.insert(bare(&info.name).to_owned(), StateNow { now: first.clone(), since: 0.0, next: None });
         }
     }
-    for c in &host.components {
-        host.stores.insert(c.clone(), BTreeMap::new());
-    }
+    STORES.with(|s| *s.borrow_mut() = host.components.iter().map(|c| (c.clone(), BTreeMap::new())).collect());
     let resource_ids: HashSet<u16> = resources_list.iter().map(|r| r.0).collect();
     for (id, section) in buildable.iter().map(|r| (r.0, r.1.clone())) {
         let name = host.types.struct_name(id).to_owned();

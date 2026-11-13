@@ -24,6 +24,11 @@ host "drift" {
     remove_resource(string);
     send_message(...);
 
+    // Lookups: an entity's component, as [value] or [] when it has none.
+    any lookup_get(...);
+    bool lookup_has(int, int);
+    int lookup_len(int);
+
     // Input. `state` is 0 held, 1 went down this frame, 2 went up this frame.
     bool key_state(int, int);
     bool mouse_state(int, int);

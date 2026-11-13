@@ -65,7 +65,9 @@ fn hurt(hit: Contact<Bullet, Enemy>, health: Lookup<Health>, cmd: Commands) {
 }
 ```
 
-`get(e)` answers `Some(component)` or `None`; `has(e)` and `len()` answer what they say. A change made through `get` is kept.
+`get(e)` answers `Some(component)` or `None`; `has(e)` and `len()` answer what they say. A change made through `get` is kept, and a second `get` of the same entity in the same call answers the same value, changes included.
+
+A lookup fetches only the entities a system asks it for, so it suits a system that runs once per entity and reads one other entity, such as a leg reading its body.
 
 ## What a query sees
 
@@ -75,4 +77,4 @@ Rows come in the order entities were spawned, the same on every run.
 
 ## Keeping queries cheap
 
-A query or lookup of an engine component, such as `Transform` or `Rectangle`, reads every entity that has it from the engine each time the system runs. Ask for your own tag components alongside, such as `(Enemy, Transform)[]`, so the query covers only the entities you need, and keep a `Lookup` of an engine component to systems that run on events rather than every frame. A level built from hundreds of tiles is better as a [tilemap](../guides/levels-and-tilemaps.md) than as hundreds of entities.
+A query of an engine component, such as `Transform` or `Rectangle`, reads every entity that has it from the engine each time the system runs. Ask for your own tag components alongside, such as `(Enemy, Transform)[]`, so the query covers only the entities you need. A list parameter in a system that runs once per entity is built again for every call; when such a system needs one other entity, a `Lookup` reads just that one. A level built from hundreds of tiles is better as a [tilemap](../guides/levels-and-tilemaps.md) than as hundreds of entities.

@@ -14,25 +14,28 @@ struct OverlapEnd<A, B> { a: Entity, b: Entity }
 
 // ---- Lookups ----
 
-struct Lookup<T> { ids: int[], rows: T[] }
+// The host fetches an entity's component the first time `get` asks for it
+// and keeps it in `rows`, so a system pays only for the entities it reads,
+// and a second `get` of the same entity hands back the same value. The host
+// keeps the changes made to `rows`.
+struct Lookup<T> { key: int = 0, ids: int[] = [], rows: T[] = [], slots: {int: int} = {} }
 impl Lookup<T> {
     fn get(self, e: Entity) -> Option<T> {
-        for i in range(self.ids.len()) {
-            if self.ids[i] == e.id {
-                return Some(self.rows[i]);
-            }
+        if self.slots.contains(e.id) {
+            return Some(self.rows[self.slots[e.id]]);
         }
-        return None;
-    }
-    fn has(self, e: Entity) -> bool {
-        for id in self.ids {
-            if id == e.id {
-                return true;
-            }
+        let found = drift::lookup_get(self.key, e.id) as any[];
+        if found.len() == 0 {
+            return None;
         }
-        return false;
+        let row = found[0] as T;
+        self.slots[e.id] = self.rows.len();
+        self.ids.push(e.id);
+        self.rows.push(row);
+        return Some(row);
     }
-    fn len(self) -> int { return self.ids.len(); }
+    fn has(self, e: Entity) -> bool { return self.slots.contains(e.id) || drift::lookup_has(self.key, e.id); }
+    fn len(self) -> int { return drift::lookup_len(self.key); }
 }
 
 // ---- Commands ----
