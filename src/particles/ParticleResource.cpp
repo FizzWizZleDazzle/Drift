@@ -22,7 +22,7 @@ struct RNG {
     }
 
     float floatVal() {
-        return static_cast<float>(next() & 0x00FFFFFFu) / static_cast<float>(0x00FFFFFFu);
+        return static_cast<float>(next() >> 8) / static_cast<float>(0x00FFFFFFu);
     }
 
     float range(float lo, float hi) {

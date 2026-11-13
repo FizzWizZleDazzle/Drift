@@ -17,10 +17,11 @@ struct ValueRange {
     ValueRange(float v) : min(v), max(v) {}
     ValueRange(float lo, float hi) : min(lo), max(hi) {}
 
-    // Sample using LCG RNG (caller passes state by reference)
+    // Sample using LCG RNG (caller passes state by reference), from its high
+    // bits: the low ones repeat with short periods.
     float sample(uint32_t& rng) const {
         rng = rng * 1664525u + 1013904223u;
-        float t = static_cast<float>(rng & 0x00FFFFFFu) / static_cast<float>(0x00FFFFFFu);
+        float t = static_cast<float>(rng >> 8) / static_cast<float>(0x00FFFFFFu);
         return min + t * (max - min);
     }
 };

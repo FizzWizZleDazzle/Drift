@@ -18,9 +18,11 @@ namespace drift {
 // ---------------------------------------------------------------------------
 // RNG helper
 // ---------------------------------------------------------------------------
+// The high 24 bits: an LCG's low bits repeat with short periods, so draws
+// taken from them in a row (speed, then angle) fall on a few lines.
 static float rngFloat(uint32_t& state) {
     state = state * 1664525u + 1013904223u;
-    return static_cast<float>(state & 0x00FFFFFFu) / static_cast<float>(0x00FFFFFFu);
+    return static_cast<float>(state >> 8) / static_cast<float>(0x00FFFFFFu);
 }
 
 static float rngRange(uint32_t& state, float lo, float hi) {
@@ -322,6 +324,14 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
         float z = config.zOrder;
         bool isLocal = (config.space == ParticleSpace::Local);
 
+        // drawSprite scales the source rect and takes the origin in source
+        // pixels, so a particle `size` pixels wide is the source scaled by
+        // size / source width, turning around the source's center.
+        Vec2 src = {srcRect.w, srcRect.h};
+        if (src.x <= 0.f || src.y <= 0.f) src = renderer->textureSize(tex);
+        if (src.x <= 0.f || src.y <= 0.f) src = {1.f, 1.f};
+        Vec2 origin = {src.x * 0.5f, src.y * 0.5f};
+
         for (int32_t i = 0; i < pool.count; ++i) {
             float t = pool.lifetimes[i] > 0.f ? (pool.ages[i] / pool.lifetimes[i]) : 1.f;
 
@@ -332,7 +342,6 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
             tint.a = static_cast<uint8_t>(lerpf(pool.colorStarts[i].a, pool.colorEnds[i].a, t) * 255.f);
 
             float size = pool.sizes[i];
-            Vec2 origin = {size * 0.5f, size * 0.5f};
 
             Vec2 pos = pool.positions[i];
             if (isLocal) {
@@ -342,7 +351,7 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
             }
 
             renderer->drawSprite(tex, pos, srcRect,
-                                 {size, size}, pool.rotations[i], origin,
+                                 {size / src.x, size / src.y}, pool.rotations[i], origin,
                                  tint, Flip::None, z,
                                  config.blendMode);
         }
