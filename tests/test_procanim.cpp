@@ -105,3 +105,136 @@ TEST(hierarchy_despawn_takes_the_subtree) {
     despawnRecursive(w, a);
     CHECK(!w.isAlive(d));
 }
+
+// ---------------------------------------------------------------------------
+// Procedural animation
+// ---------------------------------------------------------------------------
+
+#include <drift/gameplay/ProceduralAnimation.hpp>
+#include <drift/math/Vector.hpp>
+
+#include <vector>
+
+TEST(procanim_rotate_towards_takes_the_short_arc) {
+    // From just below +pi to just above -pi is a short step across the seam.
+    float r = rotateTowards(3.0f, -3.0f, 0.1f);
+    CHECK_NEAR(r, 3.1f, 1e-5);
+    CHECK_NEAR(rotateTowards(0.f, 0.05f, 0.1f), 0.05f, 1e-6);
+    CHECK_NEAR(rotateTowards(0.f, -1.f, 0.25f), -0.25f, 1e-6);
+}
+
+TEST(procanim_springs_settle) {
+    float x = 0.f, v = 0.f;
+    for (int i = 0; i < 240; ++i) springStep(x, v, 10.f, 200.f, 2.f * std::sqrt(200.f), 1.f / 60.f);
+    CHECK_NEAR(x, 10.f, 1e-2);
+    // Critical damping does not overshoot.
+    float y = 0.f, w = 0.f, peak = 0.f;
+    for (int i = 0; i < 240; ++i) {
+        springStep(y, w, 1.f, 100.f, 20.f, 1.f / 60.f);
+        peak = std::max(peak, y);
+    }
+    CHECK(peak <= 1.0001f);
+    // A long frame stays stable.
+    float z = 0.f, u = 0.f;
+    springStep(z, u, 1.f, 5000.f, 10.f, 0.5f);
+    CHECK(std::fabs(z) < 10.f);
+    float a = 3.0f, av = 0.f;
+    for (int i = 0; i < 240; ++i) angleSpringStep(a, av, -3.0f, 100.f, 20.f, 1.f / 60.f);
+    CHECK_NEAR(wrapAngle(a), -3.0f, 1e-3);
+    CHECK(a > 3.0f);   // went across the seam, not the long way round
+}
+
+TEST(procanim_two_bone_ik) {
+    TwoBonePose p = twoBoneIk({0, 0}, {10, 0}, 8.f, 8.f, 1.f);
+    CHECK(p.reached);
+    CHECK_NEAR(p.end.x, 10.f, 1e-3);
+    CHECK_NEAR(p.end.y, 0.f, 1e-3);
+    CHECK_NEAR((p.joint - Vec2{0, 0}).length(), 8.f, 1e-3);
+    CHECK_NEAR((p.end - p.joint).length(), 8.f, 1e-3);
+    CHECK(p.joint.y > 0.f);   // bend > 0: clockwise on screen, below the +x line
+    TwoBonePose q = twoBoneIk({0, 0}, {10, 0}, 8.f, 8.f, -1.f);
+    CHECK(q.joint.y < 0.f);
+    TwoBonePose far = twoBoneIk({0, 0}, {100, 0}, 8.f, 8.f, 1.f);
+    CHECK(!far.reached);
+    CHECK_NEAR(far.end.x, 16.f, 1e-2);
+}
+
+TEST(procanim_fabrik_reaches_and_keeps_lengths) {
+    std::vector<Vec2> j = {{0, 0}, {10, 0}, {20, 0}, {30, 0}};
+    std::vector<float> len = {10, 10, 10};
+    CHECK(solveFabrik(j, len, {15, 15}));
+    CHECK_NEAR(j[0].x, 0.f, 1e-6);
+    CHECK_NEAR((j[3] - Vec2{15, 15}).length(), 0.f, 0.5);
+    for (int i = 0; i < 3; ++i) CHECK_NEAR((j[i + 1] - j[i]).length(), 10.f, 1e-3);
+    // Out of reach: the chain points straight at the target.
+    CHECK(!solveFabrik(j, len, {0, 100}));
+    CHECK_NEAR(j[3].y, 30.f, 0.1);
+    // Limits: no joint may bend more than 0.2 rad, so a target behind cannot be reached.
+    std::vector<Vec2> k = {{0, 0}, {10, 0}, {20, 0}, {30, 0}};
+    std::vector<float> lo = {-0.2f, -0.2f, -0.2f}, hi = {0.2f, 0.2f, 0.2f};
+    FabrikOptions o;
+    o.minAngle = lo;
+    o.maxAngle = hi;
+    solveFabrik(k, len, {-10, 5}, o);
+    float prev = 0.f;
+    for (int i = 0; i < 3; ++i) {
+        float a = angle(k[i + 1] - k[i]);
+        CHECK(std::fabs(angleDelta(prev, a)) <= 0.2f + 1e-4f);
+        prev = a;
+    }
+}
+
+TEST(procanim_verlet_hangs_and_keeps_segments) {
+    std::vector<Vec2> pts, prev;
+    for (int i = 0; i < 6; ++i) pts.push_back({float(i) * 10.f, 0.f});
+    prev = pts;
+    for (int f = 0; f < 1200; ++f) stepVerlet(pts, prev, {0, 0}, 10.f, 1.f / 60.f);
+    CHECK_NEAR(pts[0].x, 0.f, 1e-6);
+    // Hanging straight down after it settles.
+    CHECK_NEAR(pts[5].x, 0.f, 1.0);
+    CHECK_NEAR(pts[5].y, 50.f, 1.0);
+    for (int i = 0; i < 5; ++i) CHECK_NEAR((pts[i + 1] - pts[i]).length(), 10.f, 0.5);
+    // A stiff chain resists bending but still falls and hangs: stiffness
+    // adds no energy.
+    std::vector<Vec2> tail, tailPrev;
+    for (int i = 0; i < 6; ++i) tail.push_back({float(i) * 10.f, 0.f});
+    tailPrev = tail;
+    VerletOptions stiff;
+    stiff.stiffness = 0.8f;
+    float highest = 1e9f;
+    for (int f = 0; f < 1200; ++f) {
+        stepVerlet(tail, tailPrev, {0, 0}, 10.f, 1.f / 60.f, stiff);
+        highest = std::min(highest, tail[5].y);
+    }
+    CHECK(highest > -1.f);   // never swings up past where it started
+    CHECK_NEAR(tail[5].y, 50.f, 2.0);
+    for (int i = 0; i < 5; ++i) CHECK_NEAR((tail[i + 1] - tail[i]).length(), 10.f, 1.0);
+
+    VerletOptions o;
+    o.ground = 20.f;
+    for (int f = 0; f < 120; ++f) stepVerlet(pts, prev, {0, 0}, 10.f, 1.f / 60.f, o);
+    for (auto& p : pts) CHECK(p.y <= 20.f + 1e-4f);
+}
+
+TEST(procanim_foot_steps_when_it_strays) {
+    Foot f;
+    f.position = f.from = f.to = {0, 0};
+    StepOptions o;
+    o.distance = 10.f;
+    o.duration = 0.1f;
+    o.height = 5.f;
+    o.lead = 0.f;
+    CHECK(!f.update({5, 0}, o, 1.f / 60.f));   // close enough: stays planted
+    CHECK(f.planted());
+    CHECK_NEAR(f.position.x, 0.f, 1e-6);
+    f.update({20, 0}, o, 0.05f);               // strays: steps, halfway and lifted
+    CHECK(!f.planted());
+    CHECK_NEAR(f.position.x, 10.f, 1e-3);
+    CHECK_NEAR(f.position.y, -5.f, 1e-3);
+    CHECK(f.update({20, 0}, o, 0.05f));        // lands
+    CHECK_NEAR(f.position.x, 20.f, 1e-4);
+    Foot g;
+    g.position = g.to = {0, 0};
+    CHECK(!g.update({50, 0}, o, 0.01f, false));   // not allowed to step yet
+    CHECK(g.planted());
+}

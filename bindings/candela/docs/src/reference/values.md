@@ -24,6 +24,11 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `Image` | Pixels to change from code; see [Image](resources.md#image) |
 | `Spritesheet` | A texture cut into equal frames: `texture`, `frame_w`, `frame_h`, `columns`, `rows`. `frame(col, row)`, `frame_at(i)` (left to right, top to bottom from 0), `frames(first, count)`, `count()`. Built with `assets.spritesheet(texture, frame_w, frame_h)` |
 | `GlobalTransform` | `position`, `rotation`, `scale`: a transform in world space, from `world_transform(e)` |
+| `Spring`, `Spring2`, `AngleSpring` | Damped springs for a float, a `Vec2` and a rotation: `value`, `velocity`, `update(target, stiffness, damping, dt)`; `Spring` and `Spring2` also `smooth(target, seconds, dt)`. See [Procedural Animation](../guides/procedural-animation.md#springs) |
+| `TwoBone` | A two-bone limb's pose: `joint`, `end`, `upper`, `lower` (world rotations), `reached` |
+| `IkChain` | A FABRIK chain: `joints`, `lengths`, `min_angles`, `max_angles`, `base_angle`, `iterations`, `tolerance`. `solve(root, target)`, `limit_all(max_bend)`, `end()`, `angle(i)`, `len()` |
+| `Rope` | A verlet chain: `points`, `previous`, `segment`, `gravity`, `damping`, `iterations`, `stiffness`, `ground`. `update(anchor, dt)`, `pin(target)`, `release()`, `push(v)`, `angle(i)`, `len()` |
+| `Foot`, `Gait` | A stepping foot (`position`, `planted()`, `update(rest, gait, can_step, dt)`) and how it steps (`distance`, `duration`, `height`, `lead`, `up`) |
 | `Texture`, `Sound`, `Font`, `Map`, `Scene` | Assets from `Assets` |
 
 ## Post effect settings
@@ -56,6 +61,14 @@ The structs `Effects.add` takes; every field has a default.
 | `pixel(c)`, `color_of(px)` | A `Color` as one `int`, 0xRRGGBBAA, and back, for `Image.pixels()` |
 | `layer_mask(layers: int[])` | A `Camera.layer_mask` drawing those world layers: `layer_mask([0, 1])` |
 | `from_angle(radians)` | The unit `Vec2` at that angle |
+| `sin(x)`, `cos(x)`, `atan2(y, x)` | Trigonometry in radians |
+| `wrap_angle(a)`, `angle_diff(from, to)`, `lerp_angle(a, b, t)`, `rotate_towards(current, target, max_step)`, `look_at(from, to)` | Angle helpers that take the short way round; see [Procedural Animation](../guides/procedural-animation.md#angles) |
+| `lerp(a, b, t)`, `move_towards(current, target, max_step)`, `damp(current, target, rate, dt)`, `damp2(...)`, `smoothstep(lo, hi, x)` | Number helpers |
+| `sine_wave(t, frequency, amplitude, phase)`, `cosine_wave(...)`, `wobble(t, frequency, amplitude, seed)`, `wobble2(...)` | Oscillators and smooth random motion |
+| `squash(amount)`, `stretch(velocity, per_speed, max_stretch)` | Area-keeping scales for squash and stretch |
+| `spring(v)`, `spring2(v)`, `angle_spring(v)` | Springs at rest at a value |
+| `two_bone_ik(root, target, upper_len, lower_len, bend)` | A `TwoBone` pose |
+| `ik_chain(root, count, length, direction)`, `rope(start, count, segment, direction)`, `foot(at)` | A straight IK chain, a rope, a planted foot |
 | `parent_of(e)` | The entity's parent; `Entity {}` for a root |
 | `children_of(e)`, `descendants_of(e)` | The direct children in the order they were added; everything below, depth first |
 | `world_transform(e)` | The entity's `GlobalTransform`: its place after every parent |

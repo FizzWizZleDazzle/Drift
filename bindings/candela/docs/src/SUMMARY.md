@@ -28,6 +28,7 @@
 - [Physics](guides/physics.md)
 - [Audio](guides/audio.md)
 - [Animation, Tweens and Behaviors](guides/animation.md)
+- [Procedural Animation](guides/procedural-animation.md)
 - [Particles, Lights and Effects](guides/effects.md)
 - [Tilemaps](guides/tilemaps.md)
 - [Procedural Generation](guides/procedural-generation.md)

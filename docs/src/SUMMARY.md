@@ -60,6 +60,7 @@
 - [Save Data](gameplay/save-data.md)
 - [Spatial Queries, Pathfinding and Y-Sort](gameplay/spatial-and-pathfinding.md)
 - [Steering](gameplay/steering.md)
+- [Procedural Animation](gameplay/procedural-animation.md)
 - [Procedural Generation](gameplay/procedural-generation.md)
 
 # Candela

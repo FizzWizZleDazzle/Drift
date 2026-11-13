@@ -1317,6 +1317,12 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("hier_world", vec![I], af()),
         ("hier_to_world", vec![I, F, F], af()),
         ("hier_to_local", vec![I, F, F], af()),
+        ("anim_spring", vec![I, F, F, F, F, F, F], af()),
+        ("anim_spring2", vec![I, F, F, F, F, F, F, F, F, F], af()),
+        ("anim_two_bone", vec![F, F, F, F, F, F, F], af()),
+        ("anim_fabrik", vec![af(), af(), F, F, I, F, F, af(), af()], af()),
+        ("anim_verlet", vec![af(), af(), F, F, F, F, F, F, F, I, F, F, B, F, F], af()),
+        ("anim_foot", vec![F, F, F, F, F, F, F, F, F, F, F, F, F, F, F, F, B], af()),
     ]
     .into_iter()
     .chain(gameplay_forwarded())

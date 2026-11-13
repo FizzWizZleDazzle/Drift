@@ -13,6 +13,8 @@
 #include <drift/AssetServer.hpp>
 #include <drift/CollisionBridge.hpp>
 #include <drift/Hierarchy.hpp>
+#include <drift/gameplay/ProceduralAnimation.hpp>
+#include <drift/math/Vector.hpp>
 #include <drift/Log.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
 #include <drift/components/AudioSource.hpp>
@@ -239,6 +241,104 @@ bool hierarchyService(const std::string& f, const json& a, json& out) {
         Vec2 p{a[1].get<float>(), a[2].get<float>()};
         Vec2 r = f == "hier_to_world" ? localToWorld(world(), e, p) : worldToLocal(world(), e, p);
         out = json::array({r.x, r.y});
+        return true;
+    }
+    return false;
+}
+
+std::vector<Vec2> pointsOf(const json& flat) {
+    std::vector<Vec2> pts(flat.size() / 2);
+    for (size_t i = 0; i < pts.size(); ++i) pts[i] = {flat[i * 2].get<float>(), flat[i * 2 + 1].get<float>()};
+    return pts;
+}
+std::vector<float> floatsOf(const json& j) {
+    std::vector<float> v;
+    for (const auto& x : j) v.push_back(x.get<float>());
+    return v;
+}
+void pushPoints(json& out, const std::vector<Vec2>& pts) {
+    for (Vec2 p : pts) {
+        out.push_back(p.x);
+        out.push_back(p.y);
+    }
+}
+
+// The solvers of drift/gameplay/ProceduralAnimation.hpp; state crosses as
+// flat float lists and comes back the same way.
+bool animService(const std::string& f, const json& a, json& out) {
+    auto F = [&](size_t i) { return a[i].get<float>(); };
+    if (f == "anim_spring") {
+        // kind (0 float, 1 angle, 2 critically damped), value, velocity, target, stiffness or smooth time, damping, dt
+        float v = F(1), vel = F(2);
+        int kind = a[0].get<int>();
+        if (kind == 0) springStep(v, vel, F(3), F(4), F(5), F(6));
+        else if (kind == 1) angleSpringStep(v, vel, F(3), F(4), F(5), F(6));
+        else v = smoothDamp(v, F(3), vel, F(4), F(6));
+        out = json::array({v, vel});
+        return true;
+    }
+    if (f == "anim_spring2") {
+        // kind (0 spring, 2 critically damped), value, velocity, target (x, y each), stiffness or smooth time, damping, dt
+        Vec2 v{F(1), F(2)}, vel{F(3), F(4)}, t{F(5), F(6)};
+        if (a[0].get<int>() == 0) springStep(v, vel, t, F(7), F(8), F(9));
+        else v = smoothDamp(v, t, vel, F(7), F(9));
+        out = json::array({v.x, v.y, vel.x, vel.y});
+        return true;
+    }
+    if (f == "anim_two_bone") {
+        TwoBonePose p = twoBoneIk({F(0), F(1)}, {F(2), F(3)}, F(4), F(5), F(6));
+        out = json::array({p.joint.x, p.joint.y, p.end.x, p.end.y, p.upperAngle, p.lowerAngle, p.reached ? 1.f : 0.f});
+        return true;
+    }
+    if (f == "anim_fabrik") {
+        // joints, lengths, target x, y, iterations, tolerance, base angle, min angles, max angles
+        std::vector<Vec2> joints = pointsOf(a[0]);
+        std::vector<float> lengths = floatsOf(a[1]), lo = floatsOf(a[7]), hi = floatsOf(a[8]);
+        FabrikOptions o;
+        o.iterations = a[4].get<int>();
+        o.tolerance = F(5);
+        o.baseAngle = F(6);
+        o.minAngle = lo;
+        o.maxAngle = hi;
+        bool reached = solveFabrik(joints, lengths, {F(2), F(3)}, o);
+        out = json::array({reached ? 1.f : 0.f});
+        pushPoints(out, joints);
+        return true;
+    }
+    if (f == "anim_verlet") {
+        // points, previous, anchor x, y, segment, dt, gravity x, y, damping, iterations, stiffness, ground, pin end, end x, y
+        std::vector<Vec2> pts = pointsOf(a[0]), prev = pointsOf(a[1]);
+        prev.resize(pts.size());
+        VerletOptions o;
+        o.gravity = {F(6), F(7)};
+        o.damping = F(8);
+        o.iterations = a[9].get<int>();
+        o.stiffness = F(10);
+        o.ground = F(11);
+        o.pinEnd = a[12].get<bool>();
+        o.endTarget = {F(13), F(14)};
+        stepVerlet(pts, prev, {F(2), F(3)}, F(4), F(5), o);
+        out = json::array();
+        pushPoints(out, pts);
+        pushPoints(out, prev);
+        return true;
+    }
+    if (f == "anim_foot") {
+        // position, from, to, progress, rest, distance, duration, height, lead, up, dt, can step
+        Foot ft;
+        ft.position = {F(0), F(1)};
+        ft.from = {F(2), F(3)};
+        ft.to = {F(4), F(5)};
+        ft.progress = F(6);
+        StepOptions o;
+        o.distance = F(9);
+        o.duration = F(10);
+        o.height = F(11);
+        o.lead = F(12);
+        o.up = {F(13), F(14)};
+        bool landed = ft.update({F(7), F(8)}, o, F(15), a[16].get<bool>());
+        out = json::array({ft.position.x, ft.position.y, ft.from.x, ft.from.y, ft.to.x, ft.to.y, ft.progress,
+                           landed ? 1.f : 0.f});
         return true;
     }
     return false;
@@ -2125,6 +2225,7 @@ json service(const std::string& f, const json& a) {
     if (hierarchyService(f, a, answer)) return answer;
     if (gameplay(f, a, answer)) return answer;
     if (effects(f, a, answer)) return answer;
+    if (animService(f, a, answer)) return answer;
     auto* in = res<InputResource>();
     auto* actions = res<InputActions>();
     if (f == "key_state") {

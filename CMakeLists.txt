@@ -202,6 +202,7 @@ set(DRIFT_GAMEPLAY_SOURCES
     src/gameplay/SaveData.cpp
     src/gameplay/SpatialHash.cpp
     src/gameplay/Pathfinding.cpp
+    src/gameplay/ProceduralAnimation.cpp
     src/math/Random.cpp
     src/math/Noise.cpp
     src/procgen/Grid.cpp
