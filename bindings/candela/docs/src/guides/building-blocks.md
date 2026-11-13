@@ -7,7 +7,7 @@ import "drift" { * };
 import "drift/gameplay" { * };
 ```
 
-Each part only runs for entities that have its components; the ones a game does not use cost nothing. For HUD widgets, see [HUD and Menus](hud.md).
+Each part only runs for entities that have its components; the ones a game does not use cost nothing. `drift/control` has movement controllers, and `drift/ui` the HUD widgets in [HUD and Menus](hud.md).
 
 ## Prefabs
 
@@ -139,3 +139,33 @@ fn aim(turrets: (Turret, Transform)[], enemies: (Entity, Transform, Enemy)[], pl
 ```
 
 For colliders, `Physics.overlap_circle` asks the physics world instead; see [Physics](physics.md).
+
+## Movement controllers
+
+`import "drift/control" { * };` adds three controllers. Each reads the arrow keys, WASD, the d-pad and the first gamepad's left stick (turn that off with `default_keys: false`), plus the input actions it names, and drives the entity's `Velocity`. Set `enabled: false` to take control away during a cutscene.
+
+```rust
+// Top-down: eight directions, with acceleration and friction.
+cmd.spawn([at(100.0, 100.0), Sprite { .. }, TopDownController { speed: 200.0, .. }]);
+
+// Platformer: on a dynamic body with fixed rotation, under the physics gravity.
+cmd.spawn([at(100.0, 300.0), Rectangle { size: vec2(24.0, 32.0), .. },
+           RigidBody { kind: BodyKind::Dynamic, fixed_rotation: true, .. },
+           BoxCollider { half_size: vec2(12.0, 16.0), friction: 0.0, .. },
+           PlatformerController { foot: 16.0, width: 24.0, air_jumps: 1, .. }]);
+
+// Asteroids: turn, thrust and drift.
+cmd.spawn([at(480.0, 270.0), Sprite { .. }, ShipController { .. }, WrapAround { .. }]);
+```
+
+`TopDownController` reaches `speed` at `acceleration` pixels per second squared and stops at `friction`; diagonals are as fast as straight moves, and `facing` keeps the last direction for picking a sprite.
+
+`PlatformerController` jumps with Space, Up, W or the South button. It finds the ground with three short rays under `foot` (the distance from the entity's position to its feet), `width` apart.
+
+- Coyote time: a jump still works `coyote_time` seconds after running off a ledge.
+- Jump buffering: a jump pressed up to `jump_buffer` seconds before landing happens on landing.
+- Variable height: letting go of jump while rising multiplies the upward speed by `jump_cut`, so a tap is a hop and a hold is a full jump.
+- `air_jumps` extra jumps in the air: 1 is a double jump. `max_fall` caps the falling speed.
+- It sends `Jumped { entity, air }` and `Landed { entity }`, for sounds and dust; `grounded` and `facing` are on the component.
+
+`ShipController` turns with Left and Right at `turn_speed` radians per second, thrusts along its facing with Up, and drifts, slowed by `drag`, up to `max_speed`. At rotation 0 the ship faces right. `thrusting` is true while thrust is held, for a flame.

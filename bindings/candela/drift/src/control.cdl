@@ -1,0 +1,273 @@
+// drift/control: movement controllers for the player's entity.
+//
+// `import "drift/control" { * };` adds three controllers: top-down 8-way
+// movement, a platformer with coyote time, jump buffering and variable jump
+// height, and an asteroids-style ship. Each reads the arrow keys, WASD and
+// the first gamepad's left stick by default, plus the input actions it
+// names, and drives the entity's Velocity.
+
+import "drift" { * };
+
+// -1 to 1 on each axis from the arrow keys, WASD and the left stick, plus
+// the 2D action `action` when it is set.
+fn control_axis(input: Input, action: string, defaults: bool) -> Vec2 {
+    let v = Vec2 { .. };
+    if action != "" {
+        v = input.axis2d(action);
+    }
+    if defaults {
+        if input.key_down(Key::Left) || input.key_down(Key::A) || input.gamepad_down(0, GamepadButton::DpadLeft) {
+            v.x -= 1.0;
+        }
+        if input.key_down(Key::Right) || input.key_down(Key::D) || input.gamepad_down(0, GamepadButton::DpadRight) {
+            v.x += 1.0;
+        }
+        if input.key_down(Key::Up) || input.key_down(Key::W) || input.gamepad_down(0, GamepadButton::DpadUp) {
+            v.y -= 1.0;
+        }
+        if input.key_down(Key::Down) || input.key_down(Key::S) || input.gamepad_down(0, GamepadButton::DpadDown) {
+            v.y += 1.0;
+        }
+        let stick = Vec2 { x: input.gamepad_axis(0, GamepadAxis::LeftX), y: input.gamepad_axis(0, GamepadAxis::LeftY) };
+        if stick.length() > 0.2 {
+            v = v + stick;
+        }
+    }
+    return Vec2 { x: clamp(v.x, -1.0, 1.0), y: clamp(v.y, -1.0, 1.0) };
+}
+
+// Moves `from` toward `to` by at most `step`.
+fn approach(from: float, to: float, step: float) -> float {
+    if from < to {
+        return min(from + step, to);
+    }
+    return max(from - step, to);
+}
+
+// ---- Top-down ----
+
+// Walks in eight directions at `speed` pixels per second, reaching it in
+// `speed / acceleration` seconds and stopping in `speed / friction`.
+// Diagonals are as fast as straight lines. `facing` is the last direction
+// moved in.
+@component(requires: [Velocity])
+struct TopDownController {
+    speed: float = 220.0,
+    acceleration: float = 2000.0,
+    friction: float = 2400.0,
+    action: string = "",
+    default_keys: bool = true,
+    enabled: bool = true,
+    facing: Vec2 = Vec2 { x: 0.0, y: 1.0 },
+}
+
+@system
+fn ctl_top_down(c: TopDownController, v: Velocity, input: Input, time: Time) {
+    if !c.enabled {
+        return;
+    }
+    let dir = control_axis(input, c.action, c.default_keys);
+    if dir.length() > 1.0 {
+        dir = dir.normalized();
+    }
+    let want = dir * c.speed;
+    let dt = time.dt;
+    let rate = c.acceleration;
+    if dir.length() < 0.01 {
+        rate = c.friction;
+    } else {
+        c.facing = dir.normalized();
+    }
+    let lin = Vec2 { x: approach(v.linear.x, want.x, rate * dt), y: approach(v.linear.y, want.y, rate * dt) };
+    if lin.x != v.linear.x || lin.y != v.linear.y {
+        v.linear = lin;
+    }
+}
+
+// ---- Platformer ----
+
+// Runs and jumps on a dynamic body with fixed rotation, under the physics
+// world's gravity. Ground is found with three short rays below `foot`
+// (the distance from the entity's position to its feet), `width` apart.
+//
+// - Coyote time: a jump still works `coyote_time` seconds after running off
+//   a ledge.
+// - Jump buffering: a jump pressed `jump_buffer` seconds before landing
+//   happens on landing.
+// - Variable height: letting go of jump while rising cuts the speed by
+//   `jump_cut`, so a tap is a hop and a hold is a full jump.
+// - `air_jumps` extra jumps in the air: 1 is a double jump.
+@component(requires: [Velocity])
+struct PlatformerController {
+    speed: float = 240.0,
+    acceleration: float = 2400.0,
+    air_acceleration: float = 1400.0,
+    friction: float = 2800.0,
+    jump_speed: float = 520.0,
+    jump_cut: float = 0.45,
+    coyote_time: float = 0.1,
+    jump_buffer: float = 0.12,
+    air_jumps: int = 0,
+    max_fall: float = 900.0,
+    foot: float = 16.0,
+    width: float = 24.0,
+    jump_action: string = "",
+    move_action: string = "",
+    default_keys: bool = true,
+    enabled: bool = true,
+    grounded: bool = false,
+    since_ground: float = 1.0,
+    since_jump_press: float = 1.0,
+    jumps_left: int = 0,
+    jumping: bool = false,
+    facing: float = 1.0,
+}
+
+// Sent when a PlatformerController jumps and when it lands.
+@message
+struct Jumped { entity: Entity = Entity { .. }, air: bool = false }
+@message
+struct Landed { entity: Entity = Entity { .. } }
+
+fn jump_pressed(input: Input, c: PlatformerController) -> bool {
+    if c.jump_action != "" && input.action_pressed(c.jump_action) {
+        return true;
+    }
+    return c.default_keys && (input.key_pressed(Key::Space) || input.key_pressed(Key::Up) || input.key_pressed(Key::W)
+                              || input.gamepad_pressed(0, GamepadButton::South));
+}
+
+fn jump_held(input: Input, c: PlatformerController) -> bool {
+    if c.jump_action != "" && input.action_held(c.jump_action) {
+        return true;
+    }
+    return c.default_keys && (input.key_down(Key::Space) || input.key_down(Key::Up) || input.key_down(Key::W)
+                              || input.gamepad_down(0, GamepadButton::South));
+}
+
+fn on_ground(e: Entity, t: Transform, c: PlatformerController, physics: Physics) -> bool {
+    let down = Vec2 { x: 0.0, y: 1.0 };
+    for i in range(3) {
+        let x = t.position.x + c.width * 0.5 * float(i - 1);
+        let hit = physics.raycast(Vec2 { x: x, y: t.position.y + c.foot - 2.0 }, down, 6.0);
+        if hit.hit && hit.entity != e && hit.normal.y < -0.5 {
+            return true;
+        }
+    }
+    return false;
+}
+
+@system
+fn ctl_platformer(e: Entity, c: PlatformerController, v: Velocity, t: Transform, input: Input, time: Time,
+                  physics: Physics, cmd: Commands) {
+    if !c.enabled {
+        return;
+    }
+    let dt = time.dt;
+    let was = c.grounded;
+    c.grounded = on_ground(e, t, c, physics) && v.linear.y >= -1.0;
+    if c.grounded {
+        c.since_ground = 0.0;
+        c.jumps_left = c.air_jumps;
+        c.jumping = false;
+        if !was {
+            cmd.send(Landed { entity: e });
+        }
+    } else {
+        c.since_ground += dt;
+    }
+    c.since_jump_press += dt;
+    if jump_pressed(input, c) {
+        c.since_jump_press = 0.0;
+    }
+
+    let lin = v.linear;
+    let x = control_axis(input, c.move_action, c.default_keys).x;
+    if c.move_action != "" && !c.default_keys {
+        x = input.axis2d(c.move_action).x;
+    }
+    if x != 0.0 {
+        c.facing = 1.0;
+        if x < 0.0 {
+            c.facing = -1.0;
+        }
+    }
+    let rate = c.air_acceleration;
+    if c.grounded {
+        rate = c.acceleration;
+        if x == 0.0 {
+            rate = c.friction;
+        }
+    }
+    lin.x = approach(lin.x, x * c.speed, rate * dt);
+
+    if c.since_jump_press <= c.jump_buffer {
+        let air = false;
+        let can = c.grounded || c.since_ground <= c.coyote_time;
+        if !can && c.jumps_left > 0 {
+            can = true;
+            air = true;
+            c.jumps_left -= 1;
+        }
+        if can && (!c.jumping || air) {
+            lin.y = -c.jump_speed;
+            c.jumping = true;
+            c.grounded = false;
+            c.since_ground = c.coyote_time + 1.0;
+            c.since_jump_press = c.jump_buffer + 1.0;
+            cmd.send(Jumped { entity: e, air: air });
+        }
+    }
+    if c.jumping && lin.y < 0.0 && !jump_held(input, c) {
+        lin.y *= c.jump_cut;
+        c.jumping = false;
+    }
+    if lin.y > c.max_fall {
+        lin.y = c.max_fall;
+    }
+    if lin.x != v.linear.x || lin.y != v.linear.y {
+        v.linear = lin;
+    }
+}
+
+// ---- Ship ----
+
+// Asteroids-style: Left and Right turn at `turn_speed` radians per second,
+// Up thrusts along the facing direction, and the ship drifts, slowed by
+// `drag` per second, up to `max_speed`. The ship faces +X at rotation 0.
+// `thrusting` is true while thrust is held, for a flame sprite.
+@component(requires: [Velocity])
+struct ShipController {
+    thrust: float = 420.0,
+    turn_speed: float = 4.0,
+    max_speed: float = 420.0,
+    drag: float = 0.6,
+    reverse: float = 0.0,
+    action: string = "",
+    default_keys: bool = true,
+    enabled: bool = true,
+    thrusting: bool = false,
+}
+
+@system
+fn ctl_ship(c: ShipController, v: Velocity, t: Transform, input: Input, time: Time) {
+    if !c.enabled {
+        return;
+    }
+    let dt = time.dt;
+    let a = control_axis(input, c.action, c.default_keys);
+    t.rotation += a.x * c.turn_speed * dt;
+    let forward = Vec2 { x: cos(t.rotation), y: sin(t.rotation) };
+    let lin = v.linear;
+    c.thrusting = a.y < -0.1;
+    if c.thrusting {
+        lin = lin + forward * (c.thrust * -a.y * dt);
+    } else if a.y > 0.1 && c.reverse > 0.0 {
+        lin = lin - forward * (c.reverse * a.y * dt);
+    }
+    lin = lin * max(0.0, 1.0 - c.drag * dt);
+    if lin.length() > c.max_speed {
+        lin = lin.normalized() * c.max_speed;
+    }
+    v.linear = lin;
+}

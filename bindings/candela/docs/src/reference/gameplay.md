@@ -1,4 +1,4 @@
-# drift/gameplay
+# drift/gameplay and drift/control
 
 Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../guides/building-blocks.md) guide shows them in use.
 
@@ -48,3 +48,18 @@ Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../
 | `wave(id, count, every, delay)` | A `Wave` |
 | `nearest(rows, from)` | The entity nearest `from` among query rows that start with `(Entity, Transform, ...)`; `Entity {}` for none |
 | `within(rows, from, radius)` | The entities of such rows within `radius`, nearest first |
+
+## drift/control
+
+| Component | Fields |
+|-----------|--------|
+| `TopDownController` | `speed`, `acceleration`, `friction`, `action` (a 2D action to read too), `default_keys`, `enabled`, `facing` |
+| `PlatformerController` | `speed`, `acceleration`, `air_acceleration`, `friction`, `jump_speed`, `jump_cut`, `coyote_time`, `jump_buffer`, `air_jumps`, `max_fall`, `foot`, `width`, `jump_action`, `move_action`, `default_keys`, `enabled`, `grounded`, `facing` |
+| `ShipController` | `thrust`, `turn_speed`, `max_speed`, `drag`, `reverse`, `action`, `default_keys`, `enabled`, `thrusting` |
+
+| Message | Sent when |
+|---------|-----------|
+| `Jumped { entity, air }` | A `PlatformerController` jumps; `air` for an air jump |
+| `Landed { entity }` | It lands |
+
+All three bring a `Velocity` with them.
