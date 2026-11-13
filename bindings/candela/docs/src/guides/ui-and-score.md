@@ -57,19 +57,49 @@ Text { value: "Press [color=#ffd060]E[/color] to open", rich_text: true, layer: 
 
 ## Fonts
 
-Text uses the built-in font unless `font` names another. `Assets` loads TrueType, OpenType and BMFont files:
+Text uses the built-in font unless `font` names another. To use your own:
+
+1. Put the font file in the game folder, for example `assets/fonts/title.ttf`. Everything under `assets/` goes into the web page.
+2. Load it once in a Startup system with `assets.font(path, size)` and keep the `Font` in a resource. `size` is the size in pixels a `Text` with `size: 0.0` draws at; a `Text` with its own `size` draws at that size.
+3. Set `font` on each `Text` that should use it. Systems that spawn text from it run `after:` the loading system.
 
 ```rust
 @resource
-struct Fonts { title: Font }
+struct Fonts { title: Font = Font { .. } }   // the built-in font until loaded
 
 @system(schedule: Schedule::Startup)
-fn load_fonts(cmd: Commands, assets: Assets) {
-    cmd.insert_resource(Fonts { title: assets.font("assets/fonts/title.ttf", 48.0) });
+fn load_fonts(assets: Assets, fonts: Fonts) {
+    fonts.title = assets.font("assets/fonts/title.ttf", 48.0);
+}
+
+@system(schedule: Schedule::Startup, after: [load_fonts])
+fn spawn_title(cmd: Commands, fonts: Fonts) {
+    cmd.spawn([at(200.0, 60.0), Text { value: "My Game", font: fonts.title, size: 48.0, align: Align::Center, .. }]);
 }
 ```
 
-TrueType and OpenType fonts stay smooth at any `size`. BMFont files suit pixel-art fonts drawn at their own size.
+For the `drift/ui` widgets, set the theme's font in the same Startup system, before any widget is made; widgets copy the theme when they are created:
+
+```rust
+@system(schedule: Schedule::Startup)
+fn load_fonts(assets: Assets, fonts: Fonts, theme: Theme) {
+    fonts.title = assets.font("assets/fonts/title.ttf", 48.0);
+    theme.font = fonts.title;
+}
+```
+
+`assets.font` loads TrueType (`.ttf`), OpenType (`.otf`) and BMFont (`.fnt` with its page images) files, each path once. TrueType and OpenType fonts stay smooth at any `size`; BMFont files suit pixel-art fonts drawn at their own size. The size must be a float: write `48.0`, not `48`.
+
+A path that does not exist logs an error and throws `"drift_load_failed: <path>"`. The whole string is the error, so `catch "drift_load_failed"` does not match it; catch it with `catch e` to fall back to the built-in font:
+
+```rust
+let title = Font { .. };
+try {
+    title = assets.font("assets/fonts/title.ttf", 48.0);
+} catch e {
+    warn("using the built-in font: " + e);
+}
+```
 
 ## Measuring
 
