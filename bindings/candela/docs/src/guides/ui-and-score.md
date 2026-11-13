@@ -64,7 +64,7 @@ struct Fonts { title: Font }
 
 @system(schedule: Schedule::Startup)
 fn load_fonts(cmd: Commands, assets: Assets) {
-    cmd.insert_resource(Fonts { title: assets.font("assets/fonts/title.ttf", 48) });
+    cmd.insert_resource(Fonts { title: assets.font("assets/fonts/title.ttf", 48.0) });
 }
 ```
 
