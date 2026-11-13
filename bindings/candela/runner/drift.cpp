@@ -78,6 +78,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -938,12 +939,15 @@ const std::vector<Codec>& codecs() {
 // The drift module names a struct `Sprite`, or `drift::Sprite` when a game
 // declares its own of that name.
 const Codec* codec(const char* component) {
-    std::string n = component ? component : "";
-    if (n.rfind("drift::", 0) == 0) n = n.substr(7);
-    for (const auto& c : codecs()) {
-        if (n == c.name) return &c;
-    }
-    return nullptr;
+    static const std::unordered_map<std::string_view, const Codec*> byName = [] {
+        std::unordered_map<std::string_view, const Codec*> m;
+        for (const auto& c : codecs()) m.emplace(c.name, &c);
+        return m;
+    }();
+    std::string_view n = component ? component : "";
+    if (n.substr(0, 7) == "drift::") n.remove_prefix(7);
+    auto it = byName.find(n);
+    return it != byName.end() ? it->second : nullptr;
 }
 
 // ---- Random numbers, noise, generators, pathfinding and tilemaps ----

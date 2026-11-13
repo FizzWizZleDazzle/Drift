@@ -55,9 +55,16 @@ fn log(level: i32, message: &str) {
     unsafe { drift_bridge_log(level, m.as_ptr()) };
 }
 
+/// Whether the engine has a component of this name. The engine's set of
+/// components never changes, so each answer is kept.
 fn is_engine(component: &str) -> bool {
+    if let Some(known) = ENGINE_COMPONENTS.with(|k| k.borrow().get(component).copied()) {
+        return known;
+    }
     let c = cstr(component);
-    unsafe { drift_bridge_is_engine(c.as_ptr()) != 0 }
+    let answer = unsafe { drift_bridge_is_engine(c.as_ptr()) != 0 };
+    ENGINE_COMPONENTS.with(|k| k.borrow_mut().insert(component.to_owned(), answer));
+    answer
 }
 
 /// The value an engine answer holds: `len` bytes of MessagePack at `p`.
@@ -420,6 +427,8 @@ thread_local! {
     /// What each lookup handed out during the current call, by (key,
     /// entity), to tell what the system changed.
     static LOOKUP_SEEN: RefCell<HashMap<(i64, u64), Value>> = RefCell::new(HashMap::new());
+    /// is_engine's answers by component name.
+    static ENGINE_COMPONENTS: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
 }
 
 /// Entity `e`'s component `name`: from the script's stores, or the engine.
@@ -518,6 +527,8 @@ struct Host {
     condition_cache: HashMap<String, bool>,
     /// Components a component brings with it: type -> required types.
     requires: HashMap<String, Vec<String>>,
+    /// required_of's answers.
+    required: HashMap<String, std::rc::Rc<Vec<String>>>,
     /// Script components built from their defaults, for requires.
     component_defaults: HashMap<String, Value>,
     /// @drift::state enums by name.
@@ -727,11 +738,11 @@ impl Host {
     }
 
     /// Keeps the components a system changed in one row of entity `e`.
-    fn write_row(&mut self, fields: &[(String, Option<String>)], old: Option<&Value>, new: Option<&Value>, e: u64) {
+    fn write_row(&mut self, fields: &[(String, Option<String>)], old: Option<&Value>, new: Option<&mut Value>, e: u64) {
         let (Some(Value::Struct { fields: of, .. }), Some(Value::Struct { fields: nf, .. })) = (old, new) else { return };
         for (k, (_, c)) in fields.iter().enumerate() {
             if c.is_some() && of[k].1 != nf[k].1 {
-                self.set_component(e, nf[k].1.clone());
+                self.set_component(e, std::mem::replace(&mut nf[k].1, Value::Null));
             }
         }
     }
@@ -797,8 +808,13 @@ impl Host {
         self.add_required(e, &name);
     }
 
-    /// Adds the components `name` requires that `e` lacks, from their defaults.
-    fn add_required(&mut self, e: u64, name: &str) {
+    /// The components `name` requires, by the game's names for them: what
+    /// its @drift::component attribute lists, and for an engine component
+    /// what the engine says it needs. Worked out once per name.
+    fn required_of(&mut self, name: &str) -> std::rc::Rc<Vec<String>> {
+        if let Some(r) = self.required.get(name) {
+            return r.clone();
+        }
         let mut required = self.requires.get(name).cloned().unwrap_or_default();
         if is_engine(name) {
             let c = cstr(name);
@@ -808,8 +824,20 @@ impl Host {
                 required.extend(list);
             }
         }
-        for r in required {
-            let r = self.types.table.structs.iter().find(|s| bare(&s.name) == bare(&r)).map_or(r.clone(), |s| s.name.clone());
+        let resolved: Vec<String> = required
+            .iter()
+            .map(|r| self.types.table.structs.iter().find(|s| bare(&s.name) == bare(r)).map_or(r.clone(), |s| s.name.clone()))
+            .collect();
+        let resolved = std::rc::Rc::new(resolved);
+        self.required.insert(name.to_owned(), resolved.clone());
+        resolved
+    }
+
+    /// Adds the components `name` requires that `e` lacks, from their defaults.
+    fn add_required(&mut self, e: u64, name: &str) {
+        let required = self.required_of(name);
+        for r in required.iter() {
+            let r = r.clone();
             if self.has(e, &r) {
                 continue;
             }
@@ -977,9 +1005,12 @@ impl Host {
     }
 
     /// Keeps every change the system made to components and resources.
-    fn write_back(&mut self, sys: &System, before: &[Value], after: &[Value], entities: &[Vec<u64>]) {
+    /// `before` holds what the call was given for the parameters this can
+    /// write back (see `kept`), `after` what the call left; values are
+    /// taken out of `after`.
+    fn write_back(&mut self, sys: &System, before: &[Value], after: &mut [Value], entities: &[Vec<u64>]) {
         for (i, p) in sys.params.iter().enumerate() {
-            let (old, new) = (&before[i], &after[i]);
+            let (old, new) = (&before[i], &mut after[i]);
             if old == new {
                 continue;
             }
@@ -987,7 +1018,7 @@ impl Host {
                 Param::Rows { fields, .. } => {
                     let (Value::Array(o), Value::Array(n)) = (old, new) else { continue };
                     for (r, e) in entities[i].iter().enumerate() {
-                        self.write_row(fields, o.get(r), n.get(r), *e);
+                        self.write_row(fields, o.get(r), n.get_mut(r), *e);
                     }
                 }
                 Param::Row { fields, .. } => {
@@ -1008,7 +1039,7 @@ impl Host {
                 }
                 Param::Resource(name) => {
                     publish_resource(name, Some(new));
-                    self.resources.insert(name.clone(), new.clone());
+                    self.resources.insert(name.clone(), std::mem::replace(new, Value::Null));
                 }
                 Param::State { of, .. } => {
                     if let (Some(Value::Bool(true)), Some(Value::Enum { variant, .. })) = (field(new, "changing"), field(new, "next")) {
@@ -1256,10 +1287,10 @@ impl Host {
         for focus in self.foci(&sys) {
             let Some((mut args, entities)) = self.arguments(&sys, time, &focus) else { continue };
             LOOKUP_SEEN.with(|seen| seen.borrow_mut().clear());
-            let before = args.clone();
+            let before = kept(&sys, &args);
             match self.program.call_in_out(&sys.name, &mut args) {
                 Ok(_) => {
-                    self.write_back(&sys, &before, &args, &entities);
+                    self.write_back(&sys, &before, &mut args, &entities);
                     self.apply();
                 }
                 Err(d) => {
@@ -1384,6 +1415,20 @@ impl Host {
         self.next_seq = 0;
         self.started = false;
     }
+}
+
+/// Copies of the arguments write_back compares against: rows, resources
+/// and states. Other parameters are not written back (a lookup notes what
+/// it handed out itself), so they are not copied.
+fn kept(sys: &System, args: &[Value]) -> Vec<Value> {
+    sys.params
+        .iter()
+        .zip(args)
+        .map(|(p, a)| match p {
+            Param::Rows { .. } | Param::Row { .. } | Param::Resource(_) | Param::State { .. } => a.clone(),
+            _ => Value::Null,
+        })
+        .collect()
 }
 
 /// A game component as a scene file holds it: like to_json, with each
@@ -1980,6 +2025,7 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         conditions: HashMap::new(),
         condition_cache: HashMap::new(),
         requires: HashMap::new(),
+        required: HashMap::new(),
         component_defaults: HashMap::new(),
         states: HashMap::new(),
         time_scale: (1.0, 0.0),
