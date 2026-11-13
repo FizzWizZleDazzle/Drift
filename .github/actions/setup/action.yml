@@ -69,6 +69,13 @@ runs:
         key: naga-cli-30.0.1-${{ runner.os }}-${{ runner.arch }}
 
     - name: Install naga
-      if: steps.naga.outputs.cache-hit != 'true'
+      if: steps.naga.outputs.cache-hit != 'true' && runner.os != 'Windows'
       shell: bash
+      run: cargo install naga-cli --version 30.0.1 --locked
+
+    # Not from bash on Windows: Git's /usr/bin/link comes first on its PATH
+    # and rustc would link with it instead of MSVC's link.exe.
+    - name: Install naga (Windows)
+      if: steps.naga.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: pwsh
       run: cargo install naga-cli --version 30.0.1 --locked

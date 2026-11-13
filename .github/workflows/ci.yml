@@ -79,8 +79,9 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: ${{ matrix.name }}
+      # The runner's default shell: PowerShell on Windows, where Git Bash
+      # would put its own link ahead of MSVC's.
       - name: Configure
-        shell: bash
         run: >
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
