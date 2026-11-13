@@ -126,6 +126,18 @@ impl Types {
     /// A value of type `ty` read from JSON; what JSON leaves out takes the
     /// zero value of its type.
     fn from_json(&self, j: &Json, ty: &DataType) -> Value {
+        self.from_json_with(j, ty, None)
+    }
+
+    /// from_json, with entity references read through `entity`: scene files
+    /// hold an Entity as the file's id of the entity (or null for none).
+    fn from_json_with(&self, j: &Json, ty: &DataType, entity: Option<&dyn Fn(&Json) -> i64>) -> Value {
+        if let (Some(f), DataType::Struct(id)) = (entity, ty) {
+            let info = &self.table.structs[*id as usize];
+            if bare(&info.name) == "Entity" {
+                return Value::Struct { name: info.name.clone(), fields: vec![("id".into(), Value::Int(f(j)))] };
+            }
+        }
         // Text stands in for a number or a bool (a CSV cell is always text),
         // and a number for text.
         let text = j.as_str().map(str::trim);
@@ -146,13 +158,13 @@ impl Types {
             }),
             DataType::Array(elem) => {
                 let elem = elem.as_deref().unwrap_or(&DataType::Unknown);
-                Value::Array(j.as_array().map(|a| a.iter().map(|e| self.from_json(e, elem)).collect()).unwrap_or_default())
+                Value::Array(j.as_array().map(|a| a.iter().map(|e| self.from_json_with(e, elem, entity)).collect()).unwrap_or_default())
             }
             DataType::Map(kv) => {
                 let elem = kv.1.as_ref().unwrap_or(&DataType::Unknown);
                 Value::Map(
                     j.as_object()
-                        .map(|o| o.iter().map(|(k, v)| (k.clone(), self.from_json(v, elem))).collect())
+                        .map(|o| o.iter().map(|(k, v)| (k.clone(), self.from_json_with(v, elem, entity))).collect())
                         .unwrap_or_default(),
                 )
             }
@@ -165,7 +177,7 @@ impl Types {
                     fields: info
                         .fields
                         .iter()
-                        .map(|(f, t)| (f.clone(), self.from_json(obj.get(f).unwrap_or(&Json::Null), t)))
+                        .map(|(f, t)| (f.clone(), self.from_json_with(obj.get(f).unwrap_or(&Json::Null), t, entity)))
                         .collect(),
                 }
             }
@@ -330,9 +342,17 @@ enum Command {
     Restart,
     /// A message delivered once this many seconds have passed.
     SendAfter(f64, Value),
+    /// Writes a scene file: every entity, or `root` and its children.
+    SaveScene(String, u64),
 }
 
 thread_local! {
+    /// The names of the game's components, for the engine to ask about
+    /// while a system runs.
+    static COMPONENT_NAMES: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+    /// Script components a scene spawned: entity, component, its JSON, and
+    /// the file's entity ids mapped to the new entities.
+    static SCENE_COMPONENTS: RefCell<Vec<(u64, String, String, String)>> = const { RefCell::new(Vec::new()) };
     /// Entities the game spawned, for a restart to remove.
     static SPAWNED: RefCell<BTreeSet<u64>> = const { RefCell::new(BTreeSet::new()) };
     /// Whether each system is on, as of the start of this system's call.
@@ -867,7 +887,55 @@ impl Host {
         }
     }
 
+    /// Puts the script components scenes spawned onto their entities.
+    fn apply_scene_components(&mut self) {
+        let pending = SCENE_COMPONENTS.with(|q| std::mem::take(&mut *q.borrow_mut()));
+        for (e, name, text, ids) in pending {
+            let Some(full) = self.components.iter().find(|c| bare(c) == name).cloned() else { continue };
+            let Some(id) = self.types.struct_id(&full) else { continue };
+            let j: Json = serde_json::from_str(&text).unwrap_or(Json::Null);
+            let map: HashMap<String, u64> = serde_json::from_str(&ids).unwrap_or_default();
+            let entity = |x: &Json| x.as_i64().and_then(|l| map.get(&l.to_string())).map_or(0, |n| *n as i64);
+            let v = self.types.from_json_with(&j, &DataType::Struct(id), Some(&entity));
+            SPAWNED.with(|s| s.borrow_mut().insert(e));
+            self.set_component(e, v);
+        }
+    }
+
+    /// Writes a scene file: the engine serializes its components, and the
+    /// game's components join their entities with entity references turned
+    /// into the file's ids.
+    fn save_scene(&mut self, path: &str, root: u64) {
+        let mut extra: BTreeSet<u64> = BTreeSet::new();
+        if root == 0 {
+            for store in self.stores.values() {
+                extra.extend(store.keys().copied());
+            }
+        }
+        let answer = call("scene_serialize", json!([root, extra.into_iter().collect::<Vec<u64>>()]));
+        let (Some(mut doc), Some(order)) = (answer.get("doc").cloned(), answer.get("order").and_then(Json::as_array).cloned()) else {
+            log(2, &format!("drift_save_failed: {path}"));
+            return;
+        };
+        let order: Vec<u64> = order.iter().filter_map(Json::as_u64).collect();
+        let local: HashMap<u64, i64> = order.iter().enumerate().map(|(i, e)| (*e, i as i64)).collect();
+        if let Some(ents) = doc.get_mut("entities").and_then(Json::as_array_mut) {
+            for (i, e) in order.iter().enumerate() {
+                let Some(comps) = ents.get_mut(i).and_then(|x| x.get_mut("components")).and_then(Json::as_object_mut) else { continue };
+                for (name, store) in &self.stores {
+                    if let Some(v) = store.get(e) {
+                        comps.insert(bare(name).to_owned(), scene_json(v, &local));
+                    }
+                }
+            }
+        }
+        if !call("scene_write", json!([path, doc.to_string()])).as_bool().unwrap_or(false) {
+            log(2, &format!("drift_save_failed: {path}"));
+        }
+    }
+
     fn apply(&mut self) {
+        self.apply_scene_components();
         let commands = QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut()));
         for c in commands {
             match c {
@@ -908,6 +976,7 @@ impl Host {
                     SWITCHES.with(|w| w.borrow_mut().insert(name, on));
                 }
                 Command::Restart => self.restart_pending = true,
+                Command::SaveScene(path, root) => self.save_scene(&path, root),
                 Command::Send(v) => self.deliver(v),
                 Command::SendAfter(seconds, v) => self.later.push((seconds, v)),
             }
@@ -1080,6 +1149,8 @@ impl Host {
     }
 
     fn frame(&mut self, time: (f64, f64, i64)) {
+        // Components of scenes the engine reloaded between frames.
+        self.apply_scene_components();
         self.condition_cache.clear();
         // Entities the engine removed (a Lifetime ran out, a parent went).
         for store in self.stores.values_mut() {
@@ -1177,6 +1248,21 @@ impl Host {
     }
 }
 
+/// A game component as a scene file holds it: like to_json, with each
+/// Entity as the file's id of the entity, or null when it is not saved.
+fn scene_json(v: &Value, local: &HashMap<u64, i64>) -> Json {
+    match v {
+        Value::Struct { name, fields } if bare(name) == "Entity" => {
+            let id = fields.iter().find(|(k, _)| k == "id").and_then(|(_, x)| x.as_i64()).unwrap_or(0);
+            local.get(&(id as u64)).map_or(Json::Null, |l| json!(l))
+        }
+        Value::Struct { fields, .. } => Json::Object(fields.iter().map(|(k, x)| (k.clone(), scene_json(x, local))).collect()),
+        Value::Array(items) => Json::Array(items.iter().map(|x| scene_json(x, local)).collect()),
+        Value::Map(m) => Json::Object(m.iter().map(|(k, x)| (k.clone(), scene_json(x, local))).collect()),
+        other => to_json(other),
+    }
+}
+
 fn field<'a>(v: &'a Value, name: &str) -> Option<&'a Value> {
     match v {
         Value::Struct { fields, .. } => fields.iter().find(|(n, _)| n == name).map(|(_, v)| v),
@@ -1259,6 +1345,7 @@ fn engine(module_dir: &str) -> Engine {
         SWITCHES.with(|w| w.borrow().get(name).copied().unwrap_or(false))
     });
     e.register_host_fn("drift", "restart", || queue(Command::Restart));
+    e.register_host_fn("drift", "scene_save", |path: String, root: i64| queue(Command::SaveScene(path, root as u64)));
     e.register_host_fn_variadic("drift", "spawn_bundle", move |a| {
         let id = v(a, 0).as_i64().ok_or_else(|| host_error("spawn needs an entity"))? as u64;
         let bundle = match v(a, 1) {
@@ -1532,6 +1619,10 @@ fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("grid_fov", vec![I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, I, I], HostType::Array(Box::new(I))),
         ("grid_los", vec![I, I, HostType::Array(Box::new(I)), HostType::Array(Box::new(I)), I, I, I, I], B),
         ("grid_line", vec![I, I, I, I], HostType::Array(Box::new(I))),
+        // Scenes.
+        ("scene_load", vec![S], I),
+        ("scene_spawn", vec![I, F, F, I, as_(), as_()], HostType::Array(Box::new(I))),
+        ("scene_names", vec![], as_()),
         // Audio.
         ("voice_play", vec![I, I, F, F, F, B, F, I], I),
         ("voice_op", vec![I, I, F, F], F),
@@ -1858,6 +1949,7 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     }
     host.systems = order(systems)?;
     host.initial_resources = host.resources.clone();
+    COMPONENT_NAMES.with(|n| *n.borrow_mut() = host.components.iter().map(|c| bare(c).to_owned()).collect());
     host.initial_enabled = host.systems.iter().map(|s| s.enabled).collect();
     SWITCHES.with(|w| *w.borrow_mut() = host.systems.iter().map(|s| (s.name.clone(), s.enabled)).collect());
     Ok(host)
@@ -1889,6 +1981,23 @@ fn variant(table: &AttributeTable, v: &AttributeValue) -> Option<(String, String
 
 fn set_error(message: &str) {
     ERROR.with(|e| *e.borrow_mut() = cstr(message));
+}
+
+/// Whether the game declares a component of this name: the engine asks
+/// while it spawns a scene.
+#[no_mangle]
+pub extern "C" fn drift_host_is_component(name: *const c_char) -> i32 {
+    let Some(name) = from_c(name) else { return 0 };
+    COMPONENT_NAMES.with(|n| n.borrow().contains(&name)) as i32
+}
+
+/// A game component a scene spawned onto an entity: its JSON, and the
+/// file's entity ids mapped to the new entities as a JSON object. It joins
+/// the entity when the current system returns, or at the next frame.
+#[no_mangle]
+pub extern "C" fn drift_host_scene_component(e: u64, name: *const c_char, value: *const c_char, ids: *const c_char) {
+    let (Some(name), Some(value), Some(ids)) = (from_c(name), from_c(value), from_c(ids)) else { return };
+    SCENE_COMPONENTS.with(|q| q.borrow_mut().push((e, name, value, ids)));
 }
 
 /// Compiles `entry` against the `drift` module in `module_dir`. Returns 0 and

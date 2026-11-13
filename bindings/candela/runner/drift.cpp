@@ -16,6 +16,8 @@
 #include <drift/gameplay/ProceduralAnimation.hpp>
 #include <drift/math/Vector.hpp>
 #include <drift/Log.hpp>
+#include <drift/Reflect.hpp>
+#include <drift/Scene.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
 #include <drift/components/AudioSource.hpp>
 #include <drift/components/Behavior.hpp>
@@ -76,6 +78,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 using namespace drift;
@@ -87,6 +90,8 @@ const char* drift_host_error();
 void drift_host_contact(int32_t kind, uint64_t a, uint64_t b, float px, float py, float nx, float ny);
 void drift_host_frame(double dt, double elapsed, int64_t frame, double scale, double real_dt);
 void drift_host_unload();
+int32_t drift_host_is_component(const char* name);
+void drift_host_scene_component(uint64_t e, const char* name, const char* value, const char* ids);
 }
 
 namespace {
@@ -2746,9 +2751,93 @@ bool gameplaySpatial(const std::string& f, const json& a, json& out) {
     return false;
 }
 
+std::vector<std::string> g_sceneNames;   // the names of the last scene spawn
+
+bool gameplayScenes(const std::string& f, const json& a, json& out) {
+    if (f.rfind("scene_", 0) != 0) return false;
+    auto* scenes = res<SceneResource>();
+    if (!scenes) {
+        out = f == "scene_load" ? json(0) : f == "scene_write" ? json(false) : json::array();
+        return true;
+    }
+    if (f == "scene_load") {
+        out = scenes->load(a[0].get<std::string>().c_str()).id;
+    } else if (f == "scene_spawn") {
+        SceneSpawnOptions o;
+        o.offset = {a[1].get<float>(), a[2].get<float>()};
+        EntityId parent = a[3].get<EntityId>();
+        o.parent = parent ? parent : InvalidEntityId;
+        for (size_t i = 0; i < a[4].size() && i < a[5].size(); ++i) {
+            json patch = json::parse(a[5][i].get<std::string>(), nullptr, false);
+            if (!patch.is_discarded()) o.overrides[a[4][i].get<std::string>()] = patch;
+        }
+        SceneInstance inst = scenes->spawnNow(SceneHandle{a[0].get<uint32_t>()}, o);
+        out = json::array();
+        out.push_back(inst.entities.size());
+        for (EntityId e : inst.entities) out.push_back(e);
+        out.push_back(inst.roots.size());
+        for (EntityId e : inst.roots) out.push_back(e);
+        g_sceneNames = inst.names;
+    } else if (f == "scene_names") {
+        out = g_sceneNames;
+    } else if (f == "scene_serialize") {
+        // Every entity with a reflected component and the ones the game
+        // names (its own components), or one root and its children.
+        SceneSaveOptions o;
+        EntityId root = a[0].get<EntityId>();
+        if (root) {
+            o.entities.push_back(root);
+        } else {
+            std::unordered_set<EntityId> all;
+            for (const reflect::ComponentInfo* info : reflect::components()) {
+                if (ComponentId c = info->id(world())) {
+                    for (EntityId e : world().entitiesWith(c)) all.insert(e);
+                }
+            }
+            for (const auto& e : a[1]) {
+                if (world().isAlive(e.get<EntityId>())) all.insert(e.get<EntityId>());
+            }
+            o.entities.assign(all.begin(), all.end());
+            if (o.entities.empty()) o.filter = [](EntityId) { return false; };
+        }
+        std::vector<EntityId> order;
+        json doc = scenes->serialize(o, &order);
+        out = json{{"doc", doc}, {"order", order}};
+    } else if (f == "scene_write") {
+        std::string path = a[0].get<std::string>();
+        json doc = json::parse(a[1].get<std::string>(), nullptr, false);
+        std::FILE* file = doc.is_discarded() ? nullptr : std::fopen(path.c_str(), "wb");
+        bool ok = file != nullptr;
+        if (file) {
+            std::string text = doc.dump(2) + "\n";
+            ok = std::fwrite(text.data(), 1, text.size(), file) == text.size();
+            ok = std::fclose(file) == 0 && ok;
+        }
+        out = ok;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+// Scene files name the game's components by their struct names; the host
+// takes those when a scene spawns or reloads.
+void handScriptComponentsToHost() {
+    auto* scenes = res<SceneResource>();
+    if (!scenes) return;
+    scenes->setForeignComponentHandler([](EntityId e, const std::string& name, const json& value,
+                                          const std::unordered_map<int64_t, EntityId>& ids) {
+        if (!drift_host_is_component(name.c_str())) return false;
+        json map = json::object();
+        for (const auto& [local, entity] : ids) map[std::to_string(local)] = entity;
+        drift_host_scene_component(e, name.c_str(), value.dump().c_str(), map.dump().c_str());
+        return true;
+    });
+}
+
 bool gameplay(const std::string& f, const json& a, json& out) {
     return gameplayInput(f, a, out) || gameplayPhysics(f, a, out) || gameplayAudio(f, a, out) ||
-           gameplayTilemap(f, a, out) || gameplaySpatial(f, a, out);
+           gameplayTilemap(f, a, out) || gameplaySpatial(f, a, out) || gameplayScenes(f, a, out);
 }
 
 json service(const std::string& f, const json& a) {
@@ -3050,6 +3139,7 @@ private:
                 return;
             }
             loaded_ = true;
+            handScriptComponentsToHost();
         }
         if (auto* cb = a.getResource<CollisionBridge>()) {
             for (int i = 0; i < cb->collisionStartCount(); ++i) {

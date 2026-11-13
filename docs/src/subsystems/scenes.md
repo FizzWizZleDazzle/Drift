@@ -49,9 +49,11 @@ app.addSystem("save_level", Phase::Update, [](App& a) {
 ```
 
 ```cpp
-nlohmann::json serialize(const SceneSaveOptions& options = {}) const;
+nlohmann::json serialize(const SceneSaveOptions& options = {}, std::vector<EntityId>* order = nullptr) const;
 bool save(const char* path, const SceneSaveOptions& options = {});
 ```
+
+`order`, when given, receives the saved entities in file order: entry `i` is the entity written with id `i`.
 
 By default every entity with a described component is saved. `SceneSaveOptions` narrows that:
 
@@ -112,6 +114,21 @@ scenes->spawn(cmd, coin, opts);
 ```
 
 Overrides merge into the saved component values (JSON merge patch): fields you list replace the saved ones, others stay. Setting a component to `null` leaves it out of that copy.
+
+## Components Kept Elsewhere
+
+A scripting host keeps its own components outside the ECS, and they live in the same scene files under their own names. `setForeignComponentHandler` receives every component a file names that no reflected component matches, with the spawned entity, the component's name and JSON, and the file's entity ids mapped to the new entities; return `true` when it was taken, and the scene stops calling it unknown:
+
+```cpp
+scenes->setForeignComponentHandler([](EntityId e, const std::string& name, const nlohmann::json& value,
+                                      const std::unordered_map<int64_t, EntityId>& ids) {
+    if (!myScripts.has(name)) return false;
+    myScripts.insert(e, name, value, ids);
+    return true;
+});
+```
+
+To save them, serialize with an `order` and add each entity's components to `doc["entities"][i]["components"]`. The Candela host does both.
 
 ## Reloading
 

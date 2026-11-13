@@ -97,6 +97,7 @@ EntityId SceneInstance::find(const char* name) const {
 
 struct SceneResource::Impl {
     App& app;
+    ForeignComponentHandler foreign;
 
     struct SceneEntry {
         std::shared_ptr<const json> doc;
@@ -197,7 +198,9 @@ struct SceneResource::Impl {
                 const reflect::ComponentInfo* info = reflect::findComponent(it.key());
                 ComponentId cid = info ? info->id(world) : 0;
                 if (!cid) {
-                    DRIFT_LOG_WARN("Scene: unknown component '%s' skipped", it.key().c_str());
+                    if (!(foreign && foreign(e, it.key(), *it, byLocal))) {
+                        DRIFT_LOG_WARN("Scene: unknown component '%s' skipped", it.key().c_str());
+                    }
                     continue;
                 }
                 reflect::Value value(*info->info);
@@ -278,8 +281,12 @@ struct SceneResource::Impl {
 SceneResource::SceneResource(App& app) : impl_(std::make_unique<Impl>(app)) {}
 SceneResource::~SceneResource() = default;
 
-json SceneResource::serialize(const SceneSaveOptions& options) const {
-    return impl_->serialize(options, nullptr);
+json SceneResource::serialize(const SceneSaveOptions& options, std::vector<EntityId>* order) const {
+    return impl_->serialize(options, order);
+}
+
+void SceneResource::setForeignComponentHandler(ForeignComponentHandler handler) {
+    impl_->foreign = std::move(handler);
 }
 
 json SceneResource::Impl::serialize(const SceneSaveOptions& options,

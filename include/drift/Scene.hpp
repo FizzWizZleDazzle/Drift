@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace drift {
@@ -52,6 +53,15 @@ struct SceneInstance {
     EntityId find(const char* name) const;
 };
 
+// Handles a component a scene file names that no reflected component
+// matches, such as the components of a scripting host: the entity, the
+// component's name and JSON, and the file's entity ids mapped to the spawned
+// entities (to resolve entity references inside it). Return true when the
+// component was taken; otherwise the scene logs it as unknown.
+using ForeignComponentHandler =
+    std::function<bool(EntityId, const std::string&, const nlohmann::json&,
+                       const std::unordered_map<int64_t, EntityId>&)>;
+
 class SceneResource : public Resource {
 public:
     explicit SceneResource(App& app);
@@ -63,7 +73,9 @@ public:
     // ---- Saving ----
     // Reads the world directly: call from an exclusive system
     // (app.addSystem(name, phase, [](App&) {...})) or from startup.
-    nlohmann::json serialize(const SceneSaveOptions& options = {}) const;
+    // `order`, when given, receives the saved entities in file order: entry
+    // i is the entity written with id i.
+    nlohmann::json serialize(const SceneSaveOptions& options = {}, std::vector<EntityId>* order = nullptr) const;
     // The saved file becomes a loaded scene with the saved entities as its
     // instance, so reloading the file (or hot reload) updates them in place.
     bool save(const char* path, const SceneSaveOptions& options = {});
@@ -87,6 +99,10 @@ public:
                         const SceneSpawnOptions& options = {});
     // Spawns immediately. Only from exclusive systems or startup.
     SceneInstance spawnNow(SceneHandle scene, const SceneSpawnOptions& options = {});
+
+    // Components that are not reflected go to this handler when a scene
+    // spawns or reloads; see ForeignComponentHandler.
+    void setForeignComponentHandler(ForeignComponentHandler handler);
 
 private:
     struct Impl;
