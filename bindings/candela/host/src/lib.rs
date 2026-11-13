@@ -1542,6 +1542,7 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         // Time and entities.
         ("set_time_scale", vec![F], U),
         ("entity_alive", vec![I], B),
+        ("entity_count", vec![], I),
         // Hierarchy and procedural animation.
         ("hier_parent", vec![I], I),
         ("hier_children", vec![I], ai()),

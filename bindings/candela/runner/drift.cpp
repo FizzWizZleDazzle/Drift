@@ -3019,6 +3019,7 @@ json service(const std::string& f, const json& a) {
         if (f == "save_clear") { save->clear(); return nullptr; }
         if (f == "save_flush") return save->flush();
     }
+    if (f == "entity_count") return int64_t(world().entitiesWith(cid<Transform2D>()).size());
     if (f == "entity_alive") return a[0].get<EntityId>() != 0 && world().isAlive(a[0].get<EntityId>());
     if (f == "set_time_scale") {
         if (auto* time = res<Time>()) time->scale = std::max(0.f, a[0].get<float>());

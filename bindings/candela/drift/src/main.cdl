@@ -72,6 +72,7 @@ host "drift" {
     string resource_text(string);
     set_time_scale(float);
     bool entity_alive(int);
+    int entity_count();
 
     // Random numbers. A generator crosses as its state (hi, lo) and
     // increment; the answer starts with the new (hi, lo).

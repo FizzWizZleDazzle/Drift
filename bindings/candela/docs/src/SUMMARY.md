@@ -52,7 +52,7 @@
 - [Engine Resources](reference/resources.md)
 - [Values and Enums](reference/values.md)
 - [drift/ui](reference/ui.md)
-- [drift/gameplay, control and screens](reference/gameplay.md)
+- [Building Block Modules](reference/blocks.md)
 - [drift/ai](reference/ai.md)
 - [drift/rpg](reference/rpg.md)
 - [The drift Command](reference/cli.md)

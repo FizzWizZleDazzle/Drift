@@ -1,0 +1,148 @@
+// drift/debug: an on-screen debug overlay and time controls that work in
+// every build, the browser included.
+//
+// `import "drift/debug" { * };` adds the overlay (F2): frames per second,
+// entity count, the time scale, watched resource fields and recent
+// messages. F3 draws the colliders, F4 toggles slow motion, F6 freezes
+// time and F7 steps one frame while frozen. drift.toml [debug] sets
+// `shown`, `keys` and `slow`.
+
+import "drift" { * };
+
+@settings(section: "debug")
+struct Debug {
+    // The overlay shows.
+    shown: bool = true,
+    // The F-keys work. Turn them off for a release.
+    keys: bool = true,
+    // The time scale of slow motion.
+    slow: float = 0.25,
+    // Resource fields the overlay shows, by path: "Game.score".
+    watches: string[] = [],
+    lines: string[] = [],
+    ages: float[] = [],
+    fps: float = 0.0,
+    colliders: bool = false,
+    frozen: bool = false,
+    stepping: int = 0,
+    slowed: bool = false,
+}
+
+impl Debug {
+    // Shows a resource field on the overlay, by path: "Game.score".
+    fn watch(self, path: string) {
+        if !self.watches.contains(path) {
+            self.watches.push(path);
+        }
+    }
+    // A line on the overlay that goes after five seconds; also logged.
+    fn print(self, text: string) {
+        log(text);
+        self.lines.push(text);
+        self.ages.push(0.0);
+        while self.lines.len() > 8 {
+            self.lines.remove(0);
+            self.ages.remove(0);
+        }
+    }
+}
+
+fn dbg_scale(d: Debug) -> float {
+    if d.frozen {
+        return 0.0;
+    }
+    if d.slowed {
+        return d.slow;
+    }
+    return 1.0;
+}
+
+@system
+fn dbg_keys(d: Debug, input: Input, time: Time, physics: Physics) {
+    if d.stepping > 0 {
+        // The stepped frame has run; freeze again.
+        d.stepping -= 1;
+        if d.stepping == 0 {
+            time.set_scale(0.0);
+        }
+    }
+    if !d.keys {
+        return;
+    }
+    if input.key_pressed(Key::F2) {
+        d.shown = !d.shown;
+    }
+    if input.key_pressed(Key::F3) {
+        d.colliders = !d.colliders;
+        physics.set_debug_draw(d.colliders);
+    }
+    if input.key_pressed(Key::F4) {
+        d.slowed = !d.slowed;
+        time.set_scale(dbg_scale(d));
+    }
+    if input.key_pressed(Key::F6) {
+        d.frozen = !d.frozen;
+        time.set_scale(dbg_scale(d));
+    }
+    if input.key_pressed(Key::F7) && d.frozen {
+        time.set_scale(1.0);
+        d.stepping = 1;
+    }
+}
+
+@system(after: [dbg_keys])
+fn dbg_overlay(d: Debug, time: Time, draw: Draw, win: Window) {
+    if time.real_dt > 0.0 {
+        let now = 1.0 / time.real_dt;
+        if d.fps <= 0.0 {
+            d.fps = now;
+        }
+        d.fps += (now - d.fps) * 0.05;
+    }
+    let i = 0;
+    while i < d.ages.len() {
+        d.ages[i] += time.real_dt;
+        if d.ages[i] > 5.0 {
+            d.ages.remove(i);
+            d.lines.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+    if !d.shown {
+        return;
+    }
+    let rows: string[] = [];
+    rows.push(string(int(d.fps.round())) + " fps   " + string(drift::entity_count()) + " entities");
+    let mode = "";
+    if d.frozen {
+        mode = "frozen (F7 steps)";
+    } else if d.slowed {
+        mode = "slow x" + string(d.slow);
+    }
+    if mode != "" {
+        rows.push("time " + mode);
+    }
+    for w in d.watches {
+        rows.push(w + " = " + drift::resource_text(w));
+    }
+    for l in d.lines {
+        rows.push(l);
+    }
+    let size = 14.0;
+    let line = size + 4.0;
+    let width = 0.0;
+    for r in rows {
+        width = max(width, float(r.len()) * size * 0.56);
+    }
+    let x = win.width - width - 16.0;
+    draw.hud();
+    draw.at_z(90000.0);
+    draw.rect(Rect { x: x - 6.0, y: win.height - float(rows.len()) * line - 14.0, w: width + 14.0, h: float(rows.len()) * line + 8.0 },
+              Color { r: 0.0, g: 0.0, b: 0.0, a: 0.55 });
+    let y = win.height - float(rows.len()) * line - 10.0;
+    for r in rows {
+        draw.text(r, Vec2 { x: x, y: y }, size, Color { r: 0.85, g: 1.0, b: 0.85, a: 1.0 });
+        y += line;
+    }
+}

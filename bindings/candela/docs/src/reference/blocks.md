@@ -1,8 +1,10 @@
-# drift/gameplay, drift/control and drift/screens
+# Building Block Modules
 
-Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../guides/building-blocks.md) guide shows them in use.
+What `drift/gameplay`, `drift/control`, `drift/screens` and `drift/debug` bring in. The [Building Blocks](../guides/building-blocks.md) and [Debugging](../guides/debugging.md#the-debug-overlay-in-every-build) guides show them in use.
 
-## Components
+## drift/gameplay
+
+### Components
 
 | Component | Fields | Example |
 |-----------|--------|---------|
@@ -18,13 +20,13 @@ Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../
 | `Spawner` | `id`, `every`, `count` (-1 forever), `spread`, `paused`, `fired` | `spawner("bat", 0.8)` |
 | `WaveSpawner` | `waves` (a `Wave[]`), `looping`, `wave` (the current one), `done` | `WaveSpawner { waves: [wave("bat", 5, 0.6, 1.0)], .. }` |
 
-## Resources
+### Resources
 
 | Resource | Fields and methods |
 |----------|--------------------|
 | `Score` | `value`, `best`, `key` (the save key, `"best"`); `add(points)`, `reset()`, `is_record()` |
 
-## Messages
+### Messages
 
 | Message | Sent when, or what it does |
 |---------|----------------------------|
@@ -36,7 +38,7 @@ Everything `import "drift/gameplay" { * };` brings in. The [Building Blocks](../
 | `SpawnTick { spawner, id, position, index }` | A `Spawner` fired |
 | `WaveStarted { wave }`, `WaveSpawn { wave, id, index }`, `WavesDone { waves }` | A `WaveSpawner` started a wave, spawned, finished |
 
-## Functions
+### Functions
 
 | Function | Does |
 |----------|------|
@@ -75,3 +77,17 @@ All three bring a `Velocity` with them.
 | `game_over_screen(cmd, theme, title, detail)` | Heading, detail and Play again and Title buttons on the game-over screen |
 
 Button ids the module answers: `"play"` and `"retry"` go to `Playing`, `"title"` to `Title`, `"resume"` ends a pause.
+
+## drift/debug
+
+| Item | What it is |
+|------|------------|
+| `Debug` | Settings from `[debug]`: `shown` (the overlay, true), `keys` (the F-keys work, true), `slow` (the slow-motion scale, 0.25), `watches`. `watch(path)` shows a resource field; `print(text)` puts a line on the overlay for five seconds and logs it |
+
+| Key | Does |
+|-----|------|
+| F2 | Shows or hides the overlay |
+| F3 | Draws the colliders |
+| F4 | Slow motion on or off |
+| F6 | Freezes or unfreezes game time |
+| F7 | Steps one frame while frozen |

@@ -28,6 +28,35 @@ Draws are in world coordinates, over entities, until `hud()` switches to screen 
 log("wave " + string(waves.count) + " with " + string(enemies.len()) + " enemies");
 ```
 
+## The debug overlay in every build
+
+`import "drift/debug" { * };` puts a small overlay in the bottom-right corner that works in every build, the browser included: frames per second, the number of entities, the time scale, resource fields you watch and recent lines you print.
+
+```rust
+@system(schedule: Schedule::Startup)
+fn debug_setup(debug: Debug) {
+    debug.watch("Game.score");
+    debug.watch("Game.wave");
+}
+
+@system
+fn on_hit(d: Damaged, debug: Debug) {
+    debug.print("hit for " + string(d.amount));
+}
+```
+
+Its keys:
+
+| Key | Does |
+|-----|------|
+| F2 | Shows or hides the overlay |
+| F3 | Draws the colliders, as the physics engine sees them |
+| F4 | Slow motion on or off, at `slow` (0.25) |
+| F6 | Freezes or unfreezes game time |
+| F7 | Steps one frame while frozen |
+
+`[debug]` in `drift.toml` sets `shown`, `keys` (false turns the keys off) and `slow`. Remove the import, or set `shown = false` and `keys = false`, for a release.
+
 ## The dev overlay
 
 Dev builds have an in-game overlay. Press **F1** to show or hide it.
