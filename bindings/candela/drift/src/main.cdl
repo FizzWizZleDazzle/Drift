@@ -65,6 +65,10 @@ host "drift" {
     save_flush();
     shake(int, float);
     log_message(int, string);
+    // A field of the script's resources, by path ("Game.score"), as text.
+    string resource_text(string);
+    set_time_scale(float);
+    bool entity_alive(int);
 
     // Random numbers. A generator crosses as its state (hi, lo) and
     // increment; the answer starts with the new (hi, lo).
@@ -234,6 +238,11 @@ impl Color {
 
 // An entity's id. `Entity {}` is no entity.
 struct Entity { id: int = 0 }
+impl Entity {
+    // Whether the entity exists: false for `Entity {}` and after a despawn
+    // has been applied.
+    fn alive(self) -> bool { return drift::entity_alive(self.id); }
+}
 
 fn hud_layer() -> int { return 31; }
 
@@ -546,6 +555,20 @@ impl Commands {
     fn send(self, message: any) { drift::send_message(message); }
 }
 
+// A bundle with more components after it, for prefabs with extras:
+// `cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}, Health { hp: 500.0, .. }]))`.
+// A component given twice is the later one, so this also overrides.
+fn plus(bundle: any[], more: any[]) -> any[] {
+    let out: any[] = [];
+    for c in bundle {
+        out.push(c);
+    }
+    for c in more {
+        out.push(c);
+    }
+    return out;
+}
+
 // ---- States ----
 
 // The current variant of a @drift::state enum. `set` asks for a change; the
@@ -561,7 +584,17 @@ impl State<S> {
 
 // ---- Engine resources ----
 
-struct Time { dt: float = 0.0, elapsed: float = 0.0, frame: int = 0 }
+// `dt` is the frame time times `scale`; `real_dt` ignores the scale, for
+// menus and tools that keep running while the game is slowed or frozen.
+struct Time { dt: float = 0.0, elapsed: float = 0.0, frame: int = 0, scale: float = 1.0, real_dt: float = 0.0 }
+impl Time {
+    // Game speed from the next frame on: 1.0 normal, 0.5 half, 0.0 frozen.
+    // Physics, tweens, particles and every system's `dt` follow it.
+    fn set_scale(self, s: float) {
+        drift::set_time_scale(s);
+        self.scale = s;
+    }
+}
 
 struct Window { width: float = 0.0, height: float = 0.0 }
 impl Window {
@@ -734,8 +767,37 @@ impl Timer {
         return n;
     }
     fn finished(self) -> bool { return !self.repeating && self.left <= 0.0; }
+    fn remaining(self) -> float { return max(self.left, 0.0); }
     fn fraction(self) -> float { return 1.0 - self.left / self.seconds; }
     fn reset(self) { self.left = self.seconds; }
+}
+
+// Gates an action: ready, used, then ready again after `seconds`.
+struct Cooldown { seconds: float = 1.0, left: float = 0.0 }
+fn cooldown(seconds: float) -> Cooldown { return Cooldown { seconds: seconds, left: 0.0 }; }
+impl Cooldown {
+    fn tick(self, dt: float) {
+        if self.left > 0.0 {
+            self.left = max(0.0, self.left - dt);
+        }
+    }
+    fn ready(self) -> bool { return self.left <= 0.0; }
+    // If ready, starts the cooldown and returns true.
+    fn try_use(self) -> bool {
+        if self.left > 0.0 {
+            return false;
+        }
+        self.left = self.seconds;
+        return true;
+    }
+    // 1.0 right after use, falling to 0.0 when ready.
+    fn fraction(self) -> float {
+        if self.seconds <= 0.0 {
+            return 0.0;
+        }
+        return clamp(self.left / self.seconds, 0.0, 1.0);
+    }
+    fn reset(self) { self.left = 0.0; }
 }
 
 // ---- Random numbers ----

@@ -258,6 +258,44 @@ thread_local! {
     static QUEUE: RefCell<Vec<Command>> = const { RefCell::new(Vec::new()) };
     static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
     static ERROR: RefCell<CString> = RefCell::new(CString::default());
+    /// The script's resources by bare name, as of the last change, for
+    /// `drift::resource_text` while a system runs.
+    static RESOURCE_VIEW: RefCell<HashMap<String, Value>> = RefCell::new(HashMap::new());
+}
+
+fn publish_resource(name: &str, v: Option<&Value>) {
+    RESOURCE_VIEW.with(|r| {
+        let mut r = r.borrow_mut();
+        match v {
+            Some(v) => r.insert(bare(name).to_owned(), v.clone()),
+            None => r.remove(bare(name)),
+        };
+    });
+}
+
+/// The field a path like `Game.score` or `Game.player.hp` names in the
+/// script's resources, as text: numbers and bools as written, strings as
+/// they are, "" when the path names nothing.
+fn resource_text(path: &str) -> String {
+    let mut parts = path.split('.');
+    let Some(first) = parts.next() else { return String::new() };
+    RESOURCE_VIEW.with(|r| {
+        let r = r.borrow();
+        let Some(mut v) = r.get(first) else { return String::new() };
+        for p in parts {
+            match field(v, p) {
+                Some(next) => v = next,
+                None => return String::new(),
+            }
+        }
+        match v {
+            Value::Int(i) => i.to_string(),
+            Value::Float(f) => f.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::String(s) => s.clone(),
+            other => to_json(other).to_string(),
+        }
+    })
 }
 
 fn queue(c: Command) {
@@ -290,6 +328,8 @@ struct Host {
     component_defaults: HashMap<String, Value>,
     /// @drift::state enums by name.
     states: HashMap<String, StateNow>,
+    /// This frame's time scale and unscaled frame time.
+    time_scale: (f64, f64),
 }
 
 struct StateNow {
@@ -641,6 +681,8 @@ impl Host {
                         ("dt".into(), Value::Float(time.0)),
                         ("elapsed".into(), Value::Float(time.1)),
                         ("frame".into(), Value::Int(time.2)),
+                        ("scale".into(), Value::Float(self.time_scale.0)),
+                        ("real_dt".into(), Value::Float(self.time_scale.1)),
                     ],
                 },
                 Param::Engine(id) => self.engine_resource(*id),
@@ -716,6 +758,7 @@ impl Host {
                     }
                 }
                 Param::Resource(name) => {
+                    publish_resource(name, Some(new));
                     self.resources.insert(name.clone(), new.clone());
                 }
                 Param::State { of, .. } => {
@@ -756,10 +799,12 @@ impl Host {
                 }
                 Command::InsertResource(v) => {
                     if let Value::Struct { name, .. } = &v {
+                        publish_resource(name, Some(&v));
                         self.resources.insert(name.clone(), v.clone());
                     }
                 }
                 Command::RemoveResource(name) => {
+                    publish_resource(&name, None);
                     self.resources.remove(&name);
                 }
                 Command::Send(v) => {
@@ -1123,6 +1168,7 @@ fn engine(module_dir: &str) -> Engine {
         call("shake", json!([c, s]));
     });
     e.register_host_fn("drift", "log_message", |level: i64, m: String| log(level as i32, &m));
+    e.register_host_fn("drift", "resource_text", |path: &str| resource_text(path));
     for (name, args, ret) in forwarded().into_iter().chain(presentation_forwarded()) {
         forward(&mut e, name, args, ret);
     }
@@ -1185,6 +1231,9 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("map_read", vec![I, I], ai()),
         ("map_property", vec![I, S], S),
         ("map_destroy", vec![I], U),
+        // Time and entities.
+        ("set_time_scale", vec![F], U),
+        ("entity_alive", vec![I], B),
         // Hierarchy and procedural animation.
         ("hier_parent", vec![I], I),
         ("hier_children", vec![I], ai()),
@@ -1398,6 +1447,7 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         requires: HashMap::new(),
         component_defaults: HashMap::new(),
         states: HashMap::new(),
+        time_scale: (1.0, 0.0),
     };
     for a in host.types.table.named("drift", "state") {
         let AttributeTarget::Enum(id) = a.target else { continue };
@@ -1424,6 +1474,7 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
             let j = call("settings_section", json!([section]));
             v = host.types.merge(&v, &j, id);
         }
+        publish_resource(&name, Some(&v));
         host.resources.insert(name, v);
     }
     for (id, section) in &settings {
@@ -1592,10 +1643,11 @@ pub extern "C" fn drift_host_contact(kind: i32, a: u64, b: u64, px: f32, py: f32
 
 /// Runs one frame of systems (and the startup systems before the first).
 #[no_mangle]
-pub extern "C" fn drift_host_frame(dt: f64, elapsed: f64, frame: i64) {
+pub extern "C" fn drift_host_frame(dt: f64, elapsed: f64, frame: i64, scale: f64, real_dt: f64) {
     HOST.with(|h| {
         let mut h = h.borrow_mut();
         if let Some(host) = h.as_mut() {
+            host.time_scale = (scale, real_dt);
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| host.frame((dt, elapsed, frame)))).is_err() {
                 log(2, "Candela: a system stopped unexpectedly");
             }
@@ -1606,4 +1658,5 @@ pub extern "C" fn drift_host_frame(dt: f64, elapsed: f64, frame: i64) {
 #[no_mangle]
 pub extern "C" fn drift_host_unload() {
     HOST.with(|h| *h.borrow_mut() = None);
+    RESOURCE_VIEW.with(|r| r.borrow_mut().clear());
 }

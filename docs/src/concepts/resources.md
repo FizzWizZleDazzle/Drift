@@ -128,7 +128,9 @@ void gameplaySystem(Res<Time> time,
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `delta` | `float` | Seconds elapsed since the previous frame |
+| `delta` | `float` | Seconds elapsed since the previous frame, times `scale` |
+| `scale` | `float` | How fast game time runs: 1 normal, 0.5 half speed, 0 frozen. Physics, tweens, particles and every system reading `delta` follow it |
+| `realDelta` | `float` | Seconds elapsed since the previous frame, whatever `scale` is; for menus and debug tools that keep running while the game is frozen |
 | `elapsed` | `double` | Seconds elapsed since the engine started |
 | `frame` | `uint64_t` | Frame counter (increments by 1 each frame) |
 

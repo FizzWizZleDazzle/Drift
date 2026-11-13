@@ -1,0 +1,976 @@
+// drift/ui: HUD and menu widgets on the screen layer.
+//
+// `import "drift/ui" { * };` adds the components, the messages and the
+// systems that run them. Every widget is an entity on hud_layer(), placed
+// by an Anchor relative to the window, so it stays put when the window
+// changes size and when the camera shakes. Widgets that are more than one
+// shape (bars, buttons, toggles, sliders, icon rows) keep their extra
+// shapes as part entities and move them along.
+
+import "drift" { * };
+
+// ---- Theme ----
+
+// The look every widget starts from. Set it once in drift.toml [theme] or
+// from a system; a widget copies what it needs when it is made, so change
+// one widget afterwards through its own components.
+@settings(section: "theme")
+struct Theme {
+    font: Font = Font { .. },
+    text_size: float = 22.0,
+    text_color: Color = Color { r: 0.93, g: 0.94, b: 0.97, a: 1.0 },
+    outline: float = 0.0,
+    outline_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+    shadow_offset: Vec2 = Vec2 { x: 0.0, y: 2.0 },
+    shadow_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.55 },
+    panel_color: Color = Color { r: 0.08, g: 0.09, b: 0.14, a: 0.86 },
+    accent: Color = Color { r: 0.35, g: 0.67, b: 1.0, a: 1.0 },
+    button_color: Color = Color { r: 0.18, g: 0.21, b: 0.32, a: 1.0 },
+    button_hover: Color = Color { r: 0.26, g: 0.31, b: 0.46, a: 1.0 },
+    button_pressed: Color = Color { r: 0.13, g: 0.15, b: 0.24, a: 1.0 },
+    button_focus: Color = Color { r: 0.35, g: 0.67, b: 1.0, a: 1.0 },
+    bar_back: Color = Color { r: 0.05, g: 0.06, b: 0.09, a: 0.9 },
+    bar_fill: Color = Color { r: 0.36, g: 0.85, b: 0.45, a: 1.0 },
+    bar_trail: Color = Color { r: 0.95, g: 0.85, b: 0.4, a: 1.0 },
+    padding: Vec2 = Vec2 { x: 16.0, y: 10.0 },
+    corner_radius: float = 6.0,
+    // The narrowest a button, toggle or slider is; slider tracks add half.
+    widget_width: float = 220.0,
+    // Kept clear on every side of the window: notches and rounded corners
+    // on phones.
+    safe_margin: Vec2 = Vec2 { x: 0.0, y: 0.0 },
+}
+
+impl Theme {
+    // A copy with another text size, for one widget.
+    fn sized(self, size: float) -> Theme {
+        let t = self.copy();
+        t.text_size = size;
+        return t;
+    }
+    // A copy with another text color.
+    fn colored(self, c: Color) -> Theme {
+        let t = self.copy();
+        t.text_color = c;
+        return t;
+    }
+    // A copy with another accent: bar fill and focus color.
+    fn accented(self, c: Color) -> Theme {
+        let t = self.copy();
+        t.accent = c;
+        t.bar_fill = c;
+        t.button_focus = c;
+        return t;
+    }
+    fn copy(self) -> Theme {
+        return Theme {
+            font: self.font, text_size: self.text_size, text_color: self.text_color,
+            outline: self.outline, outline_color: self.outline_color,
+            shadow_offset: self.shadow_offset, shadow_color: self.shadow_color,
+            panel_color: self.panel_color, accent: self.accent,
+            button_color: self.button_color, button_hover: self.button_hover,
+            button_pressed: self.button_pressed, button_focus: self.button_focus,
+            bar_back: self.bar_back, bar_fill: self.bar_fill, bar_trail: self.bar_trail,
+            padding: self.padding, corner_radius: self.corner_radius, widget_width: self.widget_width,
+            safe_margin: self.safe_margin,
+        };
+    }
+    // Text in this theme. `pivot` picks the alignment, as in Anchor.
+    fn text(self, value: string, pivot: Vec2) -> Text {
+        return Text {
+            value: value, size: self.text_size, color: self.text_color,
+            align: align_of(pivot.x), valign: valign_of(pivot.y),
+            outline: self.outline, outline_color: self.outline_color,
+            shadow_offset: self.shadow_offset, shadow_color: self.shadow_color,
+            font: self.font, z: 2.0, layer: hud_layer(), ..
+        };
+    }
+}
+
+// ---- Anchors and layout ----
+
+// Points of the window, for Anchor.to: (0, 0) is the top-left, (1, 1) the
+// bottom-right.
+const TOP_LEFT: Vec2 = Vec2 { x: 0.0, y: 0.0 };
+const TOP: Vec2 = Vec2 { x: 0.5, y: 0.0 };
+const TOP_RIGHT: Vec2 = Vec2 { x: 1.0, y: 0.0 };
+const LEFT: Vec2 = Vec2 { x: 0.0, y: 0.5 };
+const CENTER: Vec2 = Vec2 { x: 0.5, y: 0.5 };
+const RIGHT: Vec2 = Vec2 { x: 1.0, y: 0.5 };
+const BOTTOM_LEFT: Vec2 = Vec2 { x: 0.0, y: 1.0 };
+const BOTTOM: Vec2 = Vec2 { x: 0.5, y: 1.0 };
+const BOTTOM_RIGHT: Vec2 = Vec2 { x: 1.0, y: 1.0 };
+
+// Keeps the entity at a point of the window plus `offset` pixels, inside
+// the theme's safe margin. Widgets made here also take `to` as their pivot,
+// so a TOP_RIGHT widget hangs from the top-right corner.
+@component
+struct Anchor { to: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. } }
+
+fn anchor(to: Vec2, x: float, y: float) -> Anchor { return Anchor { to: to, offset: Vec2 { x: x, y: y } }; }
+
+fn anchor_point(a: Anchor, win: Window, theme: Theme) -> Vec2 {
+    let m = theme.safe_margin;
+    return Vec2 {
+        x: m.x + (win.width - m.x * 2.0) * a.to.x + a.offset.x,
+        y: m.y + (win.height - m.y * 2.0) * a.to.y + a.offset.y,
+    };
+}
+
+@system
+fn ui_anchor(a: Anchor, t: Transform, win: Window, theme: Theme) {
+    let p = anchor_point(a, win, theme);
+    if p.x != t.position.x || p.y != t.position.y {
+        t.position = p;
+    }
+}
+
+// Offsets for `count` widgets in a row, `gap` pixels apart, going right
+// from `start`.
+fn row(start: Vec2, gap: float, count: int) -> Vec2[] {
+    let out: Vec2[] = [];
+    for i in range(count) {
+        out.push(Vec2 { x: start.x + gap * float(i), y: start.y });
+    }
+    return out;
+}
+
+// The same going down.
+fn column(start: Vec2, gap: float, count: int) -> Vec2[] {
+    let out: Vec2[] = [];
+    for i in range(count) {
+        out.push(Vec2 { x: start.x, y: start.y + gap * float(i) });
+    }
+    return out;
+}
+
+// Offsets for `count` widgets in rows of `columns`, `cell` apart.
+fn grid_layout(start: Vec2, cell: Vec2, columns: int, count: int) -> Vec2[] {
+    let out: Vec2[] = [];
+    for i in range(count) {
+        out.push(Vec2 { x: start.x + cell.x * float(i % columns), y: start.y + cell.y * float(i / columns) });
+    }
+    return out;
+}
+
+fn align_of(x: float) -> Align {
+    if x < 0.25 {
+        return Align::Left;
+    }
+    if x > 0.75 {
+        return Align::Right;
+    }
+    return Align::Center;
+}
+
+fn valign_of(y: float) -> VAlign {
+    if y < 0.25 {
+        return VAlign::Top;
+    }
+    if y > 0.75 {
+        return VAlign::Bottom;
+    }
+    return VAlign::Middle;
+}
+
+// ---- Labels ----
+
+// Text on the HUD.
+fn label(theme: Theme, value: string, at: Anchor) -> any[] {
+    return [Transform { .. }, theme.text(value, at.to), at];
+}
+
+// A rounded panel behind other widgets, `size` pixels.
+fn panel(theme: Theme, at: Anchor, size: Vec2) -> any[] {
+    return [
+        Transform { .. },
+        Rectangle { size: size, color: theme.panel_color, corner_radius: theme.corner_radius,
+                    anchor: at.to, z: 0.0, layer: hud_layer(), .. },
+        at,
+    ];
+}
+
+// Fills a Text from a field of a resource: `path` is the resource and the
+// field, "Game.score" or "Game.player.lives", and `format` the text with
+// {} where the value goes. `count_speed` above 0 counts a number up or down
+// to its new value at that many units per second, with at least a quarter
+// second per change, instead of jumping.
+@component
+struct Bind {
+    path: string = "",
+    format: string = "{}",
+    decimals: int = 0,
+    count_speed: float = 0.0,
+    shown: float = 0.0,
+    started: bool = false,
+}
+
+fn bind(path: string, format: string) -> Bind { return Bind { path: path, format: format, .. }; }
+fn bind_counter(path: string, format: string, speed: float) -> Bind {
+    return Bind { path: path, format: format, count_speed: speed, .. };
+}
+
+// A number with a fixed count of decimals.
+fn format_number(v: float, decimals: int) -> string {
+    if decimals <= 0 {
+        return string(int(v.round()));
+    }
+    let scale = 1.0;
+    for i in range(decimals) {
+        scale *= 10.0;
+    }
+    let n = int((v.abs() * scale).round());
+    let whole = string(n / int(scale));
+    let frac = string(n % int(scale));
+    while frac.len() < decimals {
+        frac = "0" + frac;
+    }
+    let sign = "";
+    if v < 0.0 && n != 0 {
+        sign = "-";
+    }
+    return sign + whole + "." + frac;
+}
+
+// A resource field as a number; 0.0 when it is not one.
+fn resource_number(path: string) -> float {
+    let s = drift::resource_text(path);
+    if s.parse<float>() is Some(v) {
+        return v;
+    }
+    if s == "true" {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+fn resource_string(path: string) -> string { return drift::resource_text(path); }
+
+@system
+fn ui_bind(b: Bind, text: Text, time: Time) {
+    let raw = drift::resource_text(b.path);
+    let shown = raw;
+    if raw.parse<float>() is Some(v) {
+        let target = v;
+        if b.count_speed > 0.0 && b.started {
+            let step = max(b.count_speed, (target - b.shown).abs() * 4.0) * time.real_dt;
+            if (target - b.shown).abs() <= step {
+                b.shown = target;
+            } else if target > b.shown {
+                b.shown += step;
+            } else {
+                b.shown -= step;
+            }
+        } else {
+            b.shown = target;
+        }
+        b.started = true;
+        shown = format_number(b.shown, b.decimals);
+    }
+    let value = b.format.replace("{}", shown);
+    if value != text.value {
+        text.value = value;
+    }
+}
+
+// Shows a time in seconds as m:ss, or m:ss.d with `tenths`.
+fn clock(seconds: float, tenths: bool) -> string {
+    let s = max(seconds, 0.0);
+    let whole = int(s.floor());
+    let secs = string(whole % 60);
+    if secs.len() < 2 {
+        secs = "0" + secs;
+    }
+    let out = string(whole / 60) + ":" + secs;
+    if tenths {
+        out = out + "." + string(int(((s - float(whole)) * 10.0).floor()));
+    }
+    return out;
+}
+
+// A Text that shows a resource field holding seconds as a clock.
+@component
+struct ClockBind { path: string = "", format: string = "{}", tenths: bool = false }
+
+@system
+fn ui_clock(c: ClockBind, text: Text) {
+    let value = c.format.replace("{}", clock(resource_number(c.path), c.tenths));
+    if value != text.value {
+        text.value = value;
+    }
+}
+
+// ---- Parts ----
+
+// A shape that belongs to a widget: it goes when the widget goes.
+@component
+struct PartOf { owner: Entity = Entity { .. } }
+
+@system
+fn ui_parts(e: Entity, p: PartOf, cmd: Commands) {
+    if !p.owner.alive() {
+        cmd.despawn(e);
+    }
+}
+
+// The top-left corner of a rectangle drawn at `t` with its pivot at `pivot`.
+fn top_left(t: Transform, size: Vec2, pivot: Vec2) -> Vec2 {
+    return Vec2 { x: t.position.x - size.x * pivot.x, y: t.position.y - size.y * pivot.y };
+}
+
+fn part_rect(at: Vec2, size: Vec2, c: Color, corner: float, z: float, visible: bool) -> any[] {
+    return [
+        Transform { position: at, .. },
+        Rectangle { size: size, color: c, corner_radius: corner, anchor: Vec2 { x: 0.0, y: 0.0 },
+                    z: z, layer: hud_layer(), visible: visible, .. },
+    ];
+}
+
+// How faded a widget is: its background alpha against the one it was made
+// with, so fading the background fades the parts too.
+fn fade_of(r: Rectangle, alpha: float) -> float {
+    if alpha <= 0.0 {
+        return 1.0;
+    }
+    return clamp(r.color.a / alpha, 0.0, 1.0);
+}
+
+// ---- Bars ----
+
+// A bar that fills to value / max: health, stamina, progress. The fill
+// slides toward a new value at `smooth` per second (0 jumps), and a trail
+// in `trail_color` shows recent damage, shrinking after `trail_delay`
+// seconds. `path` and `max_path` fill value and max from resource fields.
+// Colors left unset come from the theme.
+@component
+struct Bar {
+    value: float = 1.0,
+    max: float = 1.0,
+    path: string = "",
+    max_path: string = "",
+    fill_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
+    trail_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
+    smooth: float = 6.0,
+    trail_delay: float = 0.4,
+    trail_speed: float = 1.5,
+    inset: float = 2.0,
+    shown: float = -1.0,
+    trail: float = -1.0,
+    hold: float = 0.0,
+    last: float = -1.0,
+    alpha: float = 1.0,
+    fill_part: Entity = Entity { .. },
+    trail_part: Entity = Entity { .. },
+}
+
+// Spawns a bar `size` pixels at `at` and answers its entity:
+// `spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
+// Bar { path: "Game.hp", max_path: "Game.max_hp", .. })`. Change it later
+// through a system that takes its Bar.
+fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> Entity {
+    let e = cmd.spawn([
+        Transform { .. },
+        Rectangle { size: size, color: theme.bar_back, corner_radius: theme.corner_radius * 0.5,
+                    anchor: at.to, z: 0.0, layer: hud_layer(), .. },
+        at,
+    ]);
+    let trail = cmd.spawn(part_rect(Vec2 { .. }, size, theme.bar_trail, 0.0, 0.5, false));
+    let fill = cmd.spawn(part_rect(Vec2 { .. }, size, theme.bar_fill, 0.0, 1.0, false));
+    cmd.insert(trail, PartOf { owner: e });
+    cmd.insert(fill, PartOf { owner: e });
+    if bar.fill_color.a < 0.0 {
+        bar.fill_color = theme.bar_fill;
+    }
+    if bar.trail_color.a < 0.0 {
+        bar.trail_color = theme.bar_trail;
+    }
+    bar.alpha = theme.bar_back.a;
+    bar.fill_part = fill;
+    bar.trail_part = trail;
+    cmd.insert(e, bar);
+    return e;
+}
+
+@system(after: [ui_anchor])
+fn ui_bars(bar: Bar, back: Rectangle, t: Transform, time: Time, cmd: Commands) {
+    if bar.path != "" {
+        bar.value = resource_number(bar.path);
+    }
+    if bar.max_path != "" {
+        bar.max = resource_number(bar.max_path);
+    }
+    let target = 0.0;
+    if bar.max > 0.0 {
+        target = clamp(bar.value / bar.max, 0.0, 1.0);
+    }
+    let dt = time.real_dt;
+    if bar.shown < 0.0 {
+        bar.shown = target;
+        bar.trail = target;
+        bar.last = target;
+    }
+    if bar.smooth > 0.0 {
+        bar.shown += (target - bar.shown) * min(1.0, bar.smooth * dt);
+        if (target - bar.shown).abs() < 0.001 {
+            bar.shown = target;
+        }
+    } else {
+        bar.shown = target;
+    }
+    // New damage holds the trail where it was for trail_delay seconds, then
+    // it catches up; it never sits below the fill.
+    if target < bar.last - 0.0001 {
+        bar.hold = bar.trail_delay;
+    }
+    bar.last = target;
+    if bar.trail > target {
+        if bar.hold > 0.0 {
+            bar.hold -= dt;
+        } else {
+            bar.trail = max(target, bar.trail - bar.trail_speed * dt);
+        }
+    } else {
+        bar.trail = bar.shown;
+    }
+    if bar.trail < bar.shown {
+        bar.trail = bar.shown;
+    }
+
+    let fade = fade_of(back, bar.alpha);
+    let inner = Vec2 { x: back.size.x - bar.inset * 2.0, y: back.size.y - bar.inset * 2.0 };
+    let corner = top_left(t, back.size, back.anchor) + Vec2 { x: bar.inset, y: bar.inset };
+    let z = back.z;
+    let fill_color = bar.fill_color.alpha(bar.fill_color.a * fade);
+    let trail_color = bar.trail_color.alpha(bar.trail_color.a * fade);
+    cmd.insert(bar.trail_part, Transform { position: corner, .. });
+    cmd.insert(bar.trail_part, Rectangle {
+        size: Vec2 { x: inner.x * bar.trail, y: inner.y }, color: trail_color, anchor: Vec2 { x: 0.0, y: 0.0 },
+        z: z + 0.5, layer: back.layer, visible: back.visible && bar.trail > 0.0, ..
+    });
+    cmd.insert(bar.fill_part, Transform { position: corner, .. });
+    cmd.insert(bar.fill_part, Rectangle {
+        size: Vec2 { x: inner.x * bar.shown, y: inner.y }, color: fill_color, anchor: Vec2 { x: 0.0, y: 0.0 },
+        z: z + 1.0, layer: back.layer, visible: back.visible && bar.shown > 0.0, ..
+    });
+}
+
+// ---- Icon rows ----
+
+// A row of `max` icons with the first `count` lit: hearts, ammo, lives.
+// Icons are `image` when it is set, circles otherwise. `path` fills count
+// from a resource field.
+@component
+struct IconRow {
+    count: int = 3,
+    max: int = 3,
+    path: string = "",
+    image: Texture = Texture { .. },
+    size: float = 24.0,
+    spacing: float = 30.0,
+    full: Color = Color { r: 1.0, g: 0.35, b: 0.4, a: 1.0 },
+    empty: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.18 },
+    parts: Entity[] = [],
+}
+
+fn icon_row(at: Anchor, count: int, max: int) -> any[] {
+    return [Transform { .. }, at, IconRow { count: count, max: max, .. }];
+}
+
+@system(after: [ui_anchor])
+fn ui_icon_rows(e: Entity, row: IconRow, t: Transform, cmd: Commands) {
+    if row.path != "" {
+        row.count = int(resource_number(row.path));
+    }
+    while row.parts.len() < row.max {
+        let part = cmd.spawn([Transform { .. }, PartOf { owner: e }]);
+        row.parts.push(part);
+    }
+    while row.parts.len() > row.max {
+        cmd.despawn(row.parts[row.parts.len() - 1]);
+        row.parts.remove(row.parts.len() - 1);
+    }
+    let width = row.spacing * float(row.max - 1) + row.size;
+    let start = t.position.x - width * 0.0;
+    for i in range(row.max) {
+        let p = Vec2 { x: start + row.spacing * float(i) + row.size * 0.5, y: t.position.y + row.size * 0.5 };
+        let c = row.empty;
+        if i < row.count {
+            c = row.full;
+        }
+        cmd.insert(row.parts[i], Transform { position: p, .. });
+        if row.image.id != 0 {
+            let s = row.image.size();
+            let k = 1.0;
+            if s.x > 0.0 {
+                k = row.size / s.x;
+            }
+            cmd.insert(row.parts[i], Transform { position: p, scale: Vec2 { x: k, y: k }, .. });
+            cmd.insert(row.parts[i], Sprite { image: row.image, color: c, z: 1.0, layer: hud_layer(), .. });
+        } else {
+            cmd.insert(row.parts[i], Circle { radius: row.size * 0.5, color: c, z: 1.0, layer: hud_layer(), .. });
+        }
+    }
+}
+
+// ---- Buttons, toggles and sliders ----
+
+// Sent when a button is clicked, tapped, or activated with Return, Space or
+// the gamepad's South button while focused.
+@message
+struct ButtonPressed { id: string = "", button: Entity = Entity { .. } }
+
+// Sent when a toggle flips.
+@message
+struct ToggleChanged { id: string = "", on: bool = false, toggle: Entity = Entity { .. } }
+
+// Sent while a slider moves.
+@message
+struct SliderChanged { id: string = "", value: float = 0.0, slider: Entity = Entity { .. } }
+
+enum WidgetKind { Button, Toggle, Slider }
+
+// Which widget the keyboard or gamepad is on: the `order` of a Widget, or
+// -1 before anyone navigates. Up/Down (W/S, the d-pad, the left stick)
+// move it; Left/Right change a focused slider.
+@resource
+struct UiFocus { index: int = -1, held: float = 0.0, enabled: bool = true }
+
+// What a clickable widget is. Made by button(), toggle() and slider().
+@component
+struct Widget {
+    id: string = "",
+    kind: WidgetKind = WidgetKind::Button,
+    order: int = 0,
+    on: bool = false,
+    value: float = 0.0,
+    min: float = 0.0,
+    max: float = 1.0,
+    step: float = 0.1,
+    hovered: bool = false,
+    pressed: bool = false,
+    dragging: bool = false,
+    color: Color = Color { .. },
+    hover: Color = Color { .. },
+    down: Color = Color { .. },
+    focus: Color = Color { .. },
+    accent: Color = Color { .. },
+    alpha: float = 1.0,
+    label_part: Entity = Entity { .. },
+    mark_part: Entity = Entity { .. },
+}
+
+fn widget_size(theme: Theme, text: string, min_width: float) -> Vec2 {
+    let w = max(min_width, float(text.len()) * theme.text_size * 0.55 + theme.padding.x * 2.0);
+    return Vec2 { x: w, y: theme.text_size + theme.padding.y * 2.0 };
+}
+
+fn spawn_widget(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, w: Widget, text: string) -> Entity {
+    let e = cmd.spawn([
+        Transform { .. },
+        Rectangle { size: size, color: theme.button_color, corner_radius: theme.corner_radius,
+                    anchor: at.to, z: 0.0, layer: hud_layer(), .. },
+        at,
+    ]);
+    let pivot = Vec2 { x: 0.5, y: 0.5 };
+    if w.kind != WidgetKind::Button {
+        pivot = Vec2 { x: 0.0, y: 0.5 };
+    }
+    let label = cmd.spawn([Transform { .. }, theme.text(text, pivot), PartOf { owner: e }]);
+    w.label_part = label;
+    if w.kind != WidgetKind::Button {
+        let mark = cmd.spawn([Transform { .. }, PartOf { owner: e }]);
+        w.mark_part = mark;
+    }
+    w.color = theme.button_color;
+    w.hover = theme.button_hover;
+    w.down = theme.button_pressed;
+    w.focus = theme.button_focus;
+    w.accent = theme.accent;
+    w.alpha = theme.button_color.a;
+    cmd.insert(e, w);
+    return e;
+}
+
+// A button with `text`; pressing it sends ButtonPressed with `id`. `order`
+// is its place in keyboard and gamepad navigation.
+fn button(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, order: int) -> Entity {
+    return spawn_widget(cmd, theme, at, widget_size(theme, text, theme.widget_width),
+                        Widget { id: id, order: order, .. }, text);
+}
+
+// An on/off switch; flipping it sends ToggleChanged.
+fn toggle(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, on: bool, order: int) -> Entity {
+    let size = widget_size(theme, text, theme.widget_width);
+    return spawn_widget(cmd, theme, at, size, Widget { id: id, kind: WidgetKind::Toggle, on: on, order: order, .. }, text);
+}
+
+// A slider from `min` to `max`; moving it sends SliderChanged.
+fn slider(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, value: float,
+          min: float, max: float, order: int) -> Entity {
+    let size = widget_size(theme, text, theme.widget_width);
+    size.x += theme.widget_width * 0.5;
+    return spawn_widget(cmd, theme, at, size, Widget {
+        id: id, kind: WidgetKind::Slider, value: value, min: min, max: max,
+        step: (max - min) / 20.0, order: order, ..
+    }, text);
+}
+
+fn ui_nav_up(input: Input) -> bool {
+    return input.key_pressed(Key::Up) || input.key_pressed(Key::W) || input.gamepad_pressed(0, GamepadButton::DpadUp);
+}
+fn ui_nav_down(input: Input) -> bool {
+    return input.key_pressed(Key::Down) || input.key_pressed(Key::S) || input.gamepad_pressed(0, GamepadButton::DpadDown);
+}
+fn ui_activate(input: Input) -> bool {
+    return input.key_pressed(Key::Return) || input.key_pressed(Key::Space) || input.gamepad_pressed(0, GamepadButton::South);
+}
+fn ui_nav_x(input: Input) -> float {
+    let x = 0.0;
+    if input.key_down(Key::Left) || input.key_down(Key::A) || input.gamepad_down(0, GamepadButton::DpadLeft) {
+        x -= 1.0;
+    }
+    if input.key_down(Key::Right) || input.key_down(Key::D) || input.gamepad_down(0, GamepadButton::DpadRight) {
+        x += 1.0;
+    }
+    let stick = input.gamepad_axis(0, GamepadAxis::LeftX);
+    if stick.abs() > 0.5 {
+        x = stick;
+    }
+    return x;
+}
+
+// Moves the focus between the visible widgets in `order`.
+@system
+fn ui_focus_nav(focus: UiFocus, input: Input, time: Time, widgets: (Widget, Rectangle)[]) {
+    if !focus.enabled {
+        return;
+    }
+    let orders: int[] = [];
+    for (w, r) in widgets {
+        if r.visible {
+            orders.push(w.order);
+        }
+    }
+    if orders.len() == 0 {
+        return;
+    }
+    orders.sort();
+    let stick = input.gamepad_axis(0, GamepadAxis::LeftY);
+    let dir = 0;
+    if ui_nav_up(input) {
+        dir = -1;
+    }
+    if ui_nav_down(input) {
+        dir = 1;
+    }
+    if dir == 0 && stick.abs() > 0.5 {
+        focus.held -= time.real_dt;
+        if focus.held <= 0.0 {
+            focus.held = 0.25;
+            dir = 1;
+            if stick < 0.0 {
+                dir = -1;
+            }
+        }
+    } else if stick.abs() <= 0.5 {
+        focus.held = 0.0;
+    }
+    if dir == 0 {
+        return;
+    }
+    let at = -1;
+    for i in range(orders.len()) {
+        if orders[i] == focus.index {
+            at = i;
+        }
+    }
+    if at < 0 {
+        focus.index = orders[0];
+        return;
+    }
+    let next = (at + dir + orders.len()) % orders.len();
+    focus.index = orders[next];
+}
+
+@system(after: [ui_anchor, ui_focus_nav])
+fn ui_widgets(e: Entity, w: Widget, r: Rectangle, t: Transform, input: Input, focus: UiFocus,
+              time: Time, cmd: Commands) {
+    let corner = top_left(t, r.size, r.anchor);
+    let box = Rect { x: corner.x, y: corner.y, w: r.size.x, h: r.size.y };
+    let mouse = input.mouse_position();
+    w.hovered = r.visible && box.contains(mouse);
+    let focused = r.visible && focus.enabled && focus.index == w.order;
+    let fire = false;
+    let fade = fade_of(r, w.alpha);
+
+    if w.hovered && input.mouse_pressed(MouseButton::Left) {
+        w.pressed = true;
+        if w.kind == WidgetKind::Slider {
+            w.dragging = true;
+        }
+    }
+    if input.mouse_released(MouseButton::Left) {
+        if w.pressed && w.hovered && w.kind != WidgetKind::Slider {
+            fire = true;
+        }
+        w.pressed = false;
+        w.dragging = false;
+    }
+    if focused && ui_activate(input) && w.kind != WidgetKind::Slider {
+        fire = true;
+    }
+
+    // Slider: the track is the right part of the box.
+    let track_x = corner.x + r.size.x * 0.45;
+    let track_w = r.size.x * 0.5;
+    if w.kind == WidgetKind::Slider {
+        let before = w.value;
+        if w.dragging && track_w > 0.0 {
+            let k = clamp((mouse.x - track_x) / track_w, 0.0, 1.0);
+            w.value = w.min + (w.max - w.min) * k;
+        }
+        if focused {
+            let x = ui_nav_x(input);
+            if x != 0.0 {
+                w.value = clamp(w.value + x * (w.max - w.min) * time.real_dt, w.min, w.max);
+            }
+        }
+        if w.value != before {
+            cmd.send(SliderChanged { id: w.id, value: w.value, slider: e });
+        }
+    }
+    if fire {
+        if w.kind == WidgetKind::Toggle {
+            w.on = !w.on;
+            cmd.send(ToggleChanged { id: w.id, on: w.on, toggle: e });
+        } else {
+            cmd.send(ButtonPressed { id: w.id, button: e });
+        }
+    }
+
+    let c = w.color;
+    if w.pressed && w.hovered {
+        c = w.down;
+    } else if w.hovered || focused {
+        c = w.hover;
+    }
+    r.color = c.alpha(c.a * fade);
+
+    // The label, and the mark of a toggle or the knob of a slider.
+    let text_pos = Vec2 { x: corner.x + r.size.x * 0.5, y: corner.y + r.size.y * 0.5 };
+    if w.kind != WidgetKind::Button {
+        text_pos = Vec2 { x: corner.x + 14.0, y: corner.y + r.size.y * 0.5 };
+    }
+    cmd.insert(w.label_part, Transform { position: text_pos, .. });
+    let mark = w.accent;
+    if focused {
+        mark = w.focus;
+    }
+    if w.kind == WidgetKind::Toggle {
+        let s = r.size.y * 0.5;
+        let m = mark;
+        if !w.on {
+            m = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.15 };
+        }
+        cmd.insert(w.mark_part, Transform { position: Vec2 { x: corner.x + r.size.x - r.size.y * 0.5, y: corner.y + r.size.y * 0.5 }, .. });
+        cmd.insert(w.mark_part, Rectangle { size: Vec2 { x: s, y: s }, color: m.alpha(m.a * fade), corner_radius: 3.0,
+                                            z: r.z + 1.0, layer: r.layer, visible: r.visible, .. });
+    }
+    if w.kind == WidgetKind::Slider {
+        let k = 0.0;
+        if w.max > w.min {
+            k = (w.value - w.min) / (w.max - w.min);
+        }
+        cmd.insert(w.mark_part, Transform { position: Vec2 { x: track_x + track_w * k, y: corner.y + r.size.y * 0.5 }, .. });
+        cmd.insert(w.mark_part, Circle { radius: r.size.y * 0.3, color: mark.alpha(mark.a * fade),
+                                         z: r.z + 1.0, layer: r.layer, visible: r.visible, .. });
+    }
+}
+
+// ---- Show, hide, slide and fade ----
+
+// Fades and slides a widget in and out: set `shown` and it moves from
+// `offset + slide` (hidden) to `offset` (shown) over `seconds`, fading its
+// Rectangle or Text. A hidden widget stops drawing.
+@component
+struct Reveal {
+    shown: bool = true,
+    slide: Vec2 = Vec2 { .. },
+    seconds: float = 0.25,
+    t: float = -1.0,
+    home: Vec2 = Vec2 { .. },
+    alpha: float = -1.0,
+}
+
+fn reveal(shown: bool, slide: Vec2) -> Reveal { return Reveal { shown: shown, slide: slide, .. }; }
+
+fn ease_out(t: float) -> float {
+    let u = 1.0 - t;
+    return 1.0 - u * u * u;
+}
+
+fn reveal_step(rv: Reveal, a: Anchor, dt: float) -> float {
+    if rv.t < 0.0 {
+        rv.home = a.offset;
+        rv.t = 0.0;
+        if rv.shown {
+            rv.t = 1.0;
+        }
+    }
+    let speed = 1.0;
+    if rv.seconds > 0.0 {
+        speed = dt / rv.seconds;
+    }
+    if rv.shown {
+        rv.t = min(1.0, rv.t + speed);
+        if rv.seconds <= 0.0 {
+            rv.t = 1.0;
+        }
+    } else {
+        rv.t = max(0.0, rv.t - speed);
+        if rv.seconds <= 0.0 {
+            rv.t = 0.0;
+        }
+    }
+    let k = ease_out(rv.t);
+    a.offset = rv.home + rv.slide * (1.0 - k);
+    return k;
+}
+
+@system(before: [ui_anchor])
+fn ui_reveal_rects(rv: Reveal, a: Anchor, r: Rectangle, time: Time) {
+    if rv.alpha < 0.0 {
+        rv.alpha = r.color.a;
+    }
+    let k = reveal_step(rv, a, time.real_dt);
+    r.color = r.color.alpha(rv.alpha * k);
+    r.visible = k > 0.0;
+}
+
+@system(before: [ui_anchor])
+fn ui_reveal_texts(rv: Reveal, a: Anchor, text: Text, time: Time) {
+    if rv.alpha < 0.0 {
+        rv.alpha = text.color.a;
+    }
+    let k = reveal_step(rv, a, time.real_dt);
+    text.color = text.color.alpha(rv.alpha * k);
+    text.shadow_color = text.shadow_color.alpha(min(text.shadow_color.a, k));
+    text.visible = k > 0.0;
+}
+
+// ---- Toasts ----
+
+// A message that shows for a few seconds below the top of the window and
+// goes; newer ones stack under older ones.
+@component
+struct Toast { seconds: float = 2.5, age: float = 0.0, slot: float = -1.0 }
+
+fn toast(cmd: Commands, theme: Theme, message: string) {
+    cmd.spawn([
+        Transform { .. },
+        theme.text(message, TOP),
+        Anchor { to: TOP, offset: Vec2 { x: 0.0, y: 72.0 } },
+        Toast { .. },
+    ]);
+}
+
+@system(before: [ui_anchor])
+fn ui_toasts(toasts: (Entity, Toast, Anchor, Text)[], time: Time, theme: Theme, cmd: Commands) {
+    let slot = 0.0;
+    for (e, t, a, text) in toasts {
+        t.age += time.real_dt;
+        if t.age >= t.seconds {
+            cmd.despawn(e);
+            continue;
+        }
+        if t.slot < 0.0 {
+            t.slot = slot;
+        }
+        t.slot += (slot - t.slot) * min(1.0, time.real_dt * 10.0);
+        let k = clamp(min(t.age / 0.2, (t.seconds - t.age) / 0.4), 0.0, 1.0);
+        a.offset = Vec2 { x: 0.0, y: 72.0 + t.slot * (theme.text_size + 12.0) - (1.0 - k) * 12.0 };
+        text.color = text.color.alpha(k);
+        text.shadow_color = text.shadow_color.alpha(k * 0.55);
+        slot += 1.0;
+    }
+}
+
+// ---- Typewriter text and dialog boxes ----
+
+// Reveals a Text's `full` string a few characters at a time.
+// `finished` turns true once all of it shows; finish() shows it at once.
+@component
+struct Typewriter { full: string = "", speed: float = 40.0, shown: float = 0.0, finished: bool = false }
+
+impl Typewriter {
+    fn finish(self) {
+        self.shown = float(self.full.len());
+        self.finished = true;
+    }
+}
+
+@system
+fn ui_typewriter(tw: Typewriter, text: Text, time: Time) {
+    let n = tw.full.len();
+    if !tw.finished {
+        tw.shown += tw.speed * time.real_dt;
+        if tw.shown >= float(n) {
+            tw.shown = float(n);
+            tw.finished = true;
+        }
+    }
+    let value = tw.full[..int(tw.shown)];
+    if value != text.value {
+        text.value = value;
+    }
+}
+
+// Sent when the player closes a dialog box.
+@message
+struct DialogClosed { id: string = "", dialog: Entity = Entity { .. } }
+
+// A box along the bottom of the window that types out `pages` one after
+// another. Return, Space, a click or the South button finishes the page,
+// then turns it; after the last page the box closes and sends DialogClosed.
+@component
+struct DialogBox { id: string = "", pages: string[] = [], page: int = 0, text_part: Entity = Entity { .. } }
+
+fn dialog_box(cmd: Commands, theme: Theme, id: string, pages: string[]) -> Entity {
+    let box = cmd.spawn(panel(theme, Anchor { to: BOTTOM, offset: Vec2 { x: 0.0, y: -16.0 } },
+                              Vec2 { x: 720.0, y: theme.text_size * 4.0 + theme.padding.y * 2.0 }));
+    let first = "";
+    if pages.len() > 0 {
+        first = pages[0];
+    }
+    let text = theme.text("", TOP_LEFT);
+    text.wrap = 720.0 - theme.padding.x * 2.0;
+    text.z = 3.0;
+    let part = cmd.spawn([Transform { .. }, text, Typewriter { full: first, .. }, PartOf { owner: box }]);
+    cmd.insert(box, DialogBox { id: id, pages: pages, text_part: part, .. });
+    return box;
+}
+
+@system(after: [ui_anchor])
+fn ui_dialogs(e: Entity, d: DialogBox, r: Rectangle, t: Transform, input: Input,
+              writers: Lookup<Typewriter>, cmd: Commands) {
+    let corner = top_left(t, r.size, r.anchor);
+    cmd.insert(d.text_part, Transform { position: corner + Vec2 { x: 16.0, y: 12.0 }, .. });
+    let next = ui_activate(input) || input.mouse_pressed(MouseButton::Left);
+    if !next {
+        return;
+    }
+    if writers.get(d.text_part) is Some(tw) {
+        if !tw.finished {
+            tw.finish();
+            cmd.insert(d.text_part, tw);
+            return;
+        }
+    }
+    d.page += 1;
+    if d.page >= d.pages.len() {
+        cmd.send(DialogClosed { id: d.id, dialog: e });
+        cmd.despawn(e);
+        return;
+    }
+    cmd.insert(d.text_part, Typewriter { full: d.pages[d.page], .. });
+}

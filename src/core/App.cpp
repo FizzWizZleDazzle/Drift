@@ -998,7 +998,8 @@ bool App::pollFrame() {
     s.fps = s.smoothedFps;
 
     // Update Time resource
-    s.timeRes->delta = s.dt;
+    s.timeRes->realDelta = s.dt;
+    s.timeRes->delta = s.dt * std::max(0.f, s.timeRes->scale);
     s.timeRes->elapsed = static_cast<double>(now - s.startCounter) /
                        static_cast<double>(s.perfFrequency);
     s.timeRes->frame = s.frame;

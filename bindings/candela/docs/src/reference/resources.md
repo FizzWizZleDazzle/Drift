@@ -6,9 +6,13 @@ The engine's resources reach a system as parameters, like your own. Their fields
 
 | Field | Meaning |
 |-------|---------|
-| `dt` | Seconds since the last frame |
+| `dt` | Seconds since the last frame, times `scale` |
 | `elapsed` | Seconds since the game started |
 | `frame` | Frames so far |
+| `scale` | How fast game time runs: 1 normal, 0.5 half speed, 0 frozen |
+| `real_dt` | Seconds since the last frame whatever the scale, for menus and tools that run while the game is frozen |
+
+`time.set_scale(s)` changes the speed from the next frame on. Physics, tweens, particles and every system's `dt` follow it: `set_scale(0.0)` pauses the game, a short `set_scale(0.05)` is a hit stop, and `set_scale(0.3)` is slow motion.
 
 ## Input
 

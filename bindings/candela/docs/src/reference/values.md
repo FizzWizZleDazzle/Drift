@@ -9,7 +9,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `Vec2` | `x`, `y`. `a + b`, `a - b`, `-a`, `a * s`, `a / s` with a float `s`; `dot`, `length`, `length_squared`, `distance`, `normalized`, `lerp(o, t)`, `angle()` (radians from +x toward +y), `rotated(radians)`, `perp()` (a quarter turn), `clamp_length(max)`. Built with `vec2(x, y)`, or `from_angle(radians)` for a unit vector |
 | `Rect` | `x`, `y`, `w`, `h` (top-left and size). `contains(p)`, `overlaps(r)`, `center()`. Built with `rect(x, y, w, h)` |
 | `Color` | `r`, `g`, `b`, `a`, from 0.0 to 1.0. `alpha(a)` returns a copy with a new alpha, `lerp(o, t)` blends. Built with `rgb(r, g, b)` or `rgba(r, g, b, a)` from 0 to 255 |
-| `Entity` | An entity's id. Compare with `==`. `Entity {}` is no entity |
+| `Entity` | An entity's id. Compare with `==`. `Entity {}` is no entity. `alive()`: whether it exists, false once a despawn has been applied |
 | `Cell` | `x`, `y`, ints: a tile or grid position. Built with `cell(x, y)` |
 | `Rng` | A seeded random generator; see [Procedural Generation](../guides/procedural-generation.md#random-numbers) |
 | `WeightedTable<T>` | Items rolled by weight: `add(item, weight)`, `roll(rng)`. Built with `weighted_table<T>()` |
@@ -47,6 +47,7 @@ The structs `Effects.add` takes; every field has a default.
 | `texture(path)` | The `Texture` of an image file (PNG, JPG, BMP, TGA, GIF), loaded once per path |
 | `sound(path)` | The `Sound` in a WAV, OGG or MP3 file, loaded once per path |
 | `at(x, y)` | A `Transform` at a position |
+| `plus(bundle, more)` | The bundle with more components after it: `plus(enemy(), [Boss {}])`. A component given twice is the later one |
 | `clamp(x, lo, hi)`, `min(a, b)`, `max(a, b)` | Floats held between bounds, the smaller, the larger |
 | `tween()` | An empty `Tween` to chain steps onto |
 | `ease(e, t)` | Eased progress for `t` from 0 to 1 |

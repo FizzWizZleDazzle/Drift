@@ -78,7 +78,7 @@ extern "C" {
 int32_t drift_host_load(const char* entry, const char* module_dir);
 const char* drift_host_error();
 void drift_host_contact(int32_t kind, uint64_t a, uint64_t b, float px, float py, float nx, float ny);
-void drift_host_frame(double dt, double elapsed, int64_t frame);
+void drift_host_frame(double dt, double elapsed, int64_t frame, double scale, double real_dt);
 void drift_host_unload();
 }
 
@@ -2134,6 +2134,11 @@ json service(const std::string& f, const json& a) {
         if (f == "save_erase") { save->erase(a[0].get<std::string>()); return nullptr; }
         if (f == "save_flush") return save->flush();
     }
+    if (f == "entity_alive") return a[0].get<EntityId>() != 0 && world().isAlive(a[0].get<EntityId>());
+    if (f == "set_time_scale") {
+        if (auto* time = res<Time>()) time->scale = std::max(0.f, a[0].get<float>());
+        return nullptr;
+    }
     if (f == "settings_section") {
         std::string text = g_app->settingsStore().valueJson(a[0].get<std::string>().c_str());
         json out = json::parse(text.empty() ? "{}" : text, nullptr, false);
@@ -2260,7 +2265,8 @@ private:
         }
         offerDownloads();
         auto* time = a.getResource<Time>();
-        drift_host_frame(time ? time->delta : 0.0, time ? time->elapsed : 0.0, time ? int64_t(time->frame) : 0);
+        drift_host_frame(time ? time->delta : 0.0, time ? time->elapsed : 0.0, time ? int64_t(time->frame) : 0,
+                         time ? time->scale : 1.0, time ? time->realDelta : 0.0);
     }
 
     std::string entry_;
