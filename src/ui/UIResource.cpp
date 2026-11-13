@@ -173,9 +173,12 @@ UIResource::UIResource(App& app)
     addDevPanel("Performance", makePerformancePanel(), false);
 #endif
 
-    // ImGui draws on top of the presented frame.
+    // ImGui draws on top of the presented frame. A frame with no windows
+    // skips the backend, which otherwise saves and restores the whole GL
+    // state; on the web each of those reads is a call out to JavaScript.
     renderer->setOverlayCallback([device]() {
-        if (ImDrawData* drawData = ImGui::GetDrawData()) {
+        ImDrawData* drawData = ImGui::GetDrawData();
+        if (drawData && drawData->CmdListsCount > 0) {
             device->imguiRender(drawData);
         }
     });
