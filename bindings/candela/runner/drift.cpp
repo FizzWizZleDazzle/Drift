@@ -15,6 +15,7 @@
 #include <drift/Hierarchy.hpp>
 #include <drift/Log.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
+#include <drift/components/AudioSource.hpp>
 #include <drift/components/Behavior.hpp>
 #include <drift/components/Camera.hpp>
 #include <drift/components/Light2D.hpp>
@@ -647,6 +648,42 @@ const std::vector<Codec>& codecs() {
          },
          [](EntityId e) { world().removeComponent(e, cid<Joint2D>()); },
          [] { return cid<Joint2D>(); }},
+        {"AudioSource",
+         [](EntityId e) { return get<AudioSource>(e) != nullptr; },
+         [](EntityId e) {
+             const AudioSource& a = *get<AudioSource>(e);
+             return json{{"sound", {{"id", a.sound.id}}}, {"bus", {{"id", a.bus.id}}}, {"volume", a.volume},
+                         {"pitch", a.pitch}, {"looping", a.loop}, {"autoplay", a.autoplay},
+                         {"spatial", a.spatial}, {"min_distance", a.minDistance},
+                         {"max_distance", a.maxDistance}, {"rolloff", a.rolloff == Rolloff::Inverse ? "Inverse" : "Linear"},
+                         {"priority", a.priority}, {"play", a.playRequested}};
+         },
+         [](EntityId e, const json& j) {
+             AudioSource a;
+             const AudioSource* cur = get<AudioSource>(e);
+             if (cur) a = *cur;   // keeps the playback the engine started
+             a.sound = SoundHandle{j.value("sound", json::object()).value("id", 0u)};
+             a.bus = BusHandle{j.value("bus", json::object()).value("id", 0u)};
+             a.volume = j.value("volume", 1.f);
+             a.pitch = j.value("pitch", 1.f);
+             a.loop = j.value("looping", false);
+             a.autoplay = j.value("autoplay", true);
+             a.spatial = j.value("spatial", false);
+             a.minDistance = j.value("min_distance", 64.f);
+             a.maxDistance = j.value("max_distance", 1024.f);
+             a.rolloff = pick<Rolloff>(j.value("rolloff", json()), {"Linear", "Inverse"});
+             a.priority = j.value("priority", 0);
+             a.playRequested = j.value("play", false) || (cur && cur->sound != a.sound);
+             put(e, a);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<AudioSource>()); },
+         [] { return cid<AudioSource>(); }},
+        {"AudioListener",
+         [](EntityId e) { return get<AudioListener>(e) != nullptr; },
+         [](EntityId e) { return json{{"active", get<AudioListener>(e)->active}}; },
+         [](EntityId e, const json& j) { put(e, AudioListener{j.value("active", true)}); },
+         [](EntityId e) { world().removeComponent(e, cid<AudioListener>()); },
+         [] { return cid<AudioListener>(); }},
         {"Lifetime",
          [](EntityId e) { return get<Lifetime>(e) != nullptr; },
          [](EntityId e) { return json{{"seconds", get<Lifetime>(e)->seconds}}; },
@@ -1955,8 +1992,115 @@ bool gameplayPhysics(const std::string& f, const json& a, json& out) {
     return true;
 }
 
+bool gameplayAudio(const std::string& f, const json& a, json& out) {
+    auto* audio = res<AudioResource>();
+    if (f == "voice_play") {
+        out = 0;
+        if (!audio) return true;
+        PlayParams p;
+        p.bus = BusHandle{a[1].get<uint32_t>()};
+        p.volume = a[2].get<float>();
+        p.pan = a[3].get<float>();
+        p.pitch = a[4].get<float>();
+        p.loop = a[5].get<bool>();
+        p.fadeIn = a[6].get<float>();
+        p.priority = a[7].get<int>();
+        out = audio->playSound(SoundHandle{a[0].get<uint32_t>()}, p).id;
+    } else if (f == "voice_op") {
+        out = 0.0;
+        if (!audio) return true;
+        PlayingSoundHandle v{a[0].get<uint32_t>()};
+        float x = a[2].get<float>(), y = a[3].get<float>();
+        switch (a[1].get<int>()) {
+            case 0: audio->stopSound(v, x); break;
+            case 1: audio->pauseSound(v, x); break;
+            case 2: audio->resumeSound(v, x); break;
+            case 3: audio->setSoundVolume(v, x, y); break;
+            case 4: audio->setSoundPan(v, x); break;
+            case 5: audio->setSoundPitch(v, x); break;
+            case 6: audio->setSoundLooping(v, x > 0.5f); break;
+            case 7: out = audio->isSoundPlaying(v) ? 1.0 : 0.0; break;
+            case 8: out = audio->isSoundPaused(v) ? 1.0 : 0.0; break;
+        }
+    } else if (f == "music_load") {
+        // Streamed, once per path.
+        static std::unordered_map<std::string, uint32_t> loaded;
+        std::string path = a[0].get<std::string>();
+        auto it = loaded.find(path);
+        if (it == loaded.end() || !audio) {
+            uint32_t id = audio ? audio->loadSound(path.c_str(), LoadMode::Stream).id : 0u;
+            if (id) loaded[path] = id;
+            out = id;
+        } else {
+            out = it->second;
+        }
+    } else if (f == "sound_info") {
+        out = 0.0;
+        if (!audio) return true;
+        SoundHandle s{a[0].get<uint32_t>()};
+        if (a[1].get<int>() == 0) out = audio->soundDuration(s);
+        else audio->setSoundMaxInstances(s, a[2].get<int>());
+    } else if (f == "music_op") {
+        out = 0.0;
+        if (!audio) return true;
+        float x = a[2].get<float>();
+        switch (a[0].get<int>()) {
+            case 0: {
+                MusicParams p;
+                p.crossfade = x;
+                p.loop = a[3].get<bool>();
+                audio->playMusic(SoundHandle{a[1].get<uint32_t>()}, p);
+            } break;
+            case 1: audio->stopMusic(x); break;
+            case 2: audio->pauseMusic(x); break;
+            case 3: audio->resumeMusic(x); break;
+            case 4: out = audio->isMusicPlaying() ? 1.0 : 0.0; break;
+            case 5: audio->nextTrack(); break;
+            case 6: out = audio->hasDevice() ? 1.0 : 0.0; break;
+        }
+    } else if (f == "music_playlist") {
+        out = nullptr;
+        if (!audio) return true;
+        std::vector<SoundHandle> tracks;
+        for (const auto& t : a[0]) tracks.push_back(SoundHandle{t.get<uint32_t>()});
+        PlaylistParams p;
+        p.crossfade = a[1].get<float>();
+        p.loop = a[2].get<bool>();
+        p.shuffle = a[3].get<bool>();
+        p.volume = a[4].get<float>();
+        audio->playPlaylist(tracks, p);
+    } else if (f == "audio_bus") {
+        out = 0;
+        if (!audio) return true;
+        std::string name = a[0].get<std::string>();
+        BusHandle b = name == "master" ? audio->masterBus()
+                    : name == "music"  ? audio->musicBus()
+                    : name == "sfx"    ? audio->sfxBus()
+                                       : audio->createBus(name.c_str(), BusHandle{a[1].get<uint32_t>()});
+        out = b.id;
+    } else if (f == "bus_op") {
+        out = 0.0;
+        if (!audio) return true;
+        BusHandle b{a[0].get<uint32_t>()};
+        if (!b.valid()) b = audio->masterBus();
+        float x = a[2].get<float>(), y = a[3].get<float>();
+        switch (a[1].get<int>()) {
+            case 0: audio->setBusVolume(b, x, y); break;
+            case 1: out = audio->busVolume(b); break;
+            case 2: audio->setBusMuted(b, x > 0.5f); break;
+            case 3: out = audio->isBusMuted(b) ? 1.0 : 0.0; break;
+            case 4: audio->setBusPaused(b, x > 0.5f); break;
+            case 5: out = audio->isBusPaused(b) ? 1.0 : 0.0; break;
+            case 6: audio->stopBus(b, x); break;
+        }
+    } else {
+        return false;
+    }
+    return true;
+}
+
 bool gameplay(const std::string& f, const json& a, json& out) {
-    return gameplayInput(f, a, out) || gameplayPhysics(f, a, out);
+    return gameplayInput(f, a, out) || gameplayPhysics(f, a, out) || gameplayAudio(f, a, out);
 }
 
 json service(const std::string& f, const json& a) {
@@ -2057,16 +2201,6 @@ json service(const std::string& f, const json& a) {
         std::vector<float> samples(s.size());
         for (size_t i = 0; i < samples.size(); ++i) samples[i] = s[i].get<float>();
         return audio->createSound(samples.data(), samples.size(), 1, a[1].get<int>()).id;
-    }
-    if (f == "sound_play") {
-        if (auto* audio = res<AudioResource>()) {
-            PlayParams p;
-            p.volume = a[1].get<float>();
-            p.pitch = a[2].get<float>();
-            p.loop = a[3].get<bool>();
-            audio->playSound(SoundHandle{a[0].get<uint32_t>()}, p);
-        }
-        return nullptr;
     }
     if (f == "quit") {
         g_app->quit();

@@ -46,6 +46,7 @@ The structs `Effects.add` takes; every field has a default.
 |----------|---------|
 | `texture(path)` | The `Texture` of an image file (PNG, JPG, BMP, TGA, GIF), loaded once per path |
 | `sound(path)` | The `Sound` in a WAV, OGG or MP3 file, loaded once per path |
+| `music(path)` | The same for a long track: it decodes while it plays instead of all at load |
 | `at(x, y)` | A `Transform` at a position |
 | `plus(bundle, more)` | The bundle with more components after it: `plus(enemy(), [Boss {}])`. A component given twice is the later one |
 | `clamp(x, lo, hi)`, `min(a, b)`, `max(a, b)` | Floats held between bounds, the smaller, the larger |

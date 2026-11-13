@@ -60,7 +60,7 @@ if input.key_pressed(Key::F12) {
 
 ## Assets
 
-Images and sounds load with the free functions `texture(path)` and `sound(path)` (see [Values](values.md)), which work anywhere, field defaults included. `Assets` makes textures and sounds from data and loads everything else. Loading the same path again returns the same asset. A file that does not load raises `drift_load_failed`.
+Images and sounds load with the free functions `texture(path)`, `sound(path)` and `music(path)` (see [Values](values.md)), which work anywhere, field defaults included. `Assets` makes textures and sounds from data and loads everything else. Loading the same path again returns the same asset. A file that does not load raises `drift_load_failed`.
 
 | Method | Returns |
 |--------|---------|
@@ -68,14 +68,13 @@ Images and sounds load with the free functions `texture(path)` and `sound(path)`
 | `render_target(w, h)` | A `Texture` a `Camera` can draw into |
 | `create_image(w, h, fill)`, `image(path)` | An `Image` to change from code: blank, or an image file's pixels. See [Image](#image) |
 | `spritesheet(texture, frame_w, frame_h)`, `aseprite(path)` | A `Spritesheet`: `frame(col, row)`, `frame_at(i)`, `frames(first, count)`, `frame_count()`, `tag(name)` (the frames of an Aseprite tag), `texture` |
-| `music(path)` | A `Sound` that decodes while it plays, for long tracks |
 | `create_sound(samples: float[], rate)` | A mono `Sound` from samples in -1 to 1 |
 | `font(path, size)` | A `Font`: TrueType, OpenType or BMFont. `Font {}` is the built-in font |
 | `tilemap(path)`, `ldtk_level(path, level)` | A `Map` from Tiled or LDtk |
 | `create_tilemap(width, height, tile_size, tileset, layers: string[])` | An empty `Map` of tile layers over one tileset image, for levels made in code |
 | `scene(path)` | A `Scene` from a scene or prefab file |
 
-`Texture` has `size()`, `set_filter(Filter)`, `update(image)` and `update_rect(image, r)` (write an image's pixels into it, cheap enough for every frame) and `to_image()` (a render target's pixels as its last frame left them); `Sound` has `play()`, `play_with(PlayOptions)` and `duration()`.
+`Texture` has `size()`, `set_filter(Filter)`, `update(image)` and `update_rect(image, r)` (write an image's pixels into it, cheap enough for every frame) and `to_image()` (a render target's pixels as its last frame left them); `Sound` has `play()` and `play_with(PlayOptions)`, which return a `Voice`, `duration()` and `set_max_instances(n)`.
 
 ### Image
 
@@ -166,10 +165,13 @@ The game's seed from `drift.toml` `[random]`; see [Procedural Generation](../gui
 | Method | Does |
 |--------|------|
 | `play_music(sound, crossfade, looping)`, `stop_music(fade)`, `pause_music(fade)`, `resume_music(fade)`, `music_playing()` | One music track at a time |
+| `play_playlist(tracks, crossfade, looping, shuffle)`, `next_track()` | Tracks one after another; `crossfade` 0 is gapless |
 | `master_bus()`, `music_bus()`, `sfx_bus()`, `bus(name, parent)` | Mixer buses; `drift.toml [audio]` sets the built-in ones' starting volumes |
 | `has_device()` | `false` when no output device opened; sounds still advance silently |
 
-A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `set_paused(p)` and `stop(fade)`. A `Voice` from `Sound.play` has `stop(fade)`, `pause(fade)`, `resume(fade)`, `set_volume(v, fade)`, `set_pan(p)`, `set_pitch(p)` and `playing()`.
+A `Bus` has `set_volume(v, fade)`, `volume()`, `set_muted(m)`, `muted()`, `set_paused(p)`, `paused()` and `stop(fade)`. A `Voice` from `Sound.play` has `stop(fade)`, `pause(fade)`, `resume(fade)`, `set_volume(v, fade)`, `set_pan(p)`, `set_pitch(p)`, `set_looping(b)`, `playing()` and `paused()`; after the sound ends its methods do nothing.
+
+`PlayOptions` fields: `volume` (1), `pitch` (1; 2 is an octave up), `looping`, `pan` (-1 left to 1 right), `bus` (`Bus {}` for sfx), `fade_in` (seconds) and `priority`.
 
 ## Physics
 

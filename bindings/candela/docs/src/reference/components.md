@@ -61,8 +61,8 @@ A collider without a `RigidBody` is static. The body is created at the end of th
 | `PointLight` | `color`, `intensity`, `radius`, `falloff` (1 fades evenly; more keeps a tighter core), `shadows`, `layer_mask` (cameras sharing a layer see it). Lights shine when drift.toml has a `[lighting]` section |
 | `SpotLight` | As `PointLight`, plus `direction` (radians, added to the entity's rotation), `angle` (the whole cone), `softness` (0 hard edge, 1 fades from the middle) |
 | `LightOccluder` | `shape` (`OccluderShape`), `half_size` (`Box`), `radius` (`Circle`), `points` (`Polygon`, up to 16), `offset`, `shadow_self` (false keeps its own area lit), `layer_mask`. Turns and scales with the entity |
-| `AudioSource` | `sound`, `bus`, `volume`, `pitch`, `looping`, `autoplay`, `spatial`, `min_distance`, `max_distance` |
-| `AudioListener` | none. Spatial sounds are heard from this entity, or from the main camera without one |
+| `AudioSource` | `sound`, `bus`, `volume`, `pitch`, `looping`, `autoplay` (true), `spatial`, `min_distance` (64), `max_distance` (1024), `rolloff` (`Rolloff::Linear` or `Inverse`), `priority`, `play` (set it to start the sound again). Changing `sound` starts the new one |
+| `AudioListener` | `active` (true). Spatial sounds are heard from the first active one |
 
 A camera that follows the player and stops at the level's edges:
 

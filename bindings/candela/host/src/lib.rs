@@ -483,7 +483,7 @@ impl Host {
                         Ok(Param::Engine(*id))
                     }
                     // The gameplay half's engine resources.
-                    "Physics" => Ok(Param::Engine(*id)),
+                    "Physics" | "Audio" => Ok(Param::Engine(*id)),
                     _ => Err(format!("{name} is not a resource, a query, a lookup or an engine resource")),
                 }
             }
@@ -1129,9 +1129,6 @@ fn engine(module_dir: &str) -> Engine {
         if id == 0 { Err(host_error(format!("drift_load_failed: {p}"))) } else { Ok(id) }
     });
     e.register_host_fn("drift", "sound_create", move |s: Vec<f64>, rate: i64| i(call("sound_create", json!([s, rate]))));
-    e.register_host_fn("drift", "sound_play", |s: i64, vol: f64, pitch: f64, looping: bool| {
-        call("sound_play", json!([s, vol, pitch, looping]));
-    });
     e.register_host_fn("drift", "quit", || {
         call("quit", json!([]));
     });
@@ -1275,6 +1272,15 @@ fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("physics_overlap", vec![I, F, F, F, F, I], HostType::Array(Box::new(I))),
         ("physics_push", vec![I, I, F, F], U),
         ("physics_debug", vec![B], U),
+        // Audio.
+        ("voice_play", vec![I, I, F, F, F, B, F, I], I),
+        ("voice_op", vec![I, I, F, F], F),
+        ("music_load", vec![S], I),
+        ("sound_info", vec![I, I, I], F),
+        ("music_op", vec![I, I, F, B], F),
+        ("music_playlist", vec![HostType::Array(Box::new(I)), F, B, B, F], U),
+        ("audio_bus", vec![S, I], I),
+        ("bus_op", vec![I, I, F, F], F),
     ]
 }
 

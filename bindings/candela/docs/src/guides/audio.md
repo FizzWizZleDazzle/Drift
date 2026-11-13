@@ -26,23 +26,45 @@ fn jump_sound(input: Input, sfx: Sfx) {
 `play()` plays at full volume on the sfx bus. `play_with` takes a `PlayOptions` for the rest:
 
 ```rust
-sfx.coin.play_with(PlayOptions { volume: 0.6, pitch: random::float_range(0.9, 1.1), .. });
+sfx.coin.play_with(PlayOptions { volume: 0.6, pitch: 1.2, .. });
 ```
 
-Both return a `Voice`, one playback you can `stop`, `pause`, `resume`, fade with `set_volume(v, fade)`, or move with `set_pan` and `set_pitch`. `playing()` says whether it is still going. When every voice is busy, a sound with a higher `priority` takes the place of a lower one.
-
-## Music
-
-`assets.music(path)` loads a track that decodes while it plays, so long files cost little memory. `Audio` plays one music track at a time, on the music bus:
+Both return a `Voice`, one playback you can `stop`, `pause`, `resume`, fade with `set_volume(v, fade)`, or move with `set_pan` and `set_pitch`. `playing()` says whether it is still going. Keep the voice in a resource to control a looping sound later:
 
 ```rust
+@resource
+struct Engine { hum: Voice = Voice { .. } }
+
 @system(schedule: Schedule::Startup)
-fn start_music(assets: Assets, audio: Audio) {
-    audio.play_music(assets.music("assets/theme.ogg"), 0.0, true);
+fn start_engine(sfx: Sfx, engine: Engine) {
+    engine.hum = sfx.engine.play_with(PlayOptions { looping: true, volume: 0.4, .. });
+}
+
+@system
+fn rev(input: Input, engine: Engine) {
+    engine.hum.set_pitch(1.0 + input.axis("throttle") * 0.5);
 }
 ```
 
-Playing another track crossfades over the seconds you pass. `stop_music`, `pause_music` and `resume_music` take a fade time too.
+`PlayOptions` also takes `pan`, a `bus`, `fade_in` seconds and a `priority`: when every voice is busy, a sound with a higher priority takes the place of a lower one. `sound.set_max_instances(n)` keeps a sound from piling up, such as footsteps; starting one more fades out the oldest.
+
+## Music
+
+`music(path)` loads a track that decodes while it plays, so long files cost little memory; like `sound`, it works in field defaults. `Audio` plays one music track at a time, on the music bus:
+
+```rust
+@resource
+struct Tracks { theme: Sound = music("assets/theme.ogg"), boss: Sound = music("assets/boss.ogg") }
+
+@system(schedule: Schedule::Startup)
+fn start_music(tracks: Tracks, audio: Audio) {
+    audio.play_music(tracks.theme, 0.0, true);
+}
+```
+
+Playing another track crossfades over the seconds you pass: `audio.play_music(tracks.boss, 2.0, true)`. `stop_music`, `pause_music` and `resume_music` take a fade time too.
+
+`play_playlist(tracks, crossfade, looping, shuffle)` plays a list of tracks one after another, gapless with a crossfade of 0, and `next_track()` skips ahead.
 
 ## Buses
 
@@ -74,7 +96,7 @@ cmd.spawn([at(400.0, 200.0), AudioSource { sound: sfx.fire, looping: true, autop
                                            spatial: true, min_distance: 64.0, max_distance: 900.0, .. }]);
 ```
 
-With `spatial` on, the sound gets quieter with distance from the listener, silent past `max_distance` and at full volume inside `min_distance`, and pans with its horizontal offset. The listener is the entity with an `AudioListener`, or the main camera without one. The engine reads the source's volume, pitch and looping every frame, so change a playing source by writing its component.
+With `spatial` on, the sound gets quieter with distance from the listener, silent past `max_distance` and at full volume inside `min_distance`, and pans with its horizontal offset. The listener is the first entity with an active `AudioListener`, usually the camera or the player; without one, spatial sources play unchanged. The engine reads the source's volume, pitch and looping every frame, so change a playing source by writing its component.
 
 ## Without an audio device
 
