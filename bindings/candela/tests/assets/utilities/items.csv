@@ -1,0 +1,3 @@
+id,name,price,heal,stackable
+potion,"Potion, small",25,0.25,true
+elixir,"The ""Best"" Elixir",300,1.0,false

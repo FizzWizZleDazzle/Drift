@@ -1,0 +1,4 @@
+[
+  {"id": "potion", "name": "Potion", "price": 25, "heal": 0.5, "tags": ["consumable"]},
+  {"id": "sword", "name": "Sword", "price": 120, "tags": ["weapon", "melee"], "rarity": "Rare"}
+]

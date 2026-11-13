@@ -236,6 +236,13 @@ if(DRIFT_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "procgen checks passed"
         FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
         TIMEOUT 60)
+    add_test(NAME candela_utilities COMMAND drift_run run ${CMAKE_CURRENT_SOURCE_DIR}/tests/utilities.cdl
+             --set locale.folder=assets/utilities/lang)
+    set_tests_properties(candela_utilities PROPERTIES
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
+        PASS_REGULAR_EXPRESSION "utility checks passed"
+        FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
+        TIMEOUT 60)
     add_test(NAME candela_images COMMAND drift_run run ${CMAKE_CURRENT_SOURCE_DIR}/tests/images.cdl)
     set_tests_properties(candela_images PROPERTIES
         ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"

@@ -50,8 +50,6 @@ Everything `import "drift/ui" { * };` brings in. The [HUD and Menus](../guides/h
 | `toast(cmd, theme, message)` | Shows a toast |
 | `dialog_box(cmd, theme, id, pages)` | Spawns a dialog box; its entity |
 | `row(start, gap, count)`, `column(start, gap, count)`, `grid_layout(start, cell, columns, count)` | Offsets for widgets in a line or a grid |
-| `clock(seconds, tenths)` | `"m:ss"` or `"m:ss.d"` |
-| `format_number(v, decimals)` | A number with a fixed count of decimals |
 | `resource_number(path)`, `resource_string(path)` | A resource field by path, as a number (0 when it is not one) or as text |
 
 ## Constants

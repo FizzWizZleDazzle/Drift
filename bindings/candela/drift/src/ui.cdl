@@ -210,28 +210,6 @@ fn bind_counter(path: string, format: string, speed: float) -> Bind {
     return Bind { path: path, format: format, count_speed: speed, .. };
 }
 
-// A number with a fixed count of decimals.
-fn format_number(v: float, decimals: int) -> string {
-    if decimals <= 0 {
-        return string(int(v.round()));
-    }
-    let scale = 1.0;
-    for i in range(decimals) {
-        scale *= 10.0;
-    }
-    let n = int((v.abs() * scale).round());
-    let whole = string(n / int(scale));
-    let frac = string(n % int(scale));
-    while frac.len() < decimals {
-        frac = "0" + frac;
-    }
-    let sign = "";
-    if v < 0.0 && n != 0 {
-        sign = "-";
-    }
-    return sign + whole + "." + frac;
-}
-
 // A resource field as a number; 0.0 when it is not one.
 fn resource_number(path: string) -> float {
     let s = drift::resource_text(path);
@@ -265,27 +243,12 @@ fn ui_bind(b: Bind, text: Text, time: Time) {
             b.shown = target;
         }
         b.started = true;
-        shown = format_number(b.shown, b.decimals);
+        shown = fixed(b.shown, b.decimals);
     }
     let value = b.format.replace("{}", shown);
     if value != text.value {
         text.value = value;
     }
-}
-
-// Shows a time in seconds as m:ss, or m:ss.d with `tenths`.
-fn clock(seconds: float, tenths: bool) -> string {
-    let s = max(seconds, 0.0);
-    let whole = int(s.floor());
-    let secs = string(whole % 60);
-    if secs.len() < 2 {
-        secs = "0" + secs;
-    }
-    let out = string(whole / 60) + ":" + secs;
-    if tenths {
-        out = out + "." + string(int(((s - float(whole)) * 10.0).floor()));
-    }
-    return out;
 }
 
 // A Text that shows a resource field holding seconds as a clock.

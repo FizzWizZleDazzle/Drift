@@ -45,6 +45,10 @@ jump = ["key:Space", "button:South"]
 [random]
 seed = 0                     # 0 picks a new seed each run and logs it
 
+[locale]                     # where the game's text in each language lives
+folder = "assets/lang"
+language = "auto"
+
 [my_game]                    # your own section, read by a @settings struct
 lives = 3
 ```
@@ -62,6 +66,7 @@ lives = 3
 | `[input]` | One key per action, a list of bindings: `key:<name>`, `mouse:Left`, `button:South` |
 | `[random]` | `seed` for the `Random` resource; see [Procedural Generation](../guides/procedural-generation.md#the-games-seed) |
 | `[web]` | The web page: `orientation`, `background`, `fullscreen_button`, `touch_controls`, `touch_stick`, `touch_buttons`, `offline`; see [Web Games](../guides/web.md#the-page) |
+| `[locale]` | `folder`, `language` (`"auto"` or a code), `fallback`; see [Localization](../guides/localization.md) |
 
 Values apply in order: the default, then `drift.toml`, then your systems, then `DRIFT_<SECTION>_<KEY>` environment variables, then `--set section.key=value` on the command line. So `DRIFT_RENDER_BACKEND=webgpu drift run` tries the WebGPU backend for one run, and `drift run --set window.width=640` checks a smaller window.
 

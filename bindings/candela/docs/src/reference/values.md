@@ -6,9 +6,10 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 
 | Type | Fields and methods |
 |------|--------------------|
-| `Vec2` | `x`, `y`. `a + b`, `a - b`, `-a`, `a * s`, `a / s` with a float `s`; `dot`, `length`, `length_squared`, `distance`, `normalized`, `lerp(o, t)`, `angle()` (radians from +x toward +y), `rotated(radians)`, `perp()` (a quarter turn), `clamp_length(max)`. Built with `vec2(x, y)`, or `from_angle(radians)` for a unit vector |
-| `Rect` | `x`, `y`, `w`, `h` (top-left and size). `contains(p)`, `overlaps(r)`, `center()`. Built with `rect(x, y, w, h)` |
-| `Color` | `r`, `g`, `b`, `a`, from 0.0 to 1.0. `alpha(a)` returns a copy with a new alpha, `lerp(o, t)` blends. Built with `rgb(r, g, b)` or `rgba(r, g, b, a)` from 0 to 255 |
+| `Vec2` | `x`, `y`. `a + b`, `a - b`, `-a`, `a * s`, `a / s` with a float `s`; `dot`, `length`, `length_squared`, `distance`, `normalized`, `lerp(o, t)`, `angle()` (radians from +x toward +y), `rotated(radians)`, `perp()` (a quarter turn), `clamp_length(max)`, `cross(o)`, `move_towards(target, max_distance)`, `reflect(normal)`. Built with `vec2(x, y)`, or `from_angle(radians)` for a unit vector |
+| `Rect` | `x`, `y`, `w`, `h` (top-left and size). `contains(p)`, `overlaps(r)`, `center()`, `clamp_point(p)` (the nearest point inside), `expand(by)`, `centered_at(c)`. Built with `rect(x, y, w, h)` |
+| `Color` | `r`, `g`, `b`, `a`, from 0.0 to 1.0. `alpha(a)` returns a copy with a new alpha, `lerp(o, t)` blends, `lighten(amount)` and `darken(amount)` move toward white or black, `shift_hue(turn)` turns the hue (1.0 is once around), `to_hsv()` gives an `Hsv` (`h`, `s`, `v`, 0 to 1), `to_hex()` gives `"#rrggbb"` (`"#rrggbbaa"` when not opaque). Built with `rgb(r, g, b)` or `rgba(r, g, b, a)` from 0 to 255, `hsv(h, s, v)` from 0 to 1, or `hex("#ff8800")` |
+| `Palette` | `colors`. `at(i)` (wrapping around), `sample(t)` (a gradient through every color, 0 to 1), `random(rng)`, `len()`. Built with `palette(["#000000", ...])`; `pico8()` is the PICO-8 sixteen |
 | `Entity` | An entity's id. Compare with `==`. `Entity {}` is no entity. `alive()`: whether it exists, false once a despawn has been applied |
 | `Cell` | `x`, `y`, ints: a tile or grid position. Built with `cell(x, y)` |
 | `Rng` | A seeded random generator; see [Procedural Generation](../guides/procedural-generation.md#random-numbers) |
@@ -22,6 +23,7 @@ Plain structs and functions the `drift` module provides. `import "drift" { * };`
 | `PlayOptions` | `volume` (1), `pan` (-1 left to 1 right), `pitch` (1), `looping`, `bus` (the sfx bus when unset), `fade_in` (seconds), `priority` (higher keeps its voice when all are busy). For `Sound.play_with` |
 | `Timer`, `Cooldown`, `Sequence` | See [Timers, Sequences and Save Data](../guides/timers-and-saves.md) |
 | `Request`, `HttpResponse`, `Socket`, `SocketEvent` | HTTP requests, WebSockets and their messages; see [Networking](../guides/networking.md) |
+| `Strings` | The game's text in one language; see [Localization](../guides/localization.md) |
 | `Image` | Pixels to change from code; see [Image](resources.md#image) |
 | `Shader`, `Material` | A fragment shader, and a shader with its parameters and textures; from `Assets` |
 | `Spritesheet` | A texture cut into equal frames: `texture`, `frame_w`, `frame_h`, `columns`, `rows`. `frame(col, row)`, `frame_at(i)` (left to right, top to bottom from 0), `frames(first, count)`, `count()`; for an Aseprite file also `tag(name)` and `clip(name)`. Built with `assets.spritesheet(texture, frame_w, frame_h)` or `assets.aseprite(path)` |
@@ -73,9 +75,16 @@ The structs `Effects.add` takes; every field has a default.
 | `spring(v)`, `spring2(v)`, `angle_spring(v)` | Springs at rest at a value |
 | `two_bone_ik(root, target, upper_len, lower_len, bend)` | A `TwoBone` pose |
 | `ik_chain(root, count, length, direction)`, `rope(start, count, segment, direction)`, `foot(at)` | A straight IK chain, a rope, a planted foot |
+| `inverse_lerp(a, b, x)`, `remap(x, a, b, c, d)` | Where `x` sits between `a` and `b` (0 to 1); `x` moved from the range `a..b` to `c..d` |
+| `radians(degrees)`, `degrees(radians)` | Angle units |
+| `wrap(x, lo, hi)`, `sign(x)` | `x` wrapped into `lo` up to `hi`; -1.0, 0.0 or 1.0 |
+| `circles_overlap(a, ra, b, rb)`, `circle_overlaps_rect(c, r, rect)`, `segments_intersect(a1, a2, b1, b2)` | Overlap tests; the last returns `Option<Vec2>`, the crossing point |
+| `hsv(h, s, v)`, `hex(text)`, `palette(hexes)`, `pico8()` | Colors; `hex` takes `"#rgb"`, `"#rrggbb"` or `"#rrggbbaa"` and raises `drift_bad_color` for anything else |
+| `format(pattern, args)`, `fill(pattern, values)`, `fixed(x, decimals)`, `pad(n, width)`, `grouped(n)`, `clock(seconds, tenths)` | Text from numbers; see [Formatting numbers](../guides/text.md#formatting-numbers) |
 | `load_data<T>(path)`, `read_text(path)`, `parse_json<T>(text)`, `to_json(value)` | Data files and JSON; see [Data Files](../guides/data-files.md) |
 | `http_get(url)`, `http_post(url, body)`, `http_request(method, url, body, headers)`, `websocket(url)` | See [Networking](../guides/networking.md) |
 | `sequence()` | An empty `Sequence` to chain steps onto |
+| `localization()`, `localization_for(language)` | The game's text; see [Localization](../guides/localization.md) |
 | `parent_of(e)` | The entity's parent; `Entity {}` for a root |
 | `children_of(e)`, `descendants_of(e)` | The direct children in the order they were added; everything below, depth first |
 | `world_transform(e)` | The entity's `GlobalTransform`: its place after every parent |

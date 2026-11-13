@@ -1,0 +1,14 @@
+name = "Forest"
+time_limit = 90.5
+
+[spawn]
+x = 120.0
+y = 64.0
+
+[[enemies]]
+kind = "slime"
+count = 3
+
+[[enemies]]
+kind = "bat"
+count = 2

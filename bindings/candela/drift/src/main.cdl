@@ -3107,3 +3107,439 @@ impl Sequence {
     }
 }
 
+// ---- Math helpers ----
+
+// Where x sits between a and b: 0.0 at a, 1.0 at b.
+fn inverse_lerp(a: float, b: float, x: float) -> float {
+    if a == b {
+        return 0.0;
+    }
+    return (x - a) / (b - a);
+}
+// x moved from the range a..b to the range c..d.
+fn remap(x: float, a: float, b: float, c: float, d: float) -> float { return lerp(c, d, inverse_lerp(a, b, x)); }
+// x wrapped into lo up to, not including, hi: angles, looping worlds.
+fn wrap(x: float, lo: float, hi: float) -> float {
+    let span = hi - lo;
+    if span <= 0.0 {
+        return lo;
+    }
+    let r = x - span * ((x - lo) / span).floor();
+    if r >= hi {
+        return lo;
+    }
+    return r;
+}
+// -1.0, 0.0 or 1.0.
+fn sign(x: float) -> float {
+    if x > 0.0 {
+        return 1.0;
+    }
+    if x < 0.0 {
+        return -1.0;
+    }
+    return 0.0;
+}
+fn radians(degrees: float) -> float { return degrees * PI / 180.0; }
+fn degrees(radians: float) -> float { return radians * 180.0 / PI; }
+
+impl Vec2 {
+    fn cross(self, o: Vec2) -> float { return self.x * o.y - self.y * o.x; }
+    // Toward target by at most max_distance, never past it.
+    fn move_towards(self, target: Vec2, max_distance: float) -> Vec2 {
+        let d = target - self;
+        let l = d.length();
+        if l <= max_distance || l == 0.0 {
+            return target;
+        }
+        return self + d / l * max_distance;
+    }
+    // Bounced off a surface with this normal.
+    fn reflect(self, normal: Vec2) -> Vec2 {
+        let n = normal.normalized();
+        return self - n * (2.0 * self.dot(n));
+    }
+}
+
+impl Rect {
+    // The point inside the rect nearest p.
+    fn clamp_point(self, p: Vec2) -> Vec2 {
+        return Vec2 { x: clamp(p.x, self.x, self.x + self.w), y: clamp(p.y, self.y, self.y + self.h) };
+    }
+    // Grown by `by` on every side; negative shrinks it.
+    fn expand(self, by: float) -> Rect {
+        return Rect { x: self.x - by, y: self.y - by, w: self.w + by * 2.0, h: self.h + by * 2.0 };
+    }
+    // A rect of size w x h centred on c.
+    fn centered_at(self, c: Vec2) -> Rect {
+        return Rect { x: c.x - self.w * 0.5, y: c.y - self.h * 0.5, w: self.w, h: self.h };
+    }
+}
+
+// Whether two circles touch.
+fn circles_overlap(a: Vec2, ra: float, b: Vec2, rb: float) -> bool {
+    return (a - b).length_squared() <= (ra + rb) * (ra + rb);
+}
+// Whether a circle touches a rect.
+fn circle_overlaps_rect(c: Vec2, r: float, box: Rect) -> bool {
+    return (box.clamp_point(c) - c).length_squared() <= r * r;
+}
+// Where segments a1-a2 and b1-b2 cross, if they do.
+fn segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> Option<Vec2> {
+    let r = a2 - a1;
+    let s = b2 - b1;
+    let d = r.cross(s);
+    if d == 0.0 {
+        return None;
+    }
+    let t = (b1 - a1).cross(s) / d;
+    let u = (b1 - a1).cross(r) / d;
+    if t < 0.0 || t > 1.0 || u < 0.0 || u > 1.0 {
+        return None;
+    }
+    return Some(a1 + r * t);
+}
+
+// ---- Colors ----
+
+// A color from hue, saturation and value, each 0.0 to 1.0 (hue goes once
+// around the color wheel: 0.0 red, 0.33 green, 0.67 blue).
+fn hsv(h: float, s: float, v: float) -> Color {
+    let hh = wrap(h, 0.0, 1.0) * 6.0;
+    let i = int(hh.floor());
+    let f = hh - float(i);
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - s * f);
+    let t = v * (1.0 - s * (1.0 - f));
+    if i == 0 {
+        return Color { r: v, g: t, b: p, a: 1.0 };
+    }
+    if i == 1 {
+        return Color { r: q, g: v, b: p, a: 1.0 };
+    }
+    if i == 2 {
+        return Color { r: p, g: v, b: t, a: 1.0 };
+    }
+    if i == 3 {
+        return Color { r: p, g: q, b: v, a: 1.0 };
+    }
+    if i == 4 {
+        return Color { r: t, g: p, b: v, a: 1.0 };
+    }
+    return Color { r: v, g: p, b: q, a: 1.0 };
+}
+
+struct Hsv { h: float = 0.0, s: float = 0.0, v: float = 0.0 }
+
+fn hex_digit(c: string) -> int {
+    let digits = "0123456789abcdef";
+    return match digits.index_of(c.lowercase()) { Some(i) => i, None => 0 };
+}
+// A color from "#rgb", "#rrggbb" or "#rrggbbaa" (the # is optional).
+fn hex(text: string) -> Color {
+    let t = text.trim_start_chars("#");
+    if t.len() == 3 {
+        t = t[0..1] + t[0..1] + t[1..2] + t[1..2] + t[2..3] + t[2..3];
+    }
+    if t.len() != 6 && t.len() != 8 {
+        throw "drift_bad_color: " + text;
+    }
+    let ch: float[] = [];
+    for i in range(t.len() / 2) {
+        ch.push(float(hex_digit(t[i * 2..i * 2 + 1]) * 16 + hex_digit(t[i * 2 + 1..i * 2 + 2])) / 255.0);
+    }
+    if ch.len() == 3 {
+        ch.push(1.0);
+    }
+    return Color { r: ch[0], g: ch[1], b: ch[2], a: ch[3] };
+}
+
+impl Color {
+    fn to_hsv(self) -> Hsv {
+        let hi = max(self.r, max(self.g, self.b));
+        let lo = min(self.r, min(self.g, self.b));
+        let d = hi - lo;
+        let h = 0.0;
+        if d > 0.0 {
+            if hi == self.r {
+                h = wrap((self.g - self.b) / d, 0.0, 6.0) / 6.0;
+            } else if hi == self.g {
+                h = ((self.b - self.r) / d + 2.0) / 6.0;
+            } else {
+                h = ((self.r - self.g) / d + 4.0) / 6.0;
+            }
+        }
+        let s = 0.0;
+        if hi > 0.0 {
+            s = d / hi;
+        }
+        return Hsv { h: h, s: s, v: hi };
+    }
+    // Toward white (amount 0.0 to 1.0), keeping alpha.
+    fn lighten(self, amount: float) -> Color {
+        return self.lerp(Color { r: 1.0, g: 1.0, b: 1.0, a: self.a }, amount);
+    }
+    // Toward black, keeping alpha.
+    fn darken(self, amount: float) -> Color {
+        return self.lerp(Color { r: 0.0, g: 0.0, b: 0.0, a: self.a }, amount);
+    }
+    // The hue turned by `turn` (1.0 is once around).
+    fn shift_hue(self, turn: float) -> Color {
+        let c = self.to_hsv();
+        return hsv(c.h + turn, c.s, c.v).alpha(self.a);
+    }
+    // "#rrggbb", or "#rrggbbaa" when not opaque.
+    fn to_hex(self) -> string {
+        let digits = "0123456789abcdef";
+        let out = "#";
+        let chans = [self.r, self.g, self.b];
+        if self.a < 1.0 {
+            chans.push(self.a);
+        }
+        for c in chans {
+            let n = int((clamp(c, 0.0, 1.0) * 255.0).round());
+            out = out + digits[n / 16..n / 16 + 1] + digits[n % 16..n % 16 + 1];
+        }
+        return out;
+    }
+}
+
+// An ordered set of colors: pick by index, or blend along it as a gradient.
+struct Palette { colors: Color[] = [] }
+fn palette(hexes: string[]) -> Palette {
+    let colors: Color[] = [];
+    for h in hexes {
+        colors.push(hex(h));
+    }
+    return Palette { colors: colors };
+}
+impl Palette {
+    fn len(self) -> int { return self.colors.len(); }
+    // The color at i, wrapping around the end.
+    fn at(self, i: int) -> Color {
+        let n = self.colors.len();
+        return self.colors[((i % n) + n) % n];
+    }
+    // A gradient through every color: 0.0 is the first, 1.0 the last.
+    fn sample(self, t: float) -> Color {
+        let n = self.colors.len();
+        if n == 1 {
+            return self.colors[0];
+        }
+        let x = clamp(t, 0.0, 1.0) * float(n - 1);
+        let i = int(x.floor());
+        if i >= n - 1 {
+            return self.colors[n - 1];
+        }
+        return self.colors[i].lerp(self.colors[i + 1], x - float(i));
+    }
+    fn random(self, rng: Rng) -> Color { return self.colors[rng.below(self.colors.len())]; }
+}
+// The PICO-8 sixteen: black, dark blue, purple, dark green, brown, dark grey,
+// light grey, white, red, orange, yellow, green, blue, lavender, pink, peach.
+fn pico8() -> Palette {
+    return palette(["#000000", "#1d2b53", "#7e2553", "#008751", "#ab5236", "#5f574f", "#c2c3c7", "#fff1e8",
+                    "#ff004d", "#ffa300", "#ffec27", "#00e436", "#29adff", "#83769c", "#ff77a8", "#ffccaa"]);
+}
+
+// ---- Text formatting ----
+
+// The pattern with each {} replaced by the next argument and each {0}, {1}
+// by the argument at that index: format("{} of {}", [3, 10]) is "3 of 10".
+fn format(pattern: string, args: any[]) -> string {
+    let out = "";
+    let next = 0;
+    let i = 0;
+    let n = pattern.len();
+    while i < n {
+        let c = pattern[i..i + 1];
+        if c == "{" && i + 1 < n && pattern[i + 1..i + 2] == "{" {
+            out = out + "{";
+            i += 2;
+        } else if c == "}" && i + 1 < n && pattern[i + 1..i + 2] == "}" {
+            out = out + "}";
+            i += 2;
+        } else if c == "{" {
+            let close = match pattern[i..n].index_of("}") { Some(k) => i + k, None => -1 };
+            if close < 0 {
+                out = out + pattern[i..n];
+                return out;
+            }
+            let inside = pattern[i + 1..close];
+            let at = next;
+            if inside == "" {
+                next += 1;
+            } else {
+                at = match inside.parse<int>() { Some(k) => k, None => -1 };
+            }
+            if at >= 0 && at < args.len() {
+                out = out + string(args[at]);
+            } else {
+                out = out + pattern[i..close + 1];
+            }
+            i = close + 1;
+        } else {
+            out = out + c;
+            i += 1;
+        }
+    }
+    return out;
+}
+// The pattern with each {name} replaced by values[name]: fill("Hi {who}",
+// {"who": "Ana"}). Names not in `values` stay as they are.
+fn fill(pattern: string, values: {string: any}) -> string {
+    let out = pattern;
+    for k in values.keys() {
+        out = out.replace("{" + k + "}", string(values[k]));
+    }
+    return out;
+}
+// x with exactly `decimals` digits after the point: fixed(3.14159, 2) is "3.14".
+fn fixed(x: float, decimals: int) -> string {
+    let scale = 1;
+    for i in range(decimals) {
+        scale *= 10;
+    }
+    let n = int((x.abs() * float(scale)).round());
+    let sign_text = "";
+    if x < 0.0 && n > 0 {
+        sign_text = "-";
+    }
+    if decimals <= 0 {
+        return sign_text + string(n);
+    }
+    let frac = string(n % scale);
+    while frac.len() < decimals {
+        frac = "0" + frac;
+    }
+    return sign_text + string(n / scale) + "." + frac;
+}
+// n with zeros in front up to `width` digits: pad(7, 3) is "007".
+fn pad(n: int, width: int) -> string {
+    let digits = string(n.abs());
+    while digits.len() < width {
+        digits = "0" + digits;
+    }
+    if n < 0 {
+        return "-" + digits;
+    }
+    return digits;
+}
+// n with a comma between each group of three digits: "12,345".
+fn grouped(n: int) -> string {
+    let digits = string(n.abs());
+    let out = "";
+    let count = 0;
+    let i = digits.len();
+    while i > 0 {
+        if count == 3 {
+            out = "," + out;
+            count = 0;
+        }
+        out = digits[i - 1..i] + out;
+        count += 1;
+        i -= 1;
+    }
+    if n < 0 {
+        return "-" + out;
+    }
+    return out;
+}
+// Seconds as "m:ss", or "h:mm:ss" from an hour up; with `tenths`, a digit
+// of tenths after a point: "1:05.3".
+fn clock(seconds: float, tenths: bool) -> string {
+    let s = max(seconds, 0.0);
+    let total = int(s.floor());
+    let h = total / 3600;
+    let m = (total / 60) % 60;
+    let out = string(m) + ":" + pad(total % 60, 2);
+    if h > 0 {
+        out = string(h) + ":" + pad(m, 2) + ":" + pad(total % 60, 2);
+    }
+    if tenths {
+        out = out + "." + string(int(((s - float(total)) * 10.0).floor()));
+    }
+    return out;
+}
+
+// ---- Localization ----
+
+// The game's text in the player's language: one file per language, key ->
+// text, in JSON or TOML. drift.toml [locale] says where:
+//
+//     [locale]
+//     folder = "assets/lang"   # files named <language>.json or .toml
+//     language = "auto"        # the browser's (or system's) language, or "fr"
+//     fallback = "en"          # where keys missing from a language come from
+struct Strings { language: string = "", table: {string: string} = {}, fallback: {string: string} = {} }
+
+fn locale_setting(key: string, fallback: string) -> string {
+    let j = drift::setting_text("locale." + key);
+    if j == "" {
+        return fallback;
+    }
+    return parse_json<string>(j);
+}
+fn locale_table(folder: string, language: string) -> Option<{string: string}> {
+    for ext in [".json", ".toml"] {
+        let j = drift::data_read(folder + "/" + language + ext, "?");
+        if j != "" {
+            return Some(parse_json<{string: string}>(j));
+        }
+    }
+    return None;
+}
+// The text the player reads, as [locale] in drift.toml picks it.
+fn localization() -> Strings { return localization_for(locale_setting("language", "auto")); }
+// The text in one language ("fr-CA" falls back to "fr", then to the
+// fallback language).
+fn localization_for(language: string) -> Strings {
+    let folder = locale_setting("folder", "assets/lang");
+    let fallback = locale_setting("fallback", "en");
+    let lang = language;
+    if lang == "" || lang == "auto" {
+        lang = drift::system_language();
+    }
+    let empty: {string: string} = {};
+    let out = Strings { language: fallback, table: empty, fallback: empty };
+    match locale_table(folder, fallback) {
+        Some(t) => {
+            out.fallback = t;
+            out.table = t;
+        }
+        None => {}
+    }
+    let tries = [lang];
+    match lang.index_of("-") {
+        Some(k) => tries.push(lang[0..k]),
+        None => {}
+    }
+    for l in tries {
+        if l != "" && l != fallback {
+            match locale_table(folder, l) {
+                Some(t) => {
+                    out.table = t;
+                    out.language = l;
+                    return out;
+                }
+                None => {}
+            }
+        }
+    }
+    return out;
+}
+impl Strings {
+    // The text for `key`, from the fallback language when this one lacks
+    // it, or the key itself when neither has it.
+    fn get(self, key: string) -> string {
+        if self.table.contains(key) {
+            return self.table[key];
+        }
+        if self.fallback.contains(key) {
+            return self.fallback[key];
+        }
+        return key;
+    }
+    // The text for `key` with its {name} parts filled from `values`.
+    fn get_with(self, key: string, values: {string: any}) -> string { return fill(self.get(key), values); }
+}

@@ -1,0 +1,18 @@
+{
+  "start": "hello",
+  "nodes": {
+    "hello": {
+      "set": ["met_ana"],
+      "lines": [
+        {"who": "Ana", "text": "Hello, {player}."},
+        {"who": "Ana", "text": "You have {gold} gold. Want a potion?"}
+      ],
+      "choices": [
+        {"text": "Buy one (5 gold)", "next": "buy", "when": "gold >= 5", "set": ["gold -= 5", "potions += 1"]},
+        {"text": "No thanks", "next": "bye"}
+      ]
+    },
+    "buy": {"lines": [{"who": "Ana", "text": "Here you go. {gold} gold left."}], "next": "bye"},
+    "bye": {"lines": [{"who": "Ana", "text": "See you."}]}
+  }
+}

@@ -34,6 +34,25 @@ fn show_score(_: ScoreLabel, text: Text, score: Score) {
 }
 ```
 
+## Formatting numbers
+
+Scores, timers and prices need more than `string(x)`:
+
+| Function | Returns |
+|----------|---------|
+| `format(pattern, args)` | The pattern with each `{}` replaced by the next argument and `{0}`, `{1}` by the argument at that index: `format("{} of {}", [3, 10])` is `"3 of 10"`. `{{` and `}}` write a brace |
+| `fill(pattern, values)` | The pattern with each `{name}` replaced by `values[name]`: `fill("Hi {who}", {"who": "Ana"})` |
+| `fixed(x, decimals)` | A float with exactly that many decimals: `fixed(3.14159, 2)` is `"3.14"` |
+| `pad(n, width)` | An int with leading zeros: `pad(7, 3)` is `"007"` |
+| `grouped(n)` | An int with thousands separated by commas: `"12,345"` |
+| `clock(seconds, tenths)` | A time as `"m:ss"`, or `"h:mm:ss"` from an hour up, with a digit of tenths when `tenths` is set: `clock(75.0, false)` is `"1:15"`, `clock(75.25, true)` is `"1:15.2"` |
+
+```rust
+text.value = format("Lap {}  {}  Best {}", [lap, clock(race.time, true), clock(race.best, true)]);
+```
+
+For text in several languages, see [Localization](localization.md).
+
 ## Style
 
 | Field | Effect |

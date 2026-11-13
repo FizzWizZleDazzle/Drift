@@ -1,0 +1,404 @@
+// drift/rpg: inventories, stats, story flags, quests and dialogue.
+//
+// `import "drift/rpg" { * };` adds plain values the game keeps in its
+// components and resources and saves with Save.set_value: Inventory,
+// Stats with Modifiers, Flags, Quests, and Dialogue played from a
+// DialogueScript data file against Flags.
+
+import "drift" { * };
+
+// ---- Inventory ----
+
+struct ItemStack { item: string = "", count: int = 0 }
+
+// Items by id, in slots of up to `stack_size` each.
+struct Inventory { slots: ItemStack[] = [], capacity: int = 20, stack_size: int = 99 }
+fn inventory(capacity: int, stack_size: int) -> Inventory {
+    return Inventory { capacity: capacity, stack_size: stack_size, .. };
+}
+impl Inventory {
+    // Adds what fits; returns how many did not.
+    fn add(self, item: string, count: int) -> int {
+        let left = count;
+        for i in range(self.slots.len()) {
+            if left > 0 && self.slots[i].item == item && self.slots[i].count < self.stack_size {
+                let put = min(float(left), float(self.stack_size - self.slots[i].count));
+                self.slots[i].count += int(put);
+                left -= int(put);
+            }
+        }
+        while left > 0 && self.slots.len() < self.capacity {
+            let put = int(min(float(left), float(self.stack_size)));
+            self.slots.push(ItemStack { item: item, count: put });
+            left -= put;
+        }
+        return left;
+    }
+    // Takes `count` of the item, or nothing when there are fewer.
+    fn remove(self, item: string, count: int) -> bool {
+        if self.count(item) < count {
+            return false;
+        }
+        let left = count;
+        let i = self.slots.len() - 1;
+        while i >= 0 && left > 0 {
+            if self.slots[i].item == item {
+                let take = int(min(float(left), float(self.slots[i].count)));
+                self.slots[i].count -= take;
+                left -= take;
+                if self.slots[i].count == 0 {
+                    self.slots.remove(i);
+                }
+            }
+            i -= 1;
+        }
+        return true;
+    }
+    fn count(self, item: string) -> int {
+        let n = 0;
+        for s in self.slots {
+            if s.item == item {
+                n += s.count;
+            }
+        }
+        return n;
+    }
+    fn has(self, item: string, count: int) -> bool { return self.count(item) >= count; }
+    fn is_full(self) -> bool { return self.slots.len() >= self.capacity; }
+    // Each item id once, in slot order.
+    fn items(self) -> string[] {
+        let out: string[] = [];
+        for s in self.slots {
+            if !out.contains(s.item) {
+                out.push(s.item);
+            }
+        }
+        return out;
+    }
+}
+
+// ---- Stats and modifiers ----
+
+// Add: plus amount. Percent: plus amount times the base (0.1 is +10%),
+// summed. Multiply: times amount, after the others.
+enum ModKind { Add, Percent, Multiply }
+
+// A change to one stat. `source` names what gave it (an item, a buff) so it
+// can be taken off again; `seconds` above zero makes it wear off.
+struct Modifier { stat: string = "", kind: ModKind = ModKind::Add, amount: float = 0.0, source: string = "", seconds: float = -1.0 }
+fn modifier(stat: string, kind: ModKind, amount: float, source: string) -> Modifier {
+    return Modifier { stat: stat, kind: kind, amount: amount, source: source, seconds: -1.0 };
+}
+
+// Base values by name, and the modifiers on them.
+struct Stats { base: {string: float} = {}, mods: Modifier[] = [] }
+fn stats() -> Stats {
+    let base: {string: float} = {};
+    let mods: Modifier[] = [];
+    return Stats { base: base, mods: mods };
+}
+impl Stats {
+    fn set_base(self, stat: string, value: float) { self.base[stat] = value; }
+    fn base_of(self, stat: string) -> float {
+        if self.base.contains(stat) {
+            return self.base[stat];
+        }
+        return 0.0;
+    }
+    fn add(self, m: Modifier) { self.mods.push(m); }
+    // Takes off every modifier from `source`.
+    fn remove_source(self, source: string) {
+        let kept: Modifier[] = [];
+        for m in self.mods {
+            if m.source != source {
+                kept.push(m);
+            }
+        }
+        self.mods = kept;
+    }
+    // The stat with every modifier applied.
+    fn get(self, stat: string) -> float {
+        let b = self.base_of(stat);
+        let add = 0.0;
+        let percent = 0.0;
+        let mult = 1.0;
+        for m in self.mods {
+            if m.stat == stat {
+                match m.kind {
+                    ModKind::Add => { add += m.amount; }
+                    ModKind::Percent => { percent += m.amount; }
+                    ModKind::Multiply => { mult *= m.amount; }
+                }
+            }
+        }
+        return (b + add + b * percent) * mult;
+    }
+    // Wears timed modifiers down; drops the ones that ran out.
+    fn tick(self, dt: float) {
+        let kept: Modifier[] = [];
+        for m in self.mods {
+            if m.seconds > 0.0 {
+                m.seconds -= dt;
+                if m.seconds <= 0.0 {
+                    continue;
+                }
+            }
+            kept.push(m);
+        }
+        self.mods = kept;
+    }
+}
+
+// ---- Flags and quests ----
+
+// Named whole numbers for story state: switches (0 or 1), counters, choices.
+// Missing names read 0. Store it with save.set_value to keep it.
+struct Flags { values: {string: int} = {} }
+fn flags() -> Flags {
+    let values: {string: int} = {};
+    return Flags { values: values };
+}
+impl Flags {
+    fn get(self, name: string) -> int {
+        if self.values.contains(name) {
+            return self.values[name];
+        }
+        return 0;
+    }
+    fn set(self, name: string, value: int) { self.values[name] = value; }
+    fn on(self, name: string) -> bool { return self.get(name) != 0; }
+    // Adds to a counter; returns the new value.
+    fn add(self, name: string, by: int) -> int {
+        let v = self.get(name) + by;
+        self.values[name] = v;
+        return v;
+    }
+    // Whether a condition holds: "key", "!key", or "key OP number" with OP
+    // one of == != < <= > >=. An empty condition holds.
+    fn check(self, condition: string) -> bool {
+        let c = condition.trim();
+        if c == "" {
+            return true;
+        }
+        if c.starts_with("!") {
+            return !self.on(c[1..c.len()].trim());
+        }
+        for op in ["==", "!=", "<=", ">=", "<", ">"] {
+            let i = match c.index_of(op) { Some(k) => k, None => -1 };
+            if i >= 0 {
+                let v = self.get(c[0..i].trim());
+                let n = match c[i + op.len()..c.len()].trim().parse<int>() { Some(k) => k, None => 0 };
+                if op == "==" {
+                    return v == n;
+                }
+                if op == "!=" {
+                    return v != n;
+                }
+                if op == "<=" {
+                    return v <= n;
+                }
+                if op == ">=" {
+                    return v >= n;
+                }
+                if op == "<" {
+                    return v < n;
+                }
+                return v > n;
+            }
+        }
+        return self.on(c);
+    }
+    // Applies an effect: "key" (sets 1), "key = 3", "key += 2", "key -= 1".
+    fn apply(self, effect: string) {
+        let e = effect.trim();
+        if e == "" {
+            return;
+        }
+        for op in ["+=", "-=", "="] {
+            let i = match e.index_of(op) { Some(k) => k, None => -1 };
+            if i >= 0 {
+                let name = e[0..i].trim();
+                let n = match e[i + op.len()..e.len()].trim().parse<int>() { Some(k) => k, None => 0 };
+                if op == "+=" {
+                    self.add(name, n);
+                } else if op == "-=" {
+                    self.add(name, -n);
+                } else {
+                    self.set(name, n);
+                }
+                return;
+            }
+        }
+        self.set(e, 1);
+    }
+}
+
+enum QuestState { Inactive, Active, Done, Failed }
+
+// Quests by id: their state and objective counters. Store it with
+// save.set_value to keep it.
+struct Quests { states: {string: QuestState} = {}, counters: {string: int} = {} }
+fn quests() -> Quests {
+    let states: {string: QuestState} = {};
+    let counters: {string: int} = {};
+    return Quests { states: states, counters: counters };
+}
+impl Quests {
+    fn state(self, quest: string) -> QuestState {
+        if self.states.contains(quest) {
+            return self.states[quest];
+        }
+        return QuestState::Inactive;
+    }
+    fn start(self, quest: string) {
+        if self.state(quest) == QuestState::Inactive {
+            self.states[quest] = QuestState::Active;
+        }
+    }
+    fn complete(self, quest: string) { self.states[quest] = QuestState::Done; }
+    fn fail(self, quest: string) { self.states[quest] = QuestState::Failed; }
+    fn is_active(self, quest: string) -> bool { return self.state(quest) == QuestState::Active; }
+    fn is_done(self, quest: string) -> bool { return self.state(quest) == QuestState::Done; }
+    // Counts toward an objective of an active quest ("wolves" of "hunt");
+    // returns the count.
+    fn progress(self, quest: string, objective: string, by: int) -> int {
+        let key = quest + "/" + objective;
+        if !self.is_active(quest) {
+            return self.count(quest, objective);
+        }
+        let v = self.count(quest, objective) + by;
+        self.counters[key] = v;
+        return v;
+    }
+    fn count(self, quest: string, objective: string) -> int {
+        let key = quest + "/" + objective;
+        if self.counters.contains(key) {
+            return self.counters[key];
+        }
+        return 0;
+    }
+    // Every quest in a state.
+    fn in_state(self, s: QuestState) -> string[] {
+        let out: string[] = [];
+        for k in self.states.keys() {
+            if self.states[k] == s {
+                out.push(k);
+            }
+        }
+        return out;
+    }
+}
+
+// ---- Dialogue ----
+
+struct DialogueLine { who: string = "", text: string = "" }
+// `when` is a Flags condition that must hold for the choice to show; `set`
+// are Flags effects applied when it is picked; `next` is the node it leads
+// to ("" ends the dialogue).
+struct DialogueChoice { text: string = "", next: string = "", when: string = "", set: string[] = [] }
+// Lines said in order, then the choices, or straight on to `next`. `set`
+// effects apply on entering the node.
+struct DialogueNode { lines: DialogueLine[] = [], choices: DialogueChoice[] = [], next: string = "", set: string[] = [] }
+// A whole conversation, usually from a data file:
+// load_data<DialogueScript>("assets/talk/ana.json").
+struct DialogueScript { start: string = "", nodes: {string: DialogueNode} = {} }
+
+// A conversation being played. Variables live in `vars`; {name} in a line
+// shows vars or `names` (for text such as the player's name).
+struct Dialogue { script: DialogueScript, node: string = "", line: int = 0, vars: Flags, names: {string: string} = {} }
+fn dialogue(script: DialogueScript, vars: Flags) -> Dialogue {
+    let names: {string: string} = {};
+    return Dialogue { script: script, node: "", line: 0, vars: vars, names: names };
+}
+impl Dialogue {
+    // Starts at a node; "" starts at the script's `start`.
+    fn start(self, node: string) {
+        let n = node;
+        if n == "" {
+            n = self.script.start;
+        }
+        self.enter(n);
+    }
+    fn enter(self, node: string) {
+        self.line = 0;
+        if node == "" || !self.script.nodes.contains(node) {
+            self.node = "";
+            return;
+        }
+        self.node = node;
+        for e in self.script.nodes[node].set {
+            self.vars.apply(e);
+        }
+        // A node with nothing to say goes straight on.
+        let n = self.script.nodes[node];
+        if n.lines.len() == 0 && n.choices.len() == 0 {
+            self.enter(n.next);
+        }
+    }
+    fn active(self) -> bool { return self.node != ""; }
+    fn current(self) -> DialogueLine {
+        if !self.active() {
+            return DialogueLine { .. };
+        }
+        let lines = self.script.nodes[self.node].lines;
+        if self.line >= lines.len() {
+            return DialogueLine { .. };
+        }
+        return lines[self.line];
+    }
+    fn speaker(self) -> string { return self.current().who; }
+    // The line with its {name} parts filled in.
+    fn text(self) -> string { return self.substitute(self.current().text); }
+    fn substitute(self, text: string) -> string {
+        let out = text;
+        for k in self.names.keys() {
+            out = out.replace("{" + k + "}", self.names[k]);
+        }
+        for k in self.vars.values.keys() {
+            out = out.replace("{" + k + "}", string(self.vars.values[k]));
+        }
+        return out;
+    }
+    // The choices to show now: on the node's last line, those whose `when`
+    // holds. Empty while lines remain or when the node has none.
+    fn choices(self) -> DialogueChoice[] {
+        let out: DialogueChoice[] = [];
+        if !self.active() {
+            return out;
+        }
+        let n = self.script.nodes[self.node];
+        if self.line < n.lines.len() - 1 {
+            return out;
+        }
+        for c in n.choices {
+            if self.vars.check(c.when) {
+                out.push(DialogueChoice { text: self.substitute(c.text), next: c.next, when: c.when, set: c.set });
+            }
+        }
+        return out;
+    }
+    // On to the next line, or the next node when the lines are done and
+    // there is nothing to choose.
+    fn advance(self) {
+        if !self.active() || self.choices().len() > 0 {
+            return;
+        }
+        let n = self.script.nodes[self.node];
+        if self.line + 1 < n.lines.len() {
+            self.line += 1;
+            return;
+        }
+        self.enter(n.next);
+    }
+    // Picks choice i of choices().
+    fn choose(self, i: int) {
+        let cs = self.choices();
+        if i < 0 || i >= cs.len() {
+            return;
+        }
+        for e in cs[i].set {
+            self.vars.apply(e);
+        }
+        self.enter(cs[i].next);
+    }
+}

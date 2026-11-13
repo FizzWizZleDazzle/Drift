@@ -38,6 +38,9 @@
 - [Building Blocks](guides/building-blocks.md)
 - [Data Files](guides/data-files.md)
 - [Networking](guides/networking.md)
+- [State Machines and AI](guides/ai.md)
+- [Inventory, Stats, Quests and Dialogue](guides/game-systems.md)
+- [Localization](guides/localization.md)
 - [Debugging](guides/debugging.md)
 - [Web Games](guides/web.md)
 
@@ -50,6 +53,8 @@
 - [Values and Enums](reference/values.md)
 - [drift/ui](reference/ui.md)
 - [drift/gameplay, control and screens](reference/gameplay.md)
+- [drift/ai](reference/ai.md)
+- [drift/rpg](reference/rpg.md)
 - [The drift Command](reference/cli.md)
 - [Errors](reference/errors.md)
 

@@ -165,7 +165,7 @@ slot.flush();
 
 ### Whole values
 
-`set_value(key, value)` stores any value as JSON in one key, and `get_value<T>(key, fallback)` reads it back, or returns `fallback` when the key is missing. A struct holding the player's progress, an `Inventory`, `Flags` or `Quests` saves in one call:
+`set_value(key, value)` stores any value as JSON in one key, and `get_value<T>(key, fallback)` reads it back, or returns `fallback` when the key is missing. A struct holding the player's progress, or an `Inventory`, `Flags` or `Quests` from [drift/rpg](game-systems.md), saves in one call:
 
 ```rust
 struct Progress { level: int = 1, coins: int = 0, unlocked: string[] = [] }

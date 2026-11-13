@@ -1,0 +1,155 @@
+// The drift module's game-building helpers: data files, JSON, delayed
+// messages, sequences, state machines, choices, inventory, stats, flags,
+// quests, dialogue, localization, formatting, colors and geometry. ctest runs
+// it with `drift run --set locale.folder=assets/utilities/lang` and reads
+// the log.
+
+import "drift" { * };
+import "drift/ai" { * };
+import "drift/rpg" { * };
+
+enum Rarity { Common, Rare }
+struct Item { id: string = "", name: string = "", price: int = 0, heal: float = 0.0, tags: string[] = [], rarity: Rarity = Rarity::Common }
+struct CsvItem { id: string = "", name: string = "", price: int = 0, heal: float = 0.0, stackable: bool = false }
+struct Spawn { x: float = 0.0, y: float = 0.0 }
+struct Wave { kind: string = "", count: int = 0 }
+struct Level { name: string = "", time_limit: float = 0.0, spawn: Spawn = Spawn { .. }, enemies: Wave[] = [] }
+enum Mode { Idle, Chase }
+
+@message struct Ping { n: int = 0 }
+
+@resource
+struct Checks {
+    failed: int = 0,
+    items: Item[] = load_data<Item[]>("assets/utilities/items.json"),
+    steps: Sequence = sequence().wait(0.1).then("a").send(Ping { n: 2 }).wait_for("go").then("b"),
+    got: string[] = [],
+    pings: int[] = [],
+    frames: int = 0,
+}
+
+fn expect(checks: Checks, what: string, ok: bool) {
+    if !ok {
+        checks.failed += 1;
+        warn("FAIL " + what);
+    }
+}
+
+@system(schedule: Schedule::Startup)
+fn data_and_values(checks: Checks, cmd: Commands) {
+    let items = checks.items;
+    expect(checks, "json", items.len() == 2 && items[1].price == 120 && items[1].tags[1] == "melee"
+           && items[1].rarity == Rarity::Rare && items[0].heal == 0.5 && items[0].rarity == Rarity::Common);
+    let rows = load_data<CsvItem[]>("assets/utilities/items.csv");
+    expect(checks, "csv", rows.len() == 2 && rows[0].name == "Potion, small" && rows[1].name == "The \"Best\" Elixir"
+           && rows[1].price == 300 && rows[0].stackable && !rows[1].stackable && rows[0].heal == 0.25);
+    let level = load_data<Level>("assets/utilities/level.toml");
+    expect(checks, "toml", level.name == "Forest" && level.time_limit == 90.5 && level.spawn.x == 120.0
+           && level.enemies.len() == 2 && level.enemies[1].kind == "bat");
+    let table = load_data<{string: string}>("assets/utilities/lang/en.json");
+    expect(checks, "map", table["title"] == "Utility Test");
+    expect(checks, "read_text", read_text("assets/utilities/lang/fr.toml").starts_with("title"));
+    expect(checks, "json roundtrip", parse_json<Item>(to_json(items[1])) == items[1]);
+    let bad = "";
+    try {
+        parse_json<Item>("{oops");
+    } catch e {
+        bad = e;
+    }
+    expect(checks, "bad json", bad.starts_with("drift_bad_data"));
+
+    let fr = localization_for("fr-CA");
+    expect(checks, "locale", fr.language == "fr" && fr.get("title") == "Test des outils" && fr.get("only_english") == "Only in English"
+           && fr.get_with("coins", {"n": 3}) == "3 pieces" && fr.get("nope") == "nope");
+
+    let vars = flags();
+    vars.set("gold", 7);
+    let talk = dialogue(load_data<DialogueScript>("assets/utilities/talk.json"), vars);
+    talk.names["player"] = "Bo";
+    talk.start("");
+    let first = talk.text();
+    talk.advance();
+    let offered = talk.choices().len();
+    talk.choose(0);
+    expect(checks, "dialogue", first == "Hello, Bo." && offered == 2 && talk.text() == "Here you go. 2 gold left."
+           && talk.vars.get("potions") == 1 && talk.vars.on("met_ana"));
+    talk.advance();
+    talk.advance();
+    expect(checks, "dialogue end", !talk.active());
+
+    expect(checks, "format", format("{} of {} ({1}) {{x}}", [3, 10]) == "3 of 10 (10) {x}" && fill("Hi {who}", {"who": "Ana"}) == "Hi Ana");
+    expect(checks, "numbers", fixed(3.14159, 2) == "3.14" && fixed(-0.004, 2) == "0.00" && pad(7, 3) == "007"
+           && grouped(1234567) == "1,234,567" && grouped(-999) == "-999" && clock(65.4, false) == "1:05" && clock(3725.0, false) == "1:02:05" && clock(65.45, true) == "1:05.4");
+    expect(checks, "colors", hsv(1.0 / 3.0, 1.0, 1.0).to_hex() == "#00ff00" && hex("f80").to_hex() == "#ff8800"
+           && hex("#11223380").to_hex() == "#11223380" && hex("#ff0000").shift_hue(1.0 / 3.0).to_hex() == "#00ff00"
+           && pico8().at(17).to_hex() == "#1d2b53" && palette(["#000000", "#ffffff"]).sample(0.5).to_hex() == "#808080");
+    expect(checks, "math", lerp(0.0, 10.0, 0.25) == 2.5 && remap(5.0, 0.0, 10.0, 100.0, 200.0) == 150.0
+           && wrap(-10.0, 0.0, 360.0) == 350.0 && inverse_lerp(10.0, 20.0, 15.0) == 0.5 && sign(-3.0) == -1.0 && fixed(degrees(PI), 1) == "180.0");
+    let cross = segments_intersect(vec2(0.0, 0.0), vec2(2.0, 2.0), vec2(0.0, 2.0), vec2(2.0, 0.0));
+    expect(checks, "geometry", cross == Some(vec2(1.0, 1.0)) && circles_overlap(vec2(0.0, 0.0), 1.0, vec2(1.5, 0.0), 1.0)
+           && vec2(1.0, 1.0).reflect(vec2(0.0, -1.0)) == vec2(1.0, -1.0) && vec2(0.0, 0.0).move_towards(vec2(3.0, 4.0), 1.0) == vec2(0.6, 0.8));
+
+    let f = fsm(Mode::Idle);
+    f.tick(0.1);
+    let entered = f.just_entered(Mode::Idle);
+    f.tick(0.1);
+    f.go(Mode::Chase);
+    f.tick(0.1);
+    expect(checks, "fsm", entered && f.just_entered(Mode::Chase) && f.previous == Mode::Idle && f.time == 0.0);
+    expect(checks, "choice", choice<string>().consider("flee", 0.2).consider("fight", 0.7).best() == Some("fight"));
+
+    let bag = inventory(3, 10);
+    let left = bag.add("apple", 25);
+    let sword_left = bag.add("sword", 1);
+    let took = bag.remove("apple", 12);
+    expect(checks, "inventory", left == 0 && sword_left == 1 && took && bag.count("apple") == 13 && bag.slots.len() == 2 && !bag.remove("apple", 99));
+
+    let st = stats();
+    st.set_base("speed", 100.0);
+    st.add(modifier("speed", ModKind::Add, 20.0, "boots"));
+    st.add(modifier("speed", ModKind::Percent, 0.5, "haste"));
+    st.add(Modifier { stat: "speed", kind: ModKind::Multiply, amount: 0.5, source: "slow", seconds: 1.0 });
+    let slowed = st.get("speed");
+    st.tick(1.5);
+    let after = st.get("speed");
+    st.remove_source("boots");
+    expect(checks, "stats", slowed == 85.0 && after == 170.0 && st.get("speed") == 150.0);
+
+    let fl = flags();
+    fl.apply("gold = 10");
+    fl.apply("gold -= 3");
+    fl.apply("met");
+    expect(checks, "flags", fl.get("gold") == 7 && fl.check("gold >= 7") && !fl.check("gold > 7") && !fl.check("!met") && fl.check(""));
+    let q = quests();
+    q.start("hunt");
+    q.progress("hunt", "wolves", 2);
+    q.complete("hunt");
+    expect(checks, "quests", q.is_done("hunt") && q.count("hunt", "wolves") == 2 && q.progress("hunt", "wolves", 1) == 2
+           && q.state("other") == QuestState::Inactive && q.in_state(QuestState::Done) == ["hunt"]);
+
+    cmd.send_after(0.3, Ping { n: 1 });
+}
+
+@system
+fn advance(checks: Checks, time: Time, window: Window) {
+    checks.frames += 1;
+    for name in checks.steps.tick(time.dt) {
+        checks.got.push(name);
+        if name == "a" {
+            checks.steps.signal("go");
+        }
+    }
+    if checks.frames == 60 {
+        expect(checks, "sequence", checks.got == ["a", "b"] && checks.steps.finished());
+        expect(checks, "messages", checks.pings.contains(1) && checks.pings.contains(2));
+        if checks.failed == 0 {
+            log("utility checks passed");
+        }
+        window.quit();
+    }
+}
+
+@system
+fn pinged(p: Ping, checks: Checks) {
+    checks.pings.push(p.n);
+}

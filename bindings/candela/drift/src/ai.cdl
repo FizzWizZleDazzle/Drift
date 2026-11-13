@@ -1,0 +1,77 @@
+// drift/ai: decision helpers for enemies and NPCs.
+//
+// `import "drift/ai" { * };` adds Fsm, a state machine per entity over an
+// enum of the game's own, and Choice, options picked by score. Both are
+// plain values kept in the game's components and resources.
+
+import "drift" { * };
+
+// ---- State machines ----
+
+// The state of one entity, over an enum of your own: keep it in a
+// component, tick it every frame, and match on `now`.
+struct Fsm<S> { now: S, previous: S, time: float = 0.0, fresh: bool = true, entered: bool = false }
+fn fsm<S>(start: S) -> Fsm<S> { return Fsm { now: start, previous: start, .. }; }
+impl Fsm<S> {
+    // Changes state; the time in it starts again.
+    fn go(self, s: S) {
+        if s == self.now {
+            return;
+        }
+        self.previous = self.now;
+        self.now = s;
+        self.time = 0.0;
+        self.fresh = true;
+    }
+    // Call once a frame before reading the state.
+    fn tick(self, dt: float) {
+        self.entered = self.fresh;
+        self.fresh = false;
+        if !self.entered {
+            self.time += dt;
+        }
+    }
+    fn in_state(self, s: S) -> bool { return self.now == s; }
+    // True on the first tick in state s: for one-off work on entering.
+    fn just_entered(self, s: S) -> bool { return self.entered && self.now == s; }
+}
+
+// ---- Utility choices ----
+
+// Options scored by how good each is right now; best() picks the highest.
+// Build one each time an AI decides.
+struct Choice<T> { options: T[], scores: float[] }
+fn choice<T>() -> Choice<T> {
+    let options: T[] = [];
+    let scores: float[] = [];
+    return Choice { options: options, scores: scores };
+}
+impl Choice<T> {
+    fn consider(self, option: T, score: float) -> Choice<T> {
+        self.options.push(option);
+        self.scores.push(score);
+        return self;
+    }
+    // The option with the highest score; None when there are none.
+    fn best(self) -> Option<T> {
+        let at = -1;
+        for i in range(self.scores.len()) {
+            if at < 0 || self.scores[i] > self.scores[at] {
+                at = i;
+            }
+        }
+        if at < 0 {
+            return None;
+        }
+        return Some(self.options[at]);
+    }
+    // An option chosen at random in proportion to its score, so close
+    // scores take turns. Scores at or below zero are never picked.
+    fn weighted(self, rng: Rng) -> Option<T> {
+        let i = rng.weighted(self.scores);
+        if i < 0 {
+            return None;
+        }
+        return Some(self.options[i]);
+    }
+}
