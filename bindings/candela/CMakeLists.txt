@@ -35,15 +35,32 @@ if(_candela_source)
         --config "patch.crates-io.candela-vm.path=\"${_candela_source}/vm\"")
 endif()
 file(GLOB _host_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/host/src/*.rs)
+# A Rust static library carries its own copy of the Rust standard library,
+# and so does any other one linked into the same program (wgpu-native, for
+# the WebGPU backend). Their std symbols are mangled per Rust version, except
+# rust_eh_personality, the unwinder's personality routine, which both define
+# under that one name; GNU ld rejects the pair. On ELF the host's copy is
+# made weak, so another library's routine wins when there is one; any
+# version of it unwinds the host's frames, since they all read the same
+# GCC exception tables.
+set(_host_link_lib ${_host_lib})
+if(NOT EMSCRIPTEN AND NOT APPLE AND NOT WIN32)
+    if(NOT CMAKE_OBJCOPY)
+        message(FATAL_ERROR "DRIFT_BUILD_CANDELA: objcopy not found (binutils)")
+    endif()
+    set(_host_link_lib ${_cargo_dir}/${CMAKE_STATIC_LIBRARY_PREFIX}drift_candela_host${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(_host_post COMMAND ${CMAKE_OBJCOPY} --weaken-symbol=rust_eh_personality ${_host_lib} ${_host_link_lib})
+endif()
 add_custom_command(
-    OUTPUT ${_host_lib}
+    OUTPUT ${_host_link_lib}
     COMMAND ${DRIFT_CARGO} ${_cargo_args}
+    ${_host_post}
     DEPENDS ${_host_sources} ${CMAKE_CURRENT_SOURCE_DIR}/host/Cargo.toml
     COMMENT "Building the Candela host (cargo)"
     VERBATIM)
-add_custom_target(drift_candela_host_build DEPENDS ${_host_lib})
+add_custom_target(drift_candela_host_build DEPENDS ${_host_link_lib})
 add_library(drift_candela_host STATIC IMPORTED GLOBAL)
-set_target_properties(drift_candela_host PROPERTIES IMPORTED_LOCATION ${_host_lib})
+set_target_properties(drift_candela_host PROPERTIES IMPORTED_LOCATION ${_host_link_lib})
 add_dependencies(drift_candela_host drift_candela_host_build)
 
 set(_runner ${CMAKE_CURRENT_SOURCE_DIR}/runner)
