@@ -1,0 +1,62 @@
+// Benchmark: many sprites, each moved by a system that runs once per entity.
+//
+// `?n=2000` sets how many; `?mode=list` moves them from one system over a
+// list query instead, to compare the two forms.
+
+import "drift" { * };
+
+@component struct Mover { velocity: Vec2 = Vec2 { .. } }
+
+@resource
+struct Bench { count: int = 2000, list: bool = false }
+
+fn arg(platform: Platform, name: string, fallback: int) -> int {
+    return match platform.query(name).parse<int>() { Some(v) => v, None => fallback };
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets, platform: Platform, bench: Bench) {
+    bench.count = arg(platform, "n", bench.count);
+    bench.list = platform.query("mode") == "list";
+    let white: Color[] = [];
+    for i in range(64) {
+        white.push(rgb(255, 255, 255));
+    }
+    let image = assets.create_texture(8, 8, white);
+    let rng = rng(7);
+    for i in range(bench.count) {
+        let angle = rng.range_float(0.0, TAU);
+        cmd.spawn([
+            at(rng.range_float(0.0, 960.0), rng.range_float(0.0, 540.0)),
+            Sprite { image: image, color: hsv(rng.range_float(0.0, 360.0), 0.6, 1.0), .. },
+            Mover { velocity: from_angle(angle) * rng.range_float(40.0, 160.0) },
+        ]);
+    }
+}
+
+fn bounce(m: Mover, t: Transform, dt: float) {
+    t.position = t.position + m.velocity * dt;
+    if t.position.x < 0.0 || t.position.x > 960.0 {
+        m.velocity = vec2(-m.velocity.x, m.velocity.y);
+    }
+    if t.position.y < 0.0 || t.position.y > 540.0 {
+        m.velocity = vec2(m.velocity.x, -m.velocity.y);
+    }
+    t.rotation = t.rotation + dt;
+}
+
+fn per_entity(bench: Bench) -> bool => !bench.list;
+fn as_list(bench: Bench) -> bool => bench.list;
+
+@system(run_if: [per_entity])
+fn move_one(row: (Mover, Transform), time: Time) {
+    let (m, t) = row;
+    bounce(m, t, time.dt);
+}
+
+@system(run_if: [as_list])
+fn move_all(rows: (Mover, Transform)[], time: Time) {
+    for (m, t) in rows {
+        bounce(m, t, time.dt);
+    }
+}

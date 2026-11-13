@@ -1,0 +1,33 @@
+// Benchmark: lots of HUD text, most of it changing every frame.
+//
+// `?n=200` sets how many labels; three in four show a number that changes
+// every frame, the rest stay as they are.
+
+import "drift" { * };
+
+@component struct Counter { rate: float = 1.0 }
+
+fn arg(platform: Platform, name: string, fallback: int) -> int {
+    return match platform.query(name).parse<int>() { Some(v) => v, None => fallback };
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, platform: Platform) {
+    let count = arg(platform, "n", 200);
+    for i in range(count) {
+        let x = 8.0 + float(i % 8) * 118.0;
+        let y = 8.0 + float(i / 8) * 21.0;
+        if i % 4 == 3 {
+            cmd.spawn([at(x, y), Text { value: "Static label " + string(i), size: 16.0, layer: hud_layer(), .. }]);
+        } else {
+            cmd.spawn([at(x, y), Text { size: 16.0, color: rgb(255, 230, 140), layer: hud_layer(), .. },
+                       Counter { rate: 1.0 + float(i % 7) }]);
+        }
+    }
+}
+
+@system
+fn count_up(label: (Counter, Text), time: Time) {
+    let (c, text) = label;
+    text.value = "Score " + string(int(time.elapsed * 100.0 * c.rate));
+}

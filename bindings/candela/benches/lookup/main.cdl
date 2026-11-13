@@ -1,0 +1,69 @@
+// Benchmark: queries that read other entities through a Lookup.
+//
+// Every seeker chases another entity, found with `Lookup<Transform>.get`.
+// `?n=600` sets how many seekers; `?mode=row` runs the chase once per
+// seeker with its own row instead of once over a list.
+
+import "drift" { * };
+
+@component struct Seeker { target: Entity = Entity { .. }, speed: float = 60.0 }
+
+@resource
+struct Bench { row: bool = false }
+
+fn arg(platform: Platform, name: string, fallback: int) -> int {
+    return match platform.query(name).parse<int>() { Some(v) => v, None => fallback };
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, platform: Platform, bench: Bench) {
+    let count = arg(platform, "n", 600);
+    bench.row = platform.query("mode") == "row";
+    let rng = rng(5);
+    let made: Entity[] = [];
+    for i in range(count) {
+        made.push(cmd.spawn([
+            at(rng.range_float(0.0, 960.0), rng.range_float(0.0, 540.0)),
+            Circle { radius: 3.0, color: hsv(rng.range_float(0.0, 360.0), 0.6, 1.0), .. },
+        ]));
+    }
+    for i in range(count) {
+        // Each one chases the next, round the ring.
+        cmd.insert(made[i], Seeker { target: made[(i + 1) % count], speed: rng.range_float(30.0, 90.0) });
+    }
+}
+
+fn as_list(bench: Bench) -> bool => !bench.row;
+fn per_entity(bench: Bench) -> bool => bench.row;
+
+@system(run_if: [as_list])
+fn chase_all(seekers: (Seeker, Transform)[], places: Lookup<Transform>, time: Time) {
+    for (s, t) in seekers {
+        if places.get(s.target) is Some(target) {
+            let to = target.position - t.position;
+            if to.length() > 1.0 {
+                t.position = t.position + to.normalized() * s.speed * time.dt;
+            }
+        }
+    }
+}
+
+@system(run_if: [per_entity])
+fn chase_one(seeker: (Seeker, Transform), places: Lookup<Transform>, time: Time) {
+    let (s, t) = seeker;
+    if places.get(s.target) is Some(target) {
+        let to = target.position - t.position;
+        if to.length() > 1.0 {
+            t.position = t.position + to.normalized() * s.speed * time.dt;
+        }
+    }
+}
+
+// Keeps them from all meeting in one spot: a slow swirl about the middle.
+@system
+fn swirl(rows: (Seeker, Transform)[], time: Time) {
+    for (_, t) in rows {
+        let d = t.position - vec2(480.0, 270.0);
+        t.position = t.position + vec2(-d.y, d.x) * 0.2 * time.dt;
+    }
+}

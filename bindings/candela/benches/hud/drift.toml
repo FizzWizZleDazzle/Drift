@@ -1,0 +1,8 @@
+[project]
+name = "Bench: HUD text"
+organization = "Drift Benchmarks"
+entry = "main.cdl"
+
+[window]
+width = 960
+height = 540

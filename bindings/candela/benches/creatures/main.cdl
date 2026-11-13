@@ -1,0 +1,158 @@
+// Benchmark: a crowd of procedurally animated creatures, written the way
+// the Creature example is: a body with child legs that step with IK feet,
+// a verlet rope tail, a head on an angle spring and antennae on springs.
+//
+// `?n=16` sets how many creatures.
+
+import "drift" { * };
+
+@component
+struct Creature {
+    velocity: Vec2 = Vec2 { .. },
+    goal: Vec2 = Vec2 { .. },
+    seed: int = 0,
+    tail: Rope = Rope { .. },
+}
+@component struct Head { body: Entity = Entity { .. }, turn: AngleSpring = AngleSpring { .. } }
+@component
+struct Leg {
+    body: Entity = Entity { .. },
+    hip: Vec2 = Vec2 { .. },
+    rest: Vec2 = Vec2 { .. },
+    bend: float = 1.0,
+    upper: float = 18.0,
+    lower: float = 18.0,
+    foot: Foot = Foot { .. },
+    thigh_angle: float = 0.0,
+    shin_angle: float = 0.0,
+}
+@component struct Shin { leg: Entity = Entity { .. } }
+@component struct TailBit { body: Entity = Entity { .. }, index: int = 0 }
+@component struct Antenna { head: Entity = Entity { .. }, offset: Vec2 = Vec2 { .. }, tip: Spring2 = Spring2 { .. } }
+
+const SKIN: Color = Color { r: 0.42, g: 0.75, b: 0.45, a: 1.0 };
+const DARK: Color = Color { r: 0.25, g: 0.5, b: 0.3, a: 1.0 };
+
+fn arg(platform: Platform, name: string, fallback: int) -> int {
+    return match platform.query(name).parse<int>() { Some(v) => v, None => fallback };
+}
+
+fn spawn_leg(cmd: Commands, body: Entity, start: Vec2, hip: Vec2, rest: Vec2, bend: float) {
+    let leg = Leg { body: body, hip: hip, rest: rest, bend: bend, foot: foot(start + rest), .. };
+    let thigh = cmd.spawn_child(body, [
+        Transform { position: hip, .. },
+        Rectangle { size: vec2(leg.upper, 6.0), anchor: vec2(0.0, 0.5), color: DARK, z: 1.0, .. },
+        leg,
+    ]);
+    let shin = cmd.spawn_child(thigh, [
+        Transform { position: vec2(leg.upper, 0.0), .. },
+        Rectangle { size: vec2(leg.lower, 4.0), anchor: vec2(0.0, 0.5), color: DARK, z: 1.1, .. },
+        Shin { leg: thigh },
+    ]);
+    cmd.spawn_child(shin, [at(leg.lower, 0.0), Circle { radius: 3.0, color: SKIN, z: 1.2, .. }]);
+}
+
+fn spawn_creature(cmd: Commands, start: Vec2, seed: int) {
+    let tail = rope(start + vec2(-18.0, 0.0), 10, 6.0, PI);
+    tail.gravity = vec2(0.0, 0.0);
+    tail.damping = 0.85;
+    tail.stiffness = 0.6;
+    let body = cmd.spawn([
+        Transform { position: start, .. },
+        Rectangle { size: vec2(38.0, 24.0), corner_radius: 12.0, color: SKIN, z: 2.0, .. },
+        Creature { goal: start, seed: seed, tail: tail, .. },
+    ]);
+    let head = cmd.spawn_child(body, [at(20.0, 0.0), Circle { radius: 10.0, color: SKIN, z: 3.0, .. },
+                                      Head { body: body, .. }]);
+    for side in [-1.0, 1.0] {
+        cmd.spawn([at(start.x + 30.0, start.y + 8.0 * side), Circle { radius: 2.0, color: rgb(240, 200, 90), z: 3.5, .. },
+                   Antenna { head: head, offset: vec2(18.0, 10.0 * side), tip: spring2(start), .. }]);
+    }
+    spawn_leg(cmd, body, start, vec2(9.0, -8.0), vec2(24.0, -26.0), -1.0);
+    spawn_leg(cmd, body, start, vec2(9.0, 8.0), vec2(24.0, 26.0), 1.0);
+    spawn_leg(cmd, body, start, vec2(-9.0, -8.0), vec2(-16.0, -26.0), 1.0);
+    spawn_leg(cmd, body, start, vec2(-9.0, 8.0), vec2(-16.0, 26.0), -1.0);
+    for i in range(10) {
+        cmd.spawn([at(start.x - 18.0 - float(i) * 6.0, start.y), Circle { radius: 7.0 - float(i) * 0.5, color: SKIN, z: 1.5, .. },
+                   TailBit { body: body, index: i }]);
+    }
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, platform: Platform) {
+    let count = arg(platform, "n", 16);
+    let rng = rng(11);
+    for i in range(count) {
+        spawn_creature(cmd, vec2(rng.range_float(80.0, 880.0), rng.range_float(60.0, 480.0)), i);
+    }
+}
+
+// Each creature walks toward a goal that wanders around the screen.
+@system
+fn move_body(creature: (Creature, Transform), time: Time) {
+    let (c, t) = creature;
+    let s = float(c.seed);
+    c.goal = vec2(480.0 + cos(time.elapsed * 0.31 + s) * 400.0, 270.0 + sin(time.elapsed * 0.43 + s * 1.7) * 220.0);
+    let to = c.goal - t.position;
+    let dir = Vec2 { .. };
+    if to.length() > 20.0 {
+        dir = to.normalized();
+    }
+    c.velocity = damp2(c.velocity, dir * 120.0, 4.0, time.dt);
+    t.position = t.position + c.velocity * time.dt;
+    if c.velocity.length() > 5.0 {
+        t.rotation = rotate_towards(t.rotation, c.velocity.angle(), 4.0 * time.dt);
+    }
+}
+
+@system(after: [move_body])
+fn swing_tail(creature: (Entity, Creature), time: Time) {
+    let (e, c) = creature;
+    c.tail.update(to_world(e, vec2(-18.0, 0.0)), time.dt);
+}
+
+@system(after: [swing_tail])
+fn place_tail(bit: (TailBit, Transform), creatures: Lookup<Creature>) {
+    let (b, t) = bit;
+    if creatures.get(b.body) is Some(c) {
+        t.position = c.tail.points[b.index];
+    }
+}
+
+@system(after: [move_body])
+fn look(head: (Head, Transform), time: Time, creatures: Lookup<Creature>) {
+    let (h, t) = head;
+    let body = world_transform(h.body);
+    let want = 0.0;
+    if creatures.get(h.body) is Some(c) {
+        want = angle_diff(body.rotation, look_at(body.position, c.goal));
+    }
+    t.rotation = h.turn.update(clamp(want, -1.0, 1.0), 120.0, 12.0, time.dt);
+}
+
+@system(after: [look])
+fn antennae(antenna: (Antenna, Transform), time: Time) {
+    let (a, t) = antenna;
+    t.position = a.tip.update(to_world(a.head, a.offset), 160.0, 7.0, time.dt);
+}
+
+@system(after: [move_body])
+fn step_legs(leg_row: (Leg, Transform), time: Time) {
+    let (leg, t) = leg_row;
+    let gait = Gait { distance: 18.0, duration: 0.14, height: 4.0, lead: 0.4, .. };
+    let body = world_transform(leg.body);
+    let hip = to_world(leg.body, leg.hip);
+    leg.foot.update(to_world(leg.body, leg.rest), gait, true, time.dt);
+    let pose = two_bone_ik(hip, leg.foot.position, leg.upper, leg.lower, leg.bend);
+    leg.thigh_angle = pose.upper;
+    leg.shin_angle = pose.lower;
+    t.rotation = angle_diff(body.rotation, pose.upper);
+}
+
+@system(after: [step_legs])
+fn bend_shins(shin: (Shin, Transform), legs: Lookup<Leg>) {
+    let (s, t) = shin;
+    if legs.get(s.leg) is Some(leg) {
+        t.rotation = angle_diff(leg.thigh_angle, leg.shin_angle);
+    }
+}

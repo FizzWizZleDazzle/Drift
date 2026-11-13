@@ -47,6 +47,16 @@ fn steer(row: (Ship, Velocity), input: Input) {
 
 Every folder in `examples/` is a complete game built as a web page by the docs workflow and playable from the book's [gallery](https://fizzwizzledazzle.github.io/Drift/candela-book/examples/gallery.html): a platformer, a top-down shooter, Breakout, Snake, a roguelike, an effects showcase, menus and states, save and load, a procedurally animated creature, Flappy Bird, Coin Dash, Cave Walk, and Star Catcher, the tutorial's game.
 
+## Benchmarks
+
+`benches/` holds games that stress one thing each: sprites moved by per-entity systems, physics bodies, particles, a crowd of procedurally animated creatures, lookups, and HUD text. A web build makes each one a page, `bench_<name>/`, and `benches/measure.mjs` times the pages in headless Chrome, startup and frame time:
+
+```sh
+node bindings/candela/benches/measure.mjs build-web/bindings/candela bench_creatures 'bench_sprites?n=4000'
+```
+
+Each page reads its size from the address, such as `?n=4000`; the comment at the top of each `main.cdl` lists what it takes.
+
 ## Limitations
 
 See [Limitations](https://fizzwizzledazzle.github.io/Drift/candela-book/limitations.html) in the book.

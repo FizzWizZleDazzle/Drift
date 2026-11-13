@@ -169,6 +169,16 @@ if(EMSCRIPTEN)
         endif()
     endforeach()
 
+    # Benchmark games, as pages bench_<name>/ that benches/measure.mjs
+    # times in headless Chrome.
+    file(GLOB _benches LIST_DIRECTORIES true CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/benches/*)
+    foreach(bench IN LISTS _benches)
+        if(IS_DIRECTORY ${bench} AND EXISTS ${bench}/main.cdl)
+            get_filename_component(name ${bench} NAME)
+            drift_candela_web_game(bench_${name} PROJECT ${bench})
+        endif()
+    endforeach()
+
     foreach(game IN LISTS DRIFT_CANDELA_WEB_GAMES)
         get_filename_component(name ${game} NAME)
         string(MAKE_C_IDENTIFIER ${name} name)

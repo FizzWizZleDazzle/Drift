@@ -1,0 +1,40 @@
+// Benchmark: many physics bodies falling into a box and piling up.
+//
+// `?n=600` sets how many bodies. Half are circles, half boxes.
+
+import "drift" { * };
+
+@component struct Body {}
+
+fn arg(platform: Platform, name: string, fallback: int) -> int {
+    return match platform.query(name).parse<int>() { Some(v) => v, None => fallback };
+}
+
+fn wall(cmd: Commands, x: float, y: float, w: float, h: float) {
+    cmd.spawn([
+        at(x, y),
+        Rectangle { size: vec2(w, h), color: rgb(70, 80, 100), .. },
+        RigidBody { kind: BodyKind::Static, .. },
+        BoxCollider { half_size: vec2(w / 2.0, h / 2.0), .. },
+    ]);
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, platform: Platform) {
+    let count = arg(platform, "n", 600);
+    wall(cmd, 480.0, 530.0, 960.0, 20.0);
+    wall(cmd, 10.0, 270.0, 20.0, 540.0);
+    wall(cmd, 950.0, 270.0, 20.0, 540.0);
+    let rng = rng(3);
+    for i in range(count) {
+        let pos = at(rng.range_float(40.0, 920.0), rng.range_float(-600.0, 400.0));
+        let color = hsv(rng.range_float(0.0, 360.0), 0.5, 0.95);
+        if i % 2 == 0 {
+            cmd.spawn([pos, Circle { radius: 6.0, color: color, .. }, RigidBody { .. }, Velocity { .. },
+                       CircleCollider { radius: 6.0, restitution: 0.2, .. }, Body {}]);
+        } else {
+            cmd.spawn([pos, Rectangle { size: vec2(12.0, 12.0), color: color, .. }, RigidBody { .. }, Velocity { .. },
+                       BoxCollider { half_size: vec2(6.0, 6.0), .. }, Body {}]);
+        }
+    }
+}
