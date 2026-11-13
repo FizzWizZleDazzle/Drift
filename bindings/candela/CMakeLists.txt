@@ -17,8 +17,13 @@ file(TO_CMAKE_PATH "${DRIFT_CANDELA_SOURCE}" _candela_source)
 
 if(EMSCRIPTEN)
     set(_rust_target wasm32-unknown-emscripten)
+    # The host is most of what a web page downloads: build it for size, as
+    # one unit with link-time optimization. Measured against the default
+    # profile, the page is smaller and scripts compile and run as fast.
+    set(_cargo_env CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1)
 else()
     set(_rust_target "")
+    set(_cargo_env "")
 endif()
 set(_cargo_dir ${CMAKE_CURRENT_BINARY_DIR}/cargo)
 set(_cargo_args build --release --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/host/Cargo.toml
@@ -53,7 +58,7 @@ if(NOT EMSCRIPTEN AND NOT APPLE AND NOT WIN32)
 endif()
 add_custom_command(
     OUTPUT ${_host_link_lib}
-    COMMAND ${DRIFT_CARGO} ${_cargo_args}
+    COMMAND ${CMAKE_COMMAND} -E env ${_cargo_env} ${DRIFT_CARGO} ${_cargo_args}
     ${_host_post}
     DEPENDS ${_host_sources} ${CMAKE_CURRENT_SOURCE_DIR}/host/Cargo.toml
     COMMENT "Building the Candela host (cargo)"
@@ -97,7 +102,8 @@ if(EMSCRIPTEN)
         "--shell-file=${DRIFT_WEB_SHELL}"
         "--pre-js=${_runner}/pack_loader.js"
         "--embed-file=${_module}@/drift-module"
-        -sFORCE_FILESYSTEM=1)
+        -sFORCE_FILESYSTEM=1
+        -sENVIRONMENT=web)
     file(GLOB_RECURSE _module_files CONFIGURE_DEPENDS ${_module}/*)
     set_property(TARGET drift_web APPEND PROPERTY LINK_DEPENDS
         ${DRIFT_WEB_SHELL} ${_runner}/pack_loader.js ${_module_files})
