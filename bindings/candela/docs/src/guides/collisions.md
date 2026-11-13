@@ -1,6 +1,8 @@
-# Physics
+# Collisions and Physics
 
 Drift simulates rigid bodies with Box2D. Give an entity a body and a collider, and the engine moves it, collides it and tells your systems what touched what. World units are pixels and +Y points down.
+
+You do not need physics to move things; see [Movement](movement.md). Use it when things should collide, bounce, fall, stack or set off triggers.
 
 ## Bodies and colliders
 
@@ -15,6 +17,7 @@ fn setup(cmd: Commands) {
         Rectangle { size: vec2(32.0, 32.0), color: rgb(180, 120, 60), .. },
         RigidBody { .. },
         BoxCollider { half_size: vec2(16.0, 16.0), .. },
+        Velocity { .. },
     ]);
     // The floor: a collider with no body is static.
     cmd.spawn([
@@ -31,7 +34,11 @@ fn setup(cmd: Commands) {
 | `Kinematic` | Moves only by its `Velocity`; pushes dynamic bodies and is not pushed |
 | `Static` | Never moves |
 
+A dynamic body moves on screen only when its entity also has a `Velocity`, as the crate above does. Give it one in the bundle, or let a component of your own bring it with `@component(requires: [Velocity])`.
+
 `fixed_rotation` keeps a character upright. `density`, `friction` and `restitution` (bounciness) live on the collider. `BoxCollider` and `CircleCollider` take an `offset` from the entity's position.
+
+Bodies move at most 400 pixels per second; a faster `Velocity` is held to that speed.
 
 The body is created at the end of the frame its components are added. Changing a field of the `RigidBody` or the collider later makes the body again with the new settings, where it is and at the speed it has: set `gravity_scale` to 0 for a power-up that makes the player float, or switch `kind` to `Static` to freeze a crate in place.
 
@@ -86,6 +93,8 @@ fn take_hits(hit: Contact<Player, Spike>, health: Lookup<Health>) {
 Take a list, `Contact<Player, Spike>[]`, to see the frame's collisions at once.
 
 A collider with `sensor: true` detects overlap without pushing anything: pickups, trigger zones, checkpoints. `Overlap<A, B>` is a sensor overlap that started this frame, whichever of the two is the sensor. `ContactEnd` and `OverlapEnd` report the ends, for "standing on" and "inside the zone" logic.
+
+A sensor with no `RigidBody`, such as a coin, notices dynamic bodies only: a kinematic or static body passes through it unreported. Give the player a dynamic body (with `gravity_scale: 0.0`, or `gravity = [0, 0]` in a top-down game, if it should not fall) to collect things. A kinematic sensor, such as a bullet, reports the dynamic bodies it passes through, and a sensor on a dynamic body, such as the bird in Flappy Bird, reports kinematic ones too.
 
 `Contact` also carries `point` and `normal`, the first contact point and the direction from `a` to `b`. A player whose contact normal with the ground points down, `hit.normal.y > 0.5`, has landed on top of it rather than hit it from the side.
 
@@ -161,6 +170,7 @@ fn pendulum(cmd: Commands) {
         Circle { radius: 8.0, .. },
         RigidBody { .. },
         CircleCollider { radius: 8.0, .. },
+        Velocity { .. },
         Joint { kind: JointKind::Distance, target_anchor: vec2(500.0, 50.0), .. },
     ]);
 }
@@ -175,4 +185,4 @@ fn pendulum(cmd: Commands) {
 
 `anchor` is on this entity and `target_anchor` on the target, each in its body's local space (without a target, `target_anchor` is a point in the world). `collide_connected` lets the two joined bodies collide. Changing a field makes the joint again; removing the component removes it. A chain is one joint per link, each targeting the link before it.
 
-See [Engine Components](../reference/components.md#physics) and [Engine Resources](../reference/resources.md#physics) for every field and method.
+See [Engine Components](../reference/components.md#rigidbody) and [`Physics`](../reference/resources.md#physics) for every field and method. [Platformer](../examples/platformer.md) and [Breakout](../examples/breakout.md) are built on bodies, contacts and sensors.

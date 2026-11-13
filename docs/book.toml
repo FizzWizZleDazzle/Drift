@@ -8,3 +8,8 @@ title = "Drift Engine"
 default-theme = "navy"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/FizzWizZleDazzle/Drift"
+
+[output.html.search]
+enable = true
+boost-title = 2
+boost-hierarchy = 2

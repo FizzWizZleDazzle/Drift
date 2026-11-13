@@ -55,4 +55,4 @@ fn show_score(ui: Ui, game: Game, label: ScoreLabel, text: Text) {
 
 A language with a region, such as `fr-CA`, uses `fr-CA.json` when it exists, then `fr.json`, then the fallback language. `localization_for("de")` loads one language directly, for a language menu; store the player's choice with `save.set_string` and pass it in on the next start.
 
-Numbers and times read better formatted: `grouped`, `fixed`, `pad` and `clock` in [Text](text.md#formatting-numbers) work inside `get_with` values.
+Numbers and times read better formatted: `grouped`, `fixed`, `pad` and `clock` in [Text](ui-and-score.md) work inside `get_with` values.

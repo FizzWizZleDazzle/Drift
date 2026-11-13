@@ -1,6 +1,6 @@
 # Networking
 
-HTTP requests for leaderboards, daily challenges and remote config, and WebSockets for simple multiplayer and live services. Both run in web builds through the browser's `fetch` and `WebSocket`. A request or a socket returns at once; what comes back arrives later as a [message](../concepts/messages.md), so the game keeps running while it waits.
+HTTP requests for leaderboards, daily challenges and remote config, and WebSockets for simple multiplayer and live services. Both run in web builds through the browser's `fetch` and `WebSocket`. A request or a socket returns at once; what comes back arrives later as a [message](../concepts/events.md), so the game keeps running while it waits.
 
 ## HTTP requests
 

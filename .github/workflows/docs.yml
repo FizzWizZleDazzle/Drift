@@ -1,11 +1,12 @@
 name: Deploy Docs
 
 # Publishes the mdBooks to GitHub Pages, so the site describes the newest
-# release: the engine book in docs/ at the site root and the Candela book in
-# bindings/candela/docs under candela-book/. release.yml calls this after it publishes a release: the
-# release is created with the workflow token, and a workflow token raises no
-# events, so a `release: published` trigger here would never fire. Run it by
-# hand to republish.
+# release: the engine book in docs/ at the site root, the Candela book in
+# bindings/candela/docs under candela-book/, and every Candela example as a
+# playable page under candela-book/play/<example>/. release.yml calls this
+# after it publishes a release: the release is created with the workflow
+# token, and a workflow token raises no events, so a `release: published`
+# trigger here would never fire. Run it by hand to republish.
 #
 # The github-pages environment only deploys refs its branch policy allows.
 # A release run is on the tag, so the policy needs a tag rule for v* beside
@@ -27,18 +28,58 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      # The Candela book's example gallery links to every example as a page
+      # under candela-book/play/<example>/, built here by the web runtime.
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: docs-web
+          desktop: "false"
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.13
+          actions-cache-folder: emsdk-cache-docs
+      - uses: ./.github/actions/candela
+        id: candela
+        with:
+          web: "true"
+      - name: Build the example pages
+        run: |
+          emcmake cmake -S . -B build-web -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DDRIFT_BUILD_TESTS=OFF -DDRIFT_BUILD_EXAMPLES=OFF \
+            -DDRIFT_BUILD_CANDELA=ON \
+            "-DDRIFT_CANDELA_SOURCE=${{ steps.candela.outputs.source }}"
+          targets=""
+          for dir in bindings/candela/examples/*/; do
+            targets="$targets $(basename "$dir")_cdl"
+          done
+          cmake --build build-web --target $targets
 
       - name: Install mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: 0.5.2
 
+      # The reference pages are written from the drift module; a module
+      # change without them fails here rather than publishing a stale book.
+      - name: Check the Candela reference
+        run: python3 scripts/candela-reference.py --check
+
       - name: Build docs
         run: |
           mdbook build docs
           mdbook build bindings/candela/docs --dest-dir "$GITHUB_WORKSPACE/docs/book/candela-book"
+          for dir in bindings/candela/examples/*/; do
+            name=$(basename "$dir")
+            mkdir -p "docs/book/candela-book/play/$name"
+            cp "build-web/bindings/candela/${name}_cdl/"* "docs/book/candela-book/play/$name/"
+          done
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

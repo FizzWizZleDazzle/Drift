@@ -1,4 +1,4 @@
-# Audio
+# Sound and Music
 
 Drift plays sound effects, music and positional sound through a mixer of buses. Load a sound once, then play it from any system.
 
@@ -102,4 +102,6 @@ With `spatial` on, the sound gets quieter with distance from the listener, silen
 
 When no output device opens, `audio.has_device()` is `false` and sounds advance silently, so the game runs the same on a machine with no sound card.
 
-See [Engine Resources](../reference/resources.md#audio) for every method.
+Browsers start sound only after the player clicks or presses a key on the page; until then sounds advance silently.
+
+Every example in this book makes its sounds from samples with `assets.create_sound`, so it runs without sound files; [Breakout](../examples/breakout.md) plays a square-wave blip at different pitches. See [`Audio`](../reference/resources.md#audio), [`Sound`](../reference/assets.md#sound) and [`AudioSource`](../reference/components.md#audiosource) for every method and field.

@@ -1,6 +1,24 @@
-# Tilemaps
+# Levels and Tilemaps
 
-Build levels in [Tiled](https://www.mapeditor.org/) or [LDtk](https://ldtk.io/) and load them as maps: the engine draws them, builds colliders from their solid layers, and answers tile queries, while your systems turn their objects into game entities.
+A level is the ground, walls and things a round is played on. Small levels can be written in the script as text; larger ones are tilemaps, drawn in an editor such as [Tiled](https://www.mapeditor.org/) or [LDtk](https://ldtk.io/), or made by a [generator](procedural-generation.md). A tilemap draws thousands of tiles as one entity, builds colliders from its solid layers, and answers which tile is where.
+
+## Levels written as text
+
+A list of strings, one per row, is a level you can read in the source:
+
+```rust
+fn level_rows() -> string[] {
+    return [
+        "................",
+        "..o.o.......F...",
+        "..#####...#####.",
+        "P...............",
+        "################",
+    ];
+}
+```
+
+A startup system walks the rows and spawns what each character stands for. Merge runs of wall characters into one wide collider rather than one per tile: fewer bodies, and nothing for a player to snag on between tiles. The [Platformer](../examples/platformer.md) builds its whole level this way.
 
 ## Loading and showing a map
 
@@ -145,3 +163,5 @@ Tiles with collision shapes in Tiled's collision editor are solid on any layer.
 With `colliders: true` on the `Tilemap`, the engine merges the solid cells into a few static boxes. Contacts with them name the map entity, so a system taking a `Contact<Player, Tilemap>` runs for each of the player's landings. A solid layer does not have to be visible: a hidden IntGrid layer keeps collision apart from the art.
 
 Changing a tile or IntGrid value on a solid layer rebuilds the colliders on the next frame.
+
+`property(name)` reads a custom property of the Tiled map or the LDtk level as a string, `""` when missing. See [`Map`](../reference/assets.md#map) for every method; the [Roguelike](../examples/roguelike.md) builds a map from a generated dungeon.

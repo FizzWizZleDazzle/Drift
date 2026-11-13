@@ -186,7 +186,7 @@ level.map.set_layer_solid(1, true, [3]);           // walls become colliders
 cmd.spawn([at(0.0, 0.0), Tilemap { map: level.map, .. }]);
 ```
 
-See [Tilemaps](tilemaps.md#maps-made-in-code).
+See [Levels and Tilemaps](levels-and-tilemaps.md#maps-made-in-code).
 
 ## Finding the way
 
@@ -260,4 +260,4 @@ fn fog_of_war(level: Level, players: (Player, Transform)[]) {
 
 `line_of_sight(g, a, b, opaque)` says whether one cell sees another, for a guard deciding whether it spotted the player, and `grid_line(a, b)` lists the cells of the straight line between two cells, for aiming and thrown objects on a grid.
 
-The [Cave Walk](../examples/cave-walk.md) example puts all of this together.
+The [Cave Walk](../examples/cave-walk.md) and [Roguelike](../examples/roguelike.md) examples put all of this together. See [Procedural Generation](../reference/procgen.md) in the reference for every type and function.

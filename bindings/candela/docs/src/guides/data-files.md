@@ -71,7 +71,7 @@ Spreadsheets save this format, so designers can edit balance tables without touc
 
 A missing or malformed file raises `drift_load_failed` with the path, and the log says why; `parse_json` on text that is not JSON raises `drift_bad_data`.
 
-`save.set_value(key, value)` and `save.get_value<T>(key, fallback)` store any value in the save slot as JSON, which keeps a whole progress struct, an inventory or a quest log in one key. See [Save data](timers-and-saves.md#save-data).
+`save.set_value(key, value)` and `save.get_value<T>(key, fallback)` store any value in the save slot as JSON, which keeps a whole progress struct, an inventory or a quest log in one key. See [Save data](saving.md).
 
 ## In the browser
 

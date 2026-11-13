@@ -75,4 +75,4 @@ fn decide(n: Villager, rng: VillageRng) {
 | `best()` | The option with the highest score, or `None` when there are none. The first of equal scores wins |
 | `weighted(rng)` | An option picked at random in proportion to its score, so close options take turns; options scoring 0 or less are never picked |
 
-`remap`, `smoothstep` and `clamp` from [Values](../reference/values.md#functions) turn distances, health and timers into scores between 0 and 1.
+`remap`, `smoothstep` and `clamp` from [Values](../reference/ai.md) turn distances, health and timers into scores between 0 and 1.

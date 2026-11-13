@@ -7,7 +7,7 @@ import "drift" { * };
 import "drift/gameplay" { * };
 ```
 
-Each part only runs for entities that have its components; the ones a game does not use cost nothing. `drift/control` has movement controllers, `drift/screens` the flow from title to game over, and `drift/ui` the HUD widgets in [HUD and Menus](hud.md).
+Each part only runs for entities that have its components; the ones a game does not use cost nothing. `drift/control` has movement controllers, `drift/screens` the flow from title to game over, and `drift/ui` the HUD widgets in [HUD and Menus](ui-and-score.md).
 
 ## Prefabs
 
@@ -85,7 +85,7 @@ The area is the main camera's view unless the component sets one.
 
 ## Following and orbiting
 
-`Follow` and `Orbit` are engine behaviors in `drift` itself; see [Animation, Tweens and Behaviors](animation.md).
+`Follow` and `Orbit` are engine behaviors in `drift` itself; see [Animation, Tweens and Behaviors](movement.md).
 
 ```rust
 cmd.spawn([at(0.0, 0.0), Circle { radius: 6.0, .. }, Orbit { center: player, radius: 50.0, speed: 3.0, .. }]);
@@ -120,11 +120,11 @@ score.reset();      // a new run
 score.is_record()   // this run is the best so far
 ```
 
-Show them with `bind("Score.value", "Score {}")` and `bind("Score.best", "Best {}")` from [HUD and Menus](hud.md).
+Show them with `bind("Score.value", "Score {}")` and `bind("Score.best", "Best {}")` from [HUD and Menus](ui-and-score.md).
 
 ## Finding entities
 
-Query lists come with the list methods of the prelude: `len()`, `first()`, `any(f)`, `all(f)`, `find(f)` and `filter(f)`. For "the nearest enemy" or "everything within 100 pixels", give the entities a `SpatialBounds` and ask the `Spatial` resource, or ask `Physics` about colliders; see [Physics](physics.md).
+Query lists come with the list methods of the prelude: `len()`, `first()`, `any(f)`, `all(f)`, `find(f)` and `filter(f)`. For "the nearest enemy" or "everything within 100 pixels", give the entities a `SpatialBounds` and ask the `Spatial` resource, or ask `Physics` about colliders; see [Physics](collisions.md).
 
 ```rust
 @system

@@ -25,14 +25,14 @@ fn controls(input: Input, window: Window) {
 
 ## Actions
 
-Bind single-button actions in the `[input]` section of `drift.toml`, one key per action with its bindings in text form (`key:<name>`, `mouse:Left`, `button:South`):
+Bind single-button actions in the `[input]` section of `drift.toml`, one key per action with its bindings in text form (`key:<name>`, `mouse:Left`, `button:South`; [Settings](../concepts/settings.md#input-bindings) lists the names):
 
 ```toml
 [input]
 jump = ["key:Space", "button:South"]
 ```
 
-Saving `drift.toml` while the game runs rebinds the actions whose line changed. Axes are bound in code, once, in a startup system; `bind_key`, `bind_mouse` and `bind_button` add action bindings from code too:
+Axes are bound in code, once, in a startup system; `bind_key`, `bind_mouse`, `bind_button` and `bind` add action bindings from code too:
 
 ```rust
 @system(schedule: Schedule::Startup)
@@ -151,4 +151,4 @@ fn autoplay(input: Input, time: Time) {
 }
 ```
 
-See [Engine Resources](../reference/resources.md#input) for every method and [Values and Enums](../reference/values.md) for the key and button names.
+See [`Input`](../reference/resources.md#input) for every method and [Enums](../reference/enums.md#key) for the key and button names. The [Snake](../examples/snake.md) and [Roguelike](../examples/roguelike.md) examples read actions from `drift.toml`; the [Top-Down Shooter](../examples/shooter.md) aims with the mouse.

@@ -312,5 +312,5 @@ Key patterns demonstrated here:
 ## Next steps
 
 - [Project Structure](project-structure.md): understand how the engine is organized
-- [ECS Concepts](../concepts/ecs.md): deeper dive into entities, components, systems, and queries
+- [ECS Concepts](../concepts/ecs-overview.md): deeper dive into entities, components, systems, and queries
 - [Components Reference](../components/sprite.md): full reference for built-in components

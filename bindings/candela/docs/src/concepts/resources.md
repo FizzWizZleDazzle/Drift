@@ -1,6 +1,6 @@
-# Resources and Settings
+# Resources
 
-A resource is one value for the whole game, not attached to any entity: the score, the current level, the state of a menu, tuning values. Systems take resources as parameters, the same way they take queries.
+A resource is one value for the whole game, not attached to any entity: the score, the current level, the state of a menu, a random number generator, the textures and sounds the game uses. Systems take resources as parameters, the same way they take components.
 
 ## Your own resources
 
@@ -14,7 +14,7 @@ fn count(_: Overlap<Player, Coin>, score: Score) {
 }
 ```
 
-A resource whose fields all have defaults exists from the start. Defaults may call functions, so a resource can load its own assets with `texture(path)` and `sound(path)`:
+A resource whose fields all have defaults exists from the start. Defaults may call functions, so a resource can load its own assets:
 
 ```rust
 @resource
@@ -24,49 +24,55 @@ struct Art {
 }
 ```
 
-A file that does not load stops the game at load with the path and the error.
+A file that does not load stops the game with the path and the error.
 
-A resource with a field that has no default exists once a system inserts it with `cmd.insert_resource(...)`. A system that takes a resource that does not exist yet is skipped that frame, so inserting and removing a resource switches a group of systems on and off.
+## Resources made by a system
 
-## Asset handles
-
-A `Texture`, `Sound`, `Map`, `Effect` or other asset handle names something the engine owns. Its methods act on the engine at once: `art.hit.play()` plays the sound, `effect.set_enabled(false)` turns the effect off.
-
-## Constants
-
-Numbers that never change, such as the size of a sprite or the height of the ground, are constants:
+A resource with a field that has no default exists once a system inserts it:
 
 ```rust
-const GROUND_Y: float = 400.0;
+@resource
+struct Level { map: Map, number: int }
+
+@system(schedule: Schedule::Startup)
+fn load_level(cmd: Commands, assets: Assets) {
+    cmd.insert_resource(Level { map: assets.tilemap("assets/level1.tmj"), number: 1 });
+}
 ```
 
-Values you tune while playing belong in settings instead.
+A system that takes a resource that does not exist is skipped that frame. Inserting and removing a resource therefore switches a group of systems on and off: a `Boss` resource can run the boss systems only while there is a boss.
 
 ## Engine resources
 
-The engine's resources are parameters too: `Time`, `Input`, `Window`, `Assets`, `Audio`, `Physics`, `Effects`, `Camera2D`, `Save`, `Draw` and `Systems`. Their methods act on the engine at once. See [Engine Resources](../reference/resources.md).
+The engine's resources are parameters too, and their methods act on the engine at once:
 
-## Settings
+| Resource | Gives |
+|----------|-------|
+| `Time` | Frame time, elapsed time and the game's speed |
+| `Input` | Keyboard, mouse, gamepads, touch and input actions |
+| `Window` | The logical size, quitting, screenshots and downloads |
+| `Assets` | Textures, sounds, images, sprite sheets and maps made from data or files |
+| `Effects` | Particle bursts, screen flashes, fades and shakes, post effects |
+| `Audio` | Music, playlists and mixer buses |
+| `Save` | Data kept between runs |
+| `Random` | The game's seed and a random generator per purpose |
+| `Physics` | Gravity, raycasts, overlap tests and pushes |
+| `Camera2D` | Converting between screen and world positions |
+| `Draw` | Shapes, text and images for one frame |
+| `Systems` | Turning systems on and off by name |
 
-Tuning values belong in `drift.toml`, where you change them without touching code. A `@settings` struct is a resource filled from one section of it:
+See [Engine Resources](../reference/resources.md) for every field and method.
 
-```toml
-[enemies]
-speed = 140.0
-spawn_every = 2.5
-max_alive = 12
-```
+## Asset handles
+
+A `Texture`, `Sound`, `Map`, `Image` or `Effect` names something the engine owns. Copying one copies the name, not the thing, so keep them in resources and components freely. Their methods act on the engine at once: `art.hit.play()` plays the sound. See [Assets](assets.md).
+
+## Constants and settings
+
+Numbers that never change, such as the size of a tile, are constants:
 
 ```rust
-@settings(section: "enemies")
-struct EnemySettings { speed: float = 120.0, spawn_every: float = 3.0, max_alive: int = 10 }
-
-@system
-fn spawn(cfg: EnemySettings, ...) { ... cfg.max_alive ... }
+const TILE: float = 16.0;
 ```
 
-Every field needs a default, used when the file leaves the key out. Values come from the default, then `drift.toml`, then a system that changes the resource, then `DRIFT_ENEMIES_SPEED`-style environment variables and `--set enemies.speed=200` on the command line, each over the one before. A value of the wrong type is logged with its line, and the field keeps its value.
-
-While the game runs, saving `drift.toml` applies the keys that changed in the file, so you tune a value and see it at once.
-
-`drift.toml` also holds the engine's own sections: `[project]`, `[window]`, `[render]`, `[app]`, `[physics]`, `[audio]`, `[lighting]` and `[hot_reload]`. See [Projects and the drift Command](../getting-started/projects.md#drifttoml).
+Values you tune while making the game, such as speeds and spawn rates, belong in `drift.toml`, read by a `@settings` resource; see [Settings and drift.toml](settings.md).

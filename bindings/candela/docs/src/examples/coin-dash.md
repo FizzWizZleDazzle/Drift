@@ -1,14 +1,12 @@
 # Coin Dash
 
-A complete game: move a square with the arrow keys, WASD or a gamepad stick, collect coins, and dodge hazards that bounce around the arena. A hit ends the round; R restarts it. The best score is saved between runs.
+A complete game: move a square with the arrow keys, WASD or a gamepad stick, collect coins, and dodge hazards that bounce around the arena. A hit ends the round; R restarts it. The best score is saved between runs. [Play it in the browser](../play/coin_dash/).
 
 It shows most of what a game needs: components and resources of its own, states, per-entity systems and collision handlers, queries and lookups, commands, input actions, physics, text on the HUD, particles, sound made from samples, timers, save data and settings from `drift.toml`.
 
-Run it from its folder:
-
 ```sh
-cd examples/coin_dash
-drift run
+cd bindings/candela/examples/coin_dash
+drift build --web
 ```
 
 ## drift.toml
@@ -34,4 +32,4 @@ The arena is top-down, so `[physics]` turns gravity off. `[input]` binds the res
 - `Art` makes its textures and sounds in its field defaults, so no system loads them.
 - `score_label` and `hint_label` run once per label and copy the score and the round into the text.
 
-Drift keeps every change a system makes. It runs the systems one after another on the script thread, and runs its own work (physics, the coin tweens, the "+1" labels' `Lifetime`) beside them where their data does not overlap. See [The Frame](../concepts/frame.md).
+Drift keeps every change a system makes. It runs the systems one after another on the script thread, and runs its own work (physics, the coin tweens, the "+1" labels' `Lifetime`) beside them where their data does not overlap. See [Systems](../concepts/systems.md#the-frame).

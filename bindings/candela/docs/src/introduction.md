@@ -1,6 +1,6 @@
 # Drift for Candela
 
-Write 2D games for the Drift engine in [candela](https://candela.lumenfx.dev). You describe the game as data and functions: components hold the data, systems are the functions that run every frame, and Drift does the rest. It opens the window, runs the frame, draws, simulates physics, plays sound, and runs its own work on several threads beside your scripts.
+Write 2D games in [Candela](https://candela.lumenfx.dev) and play them in the browser. Drift is the engine: it opens the window or the canvas, draws, simulates physics, plays sound and runs the frame. You describe the game as data and functions: components hold the data, and systems are the functions that run every frame.
 
 ```rust
 import "drift" { * };
@@ -9,9 +9,9 @@ import "drift" { * };
 struct Player { speed: float = 300.0 }
 
 @system(schedule: Schedule::Startup)
-fn setup(cmd: Commands) {
-    cmd.spawn([at(480.0, 270.0), Rectangle { size: vec2(32.0, 32.0), color: rgb(90, 170, 255), .. },
-               Player { .. }]);
+fn setup(cmd: Commands, input: Input) {
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    cmd.spawn([at(480.0, 270.0), Rectangle { color: rgb(90, 170, 255), .. }, Player { .. }]);
 }
 
 @system
@@ -21,21 +21,26 @@ fn steer(player: Player, velocity: Velocity, input: Input) {
 ```
 
 ```sh
-drift run
+drift build --web
 ```
 
-## Why Drift for candela
+## Why Drift for Candela
 
 - **No loop to write.** You write systems; Drift calls them every frame with the data their parameters ask for.
 - **Visuals are data.** Put a `Sprite`, `Text` or `ParticleEmitter` on an entity and it shows up. There is no draw call to make each frame.
-- **The engine works while your script does.** Physics, animation, tweens, particles and behaviors run inside the engine on worker threads, at the same time as your systems wherever their data does not overlap. A system's parameter types say what it uses, and Drift schedules around it.
-- **Change it while it runs.** Saving a script, an image or `drift.toml` updates the running game and keeps its state.
-- **Little to write.** A system that takes one component runs once per entity, a collision handler is a system that takes one collision, and game phases are an enum the systems name.
+- **The browser is the target.** `drift build --web` turns a game folder into a page you can put on any static host. No compiler, SDK or build system is needed on your side.
+- **Batteries included.** Sprites, text, input actions, Box2D physics with joints, sound and music, tilemaps, procedural generation and pathfinding, cameras, particles, lights, post effects, save data and a HUD module.
 - **Checked before it runs.** The compiler checks your attributes and system parameters, so mistakes show up as errors with a line number rather than as wrong behavior.
-- **Batteries included.** Sprites and spritesheets, text, input actions with rebinding, Box2D physics, audio with buses and music, tilemaps from Tiled and LDtk, procedural generation and pathfinding, lights and shadows, post effects, scenes and prefabs, save data, and an in-game inspector.
 
-## How to read this book
+## Where to start
 
-[Getting Started](getting-started/install.md) installs `drift` and builds a small game. [Concepts](concepts/components.md) explains components, systems, queries, commands, resources, messages and states, which every game uses. The guides cover one part of the engine each, and the reference lists every attribute, parameter, component and engine resource. [Coin Dash](examples/coin-dash.md) is a complete game to read from top to bottom.
+1. [Install](getting-started/install.md) the `drift` command.
+2. Follow the [tutorial](getting-started/tutorial.md): ten minutes from an empty folder to a game in your browser.
+3. Read the [concepts](concepts/components.md) once; every game uses them.
+4. Pick the [guide](guides/input.md) for what you are building, or start from an [example](examples/gallery.md) and change it.
 
-You need to know candela itself: structs, functions, lists and imports. The [candela book](https://docs.lumenfx.dev/candela/) covers the language.
+The [reference](reference/index.md) lists every type, field, function and attribute of the `drift` module, each with an example. Use the search box (press `S`) to find a name.
+
+You need to know Candela itself: structs, functions, lists and imports. The [Candela book](https://docs.lumenfx.dev/candela/) covers the language. Drift's engine is also a C++ library; its [engine book](https://fizzwizzledazzle.github.io/Drift/) covers C++ games and the engine's design.
+
+See [Limitations](limitations.md) for what Candela games cannot do yet.

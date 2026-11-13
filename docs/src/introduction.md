@@ -2,6 +2,8 @@
 
 **Drift** is a lightweight 2D game engine written in C++20, built on a Bevy-inspired Entity Component System (ECS) architecture. It provides a typed, data-driven API for building games and interactive applications.
 
+This book covers the engine and C++ games. To write a game in Candela and play it in the browser, read the [Candela book](https://fizzwizzledazzle.github.io/Drift/candela-book/) instead: a tutorial, guides, playable examples and the reference of the `drift` module.
+
 ## Key Features
 
 - **Bevy-style ECS**: Typed systems with automatic dependency injection via `Res<T>`, `ResMut<T>`, `Query<T>`, and `Commands`

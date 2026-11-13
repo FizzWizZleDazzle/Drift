@@ -1,14 +1,15 @@
 # Flappy Bird
 
-Flap through the gaps between the pipes. Space, Up, a click or the gamepad's A button flaps; after a crash, flap to play again. The game runs on the desktop with `drift run` and in the browser as a page.
+Flap through the gaps between the pipes. [Play it in the browser](../play/flappy_bird/). Space, Up, a click or the gamepad's A button flaps; after a crash, flap to play again.
 
 It shows a game state with `on_enter` and `in_state`, per-entity systems and a collision handler, resources that load their own assets, settings and input bindings from `drift.toml`, kinematic bodies moved by `Velocity`, `Lifetime`, sounds and HUD text.
 
+Unlike the other examples, it loads its art and sounds from files in `assets/`.
+
 ```sh
 cd bindings/candela/examples/flappy_bird
-drift run
-drift run --set flappy.pipe_gap=200   # an easier game for one run
 drift build --web                     # the page, in build/web
+drift run --set flappy.pipe_gap=200   # on the desktop, an easier game for one run
 ```
 
 ## drift.toml

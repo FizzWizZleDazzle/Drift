@@ -1,6 +1,6 @@
 # Debugging
 
-Drift gives you several ways to see what a game is doing: shapes drawn from systems, the engine log, an in-game overlay that shows every entity and resource, per-system timings, and input you can script for tests.
+Drift gives you several ways to see what a game is doing: the log in the browser console, shapes drawn from systems, collider outlines, an in-game overlay that lists every entity, and input you can script for tests.
 
 ## Drawing shapes
 
@@ -22,10 +22,23 @@ Draws are in world coordinates, over entities, until `hud()` switches to screen 
 
 ## The log
 
-`log(message)` and `warn(message)` write to the engine log, beside the engine's own messages: assets loaded, settings read, errors.
+`log(message)` and `warn(message)` write to the engine log, beside the engine's own messages: settings read, the seed in use, the systems found, errors. In the browser the log is the developer console (F12, or Ctrl+Shift+J); on the desktop it is the terminal that ran `drift run`.
 
 ```rust
 log("wave " + string(waves.count) + " with " + string(enemies.len()) + " enemies");
+```
+
+## Collider outlines
+
+`physics.set_debug_draw(true)` outlines every collider over the game, which shows at once whether a sensor is where you think it is:
+
+```rust
+@system
+fn debug_keys(input: Input, physics: Physics) {
+    if input.key_pressed(Key::F3) {
+        physics.set_debug_draw(true);
+    }
+}
 ```
 
 ## The debug overlay in every build
@@ -59,30 +72,17 @@ Its keys:
 
 ## The dev overlay
 
-Dev builds have an in-game overlay. Press **F1** to show or hide it.
-
-| Panel | What it does |
-|-------|--------------|
-| Inspector | Lists every entity as a tree by `Parent`, by `Name` or id. Selecting one shows its components, your own included, with an editor for each field; edits apply at once. Add and remove components, spawn and despawn entities. Resources, yours and the engine's settings, are listed below the entities and edit the same way |
-| Performance | A graph of frame times and a table of how long each system took in the last frame. Your systems appear by function name beside the engine's, with the time spent in the script |
-| Physics | Draws the colliders, contact points and normals as the physics engine sees them |
-| Scene | Saves the world to a file, spawns a scene file, reloads a file |
-
-A change you make in the inspector is a change to the stored component, so your systems see it on their next run.
+Press **F1** in a running game, in the browser too, to show or hide the engine's overlay. It shows the frame rate, and its panels list every entity and show its engine components (under their C++ names, such as `Transform2D`) with an editor for each field, time the engine's systems, and draw the physics world.
 
 ## Errors while running
 
-When a system raises an error it does not catch, Drift discards that system's changes and commands for the frame and logs the error with the script file and line. The other systems keep running. In dev builds the failing system stays off, and the overlay marks it, until you save its script; the reload turns it back on. In release builds it runs again next frame.
+When a system raises an error it does not catch, Drift discards that system's changes and commands from that call, logs the error, and turns the system off for the rest of the run. The other systems keep running. A compile error stops the game before it starts and names the file and line.
 
 Wrap a call you expect to fail, such as loading a file a player picked, in `try` and `catch "drift_load_failed"`. See [Errors](../reference/errors.md) for every kind.
 
-## drift check
+## Which systems run
 
-```sh
-drift check
-```
-
-Compiles the game without running it and lists every system with its schedule, its parameters, its conditions and states, and the order it runs in. Use it to answer "why does this system run before that one" and "why does this system not run".
+The log lists every system the game declares when it starts (`Candela: 9 systems: setup, new_game, ...`). A system that never seems to run usually takes a resource that does not exist yet, runs in another state, or has a `run_if` that never holds. `Systems.enabled("name")` says whether a system is switched on.
 
 ## Scripted input
 
@@ -110,4 +110,4 @@ fn play_demo(demo: Demo, input: Input, window: Window) {
 
 ## Screenshots
 
-`window.screenshot(path)` saves the next presented frame as a PNG, which suits bug reports and comparing a test run against an image you checked before.
+`window.screenshot(path)` saves the next presented frame as a PNG, which suits bug reports and comparing a test run against an image you checked before. In the browser, follow it with `window.download(path)` to hand the file to the player.

@@ -1,4 +1,4 @@
-# Particles, Lights and Effects
+# Particles and Effects
 
 Particles, trails, 2D lights and screen effects make a game feel alive. All of them are components or calls on `Effects`, and the engine runs them; your systems only start and stop them.
 
@@ -135,7 +135,7 @@ glow.set(Bloom { threshold: 0.5, intensity: 2.5, .. });
 effects.add(ColorGrading { saturation: 0.6, brightness: 0.9, .. });
 ```
 
-See [Post effect settings](../reference/values.md#post-effect-settings) for every field.
+See [Engine Components](../reference/resources.md#bloom) for every field of the settings structs.
 
 ## Shake, flash and fade
 
@@ -147,3 +147,5 @@ effects.fade_to(rgb(0, 0, 0), 0.0, 0.5); // fade back in
 ```
 
 `fade_to` with an `amount` between 0 and 1 holds the screen part of the way to the color, for a dim pause screen.
+
+The [Effects Showcase](../examples/effects.md) puts emitters, bursts, flashes, post effects, a trail and tweens on one screen. See [`ParticleEmitter`](../reference/components.md#particleemitter) and [`Effects`](../reference/resources.md#effects) for every field and method.

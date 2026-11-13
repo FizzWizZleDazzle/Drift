@@ -147,3 +147,5 @@ jobs:
         with:
           mdbook-version: 0.5.2
       - run: mdbook build docs
+      - run: python3 scripts/candela-reference.py --check
+      - run: mdbook build bindings/candela/docs

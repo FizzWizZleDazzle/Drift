@@ -1,6 +1,6 @@
 # Inventory, Stats, Quests and Dialogue
 
-Building blocks most RPGs, shops and adventure games write by hand: an inventory, stats with modifiers, story flags and quests, and branching dialogue read from data files. Each is a plain value: keep it in a resource or component, and store it with [`save.set_value`](timers-and-saves.md#whole-values) to keep it between runs. They come with the `drift/rpg` module; the [drift/rpg reference](../reference/rpg.md) lists every member.
+Building blocks most RPGs, shops and adventure games write by hand: an inventory, stats with modifiers, story flags and quests, and branching dialogue read from data files. Each is a plain value: keep it in a resource or component, and store it with [`save.set_value`](saving.md) to keep it between runs. They come with the `drift/rpg` module; the [drift/rpg reference](../reference/rpg.md) lists every member.
 
 ```rust
 import "drift" { * };

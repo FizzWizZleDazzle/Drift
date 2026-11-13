@@ -6,3 +6,13 @@ src = "src"
 
 [output.html]
 git-repository-url = "https://github.com/FizzWizZleDazzle/Drift"
+site-url = "/Drift/candela-book/"
+
+# Search indexes every heading down to ### on its own, so a method such as
+# `Texture.size` is a result of its own, and favors titles and headings.
+[output.html.search]
+enable = true
+limit-results = 40
+boost-title = 2
+boost-hierarchy = 2
+heading-split-level = 3

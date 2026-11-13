@@ -1,21 +1,24 @@
 # Systems
 
-A system is a function that runs every frame and works on the data its parameters ask for. All of a game's behavior lives in systems; there is no main loop to write.
+A system is a function that Drift calls every frame with the data its parameters ask for. All of a game's behavior lives in systems; there is no main loop to write.
 
 ```rust
 @system
-fn regenerate(stamina: Stamina, regen: Regen, time: Time) {
-    stamina.value = min(stamina.max, stamina.value + regen.per_second * time.dt);
+fn regenerate(stamina: Stamina, time: Time) {
+    stamina.value = min(stamina.max, stamina.value + 5.0 * time.dt);
 }
 ```
 
-Drift finds every function marked `@system`, reads its parameter types, and calls it with the matching data. [System Parameters](../reference/system-parameters.md) lists every kind of parameter.
+Drift finds every function marked `@system`, reads its parameter types when the game loads, and calls it with the matching data. [System Parameters](../reference/system-parameters.md) lists every kind of parameter.
 
 ## Once per entity, or once for all
 
-A parameter that is one component, like `stamina: Stamina`, makes the system run once for each entity that has every such component. `regenerate` above runs once per entity with both a `Stamina` and a `Regen`.
+A parameter that is one component, like `stamina: Stamina`, makes the system run once for each entity that has every such component. `regenerate` above runs once per entity with a `Stamina`.
 
-A parameter that is a list, like `(Stamina, Regen)[]` or a [query row](queries.md) list, receives every match at once, which a system needs to compare entities, count them or join two sets:
+- Name a component parameter `_` to require it without reading it: `fn drift_left(_: Cloud, t: Transform, time: Time)` runs for every entity with a `Cloud` and a `Transform`.
+- An `Entity` parameter beside component parameters receives the entity the call is for.
+
+A parameter that is a list, like `(Entity, Enemy)[]`, receives every match at once. Use one to count entities, compare them, or join two sets:
 
 ```rust
 @system
@@ -24,55 +27,133 @@ fn count_enemies(enemies: (Entity, Enemy)[], hud: Hud) {
 }
 ```
 
-Name a component parameter `_` to require it without reading it: `fn drift_left(_: Cloud, t: Transform, time: Time)` runs for every entity with a `Cloud` and a `Transform`. An `Entity` parameter next to component parameters receives the entity the call is for.
-
-A parameter that is one collision or message, such as `hit: Overlap<Player, Coin>`, makes the system run once per event; see [Messages and Collisions](messages.md).
+A parameter that is one collision or message, such as `hit: Overlap<Player, Coin>`, makes the system run once per event; see [Events and Collisions](events.md).
 
 ## Changes are kept
 
-A system changes components and resources by assigning to its parameters, and Drift keeps every change when the system returns. There is nothing to declare: a parameter's type is what the system reads and may write.
-
-The engine's own work (physics, animation, particles, rendering preparation) runs on worker threads beside your systems wherever they do not use the same types. See [The Frame](frame.md).
-
-## Order
-
-Systems run in the order they appear in the source, unless the attribute says otherwise:
+A system changes components and resources by assigning to its parameters, and Drift keeps every change when it returns. There is nothing to declare: a parameter's type is what the system reads and may write.
 
 ```rust
-@system(after: [steer, score])
-fn hud(...) { ... }
+@system
+fn fall(bird: Bird, t: Transform, time: Time) {
+    bird.vy += 1400.0 * time.dt;
+    t.position = t.position + vec2(0.0, bird.vy * time.dt);
+}
 ```
-
-`after: [a, b]` runs this system once `a` and `b` have run this frame; `before: [c]` runs it before `c`. A loop between them is an error when the game loads.
 
 ## Startup systems
 
 ```rust
 @system(schedule: Schedule::Startup)
-fn setup(cmd: Commands) { ... }
+fn setup(cmd: Commands) { }
 ```
 
-A `Startup` system runs once, before the first frame. Commands a system issues apply when it returns, so a startup system ordered `after:` another sees what that one spawned and inserted.
+A `Startup` system runs once, before the first frame. A startup system ordered `after:` another sees what that one spawned.
+
+## Order
+
+Systems run one at a time, in the order they appear in the source, unless their attributes say otherwise:
+
+```rust
+@system(after: [steer, collect])
+fn hud(score: Score, labels: (ScoreLabel, Text)[]) { }
+```
+
+`after: [a, b]` runs this system once `a` and `b` have run this frame; `before: [c]` runs it before `c`. A loop between them is an error when the game loads. Order matters when one system's changes or commands should be seen by another in the same frame.
 
 ## Running some of the time
 
 `run_if:` names conditions: functions that return `bool`. The system runs only in frames where every one of them holds.
 
 ```rust
-fn flapped(input: Input) -> bool => input.action_pressed("flap");
+fn fired(input: Input) -> bool => input.action_pressed("fire");
 
-@system(run_if: [flapped])
-fn flap(bird: Bird, tuning: Tuning) {
-    bird.vy = -tuning.flap_speed;
+@system(run_if: [fired])
+fn fire(gun: Gun, t: Transform, cmd: Commands) {
+    cmd.spawn(bullet(t));
 }
 ```
 
-A condition takes parameters the way a system does: resources, settings, `Input`, `Time` and queries. It is evaluated once per frame however many systems name it, and what it changes is discarded.
+A condition takes resources, settings, engine resources and queries as parameters, the way a system does. What it changes is discarded.
 
-For game phases such as a menu, play and game over, use [states](states.md): `in_state:` runs a system only in some phases, and `on_enter:` and `on_exit:` run one when a phase begins or ends.
+Other ways to switch systems:
 
-A system that takes a resource does not run while that resource does not exist, so a resource also works as a switch. `Systems` turns individual systems on and off by name.
+- For game phases such as a title screen, play and game over, use [states](states.md): `in_state:` runs a system only in some phases, and `on_enter:` and `on_exit:` run one when a phase begins or ends.
+- A system that takes a resource does not run while that resource does not exist, so inserting and removing a resource switches a group of systems.
+- The `Systems` engine resource turns systems on and off by name: `systems.disable("spawn_enemies")`.
 
-## Functions that are not systems
+## Time
 
-Only functions marked `@system` are systems. Write helpers as plain functions and call them from systems; they take whatever arguments you pass, including `Commands`, a resource or a single component.
+`Time.dt` is the time since the last frame, in seconds. Multiply speeds by it so movement does not depend on the frame rate; the engine's own motion (`Velocity`, physics, tweens) already does. `Time.elapsed` counts seconds since the start.
+
+`time.set_scale(0.5)` slows the whole game to half speed from the next frame, physics, tweens and particles included; 0 freezes it. `Time.real_dt` ignores the scale, for menus that keep running in slow motion.
+
+## Doing something every few seconds
+
+A `Timer` counts down. Keep one in a resource or a component and tick it with `dt`; `tick` returns how many times it finished:
+
+```rust
+@resource
+struct Waves { spawn: Timer = repeating_timer(2.0) }
+
+@system
+fn spawn_wave(waves: Waves, time: Time, cmd: Commands) {
+    for i in range(waves.spawn.tick(time.dt)) {
+        cmd.spawn(enemy());
+    }
+}
+```
+
+`timer(seconds)` finishes once; `repeating_timer(seconds)` starts over each time. A `Cooldown` gates an action, such as a dash or a gun: `cooldown.try_use()` is `true` once per `seconds`. For something that should happen once after a delay, such as removing an entity, a `Lifetime` component does it in the engine.
+
+### Steps in order
+
+A `Sequence` is a list of steps that run one after another across frames: waits, named events, messages, and waits for a signal. It suits intros, tutorials, boss patterns and spawn waves. Like a timer it is a plain value; keep it in a resource or component and tick it every frame:
+
+```rust
+@resource
+struct Intro {
+    steps: Sequence = sequence()
+        .wait(1.0).then("show_title")
+        .wait(2.0).send(SpawnWave { size: 5 })
+        .wait_for("wave_cleared").then("show_boss"),
+}
+
+@system
+fn run_intro(intro: Intro, time: Time, ui: Ui) {
+    for name in intro.steps.tick(time.dt) {
+        if name == "show_title" { ui.title_visible = true; }
+        if name == "show_boss" { ui.boss_bar = true; }
+    }
+}
+
+@system
+fn wave_done(_: WaveCleared, intro: Intro) {
+    intro.steps.signal("wave_cleared");
+}
+```
+
+| Member | Meaning |
+|--------|---------|
+| `wait(seconds)` | Pause the sequence |
+| `then(name)` | `tick` returns `name` when the sequence reaches this step |
+| `send(message)` | Send a message when the sequence reaches this step |
+| `wait_for(name)` | Pause until `signal(name)` is called; a signal sent early is kept until the step is reached |
+| `repeat(times)` | Run the steps again `times` more times once they end; -1 repeats forever |
+| `tick(dt)` | Advance by `dt` seconds. Returns the names of the `then` steps reached, in order; a long frame can pass several |
+| `signal(name)` | Let a `wait_for(name)` step go on |
+| `finished()` | Every step has run |
+| `restart()` | Start again from the first step |
+
+## The frame
+
+1. Input arrives.
+2. The `Update` systems run, one after another, in their order. Each one's commands apply when it returns.
+3. State changes asked for this frame apply: the old state's `on_exit` systems run, then the new state's `on_enter` systems.
+4. The engine steps physics, moves and animates entities, advances particles and tweens, and draws the frame.
+
+Collision events from a physics step reach systems the frame after.
+
+## When a system fails
+
+A system that raises an error it does not catch stops for the rest of the run: its changes and commands from that call are dropped, and the error is logged with the script line. The other systems keep running. See [Errors](../reference/errors.md).

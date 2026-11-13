@@ -1,28 +1,18 @@
 # Drift for Candela
 
-Write 2D games for the Drift engine in [candela](https://candela.lumenfx.dev), as components and systems.
+Write 2D games for the Drift engine in [Candela](https://candela.lumenfx.dev) and play them in the browser.
 
-A game declares its components, resources and systems with attributes, and `drift` runs them: it compiles the scripts, calls every system each frame with the data its parameters ask for, and draws and simulates the engine components (sprites, text, physics bodies, particles, tweens) on its own threads. Games run on the desktop and, built with Emscripten, in the browser.
+A game declares its components, resources and systems with attributes, and `drift` runs them: it compiles the scripts, calls every system each frame with the data its parameters ask for, and draws and simulates the engine components underneath. `drift build --web` turns a game folder into a web page for any static host.
 
 ## Quick start
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.sh | sh
-drift run path/to/game              # play it
-drift build --web path/to/game      # write it as a web page, in path/to/game/build/web
+drift build --web path/to/game      # writes path/to/game/build/web
+cd path/to/game/build/web && python3 -m http.server 8000
 ```
 
-On Windows, install with `irm https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.ps1 | iex`.
-
-To build `drift` from source instead:
-
-```sh
-cmake -B build -DDRIFT_BUILD_CANDELA=ON -DDRIFT_CANDELA_SOURCE=<candela checkout>
-cmake --build build --target drift_run
-build/bindings/candela/drift run bindings/candela/examples/flappy_bird
-```
-
-`DRIFT_CANDELA_SOURCE` points at a candela checkout with the changes of lumen-fx/candela#246 until they are released. Building needs a Rust toolchain.
+On Windows, install with `irm https://raw.githubusercontent.com/FizzWizZleDazzle/Drift/main/install.ps1 | iex`. `drift run path/to/game` plays a game in a desktop window.
 
 ```rust
 import "drift" { * };
@@ -42,17 +32,26 @@ fn steer(ship: Ship, velocity: Velocity, input: Input) {
 }
 ```
 
+## What it gives a game
+
+- Sprites, shapes, text, cameras, particles, trails, lights and post effects, declared as components.
+- Input actions bound in `drift.toml`, touch, gamepads, and text entry.
+- Box2D physics with contact and sensor events, joints and raycasts.
+- Sound, music, playlists and mixer buses.
+- Tilemaps from Tiled, LDtk or code, procedural generation and pathfinding.
+- Save data that lasts in the browser, data files, HTTP and WebSockets, localization.
+- Modules for HUDs and menus, health and damage, player controllers, title and pause screens, state machines, inventories and dialogue.
+
 ## Examples
 
-- `examples/flappy_bird`: states, per-entity systems, sensor overlaps, settings from `drift.toml`.
-- `examples/coin_dash`: input actions, physics contacts, particles, tweens, save data, sound made from samples.
-- `examples/cave_walk`: generated caves and dungeons in a tilemap made in code, seeded random numbers, Poisson-disk spawns from a weighted table, flow-field chasers.
-- `examples/creature`: a lizard animated entirely in code: a rig of parent and child parts, two-bone IK legs with stepping feet, a verlet tail, a head on a spring that watches the cursor, breathing.
+Every folder in `examples/` is a complete game built as a web page by the docs workflow and playable from the book's [gallery](https://fizzwizzledazzle.github.io/Drift/candela-book/examples/gallery.html): a platformer, a top-down shooter, Breakout, Snake, a roguelike, an effects showcase, menus and states, save and load, a procedurally animated creature, Flappy Bird, Coin Dash, Cave Walk, and Star Catcher, the tutorial's game.
 
 ## Limitations
 
-Scripts are not reloaded while the game runs yet, and the `drift check` and `drift new` commands and `drift build` without `--web` are not built. Several engine resources the book describes (Audio, Physics, Draw, Camera2D) are not in the `drift` module yet, and maps do not list their objects (`Map.objects`, `object_property`).
+See [Limitations](https://fizzwizzledazzle.github.io/Drift/candela-book/limitations.html) in the book.
 
 ## Documentation
 
-The book is in [`docs/`](docs/), an mdBook, and is published at https://fizzwizzledazzle.github.io/Drift/candela-book/. Read it locally with `mdbook serve bindings/candela/docs`.
+The book is in [`docs/`](docs/), an mdBook, published at https://fizzwizzledazzle.github.io/Drift/candela-book/. Read it locally with `mdbook serve bindings/candela/docs`. Its reference pages are written from the `drift` module by `scripts/candela-reference.py`; edit the module's comments or `docs/api-notes.md`, then run the script.
+
+To build `drift` from source, see [Install](docs/src/getting-started/install.md#building-drift-from-source).

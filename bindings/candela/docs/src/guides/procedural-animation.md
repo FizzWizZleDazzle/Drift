@@ -6,7 +6,7 @@ Everything here comes with `import "drift" { * };`. Angles are radians from the 
 
 ## Parts and pivots
 
-Each part is an entity with a `Sprite` (or a `Rectangle` or `Circle`) whose `anchor` sits on its joint, so it turns around the joint. Parts that ride on another part get it as their `Parent`, and their `Transform` counts from it. See [Parts that move together](rendering.md#parts-that-move-together) for building a rig; this page is about moving one.
+Each part is an entity with a `Sprite` (or a `Rectangle` or `Circle`) whose `anchor` sits on its joint, so it turns around the joint. Parts that ride on another part get it as their `Parent`, and their `Transform` counts from it. See [Parts that move together](sprites.md) for building a rig; this page is about moving one.
 
 Two ways to drive a part:
 

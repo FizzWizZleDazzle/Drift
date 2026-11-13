@@ -1,4 +1,4 @@
-# Web Games
+# Publishing to the Web
 
 `drift build --web` turns a game folder into a web page that runs in any browser with WebGL2, on desktops, phones and tablets. This page covers publishing it, what the page does around the game, and what changes in the browser.
 
@@ -42,7 +42,7 @@ offline = true                # installable, plays without a connection
 
 ## Hosting
 
-Upload the folder to any static host: GitHub Pages, Netlify, Cloudflare Pages, an S3 bucket, your own server. What makes it load fast:
+Upload the folder to any static host: GitHub Pages, Netlify, Cloudflare Pages, an S3 bucket, your own server. On GitHub Pages, commit the folder's files to the branch or folder Pages publishes, or upload it from a workflow with `actions/upload-pages-artifact`, as this book does with its examples. What makes it load fast:
 
 - **Compression.** `drift.wasm` is most of the download and shrinks to about a third with gzip or Brotli. Most hosts compress it on their own; on your own server, turn on gzip or Brotli for `.wasm`, `.js` and `.pack`.
 - **The wasm type.** Serve `.wasm` as `application/wasm`. The page compiles the engine as it downloads either way.

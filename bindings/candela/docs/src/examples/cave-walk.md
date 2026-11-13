@@ -1,15 +1,13 @@
 # Cave Walk
 
-Walk around generated levels: a cellular-automata cave or a BSP dungeon with doors, built from one seed. Coins and gems are scattered over the floor, and slimes chase you around the walls. 1 and 2 switch between the cave and the dungeon, R rolls a new seed, the arrow keys or WASD move. A slime that reaches you halves your score and sends you back to the start.
+Walk around generated levels: a cellular-automata cave or a BSP dungeon with doors, built from one seed. Coins and gems are scattered over the floor, and slimes chase you around the walls. 1 and 2 switch between the cave and the dungeon, R rolls a new seed, the arrow keys or WASD move. A slime that reaches you halves your score and sends you back to the start. [Play it in the browser](../play/cave_walk/).
 
 It shows the [Procedural Generation](../guides/procedural-generation.md) guide in one game: the game's seed from `drift.toml`, generator streams, a tilemap made in code and filled from grids, noise, Poisson-disk points, a weighted table and a flow field.
 
-Run it from its folder:
-
 ```sh
-cd examples/cave_walk
-drift run
-drift run --set random.seed=777   # the same levels every time
+cd bindings/candela/examples/cave_walk
+drift build --web
+drift run --set random.seed=777   # on the desktop, the same levels every time
 ```
 
 ## drift.toml
