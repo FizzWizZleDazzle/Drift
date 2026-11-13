@@ -1,6 +1,6 @@
 # Queries
 
-A query is a parameter that receives entities by the components they have. A single component parameter gives a system one entity per call (see [Systems](systems.md)); a list parameter gives it every match at once. Write the list as tuples, or as a row struct when you want names or filters.
+A query is a parameter that receives entities by the components they have. A row parameter, one tuple such as `(Player, Transform)`, gives a system one entity per call (see [Systems](systems.md)); a list parameter gives it every match at once. Write the list as tuples, or as a row struct when you want names or filters.
 
 ## Tuples
 

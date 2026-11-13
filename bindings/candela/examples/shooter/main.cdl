@@ -75,7 +75,8 @@ fn setup(cmd: Commands, input: Input, game: Game, random: Random, save: Save) {
 
 // A new run: the first frame (Playing is the first state) and every R.
 @system(on_enter: Phase::Playing)
-fn new_run(cmd: Commands, game: Game, tuning: Tuning, enemies: (Entity, Enemy)[], players: (Entity, Player)[]) {
+fn new_run(cmd: Commands, game: Game, tuning: Tuning, enemies: (Entity, Enemy)[],
+           players: (Entity, Player)[]) {
     for (e, _) in enemies {
         cmd.despawn(e);
     }
@@ -111,7 +112,8 @@ fn restart(phase: State<Phase>) {
 
 // Moves, faces the mouse, and turns the exhaust on while moving.
 @system(in_state: [Phase::Playing])
-fn fly(player: Player, t: Transform, v: Velocity, emitter: ParticleEmitter, input: Input, tuning: Tuning) {
+fn fly(row: (Player, Transform, Velocity, ParticleEmitter), input: Input, tuning: Tuning) {
+    let (player, t, v, emitter) = row;
     let dir = input.axis2d("move");
     // Stay on the screen: no velocity toward an edge the player is at.
     if (dir.x < 0.0 && t.position.x < 12.0) || (dir.x > 0.0 && t.position.x > W - 12.0) {
@@ -128,7 +130,8 @@ fn fly(player: Player, t: Transform, v: Velocity, emitter: ParticleEmitter, inpu
 // ANCHOR: shoot
 // Fires while the button is held, as often as the cooldown allows.
 @system(in_state: [Phase::Playing])
-fn shoot(player: Player, t: Transform, input: Input, time: Time, tuning: Tuning, cmd: Commands) {
+fn shoot(row: (Player, Transform), input: Input, time: Time, tuning: Tuning, cmd: Commands) {
+    let (player, t) = row;
     player.gun.tick(time.dt);
     if !input.action_held("fire") || !player.gun.try_use() {
         return;
@@ -195,7 +198,8 @@ fn spawn_enemies(cmd: Commands, time: Time, game: Game, tuning: Tuning) {
 // Each enemy heads for the player. A system that takes one component runs
 // once per entity that has them all.
 @system(in_state: [Phase::Playing])
-fn chase(enemy: Enemy, t: Transform, v: Velocity, players: (Player, Transform)[]) {
+fn chase(row: (Enemy, Transform, Velocity), players: (Player, Transform)[]) {
+    let (enemy, t, v) = row;
     for (_, target) in players {
         v.linear = (target.position - t.position).normalized() * enemy.speed;
     }
@@ -242,7 +246,8 @@ fn player_hit(hit: Contact<Player, Enemy>, players: Lookup<Player>, cmd: Command
 }
 
 @system(on_enter: Phase::Over)
-fn game_over(game: Game, save: Save, players: (Player, Velocity, ParticleEmitter)[], enemies: (Enemy, Velocity)[]) {
+fn game_over(game: Game, save: Save, players: (Player, Velocity, ParticleEmitter)[],
+             enemies: (Enemy, Velocity)[]) {
     for (_, v, emitter) in players {
         v.linear = vec2(0.0, 0.0);
         emitter.playing = false;
@@ -260,7 +265,8 @@ fn game_over(game: Game, save: Save, players: (Player, Velocity, ParticleEmitter
 // ---- HUD ----
 
 @system
-fn hud(_: Hud, text: Text, game: Game, players: (Entity, Player)[]) {
+fn hud(row: (Hud, Text), game: Game, players: (Entity, Player)[]) {
+    let (_, text) = row;
     let hp = 0;
     for (_, p) in players {
         hp = p.hp;
@@ -269,6 +275,7 @@ fn hud(_: Hud, text: Text, game: Game, players: (Entity, Player)[]) {
 }
 
 @system
-fn banner(_: Banner, text: Text, phase: State<Phase>) {
+fn banner(row: (Banner, Text), phase: State<Phase>) {
+    let (_, text) = row;
     text.visible = phase.now == Phase::Over;
 }

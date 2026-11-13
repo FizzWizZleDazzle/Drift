@@ -68,7 +68,8 @@ fn new_round(cmd: Commands, game: Game, stars: (Entity, Star)[]) {
 }
 
 @system(in_state: [Round::Playing])
-fn steer(ship: Ship, t: Transform, velocity: Velocity, input: Input) {
+fn steer(row: (Ship, Transform, Velocity), input: Input) {
+    let (ship, t, velocity) = row;
     let v = input.axis2d("move") * ship.speed;
     // Stay on the screen.
     if (v.x < 0.0 && t.position.x < 16.0) || (v.x > 0.0 && t.position.x > 944.0) {
@@ -104,7 +105,8 @@ fn countdown(game: Game, time: Time, round: State<Round>) {
 }
 
 @system(on_enter: Round::Over)
-fn stop(_: Ship, velocity: Velocity) {
+fn stop(ship: (Ship, Velocity)) {
+    let (_, velocity) = ship;
     velocity.linear = vec2(0.0, 0.0);
 }
 
@@ -118,7 +120,8 @@ fn restart(round: State<Round>) {
 // ---- HUD ----
 
 @system
-fn show_score(_: ScoreLabel, text: Text, game: Game, round: State<Round>) {
+fn show_score(label: (ScoreLabel, Text), game: Game, round: State<Round>) {
+    let (_, text) = label;
     if round.now == Round::Playing {
         text.value = "Stars " + string(game.score) + "    Time " + string(int(game.left.remaining()) + 1);
     } else {

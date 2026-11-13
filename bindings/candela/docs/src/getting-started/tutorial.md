@@ -81,13 +81,14 @@ fn setup(cmd: Commands, input: Input) {
 }
 
 @system
-fn steer(ship: Ship, velocity: Velocity, input: Input) {
+fn steer(row: (Ship, Velocity), input: Input) {
+    let (ship, velocity) = row;
     velocity.linear = input.axis2d("move") * ship.speed;
 }
 ```
 
 - `@component` makes `Ship` a component. `requires: [Velocity]` gives every ship a `Velocity` too, so the bundle does not list one.
-- `steer` has no schedule, so it runs every frame. Because it takes single components, `ship: Ship` and `velocity: Velocity`, it runs once for each entity that has both.
+- `steer` has no schedule, so it runs every frame. Its parameter `row: (Ship, Velocity)` is a row, a tuple of components, so it runs once for each entity that has both, and `let (ship, velocity) = row;` names them. Changing `velocity` changes the entity.
 - `axis2d("move")` is a direction from the keys, and the engine moves an entity by its `Velocity` in pixels per second. The system only sets it.
 
 Click the page so it has the keyboard, and fly around.
@@ -166,12 +167,13 @@ And a system:
 
 ```rust
 @system
-fn show_score(_: ScoreLabel, text: Text, game: Game) {
+fn show_score(label: (ScoreLabel, Text), game: Game) {
+    let (_, text) = label;
     text.value = "Stars " + string(game.score);
 }
 ```
 
-`hud_layer()` draws in screen pixels, on top of everything. `_: ScoreLabel` requires the tag without reading it, so `show_score` runs for the label and nothing else.
+`hud_layer()` draws in screen pixels, on top of everything. The row `(ScoreLabel, Text)` requires the tag, and `_` in `let (_, text) = label;` skips it, so `show_score` runs for the label and nothing else.
 
 ## 8. Against the clock
 
@@ -233,7 +235,8 @@ Show the time in `show_score`:
 
 ```rust
 @system
-fn show_score(_: ScoreLabel, text: Text, game: Game, round: State<Round>) {
+fn show_score(label: (ScoreLabel, Text), game: Game, round: State<Round>) {
+    let (_, text) = label;
     if round.now == Round::Playing {
         text.value = "Stars " + string(game.score) + "    Time " + string(int(game.left.remaining()) + 1);
     } else {

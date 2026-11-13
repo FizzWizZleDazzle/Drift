@@ -118,7 +118,8 @@ fn anchor_point(a: Anchor, win: Window, theme: Theme) -> Vec2 {
 }
 
 @system
-fn ui_anchor(a: Anchor, t: Transform, win: Window, theme: Theme) {
+fn ui_anchor(anchor: (Anchor, Transform), win: Window, theme: Theme) {
+    let (a, t) = anchor;
     let p = anchor_point(a, win, theme);
     if p.x != t.position.x || p.y != t.position.y {
         t.position = p;
@@ -225,7 +226,8 @@ fn resource_number(path: string) -> float {
 fn resource_string(path: string) -> string { return drift::resource_text(path); }
 
 @system
-fn ui_bind(b: Bind, text: Text, time: Time) {
+fn ui_bind(bind: (Bind, Text), time: Time) {
+    let (b, text) = bind;
     let raw = drift::resource_text(b.path);
     let shown = raw;
     if raw.parse<float>() is Some(v) {
@@ -256,7 +258,8 @@ fn ui_bind(b: Bind, text: Text, time: Time) {
 struct ClockBind { path: string = "", format: string = "{}", tenths: bool = false }
 
 @system
-fn ui_clock(c: ClockBind, text: Text) {
+fn ui_clock(clock_bind: (ClockBind, Text)) {
+    let (c, text) = clock_bind;
     let value = c.format.replace("{}", clock(resource_number(c.path), c.tenths));
     if value != text.value {
         text.value = value;
@@ -270,7 +273,8 @@ fn ui_clock(c: ClockBind, text: Text) {
 struct PartOf { owner: Entity = Entity { .. } }
 
 @system
-fn ui_parts(e: Entity, p: PartOf, cmd: Commands) {
+fn ui_parts(part_of: (Entity, PartOf), cmd: Commands) {
+    let (e, p) = part_of;
     if !p.owner.alive() {
         cmd.despawn(e);
     }
@@ -355,7 +359,8 @@ fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> E
 }
 
 @system(after: [ui_anchor])
-fn ui_bars(bar: Bar, back: Rectangle, t: Transform, time: Time, cmd: Commands) {
+fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands) {
+    let (bar, back, t) = row;
     if bar.path != "" {
         bar.value = resource_number(bar.path);
     }
@@ -440,7 +445,8 @@ fn icon_row(at: Anchor, count: int, max: int) -> any[] {
 }
 
 @system(after: [ui_anchor])
-fn ui_icon_rows(e: Entity, row: IconRow, t: Transform, cmd: Commands) {
+fn ui_icon_rows(icon_row: (Entity, IconRow, Transform), cmd: Commands) {
+    let (e, row, t) = icon_row;
     if row.path != "" {
         row.count = int(resource_number(row.path));
     }
@@ -656,8 +662,9 @@ fn ui_focus_nav(focus: UiFocus, input: Input, time: Time, widgets: (Widget, Rect
 }
 
 @system(after: [ui_anchor, ui_focus_nav])
-fn ui_widgets(e: Entity, w: Widget, r: Rectangle, t: Transform, input: Input, focus: UiFocus,
+fn ui_widgets(widget: (Entity, Widget, Rectangle, Transform), input: Input, focus: UiFocus,
               time: Time, cmd: Commands) {
+    let (e, w, r, t) = widget;
     let corner = top_left(t, r.size, r.anchor);
     let box = Rect { x: corner.x, y: corner.y, w: r.size.x, h: r.size.y };
     let mouse = input.mouse_position();
@@ -801,7 +808,8 @@ fn reveal_step(rv: Reveal, a: Anchor, dt: float) -> float {
 }
 
 @system(before: [ui_anchor])
-fn ui_reveal_rects(rv: Reveal, a: Anchor, r: Rectangle, time: Time) {
+fn ui_reveal_rects(reveal: (Reveal, Anchor, Rectangle), time: Time) {
+    let (rv, a, r) = reveal;
     if rv.alpha < 0.0 {
         rv.alpha = r.color.a;
     }
@@ -811,7 +819,8 @@ fn ui_reveal_rects(rv: Reveal, a: Anchor, r: Rectangle, time: Time) {
 }
 
 @system(before: [ui_anchor])
-fn ui_reveal_texts(rv: Reveal, a: Anchor, text: Text, time: Time) {
+fn ui_reveal_texts(reveal: (Reveal, Anchor, Text), time: Time) {
+    let (rv, a, text) = reveal;
     if rv.alpha < 0.0 {
         rv.alpha = text.color.a;
     }
@@ -873,7 +882,8 @@ impl Typewriter {
 }
 
 @system
-fn ui_typewriter(tw: Typewriter, text: Text, time: Time) {
+fn ui_typewriter(typewriter: (Typewriter, Text), time: Time) {
+    let (tw, text) = typewriter;
     let n = tw.full.len();
     if !tw.finished {
         tw.shown += tw.speed * time.real_dt;
@@ -914,8 +924,9 @@ fn dialog_box(cmd: Commands, theme: Theme, id: string, pages: string[]) -> Entit
 }
 
 @system(after: [ui_anchor])
-fn ui_dialogs(e: Entity, d: DialogBox, r: Rectangle, t: Transform, input: Input,
+fn ui_dialogs(dialog_box: (Entity, DialogBox, Rectangle, Transform), input: Input,
               writers: Lookup<Typewriter>, cmd: Commands) {
+    let (e, d, r, t) = dialog_box;
     let corner = top_left(t, r.size, r.anchor);
     cmd.insert(d.text_part, Transform { position: corner + Vec2 { x: 16.0, y: 12.0 }, .. });
     let next = ui_activate(input) || input.mouse_pressed(MouseButton::Left);
@@ -951,7 +962,9 @@ fn screen_point_of(e: Entity, camera: Camera2D) -> Vec2 {
 }
 
 @system(before: [ui_anchor])
-fn ui_follow_world(e: Entity, f: FollowWorld, a: Anchor, camera: Camera2D, win: Window, theme: Theme, cmd: Commands) {
+fn ui_follow_world(follow_world: (Entity, FollowWorld, Anchor), camera: Camera2D, win: Window,
+                   theme: Theme, cmd: Commands) {
+    let (e, f, a) = follow_world;
     if !f.target.alive() {
         cmd.despawn(e);
         return;
@@ -973,7 +986,9 @@ struct OffscreenArrow {
 }
 
 @system
-fn ui_offscreen_arrows(a: OffscreenArrow, camera: Camera2D, win: Window, theme: Theme, draw: Draw) {
+fn ui_offscreen_arrows(offscreen_arrow: (Entity, OffscreenArrow), camera: Camera2D, win: Window,
+                       theme: Theme, draw: Draw) {
+    let (_, a) = offscreen_arrow;
     if !a.target.alive() {
         return;
     }
@@ -1025,7 +1040,8 @@ struct Radar {
 struct RadarBlip { color: Color = Color { r: 1.0, g: 0.35, b: 0.4, a: 1.0 }, size: float = 3.0 }
 
 @system(after: [ui_anchor])
-fn ui_radars(r: Radar, t: Transform, blips: (Entity, RadarBlip)[], draw: Draw) {
+fn ui_radars(radar: (Radar, Transform), blips: (Entity, RadarBlip)[], draw: Draw) {
+    let (r, t) = radar;
     let c = t.position;
     draw.hud();
     draw.at_z(4000.0);
@@ -1065,7 +1081,8 @@ fn nine_slice_panel(image: Texture, border: float, at: Anchor, size: Vec2) -> an
 }
 
 @system(after: [ui_anchor])
-fn ui_nine_slices(n: NineSlice, a: Anchor, t: Transform, draw: Draw) {
+fn ui_nine_slices(nine_slice: (NineSlice, Anchor, Transform), draw: Draw) {
+    let (n, a, t) = nine_slice;
     if !n.visible {
         return;
     }
@@ -1087,7 +1104,8 @@ fn icon_label(cmd: Commands, theme: Theme, icon: Texture, text: string, at: Anch
 struct IconOf { icon: Texture = Texture { .. }, size: float = 0.0, gap: float = 8.0, part: Entity = Entity { .. } }
 
 @system(after: [ui_anchor])
-fn ui_icons(e: Entity, i: IconOf, text: Text, t: Transform, cmd: Commands) {
+fn ui_icons(icon_of: (Entity, IconOf, Text, Transform), cmd: Commands) {
+    let (e, i, text, t) = icon_of;
     if i.part.id == 0 {
         i.part = cmd.spawn([Transform { .. }, PartOf { owner: e }]);
     }

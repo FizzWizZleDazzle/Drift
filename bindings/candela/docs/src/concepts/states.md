@@ -43,7 +43,8 @@ fn start(phase: State<Phase>) {
 }
 
 @system
-fn banner(_: Banner, text: Text, phase: State<Phase>) {
+fn banner(row: (Banner, Text), phase: State<Phase>) {
+    let (_, text) = row;
     text.visible = phase.now == Phase::Over;
 }
 ```

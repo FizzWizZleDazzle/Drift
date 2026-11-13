@@ -95,7 +95,8 @@ fn build_arm(cmd: Commands) {
 }
 
 @system
-fn swing(j: Joint, t: Transform, time: Time) {
+fn swing(joint: (Joint, Transform), time: Time) {
+    let (j, t) = joint;
     t.rotation = 0.6 * sin(time.elapsed * j.speed);
 }
 ```

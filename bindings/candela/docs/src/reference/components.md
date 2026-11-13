@@ -61,7 +61,8 @@ struct GlobalTransform {
 
 ```rust
 @system
-fn aim(_: Turret, g: GlobalTransform, draw: Draw) {
+fn aim(turret: (Turret, GlobalTransform), draw: Draw) {
+    let (_, g) = turret;
     draw.line(g.position, g.position + from_angle(g.rotation) * 40.0, rgb(255, 80, 80), 2.0);
 }
 ```

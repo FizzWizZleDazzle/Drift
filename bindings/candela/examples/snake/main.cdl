@@ -179,7 +179,8 @@ fn advance(cmd: Commands, time: Time, snake: Snake, tuning: Tuning, phase: State
 
 // Runs once per Apple entity every frame and puts it on its cell.
 @system
-fn show_apple(_: Apple, t: Transform, snake: Snake) {
+fn show_apple(apple: (Apple, Transform), snake: Snake) {
+    let (_, t) = apple;
     t.position = place(snake.apple).position;
 }
 
@@ -205,12 +206,14 @@ fn restart(phase: State<Phase>) {
 // ---- HUD ----
 
 @system
-fn score_label(_: ScoreLabel, text: Text, snake: Snake) {
+fn score_label(row: (ScoreLabel, Text), snake: Snake) {
+    let (_, text) = row;
     text.value = "Apples " + string(snake.score) + "    Best " + string(snake.best);
 }
 
 @system
-fn banner(_: Banner, text: Text, phase: State<Phase>) {
+fn banner(row: (Banner, Text), phase: State<Phase>) {
+    let (_, text) = row;
     text.value = match phase.now {
         Phase::Ready => "Arrow keys to start",
         Phase::Playing => "",

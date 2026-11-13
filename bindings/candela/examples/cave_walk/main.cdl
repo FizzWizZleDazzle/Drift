@@ -154,7 +154,8 @@ fn build(cmd: Commands, assets: Assets, level: Level, art: Art,
 // ---- Every frame ----
 
 @system
-fn walk(player: Player, velocity: Velocity, input: Input) {
+fn walk(row: (Player, Velocity), input: Input) {
+    let (player, velocity) = row;
     velocity.linear = input.axis2d("move").normalized() * player.speed;
 }
 
@@ -204,7 +205,8 @@ fn pick_up(hit: Overlap<Player, Pickup>, pickups: Lookup<Pickup>, cmd: Commands,
 }
 
 @system
-fn hud(_: Hud, text: Text, level: Level) {
+fn hud(row: (Hud, Text), level: Level) {
+    let (_, text) = row;
     let kind = "Cave";
     if level.dungeon {
         kind = "Dungeon";

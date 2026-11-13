@@ -103,7 +103,8 @@ fn emitters(cmd: Commands) {
 // Number keys flip `playing`. The emitter keeps its particles alive until
 // they fade; it only stops making new ones.
 @system
-fn toggle(t: Toggle, emitter: ParticleEmitter, input: Input) {
+fn toggle(row: (Toggle, ParticleEmitter), input: Input) {
+    let (t, emitter) = row;
     let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5];
     if input.key_pressed(keys[t.key - 1]) {
         emitter.playing = !emitter.playing;
@@ -111,7 +112,8 @@ fn toggle(t: Toggle, emitter: ParticleEmitter, input: Input) {
 }
 
 @system
-fn legend(_: Legend, text: Text, emitters: (Toggle, ParticleEmitter)[]) {
+fn legend(row: (Legend, Text), emitters: (Toggle, ParticleEmitter)[]) {
+    let (_, text) = row;
     let on: string[] = [];
     for (t, e) in emitters {
         if e.playing {

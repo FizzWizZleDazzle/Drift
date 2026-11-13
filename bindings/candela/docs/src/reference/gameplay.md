@@ -155,7 +155,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system
-fn gp_invulnerability(h: Health, time: Time)
+fn gp_invulnerability(health: (Entity, Health), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -179,7 +179,7 @@ struct HealthBar {
 
 ```rust
 @system
-fn gp_health_bars(h: Health, bar: HealthBar, t: Transform, draw: Draw)
+fn gp_health_bars(health: (Health, HealthBar, Transform), draw: Draw)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -223,7 +223,7 @@ fn flash_color(f: HitFlash, current: Color, dt: float) -> Color
 
 ```rust
 @system(after: [gp_flash_on_hit])
-fn gp_flash_sprites(f: HitFlash, s: Sprite, time: Time)
+fn gp_flash_sprites(hit_flash: (HitFlash, Sprite), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -232,7 +232,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system(after: [gp_flash_on_hit])
-fn gp_flash_rects(f: HitFlash, r: Rectangle, time: Time)
+fn gp_flash_rects(hit_flash: (HitFlash, Rectangle), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -241,7 +241,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system(after: [gp_flash_on_hit])
-fn gp_flash_circles(f: HitFlash, c: Circle, time: Time)
+fn gp_flash_circles(hit_flash: (HitFlash, Circle), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -327,7 +327,7 @@ fn fade_step(f: FadeOut, a: float, dt: float, e: Entity, cmd: Commands) -> float
 
 ```rust
 @system
-fn gp_fade_sprites(e: Entity, f: FadeOut, s: Sprite, time: Time, cmd: Commands)
+fn gp_fade_sprites(fade_out: (Entity, FadeOut, Sprite), time: Time, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -336,7 +336,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system
-fn gp_fade_texts(e: Entity, f: FadeOut, t: Text, time: Time, cmd: Commands)
+fn gp_fade_texts(fade_out: (Entity, FadeOut, Text), time: Time, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -345,7 +345,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system
-fn gp_fade_rects(e: Entity, f: FadeOut, r: Rectangle, time: Time, cmd: Commands)
+fn gp_fade_rects(fade_out: (Entity, FadeOut, Rectangle), time: Time, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -354,7 +354,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system
-fn gp_fade_circles(e: Entity, f: FadeOut, c: Circle, time: Time, cmd: Commands)
+fn gp_fade_circles(fade_out: (Entity, FadeOut, Circle), time: Time, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -391,7 +391,7 @@ struct KeepInBounds {
 
 ```rust
 @system
-fn gp_keep_in_bounds(k: KeepInBounds, t: Transform, camera: Camera2D)
+fn gp_keep_in_bounds(keep_in_bounds: (KeepInBounds, Transform), camera: Camera2D)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -400,7 +400,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system(after: [gp_keep_in_bounds])
-fn gp_keep_in_bounds_velocity(k: KeepInBounds, t: Transform, v: Velocity, camera: Camera2D)
+fn gp_keep_in_bounds_velocity(keep_in_bounds: (KeepInBounds, Transform, Velocity), camera: Camera2D)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -421,7 +421,7 @@ struct WrapAround {
 
 ```rust
 @system
-fn gp_wrap_around(w: WrapAround, t: Transform, camera: Camera2D)
+fn gp_wrap_around(wrap_around: (WrapAround, Transform), camera: Camera2D)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -442,7 +442,7 @@ struct DespawnOffscreen {
 
 ```rust
 @system
-fn gp_despawn_offscreen(e: Entity, d: DespawnOffscreen, t: Transform, camera: Camera2D, cmd: Commands)
+fn gp_despawn_offscreen(despawn_offscreen: (Entity, DespawnOffscreen, Transform), camera: Camera2D, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -497,7 +497,7 @@ struct SpawnRng {
 
 ```rust
 @system
-fn gp_spawners(e: Entity, s: Spawner, t: Transform, time: Time, r: SpawnRng, cmd: Commands)
+fn gp_spawners(spawner: (Entity, Spawner, Transform), time: Time, r: SpawnRng, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -574,7 +574,7 @@ struct WaveSpawner {
 
 ```rust
 @system
-fn gp_wave_spawners(w: WaveSpawner, time: Time, cmd: Commands)
+fn gp_wave_spawners(wave_spawner: (Entity, WaveSpawner), time: Time, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.

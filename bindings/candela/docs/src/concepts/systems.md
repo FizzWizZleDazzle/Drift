@@ -4,7 +4,8 @@ A system is a function that Drift calls every frame with the data its parameters
 
 ```rust
 @system
-fn regenerate(stamina: Stamina, time: Time) {
+fn regenerate(hero: (Player, Stamina), time: Time) {
+    let (_, stamina) = hero;
     stamina.value = min(stamina.max, stamina.value + 5.0 * time.dt);
 }
 ```
@@ -13,10 +14,34 @@ Drift finds every function marked `@system`, reads its parameter types when the 
 
 ## Once per entity, or once for all
 
-A parameter that is one component, like `stamina: Stamina`, makes the system run once for each entity that has every such component. `regenerate` above runs once per entity with a `Stamina`.
+A parameter that is a tuple of components, like `hero: (Player, Stamina)`, is a row: the system runs once for each entity that has every component in it, and the row holds that entity's components. It has the shape of one element of a query such as `(Player, Stamina)[]`. `regenerate` above runs once per entity with a `Player` and a `Stamina`. A system takes at most one row.
 
-- Name a component parameter `_` to require it without reading it: `fn drift_left(_: Cloud, t: Transform, time: Time)` runs for every entity with a `Cloud` and a `Transform`.
-- An `Entity` parameter beside component parameters receives the entity the call is for.
+Take the row apart with `let`:
+
+- `_` skips a place: `let (_, stamina) = hero;` requires a `Player` without reading it.
+- `Entity` in the tuple gives the entity the call is for: `fn hurt(enemy: (Entity, Enemy, Health), cmd: Commands)` with `let (e, _, health) = enemy;`.
+- The names share the row's values, so `stamina.value = 10.0` and `t.position.x += 1.0` change the entity. Assigning a new value to a name itself, `stamina = Stamina { .. }`, only rebinds the name; set its fields instead.
+
+A tuple has at least two places, so a row of one component pairs it with its `Entity`: `(Entity, Transform)`. Components as separate parameters, as in `fn steer(ship: Ship, v: Velocity)`, stop the game when it loads with `drift_loose_components`, which shows the row to write instead.
+
+### Updating a game written with separate component parameters
+
+Games written before rows took each component as its own parameter. Gather a system's component and `Entity` parameters into one tuple, in the same order, and take it apart on the first line; the body stays as it was. A system that took a single component adds `Entity` in front of it.
+
+```rust
+// Before
+@system
+fn steer(_: Ship, t: Transform, velocity: Velocity, input: Input) {
+    velocity.linear = input.axis2d("move") * 320.0;
+}
+
+// After
+@system
+fn steer(ship: (Ship, Transform, Velocity), input: Input) {
+    let (_, t, velocity) = ship;
+    velocity.linear = input.axis2d("move") * 320.0;
+}
+```
 
 A parameter that is a list, like `(Entity, Enemy)[]`, receives every match at once. Use one to count entities, compare them, or join two sets:
 
@@ -27,7 +52,7 @@ fn count_enemies(enemies: (Entity, Enemy)[], hud: Hud) {
 }
 ```
 
-A parameter that is one collision or message, such as `hit: Overlap<Player, Coin>`, makes the system run once per event; see [Events and Collisions](events.md).
+A parameter that is one collision or message, such as `hit: Overlap<Player, Coin>`, makes the system run once per event; see [Events and Collisions](events.md). A system runs once per entity or once per event, so it takes a row or a single event, not both; read the other side through a list or a [Lookup](queries.md).
 
 ## Changes are kept
 
@@ -35,7 +60,8 @@ A system changes components and resources by assigning to its parameters, and Dr
 
 ```rust
 @system
-fn fall(bird: Bird, t: Transform, time: Time) {
+fn fall(flier: (Bird, Transform), time: Time) {
+    let (bird, t) = flier;
     bird.vy += 1400.0 * time.dt;
     t.position = t.position + vec2(0.0, bird.vy * time.dt);
 }
@@ -69,7 +95,8 @@ fn hud(score: Score, labels: (ScoreLabel, Text)[]) { }
 fn fired(input: Input) -> bool => input.action_pressed("fire");
 
 @system(run_if: [fired])
-fn fire(gun: Gun, t: Transform, cmd: Commands) {
+fn fire(gun: (Gun, Transform), cmd: Commands) {
+    let (_, t) = gun;
     cmd.spawn(bullet(t));
 }
 ```

@@ -132,7 +132,8 @@ fn gp_damage(d: DealDamage, healths: Lookup<Health>, cmd: Commands) {
 }
 
 @system
-fn gp_invulnerability(h: Health, time: Time) {
+fn gp_invulnerability(health: (Entity, Health), time: Time) {
+    let (_, h) = health;
     if h.invulnerable > 0.0 {
         h.invulnerable = max(0.0, h.invulnerable - time.dt);
     }
@@ -149,7 +150,8 @@ struct HealthBar {
 }
 
 @system
-fn gp_health_bars(h: Health, bar: HealthBar, t: Transform, draw: Draw) {
+fn gp_health_bars(health: (Health, HealthBar, Transform), draw: Draw) {
+    let (h, bar, t) = health;
     let k = h.fraction();
     if bar.hide_when_full && k >= 1.0 {
         return;
@@ -198,11 +200,20 @@ fn flash_color(f: HitFlash, current: Color, dt: float) -> Color {
 }
 
 @system(after: [gp_flash_on_hit])
-fn gp_flash_sprites(f: HitFlash, s: Sprite, time: Time) { s.color = flash_color(f, s.color, time.real_dt); }
+fn gp_flash_sprites(hit_flash: (HitFlash, Sprite), time: Time) {
+    let (f, s) = hit_flash;
+    s.color = flash_color(f, s.color, time.real_dt);
+}
 @system(after: [gp_flash_on_hit])
-fn gp_flash_rects(f: HitFlash, r: Rectangle, time: Time) { r.color = flash_color(f, r.color, time.real_dt); }
+fn gp_flash_rects(hit_flash: (HitFlash, Rectangle), time: Time) {
+    let (f, r) = hit_flash;
+    r.color = flash_color(f, r.color, time.real_dt);
+}
 @system(after: [gp_flash_on_hit])
-fn gp_flash_circles(f: HitFlash, c: Circle, time: Time) { c.color = flash_color(f, c.color, time.real_dt); }
+fn gp_flash_circles(hit_flash: (HitFlash, Circle), time: Time) {
+    let (f, c) = hit_flash;
+    c.color = flash_color(f, c.color, time.real_dt);
+}
 
 // Send to freeze the game for `seconds` of real time: a hit stop.
 @message
@@ -259,17 +270,27 @@ fn fade_step(f: FadeOut, a: float, dt: float, e: Entity, cmd: Commands) -> float
 }
 
 @system
-fn gp_fade_sprites(e: Entity, f: FadeOut, s: Sprite, time: Time, cmd: Commands) { s.color.a = fade_step(f, s.color.a, time.dt, e, cmd); }
+fn gp_fade_sprites(fade_out: (Entity, FadeOut, Sprite), time: Time, cmd: Commands) {
+    let (e, f, s) = fade_out;
+    s.color.a = fade_step(f, s.color.a, time.dt, e, cmd);
+}
 @system
-fn gp_fade_texts(e: Entity, f: FadeOut, t: Text, time: Time, cmd: Commands) {
+fn gp_fade_texts(fade_out: (Entity, FadeOut, Text), time: Time, cmd: Commands) {
+    let (e, f, t) = fade_out;
     t.color.a = fade_step(f, t.color.a, time.dt, e, cmd);
     t.shadow_color.a = min(t.shadow_color.a, t.color.a);
     t.outline_color.a = min(t.outline_color.a, t.color.a);
 }
 @system
-fn gp_fade_rects(e: Entity, f: FadeOut, r: Rectangle, time: Time, cmd: Commands) { r.color.a = fade_step(f, r.color.a, time.dt, e, cmd); }
+fn gp_fade_rects(fade_out: (Entity, FadeOut, Rectangle), time: Time, cmd: Commands) {
+    let (e, f, r) = fade_out;
+    r.color.a = fade_step(f, r.color.a, time.dt, e, cmd);
+}
 @system
-fn gp_fade_circles(e: Entity, f: FadeOut, c: Circle, time: Time, cmd: Commands) { c.color.a = fade_step(f, c.color.a, time.dt, e, cmd); }
+fn gp_fade_circles(fade_out: (Entity, FadeOut, Circle), time: Time, cmd: Commands) {
+    let (e, f, c) = fade_out;
+    c.color.a = fade_step(f, c.color.a, time.dt, e, cmd);
+}
 
 // A number or word that pops up at a world position, floats up and fades:
 // damage numbers, "+100", "Combo!".
@@ -300,7 +321,8 @@ fn bounds_or_view(area: Rect, camera: Camera2D) -> Rect {
 struct KeepInBounds { area: Rect = Rect { .. }, margin: float = 0.0 }
 
 @system
-fn gp_keep_in_bounds(k: KeepInBounds, t: Transform, camera: Camera2D) {
+fn gp_keep_in_bounds(keep_in_bounds: (KeepInBounds, Transform), camera: Camera2D) {
+    let (k, t) = keep_in_bounds;
     let r = bounds_or_view(k.area, camera);
     let x = clamp(t.position.x, r.x + k.margin, r.x + r.w - k.margin);
     let y = clamp(t.position.y, r.y + k.margin, r.y + r.h - k.margin);
@@ -310,7 +332,9 @@ fn gp_keep_in_bounds(k: KeepInBounds, t: Transform, camera: Camera2D) {
 }
 
 @system(after: [gp_keep_in_bounds])
-fn gp_keep_in_bounds_velocity(k: KeepInBounds, t: Transform, v: Velocity, camera: Camera2D) {
+fn gp_keep_in_bounds_velocity(keep_in_bounds: (KeepInBounds, Transform, Velocity),
+                              camera: Camera2D) {
+    let (k, t, v) = keep_in_bounds;
     let r = bounds_or_view(k.area, camera);
     let lin = v.linear;
     if (t.position.x <= r.x + k.margin && lin.x < 0.0) || (t.position.x >= r.x + r.w - k.margin && lin.x > 0.0) {
@@ -330,7 +354,8 @@ fn gp_keep_in_bounds_velocity(k: KeepInBounds, t: Transform, v: Velocity, camera
 struct WrapAround { area: Rect = Rect { .. }, margin: float = 16.0 }
 
 @system
-fn gp_wrap_around(w: WrapAround, t: Transform, camera: Camera2D) {
+fn gp_wrap_around(wrap_around: (WrapAround, Transform), camera: Camera2D) {
+    let (w, t) = wrap_around;
     let r = bounds_or_view(w.area, camera);
     let p = t.position;
     let x0 = r.x - w.margin;
@@ -358,7 +383,9 @@ fn gp_wrap_around(w: WrapAround, t: Transform, camera: Camera2D) {
 struct DespawnOffscreen { area: Rect = Rect { .. }, margin: float = 64.0 }
 
 @system
-fn gp_despawn_offscreen(e: Entity, d: DespawnOffscreen, t: Transform, camera: Camera2D, cmd: Commands) {
+fn gp_despawn_offscreen(despawn_offscreen: (Entity, DespawnOffscreen, Transform),
+                        camera: Camera2D, cmd: Commands) {
+    let (e, d, t) = despawn_offscreen;
     let r = bounds_or_view(d.area, camera);
     let p = t.position;
     if p.x < r.x - d.margin || p.x > r.x + r.w + d.margin || p.y < r.y - d.margin || p.y > r.y + r.h + d.margin {
@@ -391,7 +418,8 @@ fn spawner(id: string, every: float) -> Spawner { return Spawner { id: id, every
 struct SpawnRng { rng: Rng = rng(9127) }
 
 @system
-fn gp_spawners(e: Entity, s: Spawner, t: Transform, time: Time, r: SpawnRng, cmd: Commands) {
+fn gp_spawners(spawner: (Entity, Spawner, Transform), time: Time, r: SpawnRng, cmd: Commands) {
+    let (e, s, t) = spawner;
     if s.paused || (s.count >= 0 && s.fired >= s.count) {
         return;
     }
@@ -438,7 +466,8 @@ struct WaveSpawner {
 }
 
 @system
-fn gp_wave_spawners(w: WaveSpawner, time: Time, cmd: Commands) {
+fn gp_wave_spawners(wave_spawner: (Entity, WaveSpawner), time: Time, cmd: Commands) {
+    let (_, w) = wave_spawner;
     if w.done || w.waves.len() == 0 {
         return;
     }

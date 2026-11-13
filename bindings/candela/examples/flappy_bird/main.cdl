@@ -119,7 +119,8 @@ fn restart(state: State<Phase>) {
 // ---- Every frame ----
 
 @system(in_state: [Phase::Ready, Phase::Playing], run_if: [flapped])
-fn flap(bird: Bird, state: State<Phase>, tuning: Tuning, art: Art) {
+fn flap(row: (Entity, Bird), state: State<Phase>, tuning: Tuning, art: Art) {
+    let (_, bird) = row;
     state.set(Phase::Playing);
     bird.vy = -tuning.flap_speed;
     art.wing.play();
@@ -127,7 +128,8 @@ fn flap(bird: Bird, state: State<Phase>, tuning: Tuning, art: Art) {
 
 // Gravity, the tilt of the bird, and crashing into the ground.
 @system(in_state: [Phase::Playing, Phase::Over])
-fn fall(bird: Bird, v: Velocity, t: Transform, time: Time, tuning: Tuning, state: State<Phase>) {
+fn fall(row: (Bird, Velocity, Transform), time: Time, tuning: Tuning, state: State<Phase>) {
+    let (bird, v, t) = row;
     if t.position.y >= GROUND_Y - 12.0 {
         v.linear = vec2(0.0, 0.0);
         if state.now == Phase::Playing {
@@ -145,7 +147,8 @@ fn fall(bird: Bird, v: Velocity, t: Transform, time: Time, tuning: Tuning, state
 
 // Flaps the wings: three frames.
 @system(in_state: [Phase::Ready, Phase::Playing])
-fn animate_bird(bird: Bird, sprite: Sprite, time: Time, art: Art) {
+fn animate_bird(row: (Bird, Sprite), time: Time, art: Art) {
+    let (bird, sprite) = row;
     bird.frame_time += time.dt;
     sprite.image = art.bird[int(bird.frame_time * 10.0) % 3];
 }
@@ -197,7 +200,8 @@ fn hit_pipe(_: Overlap<Bird, Pipe>, state: State<Phase>) {
 }
 
 @system(in_state: [Phase::Ready, Phase::Playing])
-fn scroll_ground(_: Ground, t: Transform, time: Time, tuning: Tuning) {
+fn scroll_ground(ground: (Ground, Transform), time: Time, tuning: Tuning) {
+    let (_, t) = ground;
     t.position.x -= tuning.pipe_speed * time.dt;
     if t.position.x <= -168.0 {
         t.position.x += 672.0;
@@ -207,13 +211,15 @@ fn scroll_ground(_: Ground, t: Transform, time: Time, tuning: Tuning) {
 // ---- HUD ----
 
 @system
-fn score_label(_: ScoreLabel, text: Text, game: Game, state: State<Phase>) {
+fn score_label(row: (ScoreLabel, Text), game: Game, state: State<Phase>) {
+    let (_, text) = row;
     text.visible = state.now != Phase::Ready;
     text.value = if state.now == Phase::Over { string(game.score) + "  best " + string(game.best) }
                  else { string(game.score) };
 }
 
 @system
-fn banner(banner: Banner, sprite: Sprite, state: State<Phase>) {
+fn banner(row: (Banner, Sprite), state: State<Phase>) {
+    let (banner, sprite) = row;
     sprite.visible = banner.shown_in == state.now;
 }

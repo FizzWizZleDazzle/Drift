@@ -42,7 +42,8 @@ fn hud(cmd: Commands, ui: Ui) {
 }
 
 @system
-fn show_score(ui: Ui, game: Game, label: ScoreLabel, text: Text) {
+fn show_score(label: (ScoreLabel, Text), ui: Ui, game: Game) {
+    let (_, text) = label;
     text.value = ui.text.get_with("score", {"score": grouped(game.score)});
 }
 ```

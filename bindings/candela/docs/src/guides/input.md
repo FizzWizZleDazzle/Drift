@@ -43,7 +43,8 @@ fn bind_controls(input: Input) {
 }
 
 @system
-fn walk(_: Player, v: Velocity, input: Input) {
+fn walk(player: (Player, Velocity), input: Input) {
+    let (_, v) = player;
     v.linear = vec2(input.axis2d("move").x * 200.0, v.linear.y);
     if input.action_pressed("jump") {
         v.linear = vec2(v.linear.x, -400.0);

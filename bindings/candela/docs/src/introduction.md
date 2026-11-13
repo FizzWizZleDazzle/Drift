@@ -15,7 +15,8 @@ fn setup(cmd: Commands, input: Input) {
 }
 
 @system
-fn steer(player: Player, velocity: Velocity, input: Input) {
+fn steer(row: (Player, Velocity), input: Input) {
+    let (player, velocity) = row;
     velocity.linear = input.axis2d("move") * player.speed;
 }
 ```

@@ -133,7 +133,8 @@ fn setup(cmd: Commands, input: Input, rig: Rig) {
 // Walks toward the mouse, or the way the keys point, and turns to face where
 // it is going.
 @system
-fn move_body(c: Creature, t: Transform, input: Input, time: Time, tuning: Tuning) {
+fn move_body(creature: (Creature, Transform), input: Input, time: Time, tuning: Tuning) {
+    let (c, t) = creature;
     let dir = Vec2 { .. };
     let keys = input.axis2d("move");
     if keys.length() > 0.1 {
@@ -159,7 +160,8 @@ fn move_body(c: Creature, t: Transform, input: Input, time: Time, tuning: Tuning
 
 // Breathing: a slow squash, plus a stretch along the way it moves.
 @system
-fn breathe(_: Breath, t: Transform, time: Time, rig: Rig, bodies: Lookup<Creature>) {
+fn breathe(breath: (Breath, Transform), time: Time, rig: Rig, bodies: Lookup<Creature>) {
+    let (_, t) = breath;
     let breath = squash(sine_wave(time.elapsed, 0.6, 0.06, 0.0));
     let speed = 0.0;
     match bodies.get(rig.body) {
@@ -175,7 +177,8 @@ fn breathe(_: Breath, t: Transform, time: Time, rig: Rig, bodies: Lookup<Creatur
 // Turns toward the cursor on a spring, never more than a radian off the
 // body's heading.
 @system(after: [move_body])
-fn look(h: Head, t: Transform, input: Input, time: Time, rig: Rig) {
+fn look(head: (Head, Transform), input: Input, time: Time, rig: Rig) {
+    let (h, t) = head;
     let head = world_transform(rig.head);
     let body = world_transform(rig.body);
     let want = angle_diff(body.rotation, look_at(head.position, input.mouse_world()));
@@ -184,14 +187,16 @@ fn look(h: Head, t: Transform, input: Input, time: Time, rig: Rig) {
 
 // The pupils slide toward the cursor inside their eyes.
 @system(after: [look])
-fn watch(e: Entity, _: Pupil, t: Transform, input: Input) {
+fn watch(pupil: (Entity, Pupil, Transform), input: Input) {
+    let (e, _, t) = pupil;
     let eye = parent_of(e);
     t.position = to_local(eye, input.mouse_world()).clamp_length(2.2);
 }
 
 // The antenna tips chase where they would be on a rigid head.
 @system(after: [look])
-fn antennae(a: Antenna, t: Transform, time: Time, rig: Rig, draw: Draw) {
+fn antennae(antenna: (Antenna, Transform), time: Time, rig: Rig, draw: Draw) {
+    let (a, t) = antenna;
     let base = to_world(rig.head, a.base);
     t.position = a.tip.update(to_world(rig.head, a.offset), 160.0, 7.0, time.dt);
     draw.at_z(3.4);
@@ -229,7 +234,8 @@ fn step_legs(legs: (Leg, Transform)[], rig: Rig, time: Time, tuning: Tuning) {
 
 // The shin turns relative to its thigh.
 @system(after: [step_legs])
-fn bend_shins(s: Shin, t: Transform, legs: Lookup<Leg>) {
+fn bend_shins(shin: (Shin, Transform), legs: Lookup<Leg>) {
+    let (s, t) = shin;
     match legs.get(s.leg) {
         Some(leg) => { t.rotation = angle_diff(leg.thigh_angle, leg.shin_angle); }
         None => {}
@@ -244,6 +250,7 @@ fn swing_tail(rig: Rig, time: Time) {
 }
 
 @system(after: [swing_tail])
-fn place_tail(bit: TailBit, t: Transform, rig: Rig) {
+fn place_tail(tail_bit: (TailBit, Transform), rig: Rig) {
+    let (bit, t) = tail_bit;
     t.position = rig.tail.points[bit.index];
 }

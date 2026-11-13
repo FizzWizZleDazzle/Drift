@@ -218,7 +218,9 @@ Steering behaviors move agents smoothly toward or away from things: the engine's
 struct Chaser { wander: Wander = Wander { .. } }
 
 @system
-fn chase(c: Chaser, t: Transform, v: Velocity, time: Time, dice: Dice, players: (Player, Transform)[]) {
+fn chase(chaser: (Chaser, Transform, Velocity), time: Time, dice: Dice,
+         players: (Player, Transform)[]) {
+    let (c, t, v) = chaser;
     let force = steer_wander(v.linear, c.wander, dice.rng, 90.0) * 0.3;
     for (_, p) in players {
         force = force + steer_arrive(t.position, v.linear, p.position, 90.0, 48.0);

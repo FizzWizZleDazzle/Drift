@@ -114,7 +114,8 @@ fn restart(round: State<Round>) {
 // ---- Every frame ----
 
 @system(in_state: [Round::Playing])
-fn steer(player: Player, velocity: Velocity, input: Input) {
+fn steer(row: (Player, Velocity), input: Input) {
+    let (player, velocity) = row;
     velocity.linear = input.axis2d("move") * player.speed;
 }
 
@@ -175,12 +176,14 @@ fn hit(_: Contact<Player, Hazard>, round: State<Round>) {
 // ---- HUD ----
 
 @system
-fn score_label(_: ScoreLabel, text: Text, game: Game) {
+fn score_label(row: (ScoreLabel, Text), game: Game) {
+    let (_, text) = row;
     text.value = "Score " + string(game.score) + "    Best " + string(game.best);
 }
 
 @system
-fn hint_label(_: HintLabel, text: Text, round: State<Round>) {
+fn hint_label(row: (HintLabel, Text), round: State<Round>) {
+    let (_, text) = row;
     text.visible = round.now == Round::Over;
 }
 

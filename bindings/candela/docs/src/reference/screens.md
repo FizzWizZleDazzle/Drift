@@ -100,7 +100,7 @@ struct OnlyIn {
 
 ```rust
 @system
-fn scr_only_in(e: Entity, o: OnlyIn, state: State<Screen>, cmd: Commands)
+fn scr_only_in(only_in: (Entity, OnlyIn), state: State<Screen>, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.

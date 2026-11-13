@@ -139,7 +139,8 @@ Systems with no order between them run in the order they appear in the source.
 fn jumped(input: Input) -> bool => input.action_pressed("jump");
 
 @system(in_state: [Phase::Playing], run_if: [jumped], after: [land])
-fn jump(player: Player, v: Velocity) {
+fn jump(row: (Player, Velocity)) {
+    let (player, v) = row;
     v.linear = vec2(v.linear.x, -player.jump_speed);
 }
 ```

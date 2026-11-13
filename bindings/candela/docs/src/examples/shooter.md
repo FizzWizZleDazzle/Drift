@@ -40,7 +40,7 @@ The `Cooldown` in the player component ticks every frame; `try_use` lets one sho
 
 ## Chasing
 
-A system that takes single components runs once per enemy. Each one reads the player's position from a query and sets its own velocity toward it.
+A system that takes one row, `(Enemy, Transform, Velocity)`, runs once per enemy. Each one reads the player's position from a query and sets its own velocity toward it.
 
 ```rust
 {{#include ../../../examples/shooter/main.cdl:chase}}

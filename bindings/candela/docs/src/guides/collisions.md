@@ -121,8 +121,9 @@ The default category is 1 and the default mask is every bit.
 
 ```rust
 @system
-fn line_of_sight(_: Guard, eye: Transform, physics: Physics,
+fn line_of_sight(guard: (Guard, Transform), physics: Physics,
                  players: (Entity, Player, Transform)[]) {
+    let (_, eye) = guard;
     for (player, _, t) in players {
         let to = t.position - eye.position;
         let ray = physics.raycast(eye.position, to.normalized(), to.length());
@@ -146,7 +147,8 @@ fn spawn_bats(cmd: Commands) {
 }
 
 @system
-fn alert(_: Bat, t: Transform, me: Entity, spatial: Spatial, cmd: Commands) {
+fn alert(bat: (Bat, Transform, Entity), spatial: Spatial, cmd: Commands) {
+    let (_, t, me) = bat;
     for other in spatial.in_radius(t.position, 120.0) {
         if other.id != me.id {
             cmd.insert(other, Alerted {});

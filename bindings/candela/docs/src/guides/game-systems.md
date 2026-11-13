@@ -53,7 +53,8 @@ fn haste(f: Fighter) {
 }
 
 @system
-fn move_fighters(f: Fighter, v: Velocity, time: Time) {
+fn move_fighters(fighter: (Fighter, Velocity), time: Time) {
+    let (f, v) = fighter;
     f.stats.tick(time.dt);
     v.linear = v.linear.normalized() * f.stats.get("speed");
 }
@@ -146,7 +147,8 @@ fn begin(talk: Talk) {
 }
 
 @system
-fn show_dialogue(talk: Talk, input: Input, box: DialogueBox, text: Text) {
+fn show_dialogue(dialogue_box: (DialogueBox, Text), talk: Talk, input: Input) {
+    let (box, text) = dialogue_box;
     if !talk.now.active() {
         text.value = "";
         return;

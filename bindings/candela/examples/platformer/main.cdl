@@ -191,7 +191,8 @@ fn new_run(cmd: Commands, run: Run, time: Time, coins: (Entity, Coin)[],
 
 // ANCHOR: jump
 @system(in_state: [Phase::Playing])
-fn run_and_jump(player: Player, v: Velocity, input: Input, tuning: Tuning) {
+fn run_and_jump(row: (Player, Velocity), input: Input, tuning: Tuning) {
+    let (player, v) = row;
     // Writing Velocity sets the body's speed directly; gravity still pulls.
     v.linear = vec2(input.axis2d("move").x * tuning.run_speed, v.linear.y);
     if input.action_pressed("jump") && player.standing_on.len() > 0 {
@@ -235,7 +236,8 @@ fn leave(hit: ContactEnd<Player, Ground>, players: (Player, Transform)[]) {
 // ---- Hazards, coins and the goal ----
 
 @system(in_state: [Phase::Playing])
-fn spiked(_: Contact<Player, Spike>, players: (Player, Transform, Velocity)[], run: Run, effects: Effects) {
+fn spiked(_: Contact<Player, Spike>, players: (Player, Transform, Velocity)[], run: Run,
+          effects: Effects) {
     for (_, t, v) in players {
         t.position = run.start;   // writing a body's Transform teleports it
         v.linear = vec2(0.0, 0.0);
@@ -245,7 +247,8 @@ fn spiked(_: Contact<Player, Spike>, players: (Player, Transform, Velocity)[], r
 
 // Falling off the world counts as a spike too.
 @system(in_state: [Phase::Playing])
-fn fell(_: Player, t: Transform, v: Velocity, run: Run) {
+fn fell(player: (Player, Transform, Velocity), run: Run) {
+    let (_, t, v) = player;
     if t.position.y > 520.0 {
         t.position = run.start;
         v.linear = vec2(0.0, 0.0);
@@ -275,7 +278,8 @@ fn reach_goal(_: Overlap<Player, Goal>, run: Run, save: Save, phase: State<Phase
 }
 
 @system(on_enter: Phase::Won)
-fn stop(_: Player, v: Velocity, effects: Effects) {
+fn stop(player: (Player, Velocity), effects: Effects) {
+    let (_, v) = player;
     v.linear = vec2(0.0, 0.0);
     effects.flash(rgb(255, 255, 255), 0.4);
 }
@@ -290,7 +294,8 @@ fn play_again(phase: State<Phase>, input: Input) {
 // ---- HUD ----
 
 @system
-fn hud(_: Hud, text: Text, run: Run, time: Time, phase: State<Phase>) {
+fn hud(row: (Hud, Text), run: Run, time: Time, phase: State<Phase>) {
+    let (_, text) = row;
     if phase.now == Phase::Playing {
         run.time = time.elapsed - run.began;
     }
@@ -303,7 +308,8 @@ fn hud(_: Hud, text: Text, run: Run, time: Time, phase: State<Phase>) {
 }
 
 @system
-fn banner(_: Banner, text: Text, phase: State<Phase>) {
+fn banner(row: (Banner, Text), phase: State<Phase>) {
+    let (_, text) = row;
     text.visible = phase.now == Phase::Won;
     text.value = "You made it!\nJump to run again";
 }

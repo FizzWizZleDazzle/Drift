@@ -103,7 +103,8 @@ fn first_game(cmd: Commands, game: Game, tuning: Tuning, bricks: (Entity, Brick)
 fn restart_pressed(input: Input) -> bool => input.action_pressed("restart");
 
 @system(run_if: [restart_pressed])
-fn restart(cmd: Commands, game: Game, tuning: Tuning, bricks: (Entity, Brick)[], phase: State<Phase>) {
+fn restart(cmd: Commands, game: Game, tuning: Tuning, bricks: (Entity, Brick)[],
+           phase: State<Phase>) {
     new_game(cmd, game, tuning, bricks);
     phase.set(Phase::Serve);
 }
@@ -136,7 +137,8 @@ fn new_game(cmd: Commands, game: Game, tuning: Tuning, bricks: (Entity, Brick)[]
 // ---- The paddle ----
 
 @system
-fn move_paddle(_: Paddle, t: Transform, v: Velocity, input: Input, tuning: Tuning) {
+fn move_paddle(paddle: (Paddle, Transform, Velocity), input: Input, tuning: Tuning) {
+    let (_, t, v) = paddle;
     let x = input.axis2d("move").x * tuning.paddle_speed;
     // Stop at the walls. The paddle is kinematic, so walls do not stop it.
     if (x < 0.0 && t.position.x < PADDLE_HALF.x + 8.0) || (x > 0.0 && t.position.x > W - PADDLE_HALF.x - 8.0) {
@@ -161,7 +163,8 @@ fn hold_ball(balls: (Ball, Transform, Velocity)[], paddles: (Paddle, Transform)[
 fn launch_pressed(input: Input) -> bool => input.action_pressed("launch");
 
 @system(in_state: [Phase::Serve], run_if: [launch_pressed], after: [hold_ball])
-fn launch(_: Ball, v: Velocity, game: Game, phase: State<Phase>) {
+fn launch(ball: (Ball, Velocity), game: Game, phase: State<Phase>) {
+    let (_, v) = ball;
     v.linear = vec2(0.35, -1.0).normalized() * game.speed;
     phase.set(Phase::Playing);
 }
@@ -172,7 +175,8 @@ fn launch(_: Ball, v: Velocity, game: Game, phase: State<Phase>) {
 // Physics keeps the bounces; this keeps the speed steady and stops the
 // ball from settling into a flat, endless side-to-side path.
 @system(in_state: [Phase::Playing])
-fn keep_speed(_: Ball, v: Velocity, game: Game) {
+fn keep_speed(ball: (Ball, Velocity), game: Game) {
+    let (_, v) = ball;
     let dir = v.linear.normalized();
     if dir.length() == 0.0 {
         dir = vec2(0.0, -1.0);
@@ -246,24 +250,28 @@ fn lose_ball(_: Overlap<Ball, Pit>, game: Game, effects: Effects, sfx: Sfx, phas
 
 // When the game ends, the ball stops where it is.
 @system(on_enter: Phase::Won)
-fn won(_: Ball, v: Velocity) {
+fn won(ball: (Ball, Velocity)) {
+    let (_, v) = ball;
     v.linear = vec2(0.0, 0.0);
 }
 
 @system(on_enter: Phase::Lost)
-fn lost(_: Ball, v: Velocity) {
+fn lost(ball: (Ball, Velocity)) {
+    let (_, v) = ball;
     v.linear = vec2(0.0, 0.0);
 }
 
 // ---- HUD ----
 
 @system
-fn score_label(_: ScoreLabel, text: Text, game: Game) {
+fn score_label(row: (ScoreLabel, Text), game: Game) {
+    let (_, text) = row;
     text.value = "Score " + string(game.score) + "    Balls " + string(game.lives);
 }
 
 @system
-fn banner(_: Banner, text: Text, phase: State<Phase>) {
+fn banner(row: (Banner, Text), phase: State<Phase>) {
+    let (_, text) = row;
     text.value = match phase.now {
         Phase::Serve => "Space or click to launch",
         Phase::Playing => "",

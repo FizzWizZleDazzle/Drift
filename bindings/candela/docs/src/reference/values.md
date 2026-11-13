@@ -717,7 +717,8 @@ struct Cooldown {
 struct Gun { reload: Cooldown = cooldown(0.25) }
 
 @system
-fn fire(gun: Gun, input: Input, time: Time) {
+fn fire(row: (Entity, Gun), input: Input, time: Time) {
+    let (_, gun) = row;
     gun.reload.tick(time.dt);
     if input.action_held("fire") && gun.reload.try_use() {
         log("bang");

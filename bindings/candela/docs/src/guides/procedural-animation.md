@@ -32,7 +32,8 @@ A head that turns toward the cursor at most 4 radians a second, so it never snap
 @component struct Head {}
 
 @system
-fn watch(_: Head, t: Transform, input: Input, time: Time) {
+fn watch(head: (Head, Transform), input: Input, time: Time) {
+    let (_, t) = head;
     let want = look_at(t.position, input.mouse_world());
     t.rotation = rotate_towards(t.rotation, want, 4.0 * time.dt);
 }
@@ -51,7 +52,8 @@ For a part with a parent, compare against its world rotation: `world_transform(e
 @component struct Fin { phase: float = 0.0 }
 
 @system
-fn flap(f: Fin, t: Transform, time: Time) {
+fn flap(fin: (Fin, Transform), time: Time) {
+    let (f, t) = fin;
     t.rotation = sine_wave(time.elapsed, 2.0, 0.4, f.phase) + wobble(time.elapsed, 3.0, 0.05, 1);
 }
 ```
@@ -69,7 +71,8 @@ Breathing is a slow squash:
 
 ```rust
 @system
-fn breathe(_: Body, t: Transform, time: Time) {
+fn breathe(body: (Body, Transform), time: Time) {
+    let (_, t) = body;
     t.scale = squash(sine_wave(time.elapsed, 0.5, 0.06, 0.0));
 }
 ```
@@ -94,7 +97,8 @@ Secondary motion, a part that lags behind its parent, is a spring on the part's 
 @component struct Antenna { tip: Spring2 = Spring2 { .. }, offset: Vec2 = Vec2 { .. } }
 
 @system
-fn jiggle(a: Antenna, g: GlobalTransform, p: Parent, time: Time) {
+fn jiggle(antenna: (Antenna, GlobalTransform, Parent), time: Time) {
+    let (a, g, p) = antenna;
     let rest = to_world(p.entity, a.offset);         // where it would be if it were rigid
     g.position = a.tip.update(rest, 180.0, 8.0, time.dt);
 }
@@ -108,7 +112,8 @@ fn jiggle(a: Antenna, g: GlobalTransform, p: Parent, time: Time) {
 @component struct Leg { thigh: Entity = Entity { .. }, shin: Entity = Entity { .. }, foot: Foot = Foot { .. } }
 
 @system
-fn pose_leg(leg: Leg, g: GlobalTransform, cmd: Commands) {
+fn pose_leg(row: (Leg, GlobalTransform), cmd: Commands) {
+    let (leg, g) = row;
     let pose = two_bone_ik(g.position, leg.foot.position, 40.0, 36.0, -1.0);
     cmd.insert(leg.thigh, GlobalTransform { position: g.position, rotation: pose.upper, .. });
     cmd.insert(leg.shin, GlobalTransform { position: pose.joint, rotation: pose.lower, .. });
@@ -151,7 +156,8 @@ Joint limits make chains look like they have bones: a neck with `limit_all(0.4)`
 @component struct Tail { rope: Rope = rope(vec2(0.0, 0.0), 10, 8.0, 3.14159) }
 
 @system
-fn swing_tail(e: Entity, tail: Tail, time: Time, draw: Draw) {
+fn swing_tail(row: (Entity, Tail), time: Time, draw: Draw) {
+    let (e, tail) = row;
     tail.rope.update(to_world(e, vec2(-20.0, 0.0)), time.dt);   // hangs from 20 px behind the body
     draw.polyline(tail.rope.points, rgb(200, 120, 60), 6.0, false);
 }
@@ -176,7 +182,8 @@ A `Foot` stays planted where it landed while the body moves on, and steps when i
 @component struct Walker { left: Foot = foot(vec2(0.0, 0.0)), right: Foot = foot(vec2(0.0, 0.0)) }
 
 @system
-fn walk(w: Walker, t: Transform, time: Time) {
+fn walk(walker: (Walker, Transform), time: Time) {
+    let (w, t) = walker;
     let gait = Gait { distance: 28.0, duration: 0.15, height: 10.0, .. };
     let ground = t.position.y + 40.0;
     // Each foot steps only while the other is planted, so they take turns.

@@ -138,7 +138,8 @@ fn options_menu(input: Input, menu: Menu, options: Options, save: Save, screen: 
 
 // The option lines show their current values.
 @system(in_state: [Screen::Options], after: [options_menu])
-fn option_labels(item: MenuItem, text: Text, options: Options) {
+fn option_labels(menu_item: (MenuItem, Text), options: Options) {
+    let (item, text) = menu_item;
     let names = ["Easy", "Normal", "Hard"];
     if item.index == 0 {
         text.value = "Difficulty   < " + names[options.difficulty] + " >";
@@ -172,7 +173,8 @@ fn start_game(cmd: Commands, game: Game, options: Options, dodgers: (Entity, Dod
 // The blocks move in a system rather than by Velocity for that reason:
 // the engine keeps moving a Velocity whatever state the game is in.
 @system(in_state: [Screen::Playing])
-fn steer(_: Dodger, t: Transform, input: Input, time: Time) {
+fn steer(dodger: (Dodger, Transform), input: Input, time: Time) {
+    let (_, t) = dodger;
     let dir = 0.0;
     if input.action_held("left") {
         dir = -1.0;
@@ -213,7 +215,8 @@ fn fall(blocks: (Entity, Block, Transform)[], dodgers: (Dodger, Transform)[], ti
 }
 
 @system(in_state: [Screen::Playing])
-fn score_label(_: ScoreLabel, text: Text, game: Game) {
+fn score_label(row: (ScoreLabel, Text), game: Game) {
+    let (_, text) = row;
     text.value = "Time " + string(int(game.score)) + "    Esc: pause";
 }
 
@@ -256,7 +259,8 @@ fn close_pause(cmd: Commands, things: (Entity, OnScreen)[]) {
 
 // The selected line is bright and slightly larger.
 @system
-fn highlight(item: MenuItem, text: Text, t: Transform, menu: Menu) {
+fn highlight(menu_item: (MenuItem, Text, Transform), menu: Menu) {
+    let (item, text, t) = menu_item;
     let on = item.index == menu.selected;
     if on {
         text.color = rgb(255, 220, 110);

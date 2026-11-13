@@ -113,7 +113,8 @@ Systems with no order between them run in the order they appear in the source.
 fn jumped(input: Input) -> bool => input.action_pressed("jump");
 
 @system(in_state: [Phase::Playing], run_if: [jumped], after: [land])
-fn jump(player: Player, v: Velocity) {
+fn jump(row: (Player, Velocity)) {
+    let (player, v) = row;
     v.linear = vec2(v.linear.x, -player.jump_speed);
 }
 ```
@@ -124,9 +125,7 @@ A system's parameter types say what it receives. Drift reads them when the game 
 
 | Parameter type | Receives |
 |----------------|----------|
-| A component, such as `bird: Bird` or `t: Transform` | That component of one entity. The system runs once per entity that has every such component |
-| `Entity`, beside component parameters | The entity the call is for |
-| `_: Enemy` | Requires the component without reading it |
+| `(A, B)`, a tuple of components (a row) | One entity's components; the system runs once per entity that has every component in it. `Entity` in a place gives the entity. Take it apart with `let (a, b) = row;`, `_` skipping a place. At most one per system |
 | `(A, B)[]`, a list of tuples | One tuple per entity with every component; `Entity` in a position gives the entity's id |
 | `Row[]`, where `Row` is a `@query` struct | One row per matching entity |
 | [`Lookup<T>`](#lookup) | Every `T`, found by entity |
@@ -137,9 +136,9 @@ A system's parameter types say what it receives. Drift reads them when the game 
 | [`Commands`](#commands) | Spawning, inserting, removing and despawning, applied when the call returns |
 | An engine resource: `Time`, `Input`, `Window`, `Assets`, `Effects`, `Save`, `Random`, `Camera2D`, `Draw`, `Physics` | See [Engine Resources](resources.md) |
 
-A system may not take both a single component and a single event: it runs once per entity or once per event, not both.
+A component or an `Entity` on its own is not a parameter: a system that runs once per entity takes them together as one row, and a row of one component pairs it with `Entity`, as in `(Entity, Transform)`. A system takes at most one row, and not both a row and a single event: it runs once per entity or once per event. Each of these is an error when the game loads; see [Errors](errors.md).
 
-Drift keeps every change a system makes to the components and resources it receives, whether through a single parameter, a tuple, a row or a lookup. The lists are built when the call starts, so spawning and despawning while looping over one is safe. Rows come in the order entities were spawned, the same on every run.
+Drift keeps every change a system makes to the components and resources it receives, through a row, a list of rows, a resource or a lookup. The names a row is taken apart into share its values, so setting their fields changes the entity. The lists are built when the call starts, so spawning and despawning while looping over one is safe. Rows come in the order entities were spawned, the same on every run.
 
 ## Commands
 
@@ -407,7 +406,8 @@ cmd.spawn([at(480.0, 270.0), Circle { radius: 10.0, .. }]);
 
 ```rust
 @system
-fn aim(_: Turret, g: GlobalTransform, draw: Draw) {
+fn aim(turret: (Turret, GlobalTransform), draw: Draw) {
+    let (_, g) = turret;
     draw.line(g.position, g.position + from_angle(g.rotation) * 40.0, rgb(255, 80, 80), 2.0);
 }
 ```
@@ -895,7 +895,8 @@ The engine's resources reach a system as parameters, the same way as your own. T
 
 ```rust
 @system
-fn spin(_: Fan, t: Transform, time: Time) {
+fn spin(fan: (Fan, Transform), time: Time) {
+    let (_, t) = fan;
     t.rotation += 3.0 * time.dt;
 }
 ```
@@ -1262,7 +1263,8 @@ The game's window, or the canvas on a web page.
 
 ```rust
 @system
-fn center(_: Title, t: Transform, window: Window) {
+fn center(title: (Title, Transform), window: Window) {
+    let (_, t) = title;
     t.position = vec2(window.width * 0.5, 80.0);
 }
 ```
@@ -1972,7 +1974,9 @@ Gravity, queries about colliders, and pushes on bodies. See [Collisions and Phys
 
 ```rust
 @system
-fn line_of_sight(_: Guard, eye: Transform, physics: Physics, players: (Entity, Player, Transform)[]) {
+fn line_of_sight(guard: (Guard, Transform), physics: Physics,
+                 players: (Entity, Player, Transform)[]) {
+    let (_, eye) = guard;
     for (player, _, t) in players {
         let to = t.position - eye.position;
         let ray = physics.raycast(eye.position, to.normalized(), to.length());
@@ -4049,7 +4053,8 @@ label.value = string(int(round.left.remaining())) + " s";
 struct Gun { reload: Cooldown = cooldown(0.25) }
 
 @system
-fn fire(gun: Gun, input: Input, time: Time) {
+fn fire(row: (Entity, Gun), input: Input, time: Time) {
+    let (_, gun) = row;
     gun.reload.tick(time.dt);
     if input.action_held("fire") && gun.reload.try_use() {
         log("bang");

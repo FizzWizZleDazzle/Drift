@@ -270,14 +270,16 @@ fn take_turn(input: Input, level: Level, cmd: Commands, phase: State<Phase>,
 
 // Puts every grid entity on its cell. Runs once per entity with a Pos.
 @system(after: [take_turn])
-fn place(pos: Pos, t: Transform) {
+fn place(row: (Pos, Transform)) {
+    let (pos, t) = row;
     t.position = vec2((float(pos.cell.x) + 0.5) * CELL, TOP + (float(pos.cell.y) + 0.5) * CELL);
 }
 
 // ---- HUD ----
 
 @system
-fn status(_: Status, text: Text, level: Level, players: (Player, Pos)[]) {
+fn status(row: (Status, Text), level: Level, players: (Player, Pos)[]) {
+    let (_, text) = row;
     for (p, _) in players {
         text.value = "Depth " + string(level.depth) + "    HP " + string(p.hp) + "/" + string(p.max_hp)
             + "    Gold " + string(p.gold);
@@ -285,7 +287,8 @@ fn status(_: Status, text: Text, level: Level, players: (Player, Pos)[]) {
 }
 
 @system
-fn messages(_: Messages, text: Text, level: Level) {
+fn messages(row: (Messages, Text), level: Level) {
+    let (_, text) = row;
     text.value = level.log.join("\n");
 }
 

@@ -6,8 +6,11 @@ The Candela compiler checks the game before it runs: syntax, types, attributes a
 
 | Error | Meaning |
 |-------|---------|
-| `drift_unknown_parameter` | A system or condition parameter's type is not a component, query row, tuple list, lookup, resource, state, message, collision, `Commands` or engine resource |
-| `drift_mixed_singular` | A system takes a single component and a single event, or two single events; it runs once per entity or once per event, not both |
+| `drift_unknown_parameter` | A system or condition parameter's type is not a row, query row, tuple list, lookup, resource, state, message, collision, `Commands` or engine resource, or a row holds something that is not a component or `Entity` |
+| `drift_loose_components` | A system takes components or an `Entity` as separate parameters. A system that runs once per entity takes them as one row; the message shows the tuple to write and the `let` that takes it apart |
+| `drift_two_rows` | A system takes two rows. It runs once per entity of one row; read the others with a list such as `(Entity, Enemy)[]` |
+| `drift_row_and_event` | A system takes a row and a single collision or message. It runs once per entity or once per event, not both; take the events as a list or read the entity with a `Lookup` |
+| `drift_two_events` | A system takes two single collisions or messages. It runs once per event of one; take the other as a list |
 | `drift_unknown_condition` | `run_if:` names a function Drift cannot find |
 | `drift_condition_parameter` | A condition takes something other than resources, engine resources and queries |
 | `drift_order_cycle` | `after:` and `before:` make a loop; the message lists the systems in it |

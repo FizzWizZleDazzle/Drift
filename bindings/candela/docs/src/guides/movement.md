@@ -18,7 +18,8 @@ A player steers by setting the velocity from input:
 struct Player { speed: float = 200.0 }
 
 @system
-fn walk(player: Player, v: Velocity, input: Input) {
+fn walk(row: (Player, Velocity), input: Input) {
+    let (player, v) = row;
     v.linear = input.axis2d("move") * player.speed;
 }
 ```
@@ -36,7 +37,8 @@ On an entity with a dynamic `RigidBody`, `Velocity` is the body's velocity and w
 
 ```rust
 @system
-fn chase(enemy: Enemy, t: Transform, v: Velocity, players: (Player, Transform)[]) {
+fn chase(row: (Enemy, Transform, Velocity), players: (Player, Transform)[]) {
+    let (enemy, t, v) = row;
     for (_, target) in players {
         let to = target.position - t.position;
         v.linear = to.normalized() * enemy.speed;
@@ -53,7 +55,8 @@ Writing `Transform.position` puts an entity exactly where you say. Multiply spee
 
 ```rust
 @system
-fn bob(_: Pickup, t: Transform, time: Time) {
+fn bob(pickup: (Pickup, Transform), time: Time) {
+    let (_, t) = pickup;
     t.position = vec2(t.position.x, 200.0 + sin(time.elapsed * 3.0) * 6.0);
 }
 ```

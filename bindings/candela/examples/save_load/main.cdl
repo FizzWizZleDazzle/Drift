@@ -83,7 +83,8 @@ fn paint(input: Input, canvas: Canvas, time: Time) {
 
 // Each pixel shows its cell's color. Runs once per Pixel entity.
 @system(after: [paint, files])
-fn show_pixel(p: Pixel, r: Rectangle, canvas: Canvas) {
+fn show_pixel(pixel: (Pixel, Rectangle), canvas: Canvas) {
+    let (p, r) = pixel;
     let c = paint_color(canvas.cells[p.index]);
     if r.color.r != c.r || r.color.g != c.g || r.color.b != c.b {
         r.color = c;
@@ -91,7 +92,8 @@ fn show_pixel(p: Pixel, r: Rectangle, canvas: Canvas) {
 }
 
 @system(after: [paint])
-fn show_cursor(_: Cursor, t: Transform, canvas: Canvas) {
+fn show_cursor(cursor: (Cursor, Transform), canvas: Canvas) {
+    let (_, t) = cursor;
     t.position = place(canvas.cursor.x, canvas.cursor.y).position;
 }
 
@@ -158,7 +160,8 @@ fn files(input: Input, canvas: Canvas, save: Save) {
 // ANCHOR_END: files
 
 @system(after: [files])
-fn status(_: Status, text: Text, canvas: Canvas) {
+fn status(row: (Status, Text), canvas: Canvas) {
+    let (_, text) = row;
     text.value = "Slot " + string(canvas.slot) + "    " + canvas.message;
 }
 

@@ -95,7 +95,8 @@ fn scr_transition(screens: Screens, state: State<Screen>, time: Time, win: Windo
 struct OnlyIn { screen: Screen = Screen::Title }
 
 @system
-fn scr_only_in(e: Entity, o: OnlyIn, state: State<Screen>, cmd: Commands) {
+fn scr_only_in(only_in: (Entity, OnlyIn), state: State<Screen>, cmd: Commands) {
+    let (e, o) = only_in;
     if state.now != o.screen {
         cmd.despawn(e);
     }
@@ -139,7 +140,8 @@ fn scr_pause_keys(pause: Pause, input: Input, time: Time, screens: Screens) {
 }
 
 @system(after: [scr_pause_keys])
-fn scr_pause_menu(pause: Pause, theme: Theme, menus: (Entity, PauseMenu)[], focus: UiFocus, cmd: Commands) {
+fn scr_pause_menu(pause: Pause, theme: Theme, menus: (Entity, PauseMenu)[], focus: UiFocus,
+                  cmd: Commands) {
     let want = pause.on && pause.menu;
     if want && menus.len() == 0 {
         let a = cmd.spawn(panel(theme, anchor(CENTER, 0.0, 0.0), vec2(theme.widget_width + 80.0, 220.0)));

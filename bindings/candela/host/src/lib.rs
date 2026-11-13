@@ -288,10 +288,9 @@ enum Param {
     Commands(u16),
     Time(u16),
     Engine(u16),
-    /// One component of the entity this call is for.
-    One(String),
-    /// The entity this call is for.
-    OneEntity,
+    /// The row of the entity this call is for: a tuple of its components,
+    /// with the entity's id at `Entity` places.
+    Row { row: u16, fields: Vec<(String, Option<String>)> },
     /// The contact or overlap this call is for.
     OneContact { name: u16, kind: i32, a: String, b: String },
     /// The message this call is for.
@@ -529,19 +528,7 @@ impl Host {
                     }
                 }
                 // A tuple, or a @drift::query row struct.
-                let info = &types.table.structs[id as usize];
-                let mut fields = Vec::new();
-                for (f, t) in &info.fields {
-                    let DataType::Struct(cid) = t else { return Err(format!("row field {f} is not a component")) };
-                    let cname = types.struct_name(*cid).to_owned();
-                    if bare(&cname) == "Entity" {
-                        fields.push((f.clone(), None));
-                    } else if self.is_component(&cname) {
-                        fields.push((f.clone(), Some(cname)));
-                    } else {
-                        return Err(format!("{cname} in {} is not a component", info.name));
-                    }
-                }
+                let fields = self.row_fields(id)?;
                 let (with, without) = types
                     .table
                     .named("drift", "query")
@@ -582,11 +569,9 @@ impl Host {
                 if self.messages_kinds.contains(&name) {
                     return Ok(Param::OneMessage(name));
                 }
-                if bare(&name) == "Entity" {
-                    return Ok(Param::OneEntity);
-                }
-                if self.is_component(&name) {
-                    return Ok(Param::One(name));
+                // A tuple: the row of the entity each call is for.
+                if name.starts_with('(') {
+                    return Ok(Param::Row { row: *id, fields: self.row_fields(*id)? });
                 }
                 match bare(&name) {
                     "Commands" => Ok(Param::Commands(*id)),
@@ -603,6 +588,96 @@ impl Host {
             }
             other => Err(format!("{} is not a system parameter", types.table.type_name(other))),
         }
+    }
+
+    /// The places of a row type (a tuple or a @drift::query struct), each
+    /// with the component it holds, or None for an `Entity`.
+    fn row_fields(&self, id: u16) -> Result<Vec<(String, Option<String>)>, String> {
+        let types = &self.types;
+        let info = &types.table.structs[id as usize];
+        let mut fields = Vec::new();
+        for (f, t) in &info.fields {
+            let DataType::Struct(cid) = t else {
+                return Err(format!("{} in {} is not a component", types.table.type_name(t), info.name));
+            };
+            let cname = types.struct_name(*cid).to_owned();
+            if bare(&cname) == "Entity" {
+                fields.push((f.clone(), None));
+            } else if self.is_component(&cname) {
+                fields.push((f.clone(), Some(cname)));
+            } else {
+                return Err(format!("{cname} in {} is not a component", info.name));
+            }
+        }
+        if fields.iter().all(|(_, c)| c.is_none()) {
+            return Err(format!("{} names no component", info.name));
+        }
+        Ok(fields)
+    }
+
+    /// The row `row` of entity `e`, or None when it lacks a component.
+    fn row_value(&self, row: u16, fields: &[(String, Option<String>)], e: u64) -> Option<Value> {
+        let mut values = Vec::new();
+        for (f, c) in fields {
+            let v = match c {
+                None => self.entity_value(e),
+                Some(c) => self.component(e, c)?,
+            };
+            values.push((f.clone(), v));
+        }
+        Some(Value::Struct { name: self.types.struct_name(row).to_owned(), fields: values })
+    }
+
+    /// Keeps the components a system changed in one row of entity `e`.
+    fn write_row(&mut self, fields: &[(String, Option<String>)], old: Option<&Value>, new: Option<&Value>, e: u64) {
+        let (Some(Value::Struct { fields: of, .. }), Some(Value::Struct { fields: nf, .. })) = (old, new) else { return };
+        for (k, (_, c)) in fields.iter().enumerate() {
+            if c.is_some() && of[k].1 != nf[k].1 {
+                self.set_component(e, nf[k].1.clone());
+            }
+        }
+    }
+
+    /// The error for a system written in the old per-entity form, components
+    /// (or Entity) as separate parameters, with the row it should take.
+    fn loose_components(&self, system: &str, params: &[(String, DataType)]) -> Option<String> {
+        let loose: Vec<(&str, String)> = params
+            .iter()
+            .filter_map(|(p, t)| match t {
+                DataType::Struct(id) => {
+                    let n = self.types.struct_name(*id);
+                    (bare(n) == "Entity" || self.is_component(n)).then(|| (p.as_str(), bare(n).to_owned()))
+                }
+                _ => None,
+            })
+            .collect();
+        if loose.is_empty() {
+            return None;
+        }
+        let written: Vec<String> = loose.iter().map(|(p, t)| format!("{p}: {t}")).collect();
+        let (mut types, mut names): (Vec<String>, Vec<String>) =
+            loose.iter().map(|(p, t)| (t.clone(), (*p).to_owned())).unzip();
+        // A tuple holds at least two places: one component goes with its Entity.
+        if types.len() == 1 {
+            if types[0] == "Entity" {
+                types.push("Marker".into());
+                names.push("_".into());
+            } else {
+                types.insert(0, "Entity".into());
+                names.insert(0, "_".into());
+            }
+        }
+        let (what, them) = if loose.len() == 1 {
+            ("on its own", ", Entity and a component together,")
+        } else {
+            ("as separate parameters", "")
+        };
+        Some(format!(
+            "drift_loose_components: {system} takes {} {what}. A system that runs once per entity takes one row{them} as a tuple: fn {system}(row: ({}), ...) and inside it let ({}) = row;",
+            written.join(", "),
+            types.join(", "),
+            names.join(", ")
+        ))
     }
 
     fn component(&self, e: u64, name: &str) -> Option<Value> {
@@ -737,18 +812,9 @@ impl Host {
                 Param::Rows { row, fields, with, without } => {
                     let mut needed: Vec<String> = fields.iter().filter_map(|(_, c)| c.clone()).collect();
                     needed.extend(with.iter().cloned());
-                    let row_name = self.types.struct_name(*row).to_owned();
                     let mut rows = Vec::new();
                     for e in self.matching(&needed, without) {
-                        let mut values = Vec::new();
-                        for (f, c) in fields {
-                            let v = match c {
-                                None => self.entity_value(e),
-                                Some(c) => self.component(e, c)?,
-                            };
-                            values.push((f.clone(), v));
-                        }
-                        rows.push(Value::Struct { name: row_name.clone(), fields: values });
+                        rows.push(self.row_value(*row, fields, e)?);
                         ids.push(e);
                     }
                     Value::Array(rows)
@@ -800,14 +866,10 @@ impl Host {
                     ],
                 },
                 Param::Engine(id) => self.engine_resource(*id),
-                Param::One(c) => {
+                Param::Row { row, fields } => {
                     let Focus::Entity(e) = focus else { return None };
                     ids.push(*e);
-                    self.component(*e, c)?
-                }
-                Param::OneEntity => {
-                    let Focus::Entity(e) = focus else { return None };
-                    self.entity_value(*e)
+                    self.row_value(*row, fields, *e)?
                 }
                 Param::OneContact { name, .. } => {
                     let Focus::Contact(a, b, pn, swapped) = focus else { return None };
@@ -848,12 +910,12 @@ impl Host {
                 Param::Rows { fields, .. } => {
                     let (Value::Array(o), Value::Array(n)) = (old, new) else { continue };
                     for (r, e) in entities[i].iter().enumerate() {
-                        let (Some(Value::Struct { fields: of, .. }), Some(Value::Struct { fields: nf, .. })) = (o.get(r), n.get(r)) else { continue };
-                        for (k, (_, c)) in fields.iter().enumerate() {
-                            if c.is_some() && of[k].1 != nf[k].1 {
-                                self.set_component(*e, nf[k].1.clone());
-                            }
-                        }
+                        self.write_row(fields, o.get(r), n.get(r), *e);
+                    }
+                }
+                Param::Row { fields, .. } => {
+                    if let Some(e) = entities[i].first() {
+                        self.write_row(fields, Some(old), Some(new), *e);
                     }
                 }
                 Param::Lookup { .. } => {
@@ -864,11 +926,6 @@ impl Host {
                                 self.set_component(*e, v.clone());
                             }
                         }
-                    }
-                }
-                Param::One(_) => {
-                    if let Some(e) = entities[i].first() {
-                        self.set_component(*e, new.clone());
                     }
                 }
                 Param::Resource(name) => {
@@ -1061,23 +1118,16 @@ impl Host {
         true
     }
 
-    /// The calls a system makes this frame: one, or one per matching entity
-    /// for singular component parameters, or one per event for a singular
+    /// The calls a system makes this frame: one, or one per entity that has
+    /// every component of its row parameter, or one per event for a single
     /// contact or message parameter.
     fn foci(&self, sys: &System) -> Vec<Focus> {
-        let singular: Vec<String> = sys
-            .params
-            .iter()
-            .filter_map(|p| match p {
-                Param::One(c) => Some(c.clone()),
-                _ => None,
-            })
-            .collect();
-        if !singular.is_empty() {
-            return self.matching(&singular, &[]).into_iter().map(Focus::Entity).collect();
-        }
         for p in &sys.params {
             match p {
+                Param::Row { fields, .. } => {
+                    let needed: Vec<String> = fields.iter().filter_map(|(_, c)| c.clone()).collect();
+                    return self.matching(&needed, &[]).into_iter().map(Focus::Entity).collect();
+                }
                 Param::OneContact { kind, a, b, .. } => {
                     let mut out = Vec::new();
                     for &(k, x, y, pn) in &self.contacts {
@@ -1876,6 +1926,10 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     let mut errors = Vec::new();
     for a in host.types.table.named("drift", "system") {
         let AttributeTarget::Fn { name, params } = &a.target else { continue };
+        if let Some(why) = host.loose_components(name, params) {
+            errors.push(why);
+            continue;
+        }
         let mut ps = Vec::new();
         for (pname, ty) in params {
             match host.classify(ty) {
@@ -1883,10 +1937,33 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
                 Err(why) => errors.push(format!("drift_unknown_parameter: {name}({pname}): {why}")),
             }
         }
-        let per_entity = ps.iter().any(|p| matches!(p, Param::One(_) | Param::OneEntity));
-        let per_event = ps.iter().filter(|p| matches!(p, Param::OneContact { .. } | Param::OneMessage(_))).count();
-        if (per_entity && per_event > 0) || per_event > 1 {
-            errors.push(format!("drift_mixed_singular: {name} runs once per entity or once per event, not both"));
+        let rows: Vec<&String> = params
+            .iter()
+            .zip(&ps)
+            .filter(|(_, p)| matches!(p, Param::Row { .. }))
+            .map(|((pname, _), _)| pname)
+            .collect();
+        let events: Vec<&String> = params
+            .iter()
+            .zip(&ps)
+            .filter(|(_, p)| matches!(p, Param::OneContact { .. } | Param::OneMessage(_)))
+            .map(|((pname, _), _)| pname)
+            .collect();
+        if rows.len() > 1 {
+            errors.push(format!(
+                "drift_two_rows: {name} takes the rows {} and {}. A system runs once per entity for one row; read other entities with a query such as (Entity, Enemy)[]",
+                rows[0], rows[1]
+            ));
+        } else if !rows.is_empty() && !events.is_empty() {
+            errors.push(format!(
+                "drift_row_and_event: {name} takes the row {} and the event {}. A system runs once per entity or once per event, not both; take the events as a list, such as Contact<A, B>[], or read the entity with a Lookup",
+                rows[0], events[0]
+            ));
+        } else if events.len() > 1 {
+            errors.push(format!(
+                "drift_two_events: {name} takes the events {} and {}. A system runs once per event for one of them; take the other as a list, such as Overlap<A, B>[]",
+                events[0], events[1]
+            ));
         }
         let startup = matches!(a.arg("schedule"), Some(AttributeValue::Variant { name: v, .. }) if v == "Startup");
         let enabled = !matches!(a.arg("enabled"), Some(AttributeValue::Bool(false)));

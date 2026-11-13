@@ -49,7 +49,7 @@ struct TopDownController {
 
 ```rust
 @system
-fn ctl_top_down(c: TopDownController, v: Velocity, input: Input, time: Time)
+fn ctl_top_down(top_down_controller: (TopDownController, Velocity), input: Input, time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -129,7 +129,7 @@ fn on_ground(e: Entity, t: Transform, c: PlatformerController, physics: Physics)
 
 ```rust
 @system
-fn ctl_platformer(e: Entity, c: PlatformerController, v: Velocity, t: Transform, input: Input, time: Time, physics: Physics, cmd: Commands)
+fn ctl_platformer(platformer_controller: (Entity, PlatformerController, Velocity, Transform), input: Input, time: Time, physics: Physics, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -157,7 +157,7 @@ struct ShipController {
 
 ```rust
 @system
-fn ctl_ship(c: ShipController, v: Velocity, t: Transform, input: Input, time: Time)
+fn ctl_ship(ship_controller: (ShipController, Velocity, Transform), input: Input, time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.

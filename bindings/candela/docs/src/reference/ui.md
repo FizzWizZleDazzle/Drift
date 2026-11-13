@@ -158,7 +158,7 @@ fn anchor(to: Vec2, x: float, y: float) -> Anchor
 
 ```rust
 @system
-fn ui_anchor(a: Anchor, t: Transform, win: Window, theme: Theme)
+fn ui_anchor(anchor: (Anchor, Transform), win: Window, theme: Theme)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -249,7 +249,7 @@ fn resource_string(path: string) -> string
 
 ```rust
 @system
-fn ui_bind(b: Bind, text: Text, time: Time)
+fn ui_bind(bind: (Bind, Text), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -271,7 +271,7 @@ struct ClockBind {
 
 ```rust
 @system
-fn ui_clock(c: ClockBind, text: Text)
+fn ui_clock(clock_bind: (ClockBind, Text))
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -291,7 +291,7 @@ struct PartOf {
 
 ```rust
 @system
-fn ui_parts(e: Entity, p: PartOf, cmd: Commands)
+fn ui_parts(part_of: (Entity, PartOf), cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -335,7 +335,7 @@ Spawns a bar `size` pixels at `at` and answers its entity: `spawn_bar(cmd, theme
 
 ```rust
 @system(after: [ui_anchor])
-fn ui_bars(bar: Bar, back: Rectangle, t: Transform, time: Time, cmd: Commands)
+fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -369,7 +369,7 @@ fn icon_row(at: Anchor, count: int, max: int) -> any[]
 
 ```rust
 @system(after: [ui_anchor])
-fn ui_icon_rows(e: Entity, row: IconRow, t: Transform, cmd: Commands)
+fn ui_icon_rows(icon_row: (Entity, IconRow, Transform), cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -499,7 +499,7 @@ Moves the focus between the visible widgets in `order`.
 
 ```rust
 @system(after: [ui_anchor, ui_focus_nav])
-fn ui_widgets(e: Entity, w: Widget, r: Rectangle, t: Transform, input: Input, focus: UiFocus, time: Time, cmd: Commands)
+fn ui_widgets(widget: (Entity, Widget, Rectangle, Transform), input: Input, focus: UiFocus, time: Time, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -530,7 +530,7 @@ fn reveal(shown: bool, slide: Vec2) -> Reveal
 
 ```rust
 @system(before: [ui_anchor])
-fn ui_reveal_rects(rv: Reveal, a: Anchor, r: Rectangle, time: Time)
+fn ui_reveal_rects(reveal: (Reveal, Anchor, Rectangle), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -539,7 +539,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ```rust
 @system(before: [ui_anchor])
-fn ui_reveal_texts(rv: Reveal, a: Anchor, text: Text, time: Time)
+fn ui_reveal_texts(reveal: (Reveal, Anchor, Text), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -596,7 +596,7 @@ fn finish(self)
 
 ```rust
 @system
-fn ui_typewriter(tw: Typewriter, text: Text, time: Time)
+fn ui_typewriter(typewriter: (Typewriter, Text), time: Time)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -637,7 +637,7 @@ fn dialog_box(cmd: Commands, theme: Theme, id: string, pages: string[]) -> Entit
 
 ```rust
 @system(after: [ui_anchor])
-fn ui_dialogs(e: Entity, d: DialogBox, r: Rectangle, t: Transform, input: Input, writers: Lookup<Typewriter>, cmd: Commands)
+fn ui_dialogs(dialog_box: (Entity, DialogBox, Rectangle, Transform), input: Input, writers: Lookup<Typewriter>, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -664,7 +664,7 @@ fn screen_point_of(e: Entity, camera: Camera2D) -> Vec2
 
 ```rust
 @system(before: [ui_anchor])
-fn ui_follow_world(e: Entity, f: FollowWorld, a: Anchor, camera: Camera2D, win: Window, theme: Theme, cmd: Commands)
+fn ui_follow_world(follow_world: (Entity, FollowWorld, Anchor), camera: Camera2D, win: Window, theme: Theme, cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -687,7 +687,7 @@ struct OffscreenArrow {
 
 ```rust
 @system
-fn ui_offscreen_arrows(a: OffscreenArrow, camera: Camera2D, win: Window, theme: Theme, draw: Draw)
+fn ui_offscreen_arrows(offscreen_arrow: (Entity, OffscreenArrow), camera: Camera2D, win: Window, theme: Theme, draw: Draw)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -723,7 +723,7 @@ struct RadarBlip {
 
 ```rust
 @system(after: [ui_anchor])
-fn ui_radars(r: Radar, t: Transform, blips: (Entity, RadarBlip)[], draw: Draw)
+fn ui_radars(radar: (Radar, Transform), blips: (Entity, RadarBlip)[], draw: Draw)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -755,7 +755,7 @@ fn nine_slice_panel(image: Texture, border: float, at: Anchor, size: Vec2) -> an
 
 ```rust
 @system(after: [ui_anchor])
-fn ui_nine_slices(n: NineSlice, a: Anchor, t: Transform, draw: Draw)
+fn ui_nine_slices(nine_slice: (NineSlice, Anchor, Transform), draw: Draw)
 ```
 
 A system the module adds: it runs in every game that imports the module.
@@ -786,7 +786,7 @@ struct IconOf {
 
 ```rust
 @system(after: [ui_anchor])
-fn ui_icons(e: Entity, i: IconOf, text: Text, t: Transform, cmd: Commands)
+fn ui_icons(icon_of: (Entity, IconOf, Text, Transform), cmd: Commands)
 ```
 
 A system the module adds: it runs in every game that imports the module.

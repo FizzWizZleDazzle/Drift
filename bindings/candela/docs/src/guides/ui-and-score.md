@@ -29,7 +29,8 @@ Take the text as a parameter and assign `value`:
 struct ScoreLabel {}
 
 @system
-fn show_score(_: ScoreLabel, text: Text, score: Score) {
+fn show_score(label: (ScoreLabel, Text), score: Score) {
+    let (_, text) = label;
     text.value = "Score " + string(score.value);
 }
 ```
@@ -119,7 +120,8 @@ fn hud(cmd: Commands) {
 }
 
 @system
-fn show_score(_: ScoreLabel, text: Text, score: Score) {
+fn show_score(label: (ScoreLabel, Text), score: Score) {
+    let (_, text) = label;
     text.value = "Score " + string(score.value) + "    Best " + string(score.best);
 }
 ```
@@ -267,7 +269,8 @@ They work with every input:
 cmd.spawn(plus(label(theme, "Paused", anchor(CENTER, 0.0, 0.0)), [reveal(false, vec2(0.0, -40.0))]));
 
 @system
-fn show_pause(rv: Reveal, _: PauseLabel, state: State<Screen>) {
+fn show_pause(reveal: (Reveal, PauseLabel), state: State<Screen>) {
+    let (rv, _) = reveal;
     rv.shown = state.now == Screen::Paused;
 }
 ```

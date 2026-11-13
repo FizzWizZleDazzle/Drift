@@ -37,7 +37,8 @@ Turn an emitter on and off by writing `playing`, and start one over, bursts and 
 
 ```rust
 @system
-fn thrusters(_: Ship, emitter: ParticleEmitter, input: Input) {
+fn thrusters(ship: (Ship, ParticleEmitter), input: Input) {
+    let (_, emitter) = ship;
     emitter.playing = input.action_held("thrust");
 }
 ```

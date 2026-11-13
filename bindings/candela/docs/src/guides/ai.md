@@ -20,7 +20,8 @@ enum Mode { Patrol, Chase, Flee }
 struct Guard { brain: Fsm<Mode> = fsm(Mode::Patrol), speed: float = 60.0 }
 
 @system
-fn think(g: Guard, t: Transform, v: Velocity, time: Time, players: (Player, Transform)[]) {
+fn think(guard: (Guard, Transform, Velocity), time: Time, players: (Player, Transform)[]) {
+    let (g, t, v) = guard;
     g.brain.tick(time.dt);
     let target = players[0].1.position;
     let near = t.position.distance(target) < 120.0;
@@ -56,7 +57,8 @@ When an NPC weighs several options, score each one and take the best. Build a `C
 enum Action { Eat, Sleep, Wander }
 
 @system
-fn decide(n: Villager, rng: VillageRng) {
+fn decide(villager: (Entity, Villager), rng: VillageRng) {
+    let (_, n) = villager;
     let pick = choice<Action>()
         .consider(Action::Eat, 1.0 - n.food)
         .consider(Action::Sleep, 1.0 - n.energy)

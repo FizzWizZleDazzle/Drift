@@ -29,7 +29,8 @@ struct Time {
 
 ```rust
 @system
-fn spin(_: Fan, t: Transform, time: Time) {
+fn spin(fan: (Fan, Transform), time: Time) {
+    let (_, t) = fan;
     t.rotation += 3.0 * time.dt;
 }
 ```
@@ -617,7 +618,8 @@ struct Window {
 
 ```rust
 @system
-fn center(_: Title, t: Transform, window: Window) {
+fn center(title: (Title, Transform), window: Window) {
+    let (_, t) = title;
     t.position = vec2(window.width * 0.5, 80.0);
 }
 ```
@@ -2002,7 +2004,9 @@ struct Physics {
 
 ```rust
 @system
-fn line_of_sight(_: Guard, eye: Transform, physics: Physics, players: (Entity, Player, Transform)[]) {
+fn line_of_sight(guard: (Guard, Transform), physics: Physics,
+                 players: (Entity, Player, Transform)[]) {
+    let (_, eye) = guard;
     for (player, _, t) in players {
         let to = t.position - eye.position;
         let ray = physics.raycast(eye.position, to.normalized(), to.length());
