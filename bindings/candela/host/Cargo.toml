@@ -1,6 +1,6 @@
 [package]
 name = "drift-candela-host"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "Runs Candela games inside the Drift engine: reads @drift attributes, stores script components and calls systems every frame"
 publish = false

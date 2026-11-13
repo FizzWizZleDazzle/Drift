@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "drift-candela-host"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "candela-lang",
  "serde_json",
