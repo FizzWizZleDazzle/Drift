@@ -27,6 +27,8 @@ public:
     std::unordered_map<EntityId, PhysicsBody> entityToBody;
     // shape uint64 (packed b2ShapeId) -> EntityId
     std::unordered_map<uint64_t, EntityId> shapeToEntity;
+    // Entities with shapes by the low 32 bits of their id, for entityOfShape.
+    std::unordered_map<uint32_t, EntityId> entityByIndex;
     // The body and collider settings each body was made from; a body whose
     // settings change is made again.
     std::unordered_map<EntityId, std::string> bodySettings;
@@ -52,6 +54,8 @@ public:
         entityToBody.erase(e);
         bodySettings.erase(e);
         syncedVelocity.erase(e);
+        auto byIndex = entityByIndex.find(static_cast<uint32_t>(e));
+        if (byIndex != entityByIndex.end() && byIndex->second == e) entityByIndex.erase(byIndex);
         for (auto it = shapeToEntity.begin(); it != shapeToEntity.end();) {
             if (it->second == e) it = shapeToEntity.erase(it);
             else ++it;
@@ -82,6 +86,22 @@ static inline uint64_t shape_to_u64(PhysicsShape shape) {
     uint64_t v;
     std::memcpy(&v, &shape, sizeof(v));
     return v;
+}
+
+// The entity a collider shape belongs to. The bridge map first: it keeps
+// the whole 64-bit id, while shape user data is pointer-sized and on wasm32
+// loses the generation of a reused entity id, which entityByIndex restores.
+inline EntityId entityOfShape(const PhysicsBridge& bridge, const PhysicsResource& physics, uint64_t shapeU64) {
+    auto it = bridge.shapeToEntity.find(shapeU64);
+    if (it != bridge.shapeToEntity.end()) return it->second;
+    void* userData = physics.getShapeUserData(u64_to_shape(shapeU64));
+    if (!userData) return InvalidEntityId;
+    auto id = static_cast<EntityId>(reinterpret_cast<uintptr_t>(userData));
+    if (sizeof(uintptr_t) < sizeof(EntityId)) {
+        auto byIndex = bridge.entityByIndex.find(static_cast<uint32_t>(id));
+        if (byIndex != bridge.entityByIndex.end()) return byIndex->second;
+    }
+    return id;
 }
 
 // Makes, remakes and removes the joints of Joint2D components. A joint waits
@@ -239,6 +259,7 @@ inline void physics_sync_to_box2d(App& app) {
             bridge->bodySettings[entity] = settings;
             uint64_t shapeKey = shape_to_u64(shape);
             bridge->shapeToEntity[shapeKey] = entity;
+            bridge->entityByIndex[static_cast<uint32_t>(entity)] = entity;
 
             // Store entity ID as shape user data for fast contact lookup
             physics->setShapeUserData(shape, reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
@@ -287,6 +308,7 @@ inline void physics_sync_to_box2d(App& app) {
             bridge->bodySettings[entity] = settings;
             uint64_t shapeKey = shape_to_u64(shape);
             bridge->shapeToEntity[shapeKey] = entity;
+            bridge->entityByIndex[static_cast<uint32_t>(entity)] = entity;
 
             physics->setShapeUserData(shape, reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
         });
@@ -434,16 +456,7 @@ inline void physics_emit_events(App& app) {
     auto* sensorStartEvents = app.getResource<Events<SensorStart>>();
     auto* sensorEndEvents = app.getResource<Events<SensorEnd>>();
 
-    auto lookupEntity = [&](uint64_t shapeU64) -> EntityId {
-        PhysicsShape shape = u64_to_shape(shapeU64);
-        void* userData = physics->getShapeUserData(shape);
-        if (userData) {
-            return static_cast<EntityId>(reinterpret_cast<uintptr_t>(userData));
-        }
-        // Fallback: check bridge map
-        auto it = bridge->shapeToEntity.find(shapeU64);
-        return it != bridge->shapeToEntity.end() ? it->second : InvalidEntityId;
-    };
+    auto lookupEntity = [&](uint64_t shapeU64) { return entityOfShape(*bridge, *physics, shapeU64); };
 
     // Contact begin events
     if (collisionStartEvents) {

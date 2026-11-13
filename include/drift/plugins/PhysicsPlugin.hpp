@@ -150,15 +150,7 @@ public:
             if (!cb || !physics || !bridge) return;
             cb->clear();
 
-            auto lookupEntity = [&](uint64_t shapeU64) -> EntityId {
-                PhysicsShape shape = u64_to_shape(shapeU64);
-                void* userData = physics->getShapeUserData(shape);
-                if (userData) {
-                    return static_cast<EntityId>(reinterpret_cast<uintptr_t>(userData));
-                }
-                auto it = bridge->shapeToEntity.find(shapeU64);
-                return it != bridge->shapeToEntity.end() ? it->second : InvalidEntityId;
-            };
+            auto lookupEntity = [&](uint64_t shapeU64) { return entityOfShape(*bridge, *physics, shapeU64); };
 
             for (auto& ce : physics->contactBeginEvents()) {
                 EntityId ea = lookupEntity(ce.shapeA);
