@@ -34,7 +34,10 @@ public:
     void blend(int32_t x, int32_t y, Color c);
 
     void fill(Color c);
+    // Set the pixels to `c` as it is, alpha included; a transparent color
+    // cuts a hole.
     void fillRect(Rect r, Color c);
+    void fillCircle(Vec2 center, float radius, Color c);
     // From `a` at the left (or top, when vertical) to `b` at the other side.
     void fillGradient(Color a, Color b, bool vertical);
 

@@ -1,6 +1,9 @@
 // Physics bodies, queries and joints, and the spatial index for things without colliders.
 
 import "drift/core/values" { * };
+import "drift/core/assets" { * };
+import "drift/core/components" { * };
+import "drift/core/rendering" { * };
 
 // ---- Physics ----
 
@@ -64,6 +67,44 @@ impl Physics {
     fn apply_angular_impulse(self, e: Entity, impulse: float) { drift::physics_push(3, e.id, impulse, 0.0); }
     // Draws every collider's outline over the game.
     fn set_debug_draw(self, on: bool) { drift::physics_debug(on); }
+    // Makes every TextureCollider showing the texture again next frame,
+    // from `pixels`: call it after changing the image and writing it into
+    // the texture, such as carving a hole in terrain with
+    // Image.fill_circle and Texture.update. It traces the whole image, so
+    // do it when the pixels change, not every frame. With Image {} the
+    // texture is read back from the GPU instead, which costs more.
+    fn rebuild_shapes(self, t: Texture, pixels: Image) { drift::physics_rebuild_shapes(t.id, pixels.id); }
+}
+
+fn outline_list(flat: float[]) -> Vec2[][] {
+    // count, then that many x, y pairs, for each outline.
+    let out: Vec2[][] = [];
+    let i = 0;
+    while i < flat.len() {
+        let n = int(flat[i]);
+        let points: Vec2[] = [];
+        for k in range(n) {
+            points.push(Vec2 { x: flat[i + 1 + k * 2], y: flat[i + 2 + k * 2] });
+        }
+        out.push(points);
+        i = i + 1 + n * 2;
+    }
+    return out;
+}
+
+// The outlines a TextureCollider with settings `c` traces in `frame` of
+// the texture (Rect {} for all of it), in pixels from the frame's
+// top-left corner, to draw or check. Solid outlines wind clockwise on
+// screen and holes the other way. Worked out once and kept, like the
+// collider's.
+fn texture_outlines(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][] {
+    return outline_list(drift::physics_texture_shapes(t.id, rect_list(frame), c.threshold, c.tolerance, c.min_area, false));
+}
+
+// The convex pieces, of at most 8 points, that cover those outlines: the
+// shapes a dynamic body gets.
+fn texture_pieces(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][] {
+    return outline_list(drift::physics_texture_shapes(t.id, rect_list(frame), c.threshold, c.tolerance, c.min_area, true));
 }
 
 enum JointKind { Distance, Revolute, Prismatic, Weld }

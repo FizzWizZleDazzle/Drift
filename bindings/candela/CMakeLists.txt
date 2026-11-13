@@ -298,4 +298,10 @@ if(DRIFT_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "gameplay checks passed"
         FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
         TIMEOUT 60)
+    add_test(NAME candela_texture_colliders COMMAND drift_run run ${CMAKE_CURRENT_SOURCE_DIR}/tests/texture_colliders.cdl)
+    set_tests_properties(candela_texture_colliders PROPERTIES
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy"
+        PASS_REGULAR_EXPRESSION "texture collider checks passed"
+        FAIL_REGULAR_EXPRESSION "FAIL|\\[ERROR\\]"
+        TIMEOUT 60)
 endif()

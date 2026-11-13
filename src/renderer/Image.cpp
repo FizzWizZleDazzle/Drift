@@ -99,6 +99,18 @@ void Image::fillRect(Rect r, Color c) {
         for (int32_t x = x0; x < x1; ++x) set(x, y, c);
 }
 
+void Image::fillCircle(Vec2 center, float radius, Color c) {
+    int32_t y0 = std::max(0, static_cast<int32_t>(std::floor(center.y - radius)));
+    int32_t y1 = std::min(height_, static_cast<int32_t>(std::ceil(center.y + radius)));
+    int32_t x0 = std::max(0, static_cast<int32_t>(std::floor(center.x - radius)));
+    int32_t x1 = std::min(width_, static_cast<int32_t>(std::ceil(center.x + radius)));
+    for (int32_t y = y0; y < y1; ++y)
+        for (int32_t x = x0; x < x1; ++x) {
+            float dx = x + 0.5f - center.x, dy = y + 0.5f - center.y;
+            if (dx * dx + dy * dy <= radius * radius) set(x, y, c);
+        }
+}
+
 void Image::fillGradient(Color a, Color b, bool vertical) {
     int32_t n = vertical ? height_ : width_;
     for (int32_t i = 0; i < n; ++i) {

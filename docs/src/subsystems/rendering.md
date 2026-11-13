@@ -186,7 +186,7 @@ TextureHandle tex = renderer->createTextureFromPixels(img.data(), img.width(), i
 img.set(10, 10, Color{255, 255, 0, 255});
 renderer->updateTexture(tex, 0, 0, img.width(), img.height(), img.data());
 
-// A render target as its last frame left it.
+// Any texture's pixels; a render target as its last frame left it.
 Image shot = renderer->readTexture(minimap);
 shot.savePng("minimap.png");
 ```
@@ -195,12 +195,12 @@ shot.savePng("minimap.png");
 |--------|------|
 | `Image(w, h, fill)`, `Image::load(path)`, `savePng(path)` | Make, load (PNG, JPG, BMP, TGA, GIF) and save |
 | `get(x, y)`, `set(x, y, c)`, `blend(x, y, c)` | One pixel; outside the image reads transparent and writes are skipped |
-| `fill(c)`, `fillRect(r, c)`, `fillGradient(a, b, vertical)` | Areas |
+| `fill(c)`, `fillRect(r, c)`, `fillCircle(center, radius, c)`, `fillGradient(a, b, vertical)` | Areas, set as they are, alpha included: a transparent color cuts a hole |
 | `drawLine`, `drawRect`, `drawCircle`, `drawCircleOutline` | Shapes, blended by alpha |
 | `blit(src, x, y, srcRect, blend)`, `crop(r)`, `flipX()`, `flipY()` | Copy, cut and mirror |
 | `data()`, `width()`, `height()` | The pixels, for `createTextureFromPixels` and `updateTexture` |
 
-`RendererResource::readTexture` reads render targets only; for an image file, use `Image::load`.
+`RendererResource::readTexture` reads any texture back from the GPU. The read waits for the GPU, so do it when the pixels are needed, not every frame.
 
 ## Resolution and Scale Modes
 

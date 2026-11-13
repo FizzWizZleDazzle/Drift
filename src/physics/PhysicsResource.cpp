@@ -423,6 +423,47 @@ PhysicsShape PhysicsResource::addPolygon(PhysicsBody body, const Vec2* vertices,
     return from_b2_shape(sid);
 }
 
+PhysicsChain PhysicsResource::addLoop(PhysicsBody body, const Vec2* points, int32_t count, const ShapeDef& def,
+                                      void* userData) {
+    PhysicsChain handle{};
+    b2BodyId bid = to_b2(body);
+    if (!b2Body_IsValid(bid) || !points || count < 3) return handle;
+
+    // Box2D needs neighbouring points further apart than its linear slop
+    // (0.005 length units per meter) and at least 4 of them.
+    const float minGap = 0.01f * b2GetLengthUnitsPerMeter();
+    std::vector<b2Vec2> pts;
+    pts.reserve(static_cast<size_t>(count) + 1);
+    for (int32_t i = 0; i < count; ++i) {
+        b2Vec2 p = to_b2_vec2(points[i]);
+        if (!pts.empty() && b2Distance(pts.back(), p) < minGap) continue;
+        pts.push_back(p);
+    }
+    while (pts.size() > 1 && b2Distance(pts.back(), pts.front()) < minGap) pts.pop_back();
+    if (pts.size() < 3) return handle;
+    if (pts.size() == 3) {
+        // Split the longest side.
+        size_t longest = 0;
+        for (size_t i = 1; i < 3; ++i)
+            if (b2Distance(pts[i], pts[(i + 1) % 3]) > b2Distance(pts[longest], pts[(longest + 1) % 3])) longest = i;
+        b2Vec2 mid = b2Lerp(pts[longest], pts[(longest + 1) % 3], 0.5f);
+        pts.insert(pts.begin() + static_cast<std::ptrdiff_t>(longest) + 1, mid);
+    }
+
+    b2ChainDef cd = b2DefaultChainDef();
+    cd.points = pts.data();
+    cd.count = static_cast<int32_t>(pts.size());
+    cd.isLoop = true;
+    cd.friction = def.friction;
+    cd.restitution = def.restitution;
+    cd.filter.categoryBits = def.filter.category;
+    cd.filter.maskBits = def.filter.mask;
+    cd.userData = userData;
+    b2ChainId cid = b2CreateChain(bid, &cd);
+    std::memcpy(&handle, &cid, sizeof(handle));
+    return handle;
+}
+
 PhysicsShape PhysicsResource::addCapsule(PhysicsBody body, Vec2 p1, Vec2 p2, float radius, const ShapeDef& def) {
     PhysicsShape handle{};
     b2BodyId bid = to_b2(body);

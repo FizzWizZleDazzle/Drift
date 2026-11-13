@@ -92,7 +92,7 @@ art.photo.set_filter(Filter::Linear);
 fn to_image(self) -> Image
 ```
 
-A render target's pixels as its last frame left them. Raises drift_load_failed for other textures; load their file with Assets.image instead.
+The texture's pixels, read back from the GPU: a render target as its last frame left it. The read waits for the GPU, so do it when you need the pixels, not every frame.
 
 ```rust
 let img = minimap.to_image();
@@ -577,6 +577,18 @@ Sets the pixels in a rect to one color.
 
 ```rust
 img.fill_rect(rect(0.0, 0.0, 8.0, 8.0), rgb(255, 255, 255));
+```
+
+### Image.fill_circle
+
+```rust
+fn fill_circle(self, center: Vec2, radius: float, c: Color)
+```
+
+Sets the pixels in a circle to one color, alpha included: a transparent color cuts a round hole.
+
+```rust
+img.fill_circle(vec2(40.0, 40.0), 12.0, rgba(0, 0, 0, 0));
 ```
 
 ### Image.gradient

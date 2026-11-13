@@ -77,6 +77,60 @@ gravity = [0, 900]
 
 A top-down game sets `[0, 0]`. `Physics` changes it while running with `set_gravity`, and `RigidBody.gravity_scale` scales it for one body.
 
+## Colliders from images
+
+A `TextureCollider` takes its shape from the entity's `Sprite`: every pixel whose alpha is at least `threshold` is solid, and the collider follows the outline of those pixels, holes included. Use it for rocks, characters and terrain whose shape a box or circle does not fit:
+
+```rust
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    // A ring: a disc with a hole in it.
+    let img = assets.create_image(64, 64, rgba(0, 0, 0, 0));
+    img.circle(vec2(32.0, 32.0), 30.0, rgb(230, 180, 60));
+    img.fill_circle(vec2(32.0, 32.0), 16.0, rgba(0, 0, 0, 0));
+    let ring = img.to_texture();
+    for i in range(10) {
+        cmd.spawn([at(100.0 + float(i) * 70.0, 50.0), Sprite { image: ring, .. },
+                   RigidBody { .. }, TextureCollider { .. }, Velocity { .. }]);
+    }
+    // Ground from a picture: no RigidBody, so it is static.
+    cmd.spawn([at(0.0, 400.0), Sprite { image: texture("ground.png"), anchor: vec2(0.0, 0.0), .. },
+               TextureCollider { .. }]);
+}
+```
+
+![Rings, blobs and Ls resting on uneven ground, with the debug drawing of their outlines](../images/collisions/texture-colliders.png)
+
+The debug drawing (`physics.set_debug_draw(true)`, or F3 with [the debug overlay](debugging.md#the-debug-overlay-in-every-build)) shows what the collider is made of. Static ground gets the outlines themselves, which are cheap even for a large picture with caves in it; they push bodies out from the empty side only, so a body that starts inside solid ground stays there. A dynamic or kinematic body, or a sensor, gets the solid area cut into convex pieces of at most 8 corners, since that is what Box2D can move.
+
+The outline is simplified: `tolerance` is how far, in image pixels, it may stray from the pixels, so a sprite becomes a few dozen points rather than one per pixel. Raise it for fewer points, lower it to follow the pixels closely. Solid specks and holes smaller than `min_area` square pixels are dropped, so a stray pixel does not become a collider.
+
+The collider follows the sprite's `frame`, `anchor`, `flip_x` and `flip_y` and the `Transform`'s scale as they are when the body is made. Tracing happens once per image, frame and settings: a hundred enemies showing one sprite share one tracing. For an animated sprite whose shape changes from frame to frame, set `follow_sprite: true` to make the collider again whenever the frame, anchor, a flip or the scale changes; each change makes a new body, so leave it off when one shape fits every frame.
+
+### Changing the ground
+
+Terrain you carve holes into is an `Image` you keep, change, write into its texture, and then rebuild the shapes from:
+
+```rust
+@resource
+struct Ground { image: Image = Image { .. }, texture: Texture = Texture { .. } }
+
+@message
+struct Explosion { at: Vec2 = Vec2 { .. } }
+
+@system
+fn crater(blast: Explosion, ground: Ground, physics: Physics) {
+    // The ground sprite's top-left corner is at (0, 400).
+    ground.image.fill_circle(blast.at - vec2(0.0, 400.0), 40.0, rgba(0, 0, 0, 0));
+    ground.texture.update(ground.image);
+    physics.rebuild_shapes(ground.texture, ground.image);
+}
+```
+
+`rebuild_shapes` traces the whole image again, so call it when the pixels change rather than every frame. Passing the image saves reading the texture back from the GPU; with `Image {}` it reads the texture instead.
+
+`texture_outlines` and `texture_pieces` return the outlines and pieces a collider with given settings would get, in image pixels from the frame's top-left corner, to draw or test them yourself.
+
 ## Collisions and sensors
 
 Collisions arrive as events, filtered by the components on the two entities. A system that takes one `Contact<A, B>` runs once for each collision that started this frame between an entity with `A` and one with `B`, with `a` and `b` in that order:

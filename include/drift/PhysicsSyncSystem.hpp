@@ -4,13 +4,17 @@
 #include <drift/Query.hpp>
 #include <drift/Events.hpp>
 #include <drift/components/Physics.hpp>
+#include <drift/components/Sprite.hpp>
 #include <drift/resources/PhysicsResource.hpp>
+#include <drift/resources/TextureShapeCache.hpp>
 #include <drift/resources/Time.hpp>
 
 #include <unordered_map>
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace drift {
 
@@ -311,6 +315,102 @@ inline void physics_sync_to_box2d(App& app) {
             bridge->entityByIndex[static_cast<uint32_t>(entity)] = entity;
 
             physics->setShapeUserData(shape, reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
+        });
+    }
+
+    // Process entities with TextureCollider2D: the shape of their sprite's
+    // solid pixels, from TextureShapeCache.
+    auto* shapeCache = app.getResource<TextureShapeCache>();
+    if (registry.has<TextureCollider2D>() && registry.has<Sprite>() && shapeCache) {
+        ComponentId spriteId = registry.get<Sprite>();
+        QueryMut<Transform2D, TextureCollider2D> textureQuery(world, registry);
+        textureQuery.iterWithEntity([&](EntityId entity, Transform2D& t, TextureCollider2D& collider) {
+            const Sprite* sprite = world.hasComponent(entity, spriteId) ? world.get<Sprite>(entity, spriteId) : nullptr;
+            if (!sprite || !sprite->texture.valid()) return;   // no body until there is a sprite to shape it
+            seen[entity] = true;
+            const RigidBody2D* rb = rigidBodyOf(entity);
+            std::string settings = physicsBodySettings(rb, "texture", {collider.threshold, collider.tolerance},
+                                                       {collider.minArea, 0.f}, collider.density, collider.friction,
+                                                       collider.restitution, collider.isSensor, collider.filter);
+            char extra[192];
+            if (collider.followSprite) {
+                std::snprintf(extra, sizeof(extra), "|%u %u|%g %g %g %g %g %g %d %g %g", sprite->texture.id,
+                              shapeCache->version(sprite->texture), sprite->srcRect.x, sprite->srcRect.y,
+                              sprite->srcRect.w, sprite->srcRect.h, sprite->origin.x, sprite->origin.y,
+                              int(sprite->flip), t.scale.x, t.scale.y);
+            } else {
+                std::snprintf(extra, sizeof(extra), "|%u %u", sprite->texture.id, shapeCache->version(sprite->texture));
+            }
+            settings += extra;
+            if (bridge->hasBody(entity)) {
+                if (bridge->bodySettings[entity] == settings) return;
+                physics->destroyBody(bridge->entityToBody[entity]);
+                bridge->forget(entity);
+            }
+
+            BodyDef bdef;
+            bdef.type = BodyType::Static;
+            bdef.position = t.position;
+            bdef.rotation = t.rotation;
+            readRigidBody(entity, bdef);
+            PhysicsBody body = physics->createBody(bdef);
+            bridge->entityToBody[entity] = body;
+            bridge->bodySettings[entity] = settings;
+            bridge->entityByIndex[static_cast<uint32_t>(entity)] = entity;
+
+            if (registry.has<Velocity2D>() && world.hasComponent(entity, registry.get<Velocity2D>())) {
+                auto* vel = world.get<Velocity2D>(entity, registry.get<Velocity2D>());
+                if (vel) {
+                    physics->setBodyVelocity(body, vel->linear);
+                    physics->setBodyAngularVelocity(body, vel->angular);
+                }
+            }
+
+            const TextureShapeCache::Shapes* shapes = shapeCache->get(
+                sprite->texture, sprite->srcRect, {collider.threshold, collider.tolerance, collider.minArea});
+            if (!shapes) return;
+
+            // Texture pixels to body space: flipped inside the frame, then
+            // about the origin and scaled, as the sprite is drawn.
+            bool flipX = sprite->flip & Flip::H, flipY = sprite->flip & Flip::V;
+            Vec2 size = shapes->size, origin = sprite->origin, scale = t.scale;
+            bool mirrored = (flipX != flipY) != ((scale.x < 0.f) != (scale.y < 0.f));
+            std::vector<Vec2> pts;
+            auto place = [&](const Outline& loop) {
+                pts.clear();
+                for (Vec2 p : loop) {
+                    if (flipX) p.x = size.x - p.x;
+                    if (flipY) p.y = size.y - p.y;
+                    pts.push_back({(p.x - origin.x) * scale.x, (p.y - origin.y) * scale.y});
+                }
+                if (mirrored) std::reverse(pts.begin(), pts.end());
+            };
+
+            ShapeDef sdef;
+            sdef.density = collider.density;
+            sdef.friction = collider.friction;
+            sdef.restitution = collider.restitution;
+            sdef.isSensor = collider.isSensor;
+            sdef.filter = collider.filter;
+            void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(entity));
+
+            if (bdef.type == BodyType::Static && !collider.isSensor) {
+                // Loops along the outlines: cheap, and holes and concave
+                // ground need no cutting.
+                for (const Outline& loop : shapes->outlines) {
+                    place(loop);
+                    physics->addLoop(body, pts.data(), static_cast<int32_t>(pts.size()), sdef, userData);
+                }
+                return;
+            }
+            float areaScale = std::fabs(scale.x * scale.y);
+            for (const Outline& piece : shapes->pieces()) {
+                if (std::fabs(outlineArea(piece)) * areaScale < 0.01f) continue;   // a sliver Box2D cannot hold
+                place(piece);
+                PhysicsShape shape = physics->addPolygon(body, pts.data(), static_cast<int32_t>(pts.size()), sdef);
+                bridge->shapeToEntity[shape_to_u64(shape)] = entity;
+                physics->setShapeUserData(shape, userData);
+            }
         });
     }
 

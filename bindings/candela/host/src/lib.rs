@@ -1899,6 +1899,9 @@ fn gameplay_forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("physics_overlap", vec![I, F, F, F, F, I], HostType::Array(Box::new(I))),
         ("physics_push", vec![I, I, F, F], U),
         ("physics_debug", vec![B], U),
+        // Shapes of textures' solid pixels.
+        ("physics_texture_shapes", vec![I, af(), F, F, F, B], af()),
+        ("physics_rebuild_shapes", vec![I, I], U),
         // Tilemap objects and autotiling.
         ("map_objects", vec![I, S], af()),
         ("map_object_names", vec![I, S], as_()),

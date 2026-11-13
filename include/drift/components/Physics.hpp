@@ -35,6 +35,26 @@ struct CircleCollider2D {
     CollisionFilter filter = {};
 };
 
+// A collider the shape of the entity's Sprite: the outlines of the pixels
+// whose alpha is at least `threshold`, holes included, placed by the
+// sprite's frame, origin and flip and the Transform2D's scale. A static
+// body (or no RigidBody2D) collides along the outlines as closed loops;
+// dynamic and kinematic bodies and sensors get convex polygons. The shapes
+// are worked out once per texture, frame and settings and shared through
+// TextureShapeCache, whose rebuild() makes them again after the texture's
+// pixels change.
+struct TextureCollider2D {
+    float threshold = 0.5f;      // alpha, 0 to 1, from which a pixel is solid
+    float tolerance = 1.0f;      // how far in texture pixels the outline may stray from the pixels
+    float minArea = 4.f;         // solid parts and holes smaller than this many square texture pixels are dropped
+    bool followSprite = false;   // make the shapes again when the frame, origin, flip or scale changes
+    bool isSensor = false;
+    float density = 1.0f;
+    float friction = 0.3f;
+    float restitution = 0.0f;
+    CollisionFilter filter = {};
+};
+
 // Velocity component (used by simple movement system and physics sync)
 struct Velocity2D {
     Vec2 linear = Vec2::zero();

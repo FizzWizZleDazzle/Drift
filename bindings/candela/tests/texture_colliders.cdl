@@ -1,0 +1,200 @@
+// Colliders from the solid pixels of images: a blob, a ring with a hole and
+// an L fall onto uneven ground with a tunnel in it, a pile of Ls builds
+// up, a flipped and scaled sensor is probed, a sprite sheet's collider
+// follows its frame, and a hole carved into the ground lets a body drop
+// through. ctest runs it with `drift run` and reads the log.
+
+import "drift" { * };
+
+@resource
+struct Test {
+    failed: int = 0,
+    ground: Image = Image { .. },
+    ground_texture: Texture = Texture { .. },
+    ring: Entity = Entity { .. },
+    probe: Entity = Entity { .. },
+    stage: int = 0,
+    ring_y: float = 0.0,
+}
+
+@component
+struct Falling {}
+
+@component
+struct Sheet {}
+
+fn expect(test: Test, what: string, ok: bool) {
+    if !ok {
+        test.failed += 1;
+        warn("FAIL " + what);
+    }
+}
+
+fn clear() -> Color { return rgba(0, 0, 0, 0); }
+
+// Uneven ground across the screen, with a tunnel through it.
+fn make_ground(assets: Assets) -> Image {
+    let img = assets.create_image(1280, 320, clear());
+    for x in range(1280) {
+        let fx = float(x);
+        let top = 120.0 + sin(fx * 0.008) * 50.0 + sin(fx * 0.031) * 14.0;
+        img.fill_rect(rect(fx, top, 1.0, 320.0 - top), rgb(110, 84, 60));
+    }
+    img.fill_circle(vec2(980.0, 250.0), 26.0, clear());
+    return img;
+}
+
+fn blob(assets: Assets) -> Image {
+    let img = assets.create_image(64, 64, clear());
+    img.circle(vec2(32.0, 32.0), 18.0, rgb(90, 200, 120));
+    img.circle(vec2(16.0, 24.0), 12.0, rgb(90, 200, 120));
+    img.circle(vec2(48.0, 40.0), 13.0, rgb(90, 200, 120));
+    img.circle(vec2(30.0, 52.0), 10.0, rgb(90, 200, 120));
+    return img;
+}
+
+fn ring(assets: Assets) -> Image {
+    let img = assets.create_image(64, 64, clear());
+    img.circle(vec2(32.0, 32.0), 30.0, rgb(230, 180, 60));
+    img.fill_circle(vec2(32.0, 32.0), 16.0, clear());
+    return img;
+}
+
+fn ell(assets: Assets) -> Image {
+    let img = assets.create_image(48, 48, clear());
+    img.fill_rect(rect(0.0, 0.0, 16.0, 48.0), rgb(200, 90, 90));
+    img.fill_rect(rect(0.0, 32.0, 48.0, 16.0), rgb(200, 90, 90));
+    return img;
+}
+
+// Two frames: a bar across, then a bar down.
+fn bars(assets: Assets) -> Image {
+    let img = assets.create_image(64, 32, clear());
+    img.fill_rect(rect(0.0, 12.0, 32.0, 8.0), rgb(120, 140, 230));
+    img.fill_rect(rect(44.0, 0.0, 8.0, 32.0), rgb(120, 140, 230));
+    return img;
+}
+
+fn area(points: Vec2[]) -> float {
+    let a = 0.0;
+    let n = points.len();
+    for i in range(n) {
+        let p = points[i];
+        let q = points[(i + 1) % n];
+        a += p.x * q.y - q.x * p.y;
+    }
+    return a * 0.5;
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets, physics: Physics, test: Test) {
+    physics.set_gravity(vec2(0.0, 900.0));
+    physics.set_debug_draw(true);
+
+    test.ground = make_ground(assets);
+    test.ground_texture = test.ground.to_texture();
+    cmd.spawn([at(0.0, 400.0), Sprite { image: test.ground_texture, anchor: vec2(0.0, 0.0), .. },
+               TextureCollider { .. }]);
+
+    let blob_t = blob(assets).to_texture();
+    let ring_t = ring(assets).to_texture();
+    let ell_t = ell(assets).to_texture();
+    let shape = TextureCollider { .. };
+
+    // What the colliders are made of.
+    let ring_lines = texture_outlines(ring_t, Rect { .. }, shape);
+    expect(test, "ring has an outline and a hole",
+           ring_lines.len() == 2 && area(ring_lines[0]) * area(ring_lines[1]) < 0.0);
+    expect(test, "outlines are simplified", ring_lines[0].len() < 48 && ring_lines[0].len() > 8);
+    let ell_pieces = texture_pieces(ell_t, Rect { .. }, shape);
+    expect(test, "an L is cut into pieces", ell_pieces.len() >= 2);
+    for piece in ell_pieces {
+        expect(test, "pieces fit Box2D", piece.len() >= 3 && piece.len() <= 8);
+    }
+    let ell_area = 0.0;
+    for piece in ell_pieces {
+        ell_area += area(piece);
+    }
+    expect(test, "pieces cover the L", (ell_area - 1280.0).abs() < 40.0);
+    expect(test, "a clear frame has nothing", texture_outlines(ell_t, rect(24.0, 0.0, 24.0, 24.0), shape).len() == 0);
+
+    // Bodies falling onto the ground: three of each, and a stack of Ls.
+    let xs = [420.0, 640.0, 1120.0];
+    for i in range(3) {
+        let x = xs[i];
+        cmd.spawn([at(x, 60.0), Sprite { image: blob_t, .. }, RigidBody { .. }, TextureCollider { .. }, Velocity { .. }, Falling {}]);
+        cmd.spawn([at(x + 70.0, 0.0), Sprite { image: ell_t, flip_x: i == 1, .. }, RigidBody { .. },
+                   TextureCollider { friction: 0.6, .. }, Velocity { .. }, Falling {}]);
+    }
+    for k in range(5) {
+        cmd.spawn([at(884.0 + float(k % 2) * 6.0, -60.0 - float(k) * 70.0), Sprite { image: ell_t, .. }, RigidBody { .. },
+                   TextureCollider { friction: 0.8, .. }, Velocity { .. }, Falling {}]);
+    }
+    // The ring drops into a dip, where the hole will be carved.
+    test.ring = cmd.spawn([at(242.0, 0.0), Sprite { image: ring_t, .. }, RigidBody { .. }, TextureCollider { .. },
+                           Velocity { .. }, Falling {}]);
+
+    // A sensor probe: the L flipped both ways, anchored at its bottom-right
+    // corner and doubled, so it lies up and to the left of its position.
+    test.probe = cmd.spawn([Transform { position: vec2(1200.0, 100.0), scale: vec2(2.0, 2.0), .. },
+                            Sprite { image: ell_t, anchor: vec2(1.0, 1.0), flip_x: true, flip_y: true, .. },
+                            TextureCollider { sensor: true, .. }]);
+
+    // A kinematic body whose collider follows its sprite sheet frame.
+    cmd.spawn([at(60.0, 200.0), Sprite { image: bars(assets).to_texture(), frame: rect(0.0, 0.0, 32.0, 32.0), .. },
+               RigidBody { kind: BodyKind::Kinematic, .. }, TextureCollider { follow_sprite: true, .. }, Sheet {}]);
+}
+
+fn solid_at(physics: Physics, p: Vec2) -> bool { return physics.overlap_point(p).len() > 0; }
+
+@system
+fn run(time: Time, physics: Physics, test: Test, window: Window, falling: (Entity, Falling, Transform, Velocity)[],
+       sheets: (Sheet, Sprite)[]) {
+    if test.stage == 0 && time.elapsed > 0.5 {
+        test.stage = 1;
+        expect(test, "frame 0 is a bar across", solid_at(physics, vec2(72.0, 200.0)) && !solid_at(physics, vec2(60.0, 212.0)));
+        for (_, sprite) in sheets {
+            sprite.frame = rect(32.0, 0.0, 32.0, 32.0);
+        }
+        // Flipped both ways, the L's long side is on the right and its foot
+        // on top, 96 px across, up and to the left of the position.
+        let probe = physics.overlap_point(vec2(1200.0 - 10.0, 100.0 - 50.0));
+        expect(test, "flipped L's side is solid", probe.len() == 1 && probe[0].id == test.probe.id);
+        let empty = physics.overlap_point(vec2(1200.0 - 60.0, 100.0 - 30.0));
+        expect(test, "flipped L's open side is empty", empty.len() == 0);
+    }
+    if test.stage == 1 && time.elapsed > 1.0 {
+        test.stage = 2;
+        expect(test, "frame 1 is a bar down", solid_at(physics, vec2(60.0, 212.0)) && !solid_at(physics, vec2(72.0, 200.0)));
+    }
+    if test.stage == 2 && time.elapsed > 5.0 {
+        test.stage = 3;
+        for (e, _, t, v) in falling {
+            expect(test, "body " + string(e.id) + " rests on the ground", t.position.y < 590.0 && t.position.y > 150.0);
+            expect(test, "body " + string(e.id) + " has settled (speed " + string(v.linear.length()) + " at " + string(t.position.x) + ", " + string(t.position.y) + ")", v.linear.length() < 40.0);
+            if e.id == test.ring.id {
+                test.ring_y = t.position.y;
+            }
+        }
+        log("ring rests at y " + string(test.ring_y));
+        // Carve a hole under the ring and remake the ground's shape.
+        test.ground.fill_circle(vec2(242.0, test.ring_y - 400.0 + 40.0), 70.0, clear());
+        test.ground_texture.update(test.ground);
+        physics.rebuild_shapes(test.ground_texture, test.ground);
+    }
+    if test.stage == 3 && time.elapsed > 6.5 {
+        test.stage = 4;
+        for (e, _, t, _) in falling {
+            if e.id == test.ring.id {
+                log("ring after the hole at y " + string(t.position.y));
+                expect(test, "ring fell into the hole", t.position.y > test.ring_y + 30.0);
+            }
+        }
+    }
+    if test.stage == 4 && time.elapsed > 7.0 {
+        if test.failed == 0 {
+            log("texture collider checks passed");
+        }
+        window.quit();
+    }
+}

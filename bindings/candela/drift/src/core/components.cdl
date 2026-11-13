@@ -96,6 +96,26 @@ struct CircleCollider {
     mask: int = 65535,        // bits it collides with
 }
 
+// A collider the shape of the entity's Sprite: the outline of every pixel
+// whose alpha is at least `threshold`, holes included, placed by the
+// sprite's frame, anchor and flips and the Transform's scale. A static body
+// (or no RigidBody) collides along the outlines; dynamic and kinematic
+// bodies and sensors get convex pieces. Shapes are worked out once per
+// image, frame and settings and shared by every entity that shows them;
+// after changing the image's pixels, call Physics.rebuild_shapes.
+struct TextureCollider {
+    threshold: float = 0.5,      // alpha, 0 to 1, from which a pixel is solid
+    tolerance: float = 1.0,      // how far in image pixels the outline may stray from the pixels
+    min_area: float = 4.0,       // solid parts and holes smaller than this many square pixels are dropped
+    follow_sprite: bool = false, // make the shape again when the frame, anchor, a flip or the scale changes
+    sensor: bool = false,
+    density: float = 1.0,
+    friction: float = 0.3,
+    restitution: float = 0.0,
+    category: int = 1,           // bits this collider is
+    mask: int = 65535,           // bits it collides with
+}
+
 struct Lifetime { seconds: float = 1.0 }
 
 // Swings the entity back and forth around where it is: `amplitude` pixels

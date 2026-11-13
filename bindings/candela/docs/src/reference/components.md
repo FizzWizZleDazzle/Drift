@@ -652,6 +652,42 @@ struct CircleCollider {
 cmd.spawn([at(x, y), Circle { radius: 8.0, .. }, CircleCollider { radius: 8.0, sensor: true, .. }, Coin {}]);
 ```
 
+## TextureCollider
+
+A collider the shape of the entity's `Sprite`: its solid pixels, holes included. It follows the sprite's frame, anchor, flips and the `Transform`'s scale. Without a `RigidBody`, or with a static one, it collides along the outlines, which suits large terrain; dynamic and kinematic bodies and sensors get convex pieces. Every entity showing the same image, frame and settings shares one tracing. See [Colliders from images](../guides/collisions.md#colliders-from-images).
+
+```rust
+struct TextureCollider {
+    threshold: float = 0.5,
+    tolerance: float = 1.0,
+    min_area: float = 4.0,
+    follow_sprite: bool = false,
+    sensor: bool = false,
+    density: float = 1.0,
+    friction: float = 0.3,
+    restitution: float = 0.0,
+    category: int = 1,
+    mask: int = 65535,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `threshold` | `float` | `0.5` | A pixel is solid when its alpha, 0 to 1, is at least this |
+| `tolerance` | `float` | `1.0` | How far, in image pixels, the outline may stray from the pixels; higher gives fewer points |
+| `min_area` | `float` | `4.0` | Solid specks and holes smaller than this many square pixels are dropped |
+| `follow_sprite` | `bool` | `false` | Make the shape again when the frame, anchor, a flip or the scale changes, for animated sprites; each change costs a new body |
+| `sensor` | `bool` | `false` | Detects overlaps without pushing anything |
+| `density` | `float` | `1.0` | Mass per area |
+| `friction` | `float` | `0.3` | 0 is ice |
+| `restitution` | `float` | `0.0` | Bounciness; 1 keeps all the speed |
+| `category` | `int` | `1` | The bits this collider is |
+| `mask` | `int` | `65535` | The categories it collides with |
+
+```rust
+cmd.spawn([at(x, y), Sprite { image: rock, .. }, RigidBody { .. }, TextureCollider { .. }, Velocity { .. }]);
+```
+
 ## Joint
 
 Joins this entity's body to `target`'s, or pins it to the world when `target` is no entity. Both need a RigidBody or a collider; the joint is made once both bodies exist, and made again when a field changes. Anchors are in each body's local space; without a target, `target_anchor` is a point in the world.

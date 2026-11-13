@@ -102,8 +102,9 @@ public:
     // Render targets are textures you can draw into (camera target, view
     // hooks) and then draw like any other texture.
     TextureHandle createRenderTarget(int w, int h, TextureOptions options = {});
-    // The pixels of a render target as its last frame left them; an empty
-    // image for other textures.
+    // A texture's pixels, read back from the GPU: a render target as its
+    // last frame left it. The read waits for the GPU, so do it when the
+    // pixels are needed, not every frame.
     Image readTexture(TextureHandle texture) const;
 
     // ---- Shaders and materials ----

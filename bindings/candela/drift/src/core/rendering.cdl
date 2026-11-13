@@ -197,7 +197,10 @@ impl Image {
     fn set(self, x: int, y: int, c: Color) { drift::image_set(self.id, x, y, color_list(c)); }
     fn op(self, name: string, nums: float[], c: Color) { drift::image_op(self.id, name, nums, color_list(c), []); }
     fn fill(self, c: Color) { self.op("fill", [], c); }
+    // Sets the pixels to `c` as it is, alpha included: a transparent color
+    // cuts a hole.
     fn fill_rect(self, r: Rect, c: Color) { self.op("fill_rect", rect_list(r), c); }
+    fn fill_circle(self, center: Vec2, radius: float, c: Color) { self.op("fill_circle", [center.x, center.y, radius], c); }
     // From `a` on the left (on top, when vertical) to `b` on the other side.
     fn gradient(self, a: Color, b: Color, vertical: bool) {
         drift::image_op(self.id, "gradient", [flag(vertical)], color_list(a), color_list(b));
@@ -249,9 +252,9 @@ impl Image {
 }
 
 impl Texture {
-    // A render target's pixels as its last frame left them. Raises
-    // drift_load_failed for other textures; load their file with
-    // Assets.image instead.
+    // The texture's pixels, read back from the GPU: a render target as its
+    // last frame left it. The read waits for the GPU, so do it when you
+    // need the pixels, not every frame.
     fn to_image(self) -> Image { return image_answer(drift::image_from_texture(self.id), "texture pixels"); }
     // Writes an image of the texture's size into it. Cheap enough to do
     // every frame.

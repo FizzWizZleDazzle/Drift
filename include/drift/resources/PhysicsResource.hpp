@@ -12,6 +12,7 @@ namespace drift {
 struct PhysicsBody { int32_t index; int16_t world; uint16_t revision; };
 struct PhysicsShape { int32_t index; int16_t world; uint16_t revision; };
 struct PhysicsJoint { int32_t index; int16_t world; uint16_t revision; };
+struct PhysicsChain { int32_t index; int16_t world; uint16_t revision; };
 
 // A joint between two bodies; see Joint2D for the fields. Anchors are in
 // each body's local space.
@@ -85,6 +86,17 @@ public:
     PhysicsShape addBox(PhysicsBody body, float halfW, float halfH, const ShapeDef& def = {});
     PhysicsShape addPolygon(PhysicsBody body, const Vec2* vertices, int32_t count, const ShapeDef& def = {});
     PhysicsShape addCapsule(PhysicsBody body, Vec2 p1, Vec2 p2, float radius, const ShapeDef& def = {});
+    // A closed loop of segments that collides on one side only: the
+    // outside of a loop with positive signed area (see outlineArea in
+    // drift/ImageShapes.hpp), the inside of one with negative area. Cheap
+    // for large static outlines such as terrain. Loops have no mass and
+    // cannot be sensors (`def.density` and `def.isSensor` are ignored),
+    // and they do not collide with other loops. `userData` becomes every
+    // segment's shape user data. Points closer together than Box2D can
+    // tell apart are merged; an empty chain comes back when fewer than 3
+    // remain.
+    PhysicsChain addLoop(PhysicsBody body, const Vec2* points, int32_t count, const ShapeDef& def = {},
+                         void* userData = nullptr);
     void setShapeUserData(PhysicsShape shape, void* data);
     void* getShapeUserData(PhysicsShape shape) const;
 

@@ -2176,6 +2176,46 @@ Draws every collider's outline over the game.
 if input.key_pressed(Key::F3) { physics.set_debug_draw(true); }
 ```
 
+### Physics.rebuild_shapes
+
+```rust
+fn rebuild_shapes(self, t: Texture, pixels: Image)
+```
+
+Makes every TextureCollider showing the texture again next frame, from `pixels`: call it after changing the image and writing it into the texture, such as carving a hole in terrain with Image.fill_circle and Texture.update. It traces the whole image, so do it when the pixels change, not every frame. With Image {} the texture is read back from the GPU instead, which costs more.
+
+```rust
+ground_image.fill_circle(hit, 40.0, rgba(0, 0, 0, 0));   // a crater
+ground.update(ground_image);
+physics.rebuild_shapes(ground, ground_image);
+```
+
+## texture_outlines
+
+```rust
+fn texture_outlines(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][]
+```
+
+The outlines a TextureCollider with settings `c` traces in `frame` of the texture (Rect {} for all of it), in pixels from the frame's top-left corner, to draw or check. Solid outlines wind clockwise on screen and holes the other way. Worked out once and kept, like the collider's.
+
+```rust
+for points in texture_outlines(rock, Rect { .. }, TextureCollider { .. }) {
+    log(string(points.len()) + " points");
+}
+```
+
+## texture_pieces
+
+```rust
+fn texture_pieces(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][]
+```
+
+The convex pieces, of at most 8 points, that cover those outlines: the shapes a dynamic body gets.
+
+```rust
+let pieces = texture_pieces(rock, Rect { .. }, TextureCollider { .. });
+```
+
 ## RayHit
 
 What a ray hit; `hit` false when it hit nothing.

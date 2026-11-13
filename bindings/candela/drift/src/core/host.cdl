@@ -220,6 +220,8 @@ host "drift" {
     int[] physics_overlap(int, float, float, float, float, int);
     physics_push(int, int, float, float);
     physics_debug(bool);
+    float[] physics_texture_shapes(int, float[], float, float, float, bool);
+    physics_rebuild_shapes(int, int);
 
     // Tilemap objects, tile properties and autotiling.
     float[] map_objects(int, string);

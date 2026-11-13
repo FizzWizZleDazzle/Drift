@@ -11,7 +11,7 @@ This book covers the engine and C++ games. To write a game in Candela and play i
 - **2D renderer**: batched sprites and shapes, render layers, multiple cameras, render targets, custom shaders and post effects, pixel-perfect scaling. OpenGL 3.3 on desktop, WebGL2 in the browser, and an optional WebGPU backend for both
 - **2D lighting**: point and spot lights, ambient light, hard shadows from occluders
 - **Post effect library**: bloom, color grading, CRT, vignette, blur, pixelate, grayscale, sepia, screen fades
-- **Box2D physics**: Full 2D rigid body physics with collision events and sensors
+- **Box2D physics**: Full 2D rigid body physics with collision events and sensors, and colliders traced from a sprite's pixels
 - **Particle system**: Rich ECS-based particle emitters with configurable shapes, forces, and blend modes
 - **Text**: UTF-8 text with kerning, alignment, wrapping, outlines and shadows; a built-in font, TrueType/OpenType and BMFont pixel fonts, and a `Text` component
 - **Sprite animation**: Spritesheet-based animation clips with Aseprite import support

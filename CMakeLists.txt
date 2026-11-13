@@ -169,6 +169,8 @@ set(DRIFT_SOURCES
     src/audio/Decoder.cpp
     src/audio/Mixer.cpp
     src/physics/PhysicsResource.cpp
+    src/physics/ImageShapes.cpp
+    src/physics/TextureShapeCache.cpp
     src/sprite/SpriteResource.cpp
     src/sprite/SpriteAnimator.cpp
     src/font/FontResource.cpp
@@ -449,7 +451,7 @@ if(DRIFT_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME audio COMMAND drift_audio_tests)
 
     add_executable(drift_tests tests/main.cpp tests/test_gameplay.cpp tests/test_settings.cpp tests/test_procgen.cpp
-        tests/test_procanim.cpp tests/test_animation.cpp)
+        tests/test_procanim.cpp tests/test_animation.cpp tests/test_image_shapes.cpp)
     target_link_libraries(drift_tests PRIVATE drift)
     add_test(NAME drift_tests COMMAND drift_tests)
 
@@ -481,6 +483,11 @@ elseif(DRIFT_BUILD_TESTS)
     target_link_libraries(drift_animation_tests PRIVATE drift)
     target_link_options(drift_animation_tests PRIVATE -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
     add_test(NAME drift_animation_tests COMMAND drift_animation_tests)
+    # Outlines and convex pieces from alpha, as TextureCollider2D uses them.
+    add_executable(drift_image_shapes_tests tests/main.cpp tests/test_image_shapes.cpp)
+    target_link_libraries(drift_image_shapes_tests PRIVATE drift)
+    target_link_options(drift_image_shapes_tests PRIVATE -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
+    add_test(NAME drift_image_shapes_tests COMMAND drift_image_shapes_tests)
 endif()
 
 # ---------- Candela package ----------

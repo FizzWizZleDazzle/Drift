@@ -76,7 +76,7 @@ img.circle(vec2(64.0, 64.0), 24.0, rgba(255, 255, 255, 200));
 cmd.spawn([at(200.0, 200.0), Sprite { image: img.to_texture(), .. }]);
 ```
 
-A render target's `to_image()` reads back what its camera drew, and `save_png` or `download` keeps it. See [`Image`](../reference/assets.md#image) for every method. [Save and Load](../examples/save-load.md) paints on a grid, and the [Roguelike](../examples/roguelike.md) draws its tileset this way.
+A texture's `to_image()` reads its pixels back from the GPU: for a render target, what its camera drew. `save_png` or `download` keeps them. See [`Image`](../reference/assets.md#image) for every method. [Save and Load](../examples/save-load.md) paints on a grid, and the [Roguelike](../examples/roguelike.md) draws its tileset this way.
 
 ## Parts that move together
 

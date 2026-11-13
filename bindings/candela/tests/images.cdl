@@ -101,6 +101,11 @@ fn check(time: Time, art: Art, assets: Assets, window: Window) {
         expect(art, "png round trip", near(again.get(64, 64), rgb(255, 128, 0)));
         back.free();
         again.free();
+        // Any texture reads back, not only render targets.
+        let canvas = art.canvas.to_image();
+        expect(art, "texture read back", canvas.width() == 128 && near(canvas.get(2, 2), art.paint.get(2, 2))
+                                        && near(canvas.get(64, 64), art.paint.get(64, 64)));
+        canvas.free();
         if art.failed == 0 {
             log("image checks passed");
         }

@@ -72,6 +72,38 @@ struct CircleCollider2D {
 
 Fields are the same as `BoxCollider2D`, except `radius` replaces `halfSize`.
 
+### TextureCollider2D
+
+A collision shape taken from the entity's `Sprite`: the outline of every pixel whose alpha is at least `threshold`, holes included. Use it for rocks, characters and terrain that a box or circle does not fit.
+
+```cpp
+struct TextureCollider2D {
+    float threshold = 0.5f;      // alpha, 0 to 1, from which a pixel is solid
+    float tolerance = 1.0f;      // how far in texture pixels the outline may stray from the pixels
+    float minArea = 4.f;         // solid parts and holes smaller than this many square texture pixels are dropped
+    bool followSprite = false;   // make the shapes again when the frame, origin, flip or scale changes
+    bool isSensor = false;
+    float density = 1.0f;
+    float friction = 0.3f;
+    float restitution = 0.0f;
+    CollisionFilter filter = {};
+};
+```
+
+The shape follows the sprite's `srcRect`, `origin` and `flip` and the `Transform2D`'s scale as they are when the body is made. Without a `RigidBody2D`, or with a static one, the body collides along the outlines as closed chain loops: cheap for large terrain, holes and concave ground included. Loops push bodies out from the empty side only, so a body that starts inside solid ground stays there. Dynamic and kinematic bodies, and sensors, get the solid area cut into convex polygons of at most 8 vertices, the most Box2D allows.
+
+`tolerance` sets how closely the simplified outline follows the pixels; raise it for fewer vertices. Specks and holes below `minArea` are dropped. The shapes are worked out once per texture, frame and settings by `TextureShapeCache`, so many entities showing one sprite share them. With `followSprite` the body is made again whenever the frame, origin, flip or scale changes, for animated sprites whose shape changes; leave it off when one shape fits every frame.
+
+The texture's pixels are read back from the GPU the first time a frame of it is traced. After changing a texture's pixels (carving a hole in terrain, for example), call `TextureShapeCache::rebuild` with the image you wrote into it; every collider showing the texture is made again on the next frame:
+
+```cpp
+ground.fillCircle(hit, 40.f, Color{0, 0, 0, 0});
+renderer->updateTexture(groundTexture, 0, 0, ground.width(), ground.height(), ground.data());
+app.getResource<TextureShapeCache>()->rebuild(groundTexture, &ground);
+```
+
+See [Physics](../subsystems/physics-resource.md#shapes-from-images) for the outline functions themselves.
+
 ### Velocity2D
 
 Read or write the current velocity of a physics body. On an entity without a `RigidBody2D`, `PhysicsPlugin` moves its `Transform2D` by the velocity every frame instead, which is the cheapest way to move many things (see [Behaviors](behaviors.md)).

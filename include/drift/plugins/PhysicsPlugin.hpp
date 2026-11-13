@@ -74,6 +74,16 @@ public:
             .field("friction", &CircleCollider2D::friction)
             .field("restitution", &CircleCollider2D::restitution)
             .field("filter", &CircleCollider2D::filter);
+        reflect::component<TextureCollider2D>(world, "TextureCollider2D")
+            .field("threshold", &TextureCollider2D::threshold)
+            .field("tolerance", &TextureCollider2D::tolerance)
+            .field("minArea", &TextureCollider2D::minArea)
+            .field("followSprite", &TextureCollider2D::followSprite)
+            .field("isSensor", &TextureCollider2D::isSensor)
+            .field("density", &TextureCollider2D::density)
+            .field("friction", &TextureCollider2D::friction)
+            .field("restitution", &TextureCollider2D::restitution)
+            .field("filter", &TextureCollider2D::filter);
         reflect::enumType<JointType>("JointType", {
             {"Distance", JointType::Distance}, {"Revolute", JointType::Revolute},
             {"Prismatic", JointType::Prismatic}, {"Weld", JointType::Weld}});
@@ -108,6 +118,7 @@ public:
         // PhysicsBridge resource is registered lazily by PhysicsSyncSystem
         // but we add it here for clarity
         app.addResource<PhysicsBridge>();
+        app.addResource<TextureShapeCache>(app);
 
         // Simple movement system (Update phase, before physics)
         app.addSystem("simple_movement", Phase::Update, [](App& a) {

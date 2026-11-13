@@ -735,6 +735,30 @@ const std::vector<Codec>& codecs() {
          },
          [](EntityId e) { world().removeComponent(e, cid<CircleCollider2D>()); },
          [] { return cid<CircleCollider2D>(); }},
+        {"TextureCollider",
+         [](EntityId e) { return get<TextureCollider2D>(e) != nullptr; },
+         [](EntityId e) {
+             const TextureCollider2D& c = *get<TextureCollider2D>(e);
+             return json{{"threshold", c.threshold}, {"tolerance", c.tolerance}, {"min_area", c.minArea},
+                         {"follow_sprite", c.followSprite}, {"sensor", c.isSensor}, {"density", c.density},
+                         {"friction", c.friction}, {"restitution", c.restitution},
+                         {"category", c.filter.category}, {"mask", c.filter.mask}};
+         },
+         [](EntityId e, const json& j) {
+             TextureCollider2D c;
+             c.threshold = j.value("threshold", 0.5f);
+             c.tolerance = j.value("tolerance", 1.f);
+             c.minArea = j.value("min_area", 4.f);
+             c.followSprite = j.value("follow_sprite", false);
+             c.isSensor = j.value("sensor", false);
+             c.density = j.value("density", 1.f);
+             c.friction = j.value("friction", 0.3f);
+             c.restitution = j.value("restitution", 0.f);
+             c.filter = filterOf(j);
+             put(e, c);
+         },
+         [](EntityId e) { world().removeComponent(e, cid<TextureCollider2D>()); },
+         [] { return cid<TextureCollider2D>(); }},
         {"Joint",
          [](EntityId e) { return get<Joint2D>(e) != nullptr; },
          [](EntityId e) {
@@ -1644,6 +1668,7 @@ bool images(const std::string& f, const json& a, json& out) {
         else if (op == "line") img.drawLine({num(n, 0), num(n, 1)}, {num(n, 2), num(n, 3)}, c, num(n, 4, 1.f));
         else if (op == "rect_lines") img.drawRect(rectOf(n), c, num(n, 4, 1.f));
         else if (op == "circle") img.drawCircle({num(n, 0), num(n, 1)}, num(n, 2), c);
+        else if (op == "fill_circle") img.fillCircle({num(n, 0), num(n, 1)}, num(n, 2), c);
         else if (op == "circle_lines") img.drawCircleOutline({num(n, 0), num(n, 1)}, num(n, 2), c, num(n, 3, 1.f));
         else if (op == "flip_x") img.flipX();
         else if (op == "flip_y") img.flipY();
@@ -2619,6 +2644,30 @@ bool gameplayPhysics(const std::string& f, const json& a, json& out) {
                 case 3: physics->applyAngularImpulse(it->second, v.x); break;
             }
         }
+    } else if (f == "physics_texture_shapes") {
+        // texture, frame, threshold, tolerance, min area, pieces: each
+        // outline as its point count, then x, y pairs.
+        out = json::array();
+        auto* cache = res<TextureShapeCache>();
+        Rect frame = a[1].size() == 4 ? rectOf(a[1]) : Rect{};
+        const TextureShapeCache::Shapes* shapes =
+            cache ? cache->get(TextureHandle{a[0].get<uint32_t>()}, frame,
+                               {a[2].get<float>(), a[3].get<float>(), a[4].get<float>()})
+                  : nullptr;
+        if (shapes) {
+            for (const Outline& o : a[5].get<bool>() ? shapes->pieces() : shapes->outlines) {
+                out.push_back(o.size());
+                for (Vec2 p : o) {
+                    out.push_back(p.x);
+                    out.push_back(p.y);
+                }
+            }
+        }
+    } else if (f == "physics_rebuild_shapes") {
+        // texture, image (0: read the texture back)
+        auto img = g_images.find(a[1].get<int64_t>());
+        if (auto* cache = res<TextureShapeCache>())
+            cache->rebuild(TextureHandle{a[0].get<uint32_t>()}, img == g_images.end() ? nullptr : &img->second);
     } else if (f == "physics_debug") {
         PhysicsDebugDraw d = physics->debugDraw();
         d.enabled = a[0].get<bool>();

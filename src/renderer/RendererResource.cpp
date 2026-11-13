@@ -874,7 +874,7 @@ TextureHandle RendererResource::createRenderTarget(int w, int h, TextureOptions 
 
 Image RendererResource::readTexture(TextureHandle texture) const {
     const TextureEntry* e = impl_->textures.get(texture);
-    if (!e || !e->renderTarget || !impl_->device) return {};
+    if (!e || !impl_->device) return {};
     int32_t w = 0, h = 0;
     std::vector<uint8_t> px;
     if (!impl_->device->readPixels(e->id, &w, &h, px)) return {};

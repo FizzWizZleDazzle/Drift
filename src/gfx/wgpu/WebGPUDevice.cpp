@@ -265,7 +265,7 @@ public:
             bgra = surfaceFormat_ == WGPUTextureFormat_BGRA8Unorm;
         } else {
             auto it = textures_.find(id);
-            if (it == textures_.end() || !it->second.renderTarget) return false;
+            if (it == textures_.end()) return false;
             src = it->second.texture;
             tw = it->second.width;
             th = it->second.height;
@@ -986,8 +986,9 @@ private:
     Texture makeTexture(int32_t w, int32_t h, bool renderTarget) {
         Texture t;
         WGPUTextureDescriptor td = WGPU_TEXTURE_DESCRIPTOR_INIT;
-        td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
-        if (renderTarget) td.usage |= WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
+        // CopySrc on every texture lets readPixels read any of them.
+        td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
+        if (renderTarget) td.usage |= WGPUTextureUsage_RenderAttachment;
         td.size = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1};
         td.format = kTextureFormat;
         t.texture = wgpuDeviceCreateTexture(device_, &td);

@@ -733,6 +733,25 @@ A circle-shaped collider. Without a `RigidBody` it is static.
 cmd.spawn([at(x, y), Circle { radius: 8.0, .. }, CircleCollider { radius: 8.0, sensor: true, .. }, Coin {}]);
 ```
 
+## TextureCollider
+
+A collider the shape of the entity's `Sprite`: its solid pixels, holes included. It follows the sprite's frame, anchor, flips and the `Transform`'s scale. Without a `RigidBody`, or with a static one, it collides along the outlines, which suits large terrain; dynamic and kinematic bodies and sensors get convex pieces. Every entity showing the same image, frame and settings shares one tracing. See [Colliders from images](../guides/collisions.md#colliders-from-images).
+
+- threshold: A pixel is solid when its alpha, 0 to 1, is at least this
+- tolerance: How far, in image pixels, the outline may stray from the pixels; higher gives fewer points
+- min_area: Solid specks and holes smaller than this many square pixels are dropped
+- follow_sprite: Make the shape again when the frame, anchor, a flip or the scale changes, for animated sprites; each change costs a new body
+- sensor: Detects overlaps without pushing anything
+- density: Mass per area
+- friction: 0 is ice
+- restitution: Bounciness; 1 keeps all the speed
+- category: The bits this collider is
+- mask: The categories it collides with
+
+```rust
+cmd.spawn([at(x, y), Sprite { image: rock, .. }, RigidBody { .. }, TextureCollider { .. }, Velocity { .. }]);
+```
+
 ## Joint
 
 - kind: The kind of joint
@@ -2195,6 +2214,28 @@ physics.apply_angular_impulse(crate_entity, 5.0);
 if input.key_pressed(Key::F3) { physics.set_debug_draw(true); }
 ```
 
+## Physics.rebuild_shapes
+
+```rust
+ground_image.fill_circle(hit, 40.0, rgba(0, 0, 0, 0));   // a crater
+ground.update(ground_image);
+physics.rebuild_shapes(ground, ground_image);
+```
+
+## texture_outlines
+
+```rust
+for points in texture_outlines(rock, Rect { .. }, TextureCollider { .. }) {
+    log(string(points.len()) + " points");
+}
+```
+
+## texture_pieces
+
+```rust
+let pieces = texture_pieces(rock, Rect { .. }, TextureCollider { .. });
+```
+
 ## RayHit
 
 - hit: Whether the ray hit anything
@@ -2741,6 +2782,14 @@ Sets the pixels in a rect to one color.
 
 ```rust
 img.fill_rect(rect(0.0, 0.0, 8.0, 8.0), rgb(255, 255, 255));
+```
+
+## Image.fill_circle
+
+Sets the pixels in a circle to one color, alpha included: a transparent color cuts a round hole.
+
+```rust
+img.fill_circle(vec2(40.0, 40.0), 12.0, rgba(0, 0, 0, 0));
 ```
 
 ## Image.gradient
@@ -4454,6 +4503,7 @@ Helpers the module needs; games do not call them.
 ## Animator.check_clip
 ## ids_to_entities
 ## entity_list
+## outline_list
 ## TweenStep
 ## Tween.add_step
 ## Rng.ints

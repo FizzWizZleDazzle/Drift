@@ -109,7 +109,11 @@ PhysicsShape addBox(PhysicsBody body, float halfW, float halfH, const ShapeDef& 
 PhysicsShape addCircle(PhysicsBody body, Vec2 offset, float radius, const ShapeDef& def = {});
 PhysicsShape addPolygon(PhysicsBody body, const Vec2* vertices, int32_t count, const ShapeDef& def = {});
 PhysicsShape addCapsule(PhysicsBody body, Vec2 p1, Vec2 p2, float radius, const ShapeDef& def = {});
+PhysicsChain addLoop(PhysicsBody body, const Vec2* points, int32_t count, const ShapeDef& def = {},
+                     void* userData = nullptr);
 ```
+
+`addPolygon` takes the convex hull of at most 8 points. `addLoop` makes a closed chain of segments that collides on one side only: outside a loop with positive signed area (see `outlineArea` below), inside one with negative area. Loops suit large static outlines such as terrain. They have no mass, cannot be sensors and do not collide with other loops; `userData` becomes the user data of every segment.
 
 `ShapeDef` controls physical material properties:
 
@@ -132,6 +136,30 @@ When `isSensor = true`, the shape detects overlaps but does not generate contact
 PhysicsShape zone = physics->addCircle(body, Vec2::zero(), 32.f,
     ShapeDef{.isSensor = true});
 ```
+
+### Shapes from Images
+
+`drift/ImageShapes.hpp` turns an image's alpha channel into shapes; `TextureCollider2D` is built on it, and you can call it to draw outlines or to make shapes yourself.
+
+```cpp
+AlphaView alphaOf(const Image& image, Rect region = {});
+std::vector<Outline> traceAlphaOutlines(AlphaView alpha, float threshold);
+Outline simplifyOutline(const Outline& loop, float tolerance);
+float outlineArea(const Outline& loop);
+std::vector<Outline> alphaOutlines(AlphaView alpha, const AlphaShapeOptions& options = {});
+std::vector<Outline> convexPieces(const std::vector<Outline>& outlines, int32_t maxVertices = 8);
+```
+
+`traceAlphaOutlines` runs marching squares through the pixel centres and returns one closed loop per solid part and per hole; pixels touching only at a corner count as one part. `simplifyOutline` drops points while the loop stays within `tolerance` pixels of the original (Douglas-Peucker). `alphaOutlines` does both and drops parts and holes smaller than `minArea`. Points are in pixels from the region's top-left corner; solid outlines have positive signed area and holes negative, the winding `addPolygon` and `addLoop` expect. `convexPieces` cuts the outlines, minus their holes, into convex pieces for `addPolygon`: holes are bridged to their outline, the result is ear-clipped into triangles, and neighbouring triangles merge while the piece stays convex and within `maxVertices`.
+
+```cpp
+Image img = Image::load("assets/rock.png");
+auto outlines = alphaOutlines(alphaOf(img), {.threshold = 0.5f, .tolerance = 1.f});
+for (const Outline& piece : convexPieces(outlines))
+    physics->addPolygon(body, piece.data(), static_cast<int32_t>(piece.size()));
+```
+
+`TextureShapeCache` keeps these per texture, frame and settings: `get(texture, frame, options)` returns the outlines and, worked out on first use, `pieces()`. `rebuild(texture, &image)` forgets a texture's shapes after its pixels change and makes every `TextureCollider2D` showing it again; without an image the texture is read back from the GPU.
 
 ### Collision Filtering
 

@@ -406,6 +406,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Image.draw`](assets.md#imagedraw) method
 - [`Image.draw_part`](assets.md#imagedraw_part) method
 - [`Image.fill`](assets.md#imagefill) method
+- [`Image.fill_circle`](assets.md#imagefill_circle) method
 - [`Image.fill_rect`](assets.md#imagefill_rect) method
 - [`Image.flip_x`](assets.md#imageflip_x) method
 - [`Image.flip_y`](assets.md#imageflip_y) method
@@ -613,6 +614,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Physics.overlap_rect`](resources.md#physicsoverlap_rect) method
 - [`Physics.raycast`](resources.md#physicsraycast) method
 - [`Physics.raycast_mask`](resources.md#physicsraycast_mask) method
+- [`Physics.rebuild_shapes`](resources.md#physicsrebuild_shapes) method
 - [`Physics.set_debug_draw`](resources.md#physicsset_debug_draw) method
 - [`Physics.set_gravity`](resources.md#physicsset_gravity) method
 - [`PI`](values.md#pi) constant
@@ -873,6 +875,9 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Texture.to_image`](assets.md#textureto_image) method
 - [`Texture.update`](assets.md#textureupdate) method
 - [`Texture.update_rect`](assets.md#textureupdate_rect) method
+- [`texture_outlines`](resources.md#texture_outlines) function
+- [`texture_pieces`](resources.md#texture_pieces) function
+- [`TextureCollider`](components.md#texturecollider) type
 - [`Theme`](ui.md#theme) type
 - [`Theme.accented`](ui.md#themeaccented) method
 - [`Theme.colored`](ui.md#themecolored) method

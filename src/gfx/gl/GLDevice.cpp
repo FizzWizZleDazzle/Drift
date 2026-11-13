@@ -181,23 +181,38 @@ public:
     }
 
     bool readPixels(TextureId id, int32_t* w, int32_t* h, std::vector<uint8_t>& out) override {
-        GLuint fbo = 0;
+        GLuint fbo = 0, scratch = 0;
         int32_t tw = 0, th = 0;
         if (id == 0) {
             drawableSize(&tw, &th);
         } else {
             auto it = textures_.find(id);
-            if (it == textures_.end() || !it->second.fbo) return false;
+            if (it == textures_.end()) return false;
             fbo = it->second.fbo;
             tw = it->second.width;
             th = it->second.height;
+            if (!fbo) {
+                // Other textures are read through a framebuffer made for
+                // the read.
+                gl_.GenFramebuffers(1, &scratch);
+                gl_.BindFramebuffer(GL_FRAMEBUFFER, scratch);
+                gl_.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, it->second.tex, 0);
+                bool complete = gl_.CheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+                gl_.BindFramebuffer(GL_FRAMEBUFFER, 0);
+                if (!complete) {
+                    gl_.DeleteFramebuffers(1, &scratch);
+                    return false;
+                }
+                fbo = scratch;
+            }
         }
         out.resize(static_cast<size_t>(tw) * th * 4);
         gl_.BindFramebuffer(GL_FRAMEBUFFER, fbo);
         gl_.PixelStorei(GL_PACK_ALIGNMENT, 1);
         gl_.ReadPixels(0, 0, tw, th, GL_RGBA, GL_UNSIGNED_BYTE, out.data());
         gl_.BindFramebuffer(GL_FRAMEBUFFER, 0);
-        // Render targets are stored top-down (see submitPass); the window is bottom-up.
+        if (scratch) gl_.DeleteFramebuffers(1, &scratch);
+        // Textures are stored top-down (see submitPass); the window is bottom-up.
         if (id == 0) {
             size_t row = static_cast<size_t>(tw) * 4;
             std::vector<uint8_t> tmp(row);

@@ -80,7 +80,7 @@ To use Drift from your own project, pull it in with `FetchContent` and link `dri
 
 - **Rendering**: batched sprites and shapes (also as rectangle and circle components), render layers with a HUD layer, multiple cameras (split screen, minimaps), render targets, custom shaders written once in WGSL, pixel-perfect scaling. OpenGL 3.3 on desktop, WebGL2 in the browser, and an optional WebGPU backend for both.
 - **Lighting and effects**: point and spot lights with hard shadows, and one-line post effects such as bloom, CRT, color grading and screen fades.
-- **Physics**: Box2D rigid bodies, colliders, sensors and collision events as ECS components.
+- **Physics**: Box2D rigid bodies, colliders (including ones traced from a sprite's pixels), sensors and collision events as ECS components.
 - **Tilemaps**: Tiled and LDtk levels with parallax, animated tiles, autotiling and generated colliders.
 - **Text**: UTF-8 text with wrapping, alignment, outlines and shadows; a built-in font plus TrueType and bitmap fonts.
 - **Audio**: WAV, OGG and MP3, mixer buses, music crossfades and playlists, positional sound.
