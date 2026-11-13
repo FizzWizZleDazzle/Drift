@@ -76,9 +76,21 @@ function(drift_candela_web_game target)
         ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/drift/src/main.cdl)
 endfunction()
 
+# Game folders outside this tree to build as web pages too, each as the
+# target <folder name>_cdl: -DDRIFT_CANDELA_WEB_GAMES="/path/to/game;...".
+set(DRIFT_CANDELA_WEB_GAMES "" CACHE STRING "Candela game folders to build as web pages")
+
 if(EMSCRIPTEN)
     drift_candela_web_game(flappy_bird_cdl PROJECT ${CMAKE_CURRENT_SOURCE_DIR}/examples/flappy_bird)
     drift_candela_web_game(coin_dash_cdl PROJECT ${CMAKE_CURRENT_SOURCE_DIR}/examples/coin_dash)
+    foreach(game IN LISTS DRIFT_CANDELA_WEB_GAMES)
+        get_filename_component(name ${game} NAME)
+        string(MAKE_C_IDENTIFIER ${name} name)
+        if(TARGET ${name}_cdl)
+            message(FATAL_ERROR "DRIFT_CANDELA_WEB_GAMES: two games would build as ${name}_cdl")
+        endif()
+        drift_candela_web_game(${name}_cdl PROJECT ${game})
+    endforeach()
     return()
 endif()
 
