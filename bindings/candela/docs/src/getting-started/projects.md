@@ -73,6 +73,8 @@ import "./src/player.cdl";
 import "./src/enemies.cdl";
 ```
 
+A file import is relative to the file that writes it: `./src/player.cdl` from `main.cdl` is `src/player.cdl` in the project, and `src/player.cdl` reaches `src/weapons.cdl` with `import "./weapons.cdl";` and the project folder above it with `../`. Games split this way run the same on the desktop and in the browser.
+
 `import "drift" { * };` brings in every engine name and attribute. A name you declare yourself shadows the imported one, so a game can have its own `Timer` or `log`. Systems, components and resources are found in every imported file, not only the entry script. A system's name is its function name, so two files may not both declare a system called `setup`.
 
 The `drift` module comes with `drift` itself; there is nothing to install. Other candela packages import as usual.

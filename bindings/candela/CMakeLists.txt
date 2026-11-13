@@ -58,17 +58,30 @@ endfunction()
 
 # drift_candela_web_game(<target> PROJECT <dir>): a Candela game as a web
 # page. The game's folder (drift.toml, its scripts, its assets) and the
-# drift module are packaged into the page's file system.
+# drift module are packaged into the page's file system. Every script in
+# the folder keeps its path relative to the folder, so imports such as
+# "./src/player.cdl" find it. Hidden folders, build output folders (build,
+# build-*) and the asset folder, which is packaged whole, are skipped.
 function(drift_candela_web_game target)
     cmake_parse_arguments(ARG "" "PROJECT" "" ${ARGN})
     get_filename_component(project ${ARG_PROJECT} ABSOLUTE)
     drift_candela_program(${target})
     drift_project_value(${project}/drift.toml entry entry "main.cdl")
-    file(GLOB scripts CONFIGURE_DEPENDS ${project}/*.cdl)
+    drift_project_value(${project}/drift.toml assets assets_dir "assets")
+    file(GLOB_RECURSE found CONFIGURE_DEPENDS RELATIVE ${project} ${project}/*.cdl)
+    set(scripts "")
     set(preload "")
-    foreach(script IN LISTS scripts)
-        get_filename_component(n ${script} NAME)
-        list(APPEND preload ${script}@/${n})
+    foreach(rel IN LISTS found)
+        if(rel MATCHES "(^|/)(\\.[^/]*|build|build-[^/]*)/" OR rel MATCHES "^${assets_dir}/")
+            continue()
+        endif()
+        set(script ${project}/${rel})
+        string(FIND ${script} ${CMAKE_BINARY_DIR}/ in_binary_dir)
+        if(in_binary_dir EQUAL 0)
+            continue()
+        endif()
+        list(APPEND scripts ${script})
+        list(APPEND preload ${script}@/${rel})
     endforeach()
     list(APPEND preload ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/drift@/drift-module)
     drift_web_app(${target} PROJECT ${project} PRELOAD ${preload})

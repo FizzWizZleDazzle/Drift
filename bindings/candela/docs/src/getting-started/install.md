@@ -23,7 +23,7 @@ cmake --build build-web --target flappy_bird_cdl
 cd build-web/bindings/candela && python3 -m http.server 8000   # open flappy_bird_cdl.html
 ```
 
-The page carries the game's scripts, `drift.toml` and assets, and compiles the scripts when it loads. To build your own game folders the same way, list them in `-DDRIFT_CANDELA_WEB_GAMES="/path/to/my_game;/path/to/other"`; each becomes the target and page `play_<folder name>`.
+The page carries every script in the game folder at its path in the folder, `drift.toml` and the assets, and compiles the scripts when it loads, so a game split across subfolders runs as it does on the desktop. Hidden folders and build output folders (`build`, `build-*`) are left out. To build your own game folders the same way, list them in `-DDRIFT_CANDELA_WEB_GAMES="/path/to/my_game;/path/to/other"`; each becomes the target and page `play_<folder name>`.
 
 Check it:
 
