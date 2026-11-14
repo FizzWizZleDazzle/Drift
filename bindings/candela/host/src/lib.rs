@@ -2267,13 +2267,18 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
     // Then with a function that builds each resource from its defaults. A
     // resource with a field that has no default cannot be built; it waits for
     // cmd.insert_resource.
-    let glue_for = |list: &[&(u16, Option<String>)]| -> String {
+    // The glue, and where each item's function sits in the compiled text.
+    let base = format!("{src}{main}");
+    let glue_for = |list: &[&(u16, Option<String>)]| -> (String, Vec<std::ops::Range<usize>>) {
         let mut g = String::new();
+        let mut at = Vec::with_capacity(list.len());
         for (id, _) in list {
             let n = types.struct_name(*id);
+            let start = base.len() + g.len();
             g.push_str(&format!("\nfn __drift_default_{id}() -> {n} {{ return {n} {{ .. }}; }}\n"));
+            at.push(start..base.len() + g.len());
         }
-        g
+        (g, at)
     };
     // Components too, so a component another one requires can be added from
     // its defaults, and messages, whose new fields take their defaults when
@@ -2287,18 +2292,28 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
     // Why each one left out does not build.
     let mut unbuildable: Vec<(u16, Diagnostic)> = Vec::new();
     let program = loop {
-        match engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&buildable)), entry) {
+        let (glue, at) = glue_for(&buildable);
+        match engine(module_dir).compile(&format!("{base}{glue}"), entry) {
             Ok(p) => break p,
-            Err(_) if !buildable.is_empty() => {
-                // Find the resources whose default does not compile.
-                buildable.retain(|r| match engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&[r])), entry) {
+            Err(d) if !buildable.is_empty() => {
+                // A default that does not compile is named by where the error
+                // points: drop that one and compile again, so a game pays one
+                // more compile per struct without defaults, not one per struct.
+                let ours = d.filename == entry || d.filename.is_empty();
+                if let Some(i) = at.iter().position(|r| ours && r.contains(&d.span.start)) {
+                    unbuildable.push((buildable.remove(i).0, d));
+                    continue;
+                }
+                // The error points elsewhere, such as a default inside the
+                // struct's own declaration: try each one alone.
+                buildable.retain(|r| match engine(module_dir).compile(&format!("{base}{}", glue_for(&[r]).0), entry) {
                     Ok(_) => true,
                     Err(d) => {
                         unbuildable.push((r.0, d));
                         false
                     }
                 });
-                if let Ok(p) = engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&buildable)), entry) {
+                if let Ok(p) = engine(module_dir).compile(&format!("{base}{}", glue_for(&buildable).0), entry) {
                     break p;
                 }
                 buildable.clear();

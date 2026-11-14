@@ -986,15 +986,15 @@ Sent when a clip plays to its end: a clip made with `once()`, or one started wit
 ```rust
 @message
 struct AnimationFinished {
-    entity: Entity,
-    clip: string,
+    entity: Entity = Entity { .. },
+    clip: string = "",
 }
 ```
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `entity` | `Entity` | required | The entity whose animator played the clip |
-| `clip` | `string` | required | The clip's name |
+| `entity` | `Entity` | `Entity { .. }` | The entity whose animator played the clip |
+| `clip` | `string` | `""` | The clip's name |
 
 ```rust
 @system

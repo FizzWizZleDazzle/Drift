@@ -456,21 +456,21 @@ when there was no answer at all (offline, blocked by CORS, a bad URL).
 ```rust
 @message
 struct HttpResponse {
-    request: Request,
-    status: int,
-    ok: bool,
-    body: string,
-    error: string,
+    request: Request = Request { .. },
+    status: int = 0,
+    ok: bool = false,
+    body: string = "",
+    error: string = "",
 }
 ```
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `request` | `Request` | required | The request this answers |
-| `status` | `int` | required | The HTTP status code, such as 200 or 404; 0 when there was no answer |
-| `ok` | `bool` | required | Whether the status is in the 200s |
-| `body` | `string` | required | The answer's body, as text |
-| `error` | `string` | required | Why there was no answer; "" when there was one |
+| `request` | `Request` | `Request { .. }` | The request this answers |
+| `status` | `int` | `0` | The HTTP status code, such as 200 or 404; 0 when there was no answer |
+| `ok` | `bool` | `false` | Whether the status is in the 200s |
+| `body` | `string` | `""` | The answer's body, as text |
+| `error` | `string` | `""` | Why there was no answer; "" when there was one |
 
 ## http_get
 
@@ -556,19 +556,19 @@ failed. Sockets work only in the web build; elsewhere a socket reports an Error 
 ```rust
 @message
 struct SocketEvent {
-    socket: Socket,
-    kind: SocketEventKind,
-    text: string,
-    code: int,
+    socket: Socket = Socket { .. },
+    kind: SocketEventKind = SocketEventKind::Opened,
+    text: string = "",
+    code: int = 0,
 }
 ```
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `socket` | `Socket` | required | The socket it happened on |
-| `kind` | `SocketEventKind` | required | What happened |
-| `text` | `string` | required | The message for Message, the reason for Closed, the cause for Error |
-| `code` | `int` | required | The WebSocket close code for Closed (1000 is a normal close, 1006 a lost connection); 0 otherwise |
+| `socket` | `Socket` | `Socket { .. }` | The socket it happened on |
+| `kind` | `SocketEventKind` | `SocketEventKind::Opened` | What happened |
+| `text` | `string` | `""` | The message for Message, the reason for Closed, the cause for Error |
+| `code` | `int` | `0` | The WebSocket close code for Closed (1000 is a normal close, 1006 a lost connection); 0 otherwise |
 
 ```rust
 @system

@@ -929,9 +929,9 @@ impl AnimationClip {
 @message
 struct AnimationFinished {
     /// The entity whose animator played the clip
-    entity: Entity,
+    entity: Entity = Entity { .. },
     /// The clip's name
-    clip: string,
+    clip: string = "",
 }
 
 /// Plays named clips on the entity's `Sprite`, setting its image and frame as time passes.

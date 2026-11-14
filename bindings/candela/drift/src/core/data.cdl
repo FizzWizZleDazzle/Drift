@@ -67,15 +67,15 @@ struct Request {
 @message
 struct HttpResponse {
     /// The request this answers
-    request: Request,
+    request: Request = Request { .. },
     /// The HTTP status code, such as 200 or 404; 0 when there was no answer
-    status: int,
+    status: int = 0,
     /// Whether the status is in the 200s
-    ok: bool,
+    ok: bool = false,
     /// The answer's body, as text
-    body: string,
+    body: string = "",
     /// Why there was no answer; "" when there was one
-    error: string,
+    error: string = "",
 }
 
 /// Sends a GET request to `url`; the answer arrives later as an HttpResponse message.
@@ -130,14 +130,14 @@ enum SocketEventKind {
 @message
 struct SocketEvent {
     /// The socket it happened on
-    socket: Socket,
+    socket: Socket = Socket { .. },
     /// What happened
-    kind: SocketEventKind,
+    kind: SocketEventKind = SocketEventKind::Opened,
     /// The message for Message, the reason for Closed, the cause for Error
-    text: string,
+    text: string = "",
     /// The WebSocket close code for Closed (1000 is a normal close, 1006 a lost connection); 0
     /// otherwise
-    code: int,
+    code: int = 0,
 }
 
 /// Opens a WebSocket to a ws:// or wss:// URL. Send once Opened has arrived.
