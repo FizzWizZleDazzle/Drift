@@ -5,18 +5,55 @@
 #include <drift/Events.hpp>
 #include <drift/components/Physics.hpp>
 #include <drift/components/Sprite.hpp>
+#include <drift/math/Vector.hpp>
 #include <drift/resources/PhysicsResource.hpp>
 #include <drift/resources/TextureShapeCache.hpp>
 #include <drift/resources/Time.hpp>
 
 #include <unordered_map>
-#include <cstdio>
 #include <algorithm>
 #include <cstring>
-#include <string>
 #include <vector>
 
 namespace drift {
+
+// The settings a body is made from, to notice when they change.
+struct PhysicsBodySettings {
+    int type = -1;   // -1: no RigidBody2D
+    bool fixedRotation = false;
+    float gravityScale = 1.f, linearDamping = 0.f, angularDamping = 0.f;
+    enum class Shape : uint8_t { Box, Circle, Texture } shape = Shape::Box;
+    Vec2 size{}, offset{};
+    float density = 0.f, friction = 0.f, restitution = 0.f;
+    bool sensor = false;
+    uint32_t category = 0, mask = 0;
+    // A texture collider's sprite: its texture and the version of its
+    // shapes, and when it follows the sprite, the frame, origin, flip and
+    // scale.
+    uint32_t texture = 0, textureVersion = 0;
+    Vec2 frameAt{}, frameSize{}, origin{}, scale{};
+    int flip = 0;
+
+    bool operator==(const PhysicsBodySettings&) const = default;
+};
+
+// The settings a joint is made from, with the bodies it joins.
+struct PhysicsJointSettings {
+    Joint2D joint;
+    PhysicsBody self{}, other{};
+
+    bool operator==(const PhysicsJointSettings& o) const {
+        const Joint2D& a = joint;
+        const Joint2D& b = o.joint;
+        return a.type == b.type && a.target == b.target && self.index == o.self.index &&
+               self.revision == o.self.revision && other.index == o.other.index &&
+               other.revision == o.other.revision && a.anchor == b.anchor && a.targetAnchor == b.targetAnchor &&
+               a.length == b.length && a.minLength == b.minLength && a.maxLength == b.maxLength &&
+               a.stiffness == b.stiffness && a.damping == b.damping && a.limit == b.limit &&
+               a.lower == b.lower && a.upper == b.upper && a.motor == b.motor && a.motorSpeed == b.motorSpeed &&
+               a.maxMotorForce == b.maxMotorForce && a.axis == b.axis && a.collideConnected == b.collideConnected;
+    }
+};
 
 // Bidirectional mapping between ECS entities and Box2D bodies.
 class PhysicsBridge : public Resource {
@@ -35,12 +72,12 @@ public:
     std::unordered_map<uint32_t, EntityId> entityByIndex;
     // The body and collider settings each body was made from; a body whose
     // settings change is made again.
-    std::unordered_map<EntityId, std::string> bodySettings;
+    std::unordered_map<EntityId, PhysicsBodySettings> bodySettings;
     // Joints made from Joint2D components, with the settings they were made
     // from and the bodies they join.
     struct JointEntry {
         PhysicsJoint joint{};
-        std::string settings;
+        PhysicsJointSettings settings;
     };
     std::unordered_map<EntityId, JointEntry> joints;
     // The velocity each body had when it was last copied into Velocity2D.
@@ -67,16 +104,27 @@ public:
     }
 };
 
-// The settings a body is made from, as text, to notice when they change.
-inline std::string physicsBodySettings(const RigidBody2D* rb, const char* shape, Vec2 size, Vec2 offset,
-                                       float density, float friction, float restitution, bool sensor,
-                                       CollisionFilter filter) {
-    char buf[256];
-    std::snprintf(buf, sizeof(buf), "%d %d %g %g %g|%s %g %g %g %g %g %g %g %d %u %u",
-                  rb ? int(rb->type) : -1, rb ? int(rb->fixedRotation) : 0, rb ? rb->gravityScale : 1.f,
-                  rb ? rb->linearDamping : 0.f, rb ? rb->angularDamping : 0.f, shape, size.x, size.y, offset.x,
-                  offset.y, density, friction, restitution, int(sensor), filter.category, filter.mask);
-    return buf;
+inline PhysicsBodySettings physicsBodySettings(const RigidBody2D* rb, PhysicsBodySettings::Shape shape, Vec2 size, Vec2 offset,
+                                               float density, float friction, float restitution, bool sensor,
+                                               CollisionFilter filter) {
+    PhysicsBodySettings s;
+    if (rb) {
+        s.type = int(rb->type);
+        s.fixedRotation = rb->fixedRotation;
+        s.gravityScale = rb->gravityScale;
+        s.linearDamping = rb->linearDamping;
+        s.angularDamping = rb->angularDamping;
+    }
+    s.shape = shape;
+    s.size = size;
+    s.offset = offset;
+    s.density = density;
+    s.friction = friction;
+    s.restitution = restitution;
+    s.sensor = sensor;
+    s.category = filter.category;
+    s.mask = filter.mask;
+    return s;
 }
 
 // Convert a ContactEvent shape field back to a PhysicsShape for querying user data.
@@ -136,17 +184,11 @@ inline void physics_sync_joints(App& app, PhysicsResource& physics, PhysicsBridg
             }
             wanted[e] = true;
             // Bodies are made again when their settings change, which
-            // destroys their joints; the body ids are part of the key.
-            char buf[320];
-            std::snprintf(buf, sizeof(buf), "%d %llu %d:%d %d:%d %g %g %g %g %g %g %g %g %g %d %g %g %d %g %g %g %g %d",
-                          int(j->type), (unsigned long long)j->target, self->second.index, self->second.revision,
-                          other.index, other.revision, j->anchor.x, j->anchor.y, j->targetAnchor.x,
-                          j->targetAnchor.y, j->length, j->minLength, j->maxLength, j->stiffness, j->damping,
-                          int(j->limit), j->lower, j->upper, int(j->motor), j->motorSpeed, j->maxMotorForce,
-                          j->axis.x, j->axis.y, int(j->collideConnected));
+            // destroys their joints; the bodies are part of the settings.
+            PhysicsJointSettings settings{*j, self->second, other};
             auto existing = bridge.joints.find(e);
             if (existing != bridge.joints.end()) {
-                if (existing->second.settings == buf && physics.jointValid(existing->second.joint)) continue;
+                if (existing->second.settings == settings && physics.jointValid(existing->second.joint)) continue;
                 physics.destroyJoint(existing->second.joint);
                 bridge.joints.erase(existing);
             }
@@ -175,7 +217,7 @@ inline void physics_sync_joints(App& app, PhysicsResource& physics, PhysicsBridg
             def.maxMotorForce = j->maxMotorForce;
             def.axis = j->axis;
             def.collideConnected = j->collideConnected;
-            bridge.joints[e] = {physics.createJoint(def), buf};
+            bridge.joints[e] = {physics.createJoint(def), settings};
         }
     }
     for (auto it = bridge.joints.begin(); it != bridge.joints.end();) {
@@ -224,9 +266,9 @@ inline void physics_sync_to_box2d(App& app) {
         QueryMut<Transform2D, BoxCollider2D> boxQuery(world, registry);
         boxQuery.iterWithEntity([&](EntityId entity, Transform2D& t, BoxCollider2D& collider) {
             seen[entity] = true;
-            std::string settings = physicsBodySettings(rigidBodyOf(entity), "box", collider.halfSize, collider.offset,
-                                                       collider.density, collider.friction, collider.restitution,
-                                                       collider.isSensor, collider.filter);
+            PhysicsBodySettings settings = physicsBodySettings(rigidBodyOf(entity), PhysicsBodySettings::Shape::Box, collider.halfSize,
+                                                               collider.offset, collider.density, collider.friction,
+                                                               collider.restitution, collider.isSensor, collider.filter);
             if (bridge->hasBody(entity)) {
                 if (bridge->bodySettings[entity] == settings) return; // already synced
                 physics->destroyBody(bridge->entityToBody[entity]);   // settings changed: make it again
@@ -275,9 +317,9 @@ inline void physics_sync_to_box2d(App& app) {
         QueryMut<Transform2D, CircleCollider2D> circleQuery(world, registry);
         circleQuery.iterWithEntity([&](EntityId entity, Transform2D& t, CircleCollider2D& collider) {
             seen[entity] = true;
-            std::string settings = physicsBodySettings(rigidBodyOf(entity), "circle", {collider.radius, 0.f},
-                                                       collider.offset, collider.density, collider.friction,
-                                                       collider.restitution, collider.isSensor, collider.filter);
+            PhysicsBodySettings settings = physicsBodySettings(rigidBodyOf(entity), PhysicsBodySettings::Shape::Circle, {collider.radius, 0.f},
+                                                               collider.offset, collider.density, collider.friction,
+                                                               collider.restitution, collider.isSensor, collider.filter);
             if (bridge->hasBody(entity)) {
                 if (bridge->bodySettings[entity] == settings) return;
                 physics->destroyBody(bridge->entityToBody[entity]);
@@ -329,19 +371,18 @@ inline void physics_sync_to_box2d(App& app) {
             if (!sprite || !sprite->texture.valid()) return;   // no body until there is a sprite to shape it
             seen[entity] = true;
             const RigidBody2D* rb = rigidBodyOf(entity);
-            std::string settings = physicsBodySettings(rb, "texture", {collider.threshold, collider.tolerance},
-                                                       {collider.minArea, 0.f}, collider.density, collider.friction,
-                                                       collider.restitution, collider.isSensor, collider.filter);
-            char extra[192];
+            PhysicsBodySettings settings = physicsBodySettings(
+                rb, PhysicsBodySettings::Shape::Texture, {collider.threshold, collider.tolerance}, {collider.minArea, 0.f},
+                collider.density, collider.friction, collider.restitution, collider.isSensor, collider.filter);
+            settings.texture = sprite->texture.id;
+            settings.textureVersion = shapeCache->version(sprite->texture);
             if (collider.followSprite) {
-                std::snprintf(extra, sizeof(extra), "|%u %u|%g %g %g %g %g %g %d %g %g", sprite->texture.id,
-                              shapeCache->version(sprite->texture), sprite->srcRect.x, sprite->srcRect.y,
-                              sprite->srcRect.w, sprite->srcRect.h, sprite->origin.x, sprite->origin.y,
-                              int(sprite->flip), t.scale.x, t.scale.y);
-            } else {
-                std::snprintf(extra, sizeof(extra), "|%u %u", sprite->texture.id, shapeCache->version(sprite->texture));
+                settings.frameAt = {sprite->srcRect.x, sprite->srcRect.y};
+                settings.frameSize = {sprite->srcRect.w, sprite->srcRect.h};
+                settings.origin = sprite->origin;
+                settings.flip = int(sprite->flip);
+                settings.scale = t.scale;
             }
-            settings += extra;
             if (bridge->hasBody(entity)) {
                 if (bridge->bodySettings[entity] == settings) return;
                 physics->destroyBody(bridge->entityToBody[entity]);
