@@ -73,6 +73,16 @@ inline void cameraBoundsSystem(Res<RendererResource> renderer,
     });
 }
 
+// Takes back the shake offset applied last frame before anything reads or
+// moves the camera, so a shake never leaves the camera displaced.
+inline void cameraUnshakeSystem(QueryMut<Transform2D, CameraShake, Camera> cameras) {
+    cameras.iter([&](Transform2D& transform, CameraShake& shake, Camera&) {
+        transform.position.x -= shake.offset.x;
+        transform.position.y -= shake.offset.y;
+        shake.offset = {};
+    });
+}
+
 inline void cameraShakeSystem(Res<Time> time,
                                QueryMut<Transform2D, CameraShake, Camera> cameras) {
     float dt = time->delta;
@@ -91,8 +101,9 @@ inline void cameraShakeSystem(Res<Time> time,
         float oy = std::cos(shake.elapsed * shake.frequency * 1.3f) *
                    std::sin(shake.elapsed * shake.frequency * 0.9f);
 
-        transform.position.x += ox * shake.intensity;
-        transform.position.y += oy * shake.intensity;
+        shake.offset = {ox * shake.intensity, oy * shake.intensity};
+        transform.position.x += shake.offset.x;
+        transform.position.y += shake.offset.y;
 
         // Decay
         shake.intensity *= std::exp(-shake.decay * dt);
@@ -111,9 +122,11 @@ public:
             .field("intensity", &CameraShake::intensity)
             .field("decay", &CameraShake::decay)
             .field("frequency", &CameraShake::frequency)
-            .field("elapsed", &CameraShake::elapsed);
+            .field("elapsed", &CameraShake::elapsed)
+            .field("offset", &CameraShake::offset);
         reflect::component<CameraBounds>(app.world(), "CameraBounds")
             .field("area", &CameraBounds::area);
+        app.addSystem<cameraUnshakeSystem>("camera_unshake", Phase::PreUpdate);
         app.addSystem<cameraFollowSystem>("camera_follow", Phase::PostUpdate);
         app.addSystem<cameraBoundsSystem>("camera_bounds", Phase::PostUpdate).after("camera_follow");
         app.addSystem<cameraShakeSystem>("camera_shake", Phase::PostUpdate).after("camera_bounds");

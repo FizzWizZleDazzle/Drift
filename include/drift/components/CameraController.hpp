@@ -9,6 +9,7 @@ struct CameraShake {
     float decay = 5.f;          // how fast intensity decays per second
     float frequency = 20.f;     // shake oscillation speed
     float elapsed = 0.f;
+    Vec2 offset = {};           // displacement applied this frame, taken back next frame
 
     void trigger(float mag) {
         intensity = mag;
