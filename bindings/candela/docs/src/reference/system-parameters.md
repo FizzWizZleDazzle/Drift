@@ -151,7 +151,7 @@ struct Lookup<T> {
     key: int = 0,
     ids: int[] = [],
     rows: T[] = [],
-    slots: {int: int} = {},
+    slots: {string: int} = {},
 }
 ```
 
@@ -160,7 +160,7 @@ struct Lookup<T> {
 | `key` | `int` | `0` | The host's id for this lookup in this system call. |
 | `ids` | `int[]` | `[]` | The ids of the entities fetched so far, in fetch order. |
 | `rows` | `T[]` | `[]` | The components fetched so far, one per id; the host writes their changes back. |
-| `slots` | `{int: int}` | `{}` | Entity id to its index in `rows`, so a second `get` answers without the host. |
+| `slots` | `{string: int}` | `{}` | Entity id, as text, to its index in `rows`, so a second `get` answers without the host. |
 
 ```rust
 @system

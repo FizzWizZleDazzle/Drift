@@ -105,8 +105,8 @@ struct Lookup<T> {
     ids: int[] = [],
     /// The components fetched so far, one per id; the host writes their changes back.
     rows: T[] = [],
-    /// Entity id to its index in `rows`, so a second `get` answers without the host.
-    slots: {int: int} = {},
+    /// Entity id, as text, to its index in `rows`, so a second `get` answers without the host.
+    slots: {string: int} = {},
 }
 impl Lookup<T> {
     /// `Some(component)` when the entity has a `T`, `None` otherwise.
@@ -117,15 +117,16 @@ impl Lookup<T> {
     /// }
     /// ```
     fn get(self, e: Entity) -> Option<T> {
-        if self.slots.contains(e.id) {
-            return Some(self.rows[self.slots[e.id]]);
+        let slot = string(e.id);
+        if self.slots.contains(slot) {
+            return Some(self.rows[self.slots[slot]]);
         }
         let found = drift::lookup_get(self.key, e.id) as any[];
         if found.len() == 0 {
             return None;
         }
         let row = found[0] as T;
-        self.slots[e.id] = self.rows.len();
+        self.slots[slot] = self.rows.len();
         self.ids.push(e.id);
         self.rows.push(row);
         return Some(row);
@@ -135,7 +136,7 @@ impl Lookup<T> {
     /// ```rust
     /// if shields.has(hit.a) { return; }
     /// ```
-    fn has(self, e: Entity) -> bool { return self.slots.contains(e.id) || drift::lookup_has(self.key, e.id); }
+    fn has(self, e: Entity) -> bool { return self.slots.contains(string(e.id)) || drift::lookup_has(self.key, e.id); }
     /// How many entities have a `T`.
     ///
     /// ```rust

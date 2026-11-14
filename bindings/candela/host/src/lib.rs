@@ -3286,14 +3286,14 @@ fn build(entry: &str, module_dir: &str) -> Result<Vec<u8>, String> {
         .map_err(|_| String::from("the candela compiler stopped unexpectedly"))??;
     // Bytecode exports only functions whose parameters it can take from a
     // host; a game with a system that takes something else (with the pinned
-    // candela, a Text, whose align is an enum; a Lookup, whose slots are a
-    // map keyed by numbers) keeps compiling when its page loads.
+    // candela, a Text, whose align is an enum) keeps compiling when its page
+    // loads.
     let program = candela::load_program(&bytes, &hosts()).map_err(|e| e.to_string())?;
     let exported: HashSet<&str> = program.exports().collect();
     let names: Vec<String> = calls.iter().map(|q| q.trim_matches('"').to_owned()).collect();
     for (k, name) in names.iter().enumerate() {
         if !exported.contains(format!("__drift_call_{k}").as_str()) {
-            return Err(format!("{name} cannot be called from bytecode: a parameter holds a value its exports do not take, such as an enum or a map keyed by numbers (a Lookup)"));
+            return Err(format!("{name} cannot be called from bytecode: a parameter holds a value its exports do not take, such as an enum"));
         }
     }
     Ok(bytes)

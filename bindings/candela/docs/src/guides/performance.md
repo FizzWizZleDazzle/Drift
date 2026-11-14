@@ -19,7 +19,7 @@ Drift is built so that a game written the plain way runs fast: you should not ha
 - **A list parameter in a per-entity system is built for every call.** To read one other entity, use a `Lookup`; see [Keeping queries cheap](../concepts/queries.md#keeping-queries-cheap).
 - **Every engine call crosses into the engine.** Procedural animation solvers, physics queries and `Draw` calls each cross once per call; per entity per frame, that adds up.
 - **Pixels set one by one in a script are slow.** Build images with `fill`, `fill_rect`, `draw`, `blit`, `crop` and the shape methods, which run in the engine, rather than `set` in a loop. A startup system that draws a big image pixel by pixel delays the first frame.
-- **Compiling in the page.** A page that compiles its scripts spends that time before the first frame, and each struct marked `@component`, `@resource`, `@settings` or `@message` with a field that has no default adds one more compile; give fields defaults. A system that takes a value bytecode cannot take yet (a `Text`, a `Sprite` or anything else holding an enum, or a `Lookup`) keeps the whole game compiling in the page.
+- **Compiling in the page.** A page that compiles its scripts spends that time before the first frame, and each struct marked `@component`, `@resource`, `@settings` or `@message` with a field that has no default adds one more compile; give fields defaults. A system that takes a value bytecode cannot take yet (a `Text`, a `Sprite` or anything else holding an enum) keeps the whole game compiling in the page.
 
 ## Seeing where time goes
 
