@@ -2,6 +2,30 @@
 
 A score, a health bar, a menu: the HUD is entities on `hud_layer()`, the screen layer. It draws last, in screen pixels, not through a camera, so it stays put while the world scrolls and shakes. This page covers text, keeping a score, the `drift/ui` widget module, and drawing without entities.
 
+## Before you start
+
+- HUD entities need `layer: hud_layer()`. Without it, text and shapes are part of the world: once the game has a camera they scroll, zoom and shake with it.
+- A HUD position is in screen pixels from the top-left of the game's logical size (`width` and `height` in `[window]`), whatever the camera does.
+- The widgets need `import "drift/ui" { * };` beside `import "drift" { * };`.
+- A font of your own is loaded before the widgets that use it are made; see [Fonts](#fonts).
+
+![A score counting up, a health bar losing chunks with a yellow trail, and three hearts, all staying still while the world scrolls and shakes under them](../images/ui/hud.gif)
+
+The program behind the picture binds three widgets to one resource, and changes only the resource. [Run it in the browser](../play/gallery/ui/hud/).
+
+```rust
+{{#include ../../gallery/ui/hud/main.cdl:hud}}
+```
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/ui/hud/main.cdl:all}}
+```
+
+</details>
+
 ## Text on screen
 
 ```rust

@@ -1,0 +1,61 @@
+// ANCHOR: all
+// A HUD over a scrolling, shaking world: a score that counts up, a health
+// bar with a trail of the damage taken, and a row of lives, all from the
+// drift/ui module and bound to one resource. The world moves under them;
+// the HUD stays put, because hud_layer() is not drawn through the camera.
+
+import "drift" { * };
+import "drift/ui" { * };
+
+// ANCHOR: hud
+@resource
+struct Game { score: int = 0, hp: float = 100.0, max_hp: float = 100.0, lives: int = 3 }
+
+@system(schedule: Schedule::Startup)
+fn hud(cmd: Commands, theme: Theme) {
+    cmd.spawn(plus(label(theme, "", anchor(TOP_LEFT, 16.0, 12.0)), [bind_counter<Game>("score", "Score {}", 200.0)]));
+    spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 44.0), vec2(160.0, 14.0),
+              Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. });
+    cmd.spawn(plus(icon_row(anchor(TOP_RIGHT, -110.0, 14.0), 3, 3), [IconRow { count_from: resource_field<Game>("lives"), .. }]));
+}
+// ANCHOR_END: hud
+
+@resource
+struct View { camera: Entity = Entity { .. }, tick: Timer = repeating_timer(0.5), n: int = 0 }
+
+@system(schedule: Schedule::Startup)
+fn world(cmd: Commands, view: View) {
+    view.camera = cmd.spawn([at(240.0, 135.0), Camera { .. }]);
+    for i in range(30) {
+        cmd.spawn([at(40.0 * float(i), 200.0 + 20.0 * sin(float(i))), Circle { radius: 8.0, color: rgb(70, 110, 90), .. }]);
+    }
+}
+
+// Every half second: points, and now and then a hit that shakes the camera.
+@system
+fn play(view: View, game: Game, time: Time, effects: Effects, cams: (Camera, Transform)[]) {
+    for (_, t) in cams {
+        t.position.x += 60.0 * time.dt;
+    }
+    if view.tick.tick(time.dt) == 0 {
+        return;
+    }
+    view.n += 1;
+    game.score += 50;
+    if view.n % 3 == 0 {
+        game.hp = max(0.0, game.hp - 25.0);
+        effects.shake(view.camera, 8.0);
+    }
+    if game.hp <= 0.0 {
+        if game.lives > 0 {
+            game.lives -= 1;
+        }
+        game.hp = game.max_hp;
+    }
+    if view.n % 16 == 0 {
+        game.score = 0;
+        game.lives = 3;
+        game.hp = game.max_hp;
+    }
+}
+// ANCHOR_END: all
