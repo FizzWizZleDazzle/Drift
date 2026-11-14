@@ -6,27 +6,39 @@ You do not need physics to move things; see [Movement](movement.md). Use it when
 
 ## Bodies and colliders
 
-A `RigidBody` makes an entity simulated; a collider gives it a shape. Spawn both together:
+![Three crates falling and stacking on a floor, and three balls bouncing with restitution 0.3, 0.6 and 0.9; each ball turns red when it first hits the floor](../images/collisions/fall.gif)
+
+What each part needs:
+
+| You want | The entity needs |
+|----------|------------------|
+| Something that falls, collides and is pushed | `Transform`, `RigidBody`, a collider (`BoxCollider` or `CircleCollider`) and `Velocity` |
+| A wall or floor that never moves | `Transform` and a collider, with no `RigidBody` |
+| Gravity | `gravity` in the `[physics]` section of `drift.toml`; the default is too weak for pixel units |
+| To hear about hits | Colliders on both entities, and a system taking `Contact<A, B>` |
+
+The collider is the shape physics uses, and the `Rectangle`, `Circle` or `Sprite` is only the picture: make them the same size yourself, with `half_size` half the rectangle's `size`.
+
+```toml
+{{#include ../../gallery/collisions/fall/drift.toml:physics}}
+```
 
 ```rust
-@system(schedule: Schedule::Startup)
-fn setup(cmd: Commands) {
-    // A crate that falls and tumbles.
-    cmd.spawn([
-        at(200.0, 50.0),
-        Rectangle { size: vec2(32.0, 32.0), color: rgb(180, 120, 60), .. },
-        RigidBody { .. },
-        BoxCollider { half_size: vec2(16.0, 16.0), .. },
-        Velocity { .. },
-    ]);
-    // The floor: a collider with no body is static.
-    cmd.spawn([
-        at(320.0, 340.0),
-        Rectangle { size: vec2(640.0, 20.0), color: rgb(70, 70, 90), .. },
-        BoxCollider { half_size: vec2(320.0, 10.0), .. },
-    ]);
-}
+{{#include ../../gallery/collisions/fall/main.cdl:bodies}}
+
+{{#include ../../gallery/collisions/fall/main.cdl:contact}}
 ```
+
+[Run it in the browser](../play/gallery/collisions/fall/).
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/collisions/fall/main.cdl:all}}
+```
+
+</details>
 
 | `BodyKind` | Behavior |
 |------------|----------|
@@ -34,9 +46,25 @@ fn setup(cmd: Commands) {
 | `Kinematic` | Moves only by its `Velocity`; pushes dynamic bodies and is not pushed |
 | `Static` | Never moves |
 
-A dynamic body moves on screen only when its entity also has a `Velocity`, as the crate above does. Give it one in the bundle, or let a component of your own bring it with `@component(requires: [Velocity])`.
+A dynamic body moves on screen only when its entity also has a `Velocity`, as the crates above do. Without one, the entity stays where it was spawned, with no error. Give it one in the bundle, or let a component of your own bring it with `@component(requires: [Velocity])`.
 
-`fixed_rotation` keeps a character upright. `density`, `friction` and `restitution` (bounciness) live on the collider. `BoxCollider` and `CircleCollider` take an `offset` from the entity's position.
+| `RigidBody` field | Default | Meaning |
+|-------------------|---------|---------|
+| `kind` | `BodyKind::Dynamic` | See the table above |
+| `fixed_rotation` | false | True keeps the body upright, for characters |
+| `gravity_scale` | 1.0 | Multiplies gravity for this body; 0 floats, -1 falls up |
+| `linear_damping`, `angular_damping` | 0.0, 0.0 | Slow its motion and its spin over time, per second; 0.5 to 2 for things moving through water |
+
+| Collider field | Default | Meaning |
+|----------------|---------|---------|
+| `half_size` (box) | (16, 16) | Half the width and height, in pixels |
+| `radius` (circle) | 16.0 | In pixels |
+| `offset` | (0, 0) | Moves the shape from the entity's position, in pixels |
+| `sensor` | false | True notices overlaps without pushing anything; see [Collisions and sensors](#collisions-and-sensors) |
+| `density` | 1.0 | Mass per square pixel; heavier bodies push lighter ones aside |
+| `friction` | 0.3 | 0 is ice; 1 grips |
+| `restitution` | 0.0 | Bounciness, 0 to 1: the share of its speed a bounce keeps |
+| `category`, `mask` | 1, 65535 | Which colliders touch; see [Collision filtering](#collision-filtering) |
 
 The physics world measures lengths in meters of `pixels_per_meter` pixels, 32 unless `[physics]` sets another; see [Gravity and scale](#gravity-and-scale). Bodies can move as fast as 400 meters a second, 12800 pixels a second at the default.
 

@@ -1,0 +1,74 @@
+// ANCHOR: all
+// Bodies falling onto a floor: crates that stack, balls that bounce, and a
+// ball that turns red each time it hits the floor. Every few seconds the
+// bodies go back to the top.
+
+import "drift" { * };
+
+@component struct Ball {}
+@component struct Floor {}
+@component struct Start { at: Vec2 = Vec2 { .. } }
+
+@resource
+struct Round { every: Timer = repeating_timer(4.0) }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    // ANCHOR: bodies
+    // The floor: a collider with no RigidBody is static and never moves.
+    cmd.spawn([at(240.0, 255.0), Floor {}, Rectangle { size: vec2(480.0, 30.0), color: rgb(70, 70, 90), .. },
+               BoxCollider { half_size: vec2(240.0, 15.0), .. }]);
+
+    // Crates: a RigidBody (dynamic by default), a collider of the same size
+    // as the picture, and a Velocity, without which the body never shows
+    // its motion.
+    for i in range(3) {
+        let p = vec2(120.0 + 14.0 * float(i), 40.0 - 50.0 * float(i));
+        cmd.spawn([at(p.x, p.y), Start { at: p },
+                   Rectangle { size: vec2(36.0, 36.0), color: rgb(180, 120, 60), .. },
+                   RigidBody { .. }, BoxCollider { half_size: vec2(18.0, 18.0), .. }, Velocity { .. }]);
+    }
+
+    // Balls: restitution 0 to 1 is how much of its speed a bounce keeps.
+    let bounce = [0.3, 0.6, 0.9];
+    for i in range(3) {
+        let p = vec2(280.0 + 70.0 * float(i), 30.0);
+        cmd.spawn([at(p.x, p.y), Start { at: p }, Ball {},
+                   Circle { radius: 14.0, color: rgb(110, 180, 255), .. },
+                   RigidBody { .. }, CircleCollider { radius: 14.0, restitution: bounce[i], .. }, Velocity { .. }]);
+    }
+    // ANCHOR_END: bodies
+    let labels = ["restitution 0.3", "0.6", "0.9"];
+    for i in range(3) {
+        cmd.spawn([at(280.0 + 70.0 * float(i), 248.0), Text { value: labels[i], size: 12.0, align: Align::Center, .. }]);
+    }
+}
+
+// ANCHOR: contact
+// Runs once each time a ball starts touching the floor.
+@system
+fn hit_floor(hit: Contact<Ball, Floor>, circles: Lookup<Circle>) {
+    if circles.get(hit.a) is Some(c) {
+        c.color = rgb(255, 90, 90);
+    }
+}
+// ANCHOR_END: contact
+
+// Back to the start: setting the Transform teleports a body, and setting
+// its Velocity stops it.
+@system
+fn again(round: Round, time: Time, bodies: (Start, Transform, Velocity)[], circles: (Ball, Circle)[]) {
+    if round.every.tick(time.dt) == 0 {
+        return;
+    }
+    for (s, t, v) in bodies {
+        t.position = s.at;
+        t.rotation = 0.0;
+        v.linear = vec2(0.0, 0.0);
+        v.angular = 0.0;
+    }
+    for (_, c) in circles {
+        c.color = rgb(110, 180, 255);
+    }
+}
+// ANCHOR_END: all

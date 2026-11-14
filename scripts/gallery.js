@@ -128,6 +128,7 @@ const pictures = [
     { guide: 'sprites', name: 'basics', frames: 3 },
     { guide: 'input', name: 'move', frames: 2, count: 50, every: 3, fps: 20, width: 360,
       route: [[null, 10], ['ArrowRight', 40], ['ArrowDown', 25], ['KeyA', 40], ['ArrowUp', 25], [null, 10]] },
+    { guide: 'collisions', name: 'fall', frames: 2, count: 60, every: 4, fps: 15, width: 360 },
 ];
 
 function arg(name, fallback) {
