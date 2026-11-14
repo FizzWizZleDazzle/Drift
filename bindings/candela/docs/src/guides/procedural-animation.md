@@ -130,7 +130,7 @@ Feed them `time.elapsed` and they give idle motion with no state to keep:
 {{#include ../../gallery/animation/waves/main.cdl:waves}}
 ```
 
-`frequency` is how many times a second it repeats and `amplitude` how far it goes. Give each repeated part its own `phase` (for example `float(i) * 0.6`) and a row of fins or legs moves as a wave instead of in unison. `wobble` never repeats, which reads as alive: a hovering drone, a nervous creature, a flame. [Run it in the browser](../play/gallery/animation/waves/).
+`frequency` is how many times a second it repeats and `amplitude` how far it goes. Give each repeated part its own `phase` (for example `i * 0.6`) and a row of fins or legs moves as a wave instead of in unison. `wobble` never repeats, which reads as alive: a hovering drone, a nervous creature, a flame. [Run it in the browser](../play/gallery/animation/waves/).
 
 <details>
 <summary>The whole program</summary>

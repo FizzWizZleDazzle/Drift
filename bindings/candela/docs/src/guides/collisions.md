@@ -121,7 +121,7 @@ fn setup(cmd: Commands, assets: Assets) {
     img.fill_circle(vec2(32.0, 32.0), 16.0, rgba(0, 0, 0, 0));
     let ring = img.to_texture();
     for i in range(10) {
-        cmd.spawn([at(100.0 + float(i) * 70.0, 50.0), Sprite { image: ring, .. },
+        cmd.spawn([at(100.0 + i * 70.0, 50.0), Sprite { image: ring, .. },
                    RigidBody { .. }, TextureCollider { .. }, Velocity { .. }]);
     }
     // Ground from a picture: no RigidBody, so it is static.

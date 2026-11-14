@@ -112,7 +112,7 @@ fn load_fonts(assets: Assets, fonts: Fonts, theme: Theme) {
 }
 ```
 
-`assets.font` loads TrueType (`.ttf`), OpenType (`.otf`) and BMFont (`.fnt` with its page images) files, each path once. TrueType and OpenType fonts stay smooth at any `size`; BMFont files suit pixel-art fonts drawn at their own size. The size must be a float: write `48.0`, not `48`.
+`assets.font` loads TrueType (`.ttf`), OpenType (`.otf`) and BMFont (`.fnt` with its page images) files, each path once. TrueType and OpenType fonts stay smooth at any `size`; BMFont files suit pixel-art fonts drawn at their own size. The size is a float; an int such as `48` converts to one.
 
 A path that does not exist logs an error and throws `"drift_load_failed: <path>"`. The whole string is the error, so `catch "drift_load_failed"` does not match it; catch it with `catch e` to fall back to the built-in font:
 

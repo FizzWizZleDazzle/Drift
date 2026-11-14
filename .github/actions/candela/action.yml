@@ -22,16 +22,18 @@ runs:
   using: composite
   steps:
     # The candela the drift program is built with. Drift needs changes that
-    # are not released yet (`export import`, lumen-fx/candela#250, and doc
-    # comments with docs links on hover, lumen-fx/candela#251, branch
-    # feat/doc-comments on top of #250), so builds check out this commit.
+    # are not released yet (`export import`, lumen-fx/candela#250; doc
+    # comments with docs links on hover, #251; int and float converting to
+    # each other, #252; and every error while typing plus the package `check`
+    # command, #253, branch feat/live-diagnostics, which contains the other
+    # three), so builds check out this commit.
     # Once they are released, empty this line and set the release in
     # bindings/candela/host/Cargo.toml.
     - name: Pick the candela commit
       id: pin
       shell: bash
       env:
-        CANDELA_COMMIT: 606351a6de7bf0983a661483bd87aa55d4886d2c
+        CANDELA_COMMIT: caf1a4ad2779cf8a29c47553fc1f873bb5465b0d
       run: echo "commit=${CANDELA_COMMIT}" >> "$GITHUB_OUTPUT"
 
     - name: Check out candela

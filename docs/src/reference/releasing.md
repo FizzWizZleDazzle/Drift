@@ -76,7 +76,7 @@ If a build leg fails, fix it on main, delete the tag locally and on GitHub, and 
 
 ## The candela version
 
-`drift` embeds candela, built from source by Cargo. Until the candela changes Drift needs are released (`export import`, lumen-fx/candela#250, and doc comments on hover, lumen-fx/candela#251), CI and release builds check out one pinned candela commit and pass it as `-DDRIFT_CANDELA_SOURCE`. The pin is the `CANDELA_COMMIT` line in `.github/actions/candela/action.yml`, the one place every workflow takes it from. To move to a candela release, empty that line and set the release in `bindings/candela/host/Cargo.toml`.
+`drift` embeds candela, built from source by Cargo. Until the candela changes Drift needs are released (`export import`, lumen-fx/candela#250; doc comments on hover, #251; int and float conversion, #252; live diagnostics and the package `check` command, #253), CI and release builds check out one pinned candela commit and pass it as `-DDRIFT_CANDELA_SOURCE`. The pin is the `CANDELA_COMMIT` line in `.github/actions/candela/action.yml`, the one place every workflow takes it from. To move to a candela release, empty that line and set the release in `bindings/candela/host/Cargo.toml`.
 
 ## One-time repository setup
 
