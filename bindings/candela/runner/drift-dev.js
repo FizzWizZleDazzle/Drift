@@ -1,8 +1,9 @@
 // Hot reload for pages built with `drift build --web --dev`. Release pages do
 // not load this file.
 //
-// The page asks the server about game.pack twice a second (a HEAD request;
-// any static server answers it). When the pack's ETag, Last-Modified or
+// The page asks the server about game.pack four times a second (a HEAD
+// request; any static server answers it), so a save shows within a quarter
+// of a second plus the reload. When the pack's ETag, Last-Modified or
 // length changes, the page fetches it, writes the files whose contents
 // changed into the game's file system (Module.driftInstallPack in
 // pack_loader.js) and names them to the engine (drift_files_changed). The
@@ -97,6 +98,6 @@
       console.warn('[drift] hot reload: ' + e.message);
     }).then(function () { busy = false; });
   };
-  setInterval(check, 500);
+  setInterval(check, 250);
   check();
 })();

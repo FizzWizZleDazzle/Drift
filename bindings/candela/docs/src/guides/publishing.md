@@ -21,7 +21,7 @@ cd build/web && python3 -m http.server     # open http://localhost:8000
 # edit, then run `drift build --web --dev` again: the page changes in place
 ```
 
-A dev page asks the server about `game.pack` twice a second. When the pack changes, the page fetches it, compiles the new code and swaps it into the running game. The player stays where it was, the score stays, and the next frame runs the new code. Any static server works: the page compares the `ETag`, `Last-Modified` and `Content-Length` the server sends for the pack.
+A dev page asks the server about `game.pack` four times a second. When the pack changes, the page fetches it, compiles the new code and swaps it into the running game. The player stays where it was, the score stays, and the next frame runs the new code. Any static server works: the page compares the `ETag`, `Last-Modified` and `Content-Length` the server sends for the pack.
 
 What a reload keeps:
 
