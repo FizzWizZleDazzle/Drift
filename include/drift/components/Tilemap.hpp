@@ -20,8 +20,8 @@ struct Tilemap {
     float         zStep = 1.f;
     uint8_t       renderLayer = 0;
     bool          visible = true;
-    bool          cull = true;            // skip chunks outside the camera
-    CameraHandle  camera;                 // culling and parallax camera; empty = default camera
+    bool          cull = true;            // skip chunks no camera shows
+    CameraHandle  camera;                 // parallax camera, and the only one culling checks; empty = default camera for parallax, every camera for culling
     bool          colliders = true;       // static colliders from the collision layers
     bool          spawnObjects = true;    // run the object spawners once
     ShapeDef      collider = {};          // friction, restitution, filter of the colliders

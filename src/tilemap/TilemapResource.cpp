@@ -754,7 +754,10 @@ void TilemapResource::drawTilemap(TilemapHandle map, const TilemapDrawParams& pa
                         rc.bounds.w * scale.x, rc.bounds.h * scale.y};
                 if (wb.w < 0.f) { wb.x += wb.w; wb.w = -wb.w; }
                 if (wb.h < 0.f) { wb.y += wb.h; wb.h = -wb.h; }
-                if (!wb.overlaps(view)) continue;
+                // A chosen camera culls alone; otherwise a chunk any
+                // camera may show is drawn, so split screens keep theirs.
+                bool shown = params.camera.valid() ? wb.overlaps(view) : r.visible(wb, r.layer());
+                if (!shown) continue;
             }
             for (SubMesh& sm : rc.meshes) {
                 if (!sm.anims.empty()) updateAnimations(sm, impl_->time);

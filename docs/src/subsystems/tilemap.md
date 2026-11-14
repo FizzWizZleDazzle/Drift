@@ -94,8 +94,8 @@ struct Tilemap {
     float         zStep = 1.f;           // added per layer, bottom to top
     uint8_t       renderLayer = 0;
     bool          visible = true;
-    bool          cull = true;           // skip chunks outside the camera
-    CameraHandle  camera;                // culling and parallax camera; empty = default camera
+    bool          cull = true;           // skip chunks no camera shows
+    CameraHandle  camera;                // parallax camera, and the only one culling checks; empty = all
     bool          colliders = true;      // static colliders from the collision layers
     bool          spawnObjects = true;   // run the object spawners once
     ShapeDef      collider = {};         // friction, restitution, filter of the colliders
@@ -110,7 +110,7 @@ Despawning the entity removes its colliders. Entities made by object spawners be
 
 ## Drawing and Sorting
 
-Every tile layer is cut into chunks of 16 by 16 cells. Each chunk is built into one mesh per texture the first time it is drawn and rebuilt only when one of its tiles changes; each frame the plugin draws the chunks that overlap the camera with `RendererResource::drawMesh`. Animated tiles update their texture coordinates in place.
+Every tile layer is cut into chunks of 16 by 16 cells. Each chunk is built into one mesh per texture the first time it is drawn and rebuilt only when one of its tiles changes; each frame the plugin draws the chunks a camera shows with `RendererResource::drawMesh`. Animated tiles update their texture coordinates in place.
 
 Layers are drawn bottom to top at `zOrder`, `zOrder + zStep`, `zOrder + 2 * zStep`, ... on `renderLayer`. Object layers take a slot but draw nothing. A sprite whose `zOrder` falls between two layers' values draws between them:
 
@@ -126,7 +126,7 @@ void setLayerZOrder(TilemapHandle map, int32_t layer, float zOrder);
 void setLayerRenderLayer(TilemapHandle map, int32_t layer, uint8_t renderLayer);
 ```
 
-Parallax factors move a layer by that fraction of the camera's motion away from the parallax origin (Tiled's map parallax origin; an LDtk level's center). Factor 1 moves with the world, 0 stays fixed to the camera. Culling and parallax use the `Tilemap::camera`, the default camera when it is empty; with several cameras showing different places, set `cull = false` on maps the other cameras must see.
+Parallax factors move a layer by that fraction of the camera's motion away from the parallax origin (Tiled's map parallax origin; an LDtk level's center). Factor 1 moves with the world, 0 stays fixed to the camera. Parallax uses the `Tilemap::camera`, the default camera when it is empty. Culling keeps every chunk some camera shows, so split screens and minimaps see their part of the map; when `Tilemap::camera` is set, culling looks at that camera alone.
 
 Image layers draw their image at the layer offset; `repeatx` and `repeaty` tile it across the view.
 

@@ -191,6 +191,16 @@ public:
     Vec2 worldToScreen(Vec2 worldPos) const;
     Rect cameraWorldBounds(CameraHandle camera) const;
 
+    // Whether a world rect on `layer` may be on screen: false only when it
+    // lies well outside the view of every enabled camera that renders the
+    // layer, as the cameras stand now. Systems in the Render phase (the
+    // ECS cameras are placed by then) use it to skip building draws for
+    // things off screen. ScreenLayer is always visible. Whatever is queued
+    // is still culled exactly against the final cameras at endFrame.
+    bool visible(Rect worldRect, uint8_t layer) const;
+    // The same for a sprite, from its texture, frame, scale, origin and turn.
+    bool visible(const SpriteDraw& sprite) const;
+
     // ---- Resolution and window mapping ----
     float logicalWidth() const;
     float logicalHeight() const;

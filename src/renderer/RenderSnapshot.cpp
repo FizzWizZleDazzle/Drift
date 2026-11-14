@@ -18,7 +18,8 @@ Transform2D worldTransform(const Transform2D* local, const GlobalTransform2D* gl
 
 } // namespace
 
-void RenderSnapshot::extract(World& world, const ComponentRegistry& registry) {
+void RenderSnapshot::extract(World& world, const ComponentRegistry& registry,
+                             const CameraPlacer& placeCameras, const SpriteFilter& keep) {
     ComponentId transformId = registry.get<Transform2D>();
     ComponentId spriteId    = registry.get<Sprite>();
     ComponentId cameraId    = registry.get<Camera>();
@@ -28,24 +29,7 @@ void RenderSnapshot::extract(World& world, const ComponentRegistry& registry) {
     std::string spriteExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(spriteId) + optionalGlobal;
     std::string cameraExpr = "#" + std::to_string(transformId) + ", #" + std::to_string(cameraId) + optionalGlobal;
 
-    auto& buf = writeSpriteBuffer();
-    buf.clear();
-
-    QueryIter spriteIter = world.queryIter(spriteExpr.c_str());
-    while (world.queryNext(&spriteIter)) {
-        auto* transforms = static_cast<Transform2D*>(
-            world.queryField(&spriteIter, 0, sizeof(Transform2D)));
-        auto* sprites = static_cast<Sprite*>(
-            world.queryField(&spriteIter, 1, sizeof(Sprite)));
-        auto* globals = globalId ? static_cast<GlobalTransform2D*>(
-            world.queryFieldOptional(&spriteIter, 2, sizeof(GlobalTransform2D))) : nullptr;
-
-        for (int32_t i = 0; i < spriteIter.count; ++i) {
-            buf.push_back({worldTransform(transforms, globals, i), sprites[i]});
-        }
-    }
-    world.queryFini(&spriteIter);
-
+    // Cameras first, so they can be placed before sprites are chosen.
     auto& cams = writeCameraBuffer();
     cams.clear();
 
@@ -68,6 +52,28 @@ void RenderSnapshot::extract(World& world, const ComponentRegistry& registry) {
     std::stable_sort(cams.begin(), cams.end(), [](const CameraSnapshot& a, const CameraSnapshot& b) {
         return a.camera.order < b.camera.order;
     });
+    if (placeCameras) placeCameras(cams);
+
+    auto& buf = writeSpriteBuffer();
+    buf.clear();
+
+    QueryIter spriteIter = world.queryIter(spriteExpr.c_str());
+    while (world.queryNext(&spriteIter)) {
+        auto* transforms = static_cast<Transform2D*>(
+            world.queryField(&spriteIter, 0, sizeof(Transform2D)));
+        auto* sprites = static_cast<Sprite*>(
+            world.queryField(&spriteIter, 1, sizeof(Sprite)));
+        auto* globals = globalId ? static_cast<GlobalTransform2D*>(
+            world.queryFieldOptional(&spriteIter, 2, sizeof(GlobalTransform2D))) : nullptr;
+
+        for (int32_t i = 0; i < spriteIter.count; ++i) {
+            if (!sprites[i].visible) continue;
+            Transform2D t = worldTransform(transforms, globals, i);
+            if (keep && !keep(t, sprites[i])) continue;
+            buf.push_back({t, sprites[i]});
+        }
+    }
+    world.queryFini(&spriteIter);
 }
 
 const std::vector<SpriteEntry>& RenderSnapshot::sprites() const {

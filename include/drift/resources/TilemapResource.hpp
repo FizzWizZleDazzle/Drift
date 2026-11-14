@@ -112,7 +112,7 @@ struct TilemapDrawParams {
     float        zOrder = 0.f;           // z of the bottom layer
     float        zStep = 1.f;            // added per layer, bottom to top
     uint8_t      renderLayer = 0;
-    CameraHandle camera;                 // culling and parallax camera; empty = default camera
+    CameraHandle camera;                 // parallax camera, and the only one culling checks; empty = default camera for parallax, every camera for culling
     bool         cull = true;
 };
 

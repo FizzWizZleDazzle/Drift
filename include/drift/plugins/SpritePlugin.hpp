@@ -15,42 +15,48 @@ public:
     void build(App& app) override {
         app.addResource<SpriteResource>(*app.getResource<RendererResource>());
 
-        // Extract system: query Sprite+Transform2D+Camera entities into snapshot
-        app.addSystem("sprite_extract", Phase::Extract, [](App& a) {
+        // Extract system: copy the cameras and place the renderer's cameras
+        // from them (so every Render system sees this frame's cameras),
+        // then copy the sprites some camera may show.
+        app.addSystem("sprite_extract", Phase::Extract, [this](App& a) {
             auto* snapshot = a.getResource<RenderSnapshot>();
-            snapshot->extract(a.world(), a.world().componentRegistry());
+            auto* renderer = a.getResource<RendererResource>();
+            snapshot->extract(
+                a.world(), a.world().componentRegistry(),
+                [&](const std::vector<CameraSnapshot>& cams) { syncCameras(*renderer, cams); },
+                [&](const Transform2D& t, const Sprite& s) { return renderer->visible(spriteDraw(t, s)); });
             snapshot->swap();
         });
 
-        // Auto-render system: sync cameras, then draw sprites from snapshot
-        app.addSystem("sprite_render", Phase::Render, [this](App& a) {
+        // Auto-render system: draw the sprites of the snapshot.
+        app.addSystem("sprite_render", Phase::Render, [](App& a) {
             auto* snapshot = a.getResource<RenderSnapshot>();
             auto* renderer = a.getResource<RendererResource>();
-            syncCameras(*renderer, snapshot->cameras());
-
             for (const auto& entry : snapshot->sprites()) {
-                const Sprite& s = entry.sprite;
-                if (!s.visible) continue;
-                SpriteDraw d;
-                d.texture = s.texture;
-                d.position = entry.transform.position;
-                d.srcRect = s.srcRect;
-                d.scale = entry.transform.scale;
-                d.rotation = entry.transform.rotation;
-                d.origin = s.origin;
-                d.tint = s.tint;
-                d.flip = s.flip;
-                d.zOrder = s.zOrder;
-                d.blend = s.blend;
-                d.material = s.material;
-                d.layer = s.layer;
-                renderer->draw(d);
+                renderer->draw(spriteDraw(entry.transform, entry.sprite));
             }
         });
     }
     DRIFT_PLUGIN(SpritePlugin)
 
 private:
+    static SpriteDraw spriteDraw(const Transform2D& t, const Sprite& s) {
+        SpriteDraw d;
+        d.texture = s.texture;
+        d.position = t.position;
+        d.srcRect = s.srcRect;
+        d.scale = t.scale;
+        d.rotation = t.rotation;
+        d.origin = s.origin;
+        d.tint = s.tint;
+        d.flip = s.flip;
+        d.zOrder = s.zOrder;
+        d.blend = s.blend;
+        d.material = s.material;
+        d.layer = s.layer;
+        return d;
+    }
+
     // The first active camera that renders to the screen drives the
     // renderer's default camera (used by screenToWorld); every other active
     // camera gets its own renderer camera.

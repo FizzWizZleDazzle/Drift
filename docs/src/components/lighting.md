@@ -118,7 +118,7 @@ Lighting applies to world layers only. The HUD on `ScreenLayer` and post effects
 
 ## Cost
 
-Lights without shadows, and shadow-casting lights with no occluder in reach, are drawn together in one pass per camera. Each shadow-casting light with an occluder inside its radius adds two passes, and each occluder edge facing away from it adds a few triangles. Lower `resolutionScale` when many shadow-casting lights share the screen.
+A camera draws only the lights whose radius reaches into its view, so a level can hold many lights and pay for the ones on screen. Lights without shadows, and shadow-casting lights with no occluder in reach, are drawn together in one pass per camera. Each shadow-casting light with an occluder inside its radius adds two passes, and each occluder edge facing away from it adds a few triangles. Lower `resolutionScale` when many shadow-casting lights share the screen.
 
 ## Limitations
 

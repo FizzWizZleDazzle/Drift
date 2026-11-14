@@ -21,6 +21,30 @@ void setup(Commands& cmd) {
 
 Draw from systems registered with `app.render<...>()`. Systems that use the renderer always run on the main thread, because the graphics context belongs to it.
 
+## Culling and Batching
+
+The renderer only builds what a camera shows. When the frame ends it drops every queued draw that lies outside the view of all the cameras rendering its layer, before sorting, and builds sprite vertices only for what is left. A large world costs about as much to draw as the part on screen, and nothing has to be hidden by hand. It holds for several cameras, render-target cameras, turned and zoomed cameras, and entities placed by a hierarchy. `ScreenLayer` draws are always kept.
+
+The built-in render systems skip work earlier still: sprites, shapes, particle emitters, trail segments and tilemap chunks that no camera is near are not queued at all. `visible` answers the same question for your own Render systems:
+
+```cpp
+bool visible(Rect worldRect, uint8_t layer) const;   // may a camera show this rect?
+bool visible(const SpriteDraw& sprite) const;        // the same for a sprite
+```
+
+```cpp
+void drawBlips(ResMut<RendererResource> r, Query<Transform2D, Blip> blips) {
+    blips.iter([&](const Transform2D& t, const Blip&) {
+        Rect area = {t.position.x - 8.f, t.position.y - 8.f, 16.f, 16.f};
+        if (r->visible(area, 0)) r->drawCircleFilled(t.position, 8.f, Color::red());
+    });
+}
+```
+
+`visible` reads the cameras as they stand when you call it. The ECS cameras are placed in the Extract phase, after the update phases and before any Render system, and sprite entities are chosen right after them; call `visible` from Render systems, and move cameras you drive through `RendererResource` before the Extract phase. A camera moved later than that may show what was skipped one frame late. `visible` leaves some slack around each view, and whatever it lets through is still culled exactly at the end of the frame.
+
+Draws are sorted by layer, z-order, material, blend mode and texture, and neighbours that share a texture, material, blend mode and clip rectangle become one draw call. Sprites cut from one texture (an atlas, an Aseprite sheet, a tileset) at one z-order draw together however many there are, so a world of tiles in a few textures and z-orders takes a few draw calls. Giving every sprite its own z-order (y-sorting, for example) keeps them in order at the cost of a draw call wherever the texture changes between neighbours.
+
 ## Textures
 
 ```cpp
@@ -239,7 +263,7 @@ renderer->setClearColor(ColorF{0.1f, 0.1f, 0.15f, 1.0f});
 ```cpp
 renderer->captureScreenshot("shot.png");   // saves the next presented frame
 int32_t draws   = renderer->drawCalls();    // last frame
-int32_t sprites = renderer->spriteCount();  // last frame
+int32_t sprites = renderer->spriteCount();  // last frame, sprites some camera showed
 const char* api = renderer->backendName();  // "gl" or "webgpu"
 ```
 

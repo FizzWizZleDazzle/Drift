@@ -6,6 +6,7 @@
 #include <drift/components/Sprite.hpp>
 #include <drift/components/Camera.hpp>
 
+#include <functional>
 #include <vector>
 
 namespace drift {
@@ -26,9 +27,13 @@ class RenderSnapshot : public Resource {
 public:
     DRIFT_RESOURCE(RenderSnapshot)
 
-    // Called during Extract phase: queries World for Sprite+Transform2D
-    // and the active Camera+Transform2D
-    void extract(World& world, const ComponentRegistry& registry);
+    // Called during Extract phase: copies the active Camera+Transform2D
+    // entities, hands them to placeCameras, then copies the visible
+    // Sprite+Transform2D entities that keep accepts (all when it is empty).
+    using CameraPlacer = std::function<void(const std::vector<CameraSnapshot>&)>;
+    using SpriteFilter = std::function<bool(const Transform2D&, const Sprite&)>;
+    void extract(World& world, const ComponentRegistry& registry,
+                 const CameraPlacer& placeCameras = {}, const SpriteFilter& keep = {});
 
     // Read access for the renderer (returns the read buffer)
     const std::vector<SpriteEntry>& sprites() const;

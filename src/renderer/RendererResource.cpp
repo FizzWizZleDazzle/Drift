@@ -59,6 +59,9 @@ struct CameraEntry {
 };
 
 // One queued draw: a run of vertices + local indices plus its sort state.
+// A sprite's vertices are built only once some camera is known to see it:
+// until then `quad` points at its PendingQuad and the bounds hold the whole
+// quad however it turns.
 struct Item {
     float    z;
     uint8_t  layer;
@@ -68,7 +71,19 @@ struct Item {
     uint32_t firstVertex, vertexCount;
     uint32_t firstIndex, indexCount;
     int32_t  clip;       // index into Queue::clips, -1 = none
+    uint32_t quad;       // 1 + index into Queue::quads while unbuilt, else 0
+    uint32_t sprites;    // sprite quads it holds, for spriteCount
     float    minX, minY, maxX, maxY;
+};
+
+// A sprite waiting to be built: its corners around the position before
+// rotation, and its texture coordinates.
+struct PendingQuad {
+    float x, y;
+    float lx0, lx1, ly0, ly1;
+    float rotation;
+    float u0, v0, u1, v1;
+    Color tint;
 };
 
 struct Queue {
@@ -76,12 +91,14 @@ struct Queue {
     std::vector<uint32_t>    indices;   // local to each item
     std::vector<Item>        items;
     std::vector<Rect>        clips;
+    std::vector<PendingQuad> quads;
 
     void clear() {
         vertices.clear();
         indices.clear();
         items.clear();
         clips.clear();
+        quads.clear();
     }
 };
 
@@ -218,6 +235,76 @@ struct RendererResource::Impl {
 
     // Scratch reused across passes.
     std::vector<uint32_t> order;
+    std::vector<Vec2> shapePts;       // outlines of circles, arcs, rounded rects
+    std::vector<Vec2> meshPts;        // polyline and fan vertices
+    std::vector<uint32_t> meshIdx;
+    struct CullView { Rect bounds; uint32_t mask; };
+    std::vector<CullView> cullViews;
+    // For visible(): every enabled camera's view, at the logical size the
+    // window has now, grown by an eighth of its size on each side as slack
+    // for a camera nudged later in the frame. Rebuilt when a camera or the
+    // logical size changes.
+    std::vector<CullView> nearViews;
+    bool nearViewsDirty = true;
+    float nearW = 0.f, nearH = 0.f;
+    uint64_t nearFrame = ~0ull;
+    uint64_t frameNumber = 0;
+
+    // The logical size computeOutput will settle on this frame.
+    void currentLogicalSize(float* w, float* h) {
+        *w = configW;
+        *h = configH;
+        if (scaleMode != ScaleMode::Expand || !device) return;
+        int32_t dw = 0, dh = 0;
+        device->drawableSize(&dw, &dh);
+        if (dw <= 0 || dh <= 0) return;
+        float sc = std::min(dw / configW, dh / configH);
+        *w = std::floor(dw / sc);
+        *h = std::floor(dh / sc);
+    }
+
+    const std::vector<CullView>& nearbyViews() {
+        if (nearFrame != frameNumber) {
+            // The window size is read once a frame.
+            nearFrame = frameNumber;
+            float lw, lh;
+            currentLogicalSize(&lw, &lh);
+            if (lw != nearW || lh != nearH) nearViewsDirty = true;
+            nearW = lw;
+            nearH = lh;
+        }
+        if (!nearViewsDirty) return nearViews;
+        nearViewsDirty = false;
+        float lw = nearW, lh = nearH;
+        nearViews.clear();
+        cameras.forEach([&](CameraHandle, CameraEntry& e) {
+            const CameraDesc& d = e.desc;
+            if (!d.enabled) return;
+            float w = d.viewport.w * lw, h = d.viewport.h * lh;
+            if (d.target.valid()) {
+                const TextureEntry* te = textures.get(d.target);
+                if (!te) return;
+                w = d.viewport.w * te->width;
+                h = d.viewport.h * te->height;
+            }
+            Rect b = cameraBounds(d, w, h);
+            float mx = b.w * 0.125f, my = b.h * 0.125f;
+            nearViews.push_back({{b.x - mx, b.y - my, b.w + mx * 2.f, b.h + my * 2.f}, d.layerMask});
+        });
+        return nearViews;
+    }
+
+    bool nearby(float minX, float minY, float maxX, float maxY, uint8_t itemLayer) {
+        if (itemLayer == ScreenLayer) return true;
+        for (const CullView& v : nearbyViews()) {
+            if ((v.mask & (1u << itemLayer)) &&
+                !(maxX < v.bounds.x || minX > v.bounds.x + v.bounds.w ||
+                  maxY < v.bounds.y || minY > v.bounds.y + v.bounds.h)) {
+                return true;
+            }
+        }
+        return false;
+    }
     std::vector<gfx::Vertex> passVertices;
     std::vector<uint32_t> passIndices;
     std::vector<gfx::DrawCall> calls;
@@ -245,6 +332,8 @@ struct RendererResource::Impl {
         it.firstIndex = static_cast<uint32_t>(q.indices.size());
         it.indexCount = ni;
         it.clip = -1;
+        it.quad = 0;
+        it.sprites = 0;
         if (!clipStack.empty() && current == &frameQueue) {
             q.clips.push_back(clipStack.back());
             it.clip = static_cast<int32_t>(q.clips.size() - 1);
@@ -283,7 +372,34 @@ struct RendererResource::Impl {
         idx[0] = 0; idx[1] = 1; idx[2] = 2;
         idx[3] = 0; idx[4] = 2; idx[5] = 3;
         finishItem(*current, it);
-        ++spriteCountVal;
+        it.sprites = 1;
+    }
+
+    // The corners of a sprite quad, placed and turned the same way whether
+    // it is built at once or later.
+    static void quadCorners(const PendingQuad& pq, Vec2 p[4]) {
+        float lx[4] = {pq.lx0, pq.lx1, pq.lx1, pq.lx0};
+        float ly[4] = {pq.ly0, pq.ly0, pq.ly1, pq.ly1};
+        float c = std::cos(pq.rotation), sn = std::sin(pq.rotation);
+        for (int j = 0; j < 4; ++j) {
+            p[j] = {pq.x + lx[j] * c - ly[j] * sn,
+                    pq.y + lx[j] * sn + ly[j] * c};
+        }
+    }
+
+    // Writes the vertices of a pending sprite into its queue.
+    static void buildQuad(Queue& q, Item& it) {
+        const PendingQuad& pq = q.quads[it.quad - 1];
+        Vec2 p[4];
+        quadCorners(pq, p);
+        it.firstVertex = static_cast<uint32_t>(q.vertices.size());
+        it.firstIndex = static_cast<uint32_t>(q.indices.size());
+        q.vertices.push_back(vert(p[0].x, p[0].y, pq.u0, pq.v0, pq.tint));
+        q.vertices.push_back(vert(p[1].x, p[1].y, pq.u1, pq.v0, pq.tint));
+        q.vertices.push_back(vert(p[2].x, p[2].y, pq.u1, pq.v1, pq.tint));
+        q.vertices.push_back(vert(p[3].x, p[3].y, pq.u0, pq.v1, pq.tint));
+        q.indices.insert(q.indices.end(), {0u, 1u, 2u, 0u, 2u, 3u});
+        it.quad = 0;
     }
 
     void sprite(const SpriteDraw& s) {
@@ -300,15 +416,58 @@ struct RendererResource::Impl {
 
         float qw = src.w * s.scale.x, qh = src.h * s.scale.y;
         float ox = s.origin.x * s.scale.x, oy = s.origin.y * s.scale.y;
-        float lx[4] = {-ox, qw - ox, qw - ox, -ox};
-        float ly[4] = {-oy, -oy, qh - oy, qh - oy};
-        float c = std::cos(s.rotation), sn = std::sin(s.rotation);
-        Vec2 p[4];
-        for (int j = 0; j < 4; ++j) {
-            p[j] = {s.position.x + lx[j] * c - ly[j] * sn,
-                    s.position.y + lx[j] * sn + ly[j] * c};
+        PendingQuad pq{s.position.x, s.position.y, -ox, qw - ox, -oy, qh - oy, s.rotation,
+                       u0, v0, u1, v1, s.tint};
+
+        if (current != &frameQueue) {
+            // Passes inside view hooks and post effects draw at once.
+            Vec2 p[4];
+            quadCorners(pq, p);
+            quad(s.texture, p, u0, v0, u1, v1, s.tint, s.zOrder, s.blend, s.material, s.layer);
+            return;
         }
-        quad(s.texture, p, u0, v0, u1, v1, s.tint, s.zOrder, s.blend, s.material, s.layer);
+
+        gfx::Vertex* v;
+        uint32_t* idx;
+        Item& it = beginItem(s.texture, s.zOrder, s.blend, s.material, s.layer, 0, 0, &v, &idx);
+        it.vertexCount = 4;
+        it.indexCount = 6;
+        it.sprites = 1;
+        Queue& q = *current;
+        q.quads.push_back(pq);
+        it.quad = static_cast<uint32_t>(q.quads.size());
+        quadBounds(pq, &it.minX, &it.minY, &it.maxX, &it.maxY);
+    }
+
+    // A sprite's corners around its position, before it turns.
+    static void spriteExtents(const SpriteDraw& s, const TextureEntry& e, PendingQuad& pq) {
+        Rect src = s.srcRect;
+        if (src.w <= 0.f || src.h <= 0.f) {
+            src = {0.f, 0.f, static_cast<float>(e.width), static_cast<float>(e.height)};
+        }
+        float qw = src.w * s.scale.x, qh = src.h * s.scale.y;
+        float ox = s.origin.x * s.scale.x, oy = s.origin.y * s.scale.y;
+        pq.x = s.position.x;
+        pq.y = s.position.y;
+        pq.lx0 = -ox; pq.lx1 = qw - ox;
+        pq.ly0 = -oy; pq.ly1 = qh - oy;
+        pq.rotation = s.rotation;
+    }
+
+    // Bounds that hold a sprite quad: exact when it is not turned, else the
+    // box around the circle its corners turn in.
+    static void quadBounds(const PendingQuad& pq, float* minX, float* minY, float* maxX, float* maxY) {
+        float x0 = std::min(pq.lx0, pq.lx1), x1 = std::max(pq.lx0, pq.lx1);
+        float y0 = std::min(pq.ly0, pq.ly1), y1 = std::max(pq.ly0, pq.ly1);
+        if (pq.rotation == 0.f) {
+            *minX = pq.x + x0; *maxX = pq.x + x1;
+            *minY = pq.y + y0; *maxY = pq.y + y1;
+            return;
+        }
+        float ex = std::max(-x0, x1), ey = std::max(-y0, y1);
+        float r = std::sqrt(ex * ex + ey * ey);
+        *minX = pq.x - r; *maxX = pq.x + r;
+        *minY = pq.y - r; *maxY = pq.y + r;
     }
 
     // Triangles from a vertex list with uv 0 (white texture).
@@ -326,9 +485,10 @@ struct RendererResource::Impl {
     void polyline(const Vec2* pts, int32_t count, Color c, float thickness, bool closed, float z) {
         if (count < 2) return;
         float hw = thickness * 0.5f;
-        std::vector<Vec2> verts;
-        std::vector<uint32_t> idx;
-        verts.reserve(count * 2);
+        std::vector<Vec2>& verts = meshPts;
+        std::vector<uint32_t>& idx = meshIdx;
+        verts.clear();
+        idx.clear();
         auto normalOf = [](Vec2 a, Vec2 b) {
             Vec2 d = (b - a).normalized();
             return Vec2{-d.y, d.x};
@@ -366,11 +526,12 @@ struct RendererResource::Impl {
     }
 
     void fan(const std::vector<Vec2>& ring, Vec2 center, Color c, float z) {
-        std::vector<Vec2> verts;
-        verts.reserve(ring.size() + 1);
+        std::vector<Vec2>& verts = meshPts;
+        verts.clear();
         verts.push_back(center);
         verts.insert(verts.end(), ring.begin(), ring.end());
-        std::vector<uint32_t> idx;
+        std::vector<uint32_t>& idx = meshIdx;
+        idx.clear();
         uint32_t n = static_cast<uint32_t>(ring.size());
         for (uint32_t i = 0; i < n; ++i) {
             idx.insert(idx.end(), {0u, 1 + i, 1 + (i + 1) % n});
@@ -550,12 +711,30 @@ struct RendererResource::Impl {
         return a.texture < b.texture;
     }
 
-    void sortQueue(Queue& q) {
-        order.resize(q.items.size());
-        for (uint32_t i = 0; i < order.size(); ++i) order[i] = i;
+    // Fills `order` with the items some camera sees (and every ScreenLayer
+    // item) in draw order, and builds the vertices of the sprites among
+    // them. Items no camera sees are neither sorted nor built.
+    void cullAndSort(Queue& q) {
+        order.clear();
+        for (uint32_t i = 0; i < q.items.size(); ++i) {
+            const Item& it = q.items[i];
+            bool seen = it.layer == ScreenLayer;
+            for (size_t c = 0; c < cullViews.size() && !seen; ++c) {
+                const CullView& v = cullViews[c];
+                seen = (v.mask & (1u << it.layer)) &&
+                       !(it.maxX < v.bounds.x || it.minX > v.bounds.x + v.bounds.w ||
+                         it.maxY < v.bounds.y || it.minY > v.bounds.y + v.bounds.h);
+            }
+            if (seen) order.push_back(i);
+        }
         std::stable_sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
             return itemLess(q.items[a], q.items[b]);
         });
+        for (uint32_t i : order) {
+            Item& it = q.items[i];
+            if (it.quad) buildQuad(q, it);
+            spriteCountVal += static_cast<int32_t>(it.sprites);
+        }
     }
 };
 
@@ -623,6 +802,7 @@ RendererResource::~RendererResource() {
 void RendererResource::beginFrame() {
     impl_->frameQueue.clear();
     impl_->current = &impl_->frameQueue;
+    ++impl_->frameNumber;
     impl_->clipStack.clear();
     impl_->layer = 0;
     impl_->lastDrawCalls = impl_->drawCallCount;
@@ -644,6 +824,7 @@ void RendererResource::endFrame() {
     }
 
     s.computeOutput();
+    s.nearViewsDirty = true;   // the logical size may have changed
     if (s.output.w < 1.f || s.output.h < 1.f) {
         dev->endFrame();
         return;
@@ -659,11 +840,45 @@ void RendererResource::endFrame() {
     }
 
     Queue& q = s.frameQueue;
-    s.sortQueue(q);
-    std::vector<uint32_t> sorted = s.order;
 
     float pxPerLogicalX = sw / s.logicalW;
     float pxPerLogicalY = sh / s.logicalH;
+
+    // ---- cameras, as they stand once every draw of the frame is queued ----
+    struct Cam {
+        CameraHandle h;
+        CameraEntry e;
+        TextureHandle target;
+        Rect vp, bounds;
+        Mat3 vpm;
+        bool toScene = false;
+    };
+    std::vector<Cam> cams;
+    s.cameras.forEach([&](CameraHandle h, CameraEntry& e) {
+        if (!e.desc.enabled) return;
+        Cam c{h, e, {}, {}, {}, {}};
+        const CameraDesc& d = e.desc;
+        c.target = d.target.valid() ? d.target : s.scene[0];
+        TextureEntry* te = s.textures.get(c.target);
+        if (!te) return;
+        c.toScene = !d.target.valid();
+        c.vp = {d.viewport.x * te->width, d.viewport.y * te->height,
+                d.viewport.w * te->width, d.viewport.h * te->height};
+        float viewW = c.toScene ? d.viewport.w * s.logicalW : c.vp.w;
+        float viewH = c.toScene ? d.viewport.h * s.logicalH : c.vp.h;
+        c.vpm = cameraViewProj(d, viewW, viewH);
+        c.bounds = cameraBounds(d, viewW, viewH);
+        cams.push_back(c);
+    });
+    std::stable_sort(cams.begin(), cams.end(), [](const Cam& a, const Cam& b) {
+        if (a.e.desc.order != b.e.desc.order) return a.e.desc.order < b.e.desc.order;
+        return a.e.created < b.e.created;
+    });
+    s.cullViews.clear();
+    for (const Cam& c : cams) s.cullViews.push_back({c.bounds, c.e.desc.layerMask});
+
+    s.cullAndSort(q);
+    std::vector<uint32_t> sorted = s.order;
 
     // Clear the scene once.
     {
@@ -672,32 +887,19 @@ void RendererResource::endFrame() {
                  Mat3::identity(), 1.f, 1.f);
     }
 
-    // ---- cameras ----
-    struct Cam { CameraHandle h; CameraEntry e; };
-    std::vector<Cam> cams;
-    s.cameras.forEach([&](CameraHandle h, CameraEntry& e) {
-        if (e.desc.enabled) cams.push_back({h, e});
-    });
-    std::stable_sort(cams.begin(), cams.end(), [](const Cam& a, const Cam& b) {
-        if (a.e.desc.order != b.e.desc.order) return a.e.desc.order < b.e.desc.order;
-        return a.e.created < b.e.created;
-    });
     std::sort(s.viewHooks.begin(), s.viewHooks.end(),
               [](const Impl::Hook& a, const Impl::Hook& b) { return a.order < b.order; });
 
     std::vector<uint32_t> visible;
     for (const Cam& c : cams) {
         const CameraDesc& d = c.e.desc;
-        TextureHandle target = d.target.valid() ? d.target : s.scene[0];
+        TextureHandle target = c.target;
         TextureEntry* te = s.textures.get(target);
         if (!te) continue;
-        bool toScene = !d.target.valid();
-        Rect vp = {d.viewport.x * te->width, d.viewport.y * te->height,
-                   d.viewport.w * te->width, d.viewport.h * te->height};
-        float viewW = toScene ? d.viewport.w * s.logicalW : vp.w;
-        float viewH = toScene ? d.viewport.h * s.logicalH : vp.h;
-        Mat3 vpm = cameraViewProj(d, viewW, viewH);
-        Rect bounds = cameraBounds(d, viewW, viewH);
+        bool toScene = c.toScene;
+        const Rect& vp = c.vp;
+        const Mat3& vpm = c.vpm;
+        const Rect& bounds = c.bounds;
 
         visible.clear();
         for (uint32_t ii : sorted) {
@@ -1082,7 +1284,7 @@ void RendererResource::drawSpriteBatch(TextureHandle texture, Rect srcRect,
         o[0] = b; o[1] = b + 1; o[2] = b + 2; o[3] = b; o[4] = b + 2; o[5] = b + 3;
     }
     Impl::finishItem(*impl_->current, it);
-    impl_->spriteCountVal += count;
+    it.sprites = static_cast<uint32_t>(count);
 }
 
 void RendererResource::drawNineSlice(TextureHandle texture, Rect dest, Rect srcRect, Vec4 borders,
@@ -1164,7 +1366,8 @@ void RendererResource::drawRoundedRectFilled(Rect rect, float radius, Color colo
         return;
     }
     int seg = std::max(3, autoSegments(radius) / 4);
-    std::vector<Vec2> ring;
+    std::vector<Vec2>& ring = impl_->shapePts;
+    ring.clear();
     Vec2 corners[4] = {{rect.x + rect.w - radius, rect.y + radius},
                        {rect.x + rect.w - radius, rect.y + rect.h - radius},
                        {rect.x + radius, rect.y + rect.h - radius},
@@ -1182,7 +1385,8 @@ void RendererResource::drawRoundedRectFilled(Rect rect, float radius, Color colo
 void RendererResource::drawCircle(Vec2 center, float radius, Color color, float thickness,
                                   int segments, float zOrder) {
     if (segments < 3) segments = autoSegments(radius);
-    std::vector<Vec2> pts(segments);
+    std::vector<Vec2>& pts = impl_->shapePts;
+    pts.resize(segments);
     for (int i = 0; i < segments; ++i) {
         float a = 2.f * kPi * i / segments;
         pts[i] = {center.x + std::cos(a) * radius, center.y + std::sin(a) * radius};
@@ -1192,7 +1396,8 @@ void RendererResource::drawCircle(Vec2 center, float radius, Color color, float 
 
 void RendererResource::drawCircleFilled(Vec2 center, float radius, Color color, int segments, float zOrder) {
     if (segments < 3) segments = autoSegments(radius);
-    std::vector<Vec2> ring(segments);
+    std::vector<Vec2>& ring = impl_->shapePts;
+    ring.resize(segments);
     for (int i = 0; i < segments; ++i) {
         float a = 2.f * kPi * i / segments;
         ring[i] = {center.x + std::cos(a) * radius, center.y + std::sin(a) * radius};
@@ -1204,7 +1409,8 @@ void RendererResource::drawArc(Vec2 center, float radius, float startAngle, floa
                                float thickness, float zOrder) {
     float span = endAngle - startAngle;
     int segments = std::max(2, static_cast<int>(autoSegments(radius) * std::fabs(span) / (2.f * kPi)));
-    std::vector<Vec2> pts(segments + 1);
+    std::vector<Vec2>& pts = impl_->shapePts;
+    pts.resize(segments + 1);
     for (int i = 0; i <= segments; ++i) {
         float a = startAngle + span * i / segments;
         pts[i] = {center.x + std::cos(a) * radius, center.y + std::sin(a) * radius};
@@ -1296,18 +1502,21 @@ void RendererResource::popClipRect() {
 CameraHandle RendererResource::getDefaultCamera() const { return impl_->defaultCamera; }
 
 CameraHandle RendererResource::createCamera(const CameraDesc& desc) {
+    impl_->nearViewsDirty = true;
     return impl_->cameras.create({desc, impl_->cameraSeq++});
 }
 
 void RendererResource::destroyCamera(CameraHandle camera) {
     if (camera == impl_->defaultCamera) return;
     impl_->cameras.destroy(camera);
+    impl_->nearViewsDirty = true;
 }
 
 void RendererResource::setCamera(CameraHandle camera, const CameraDesc& desc) {
     if (CameraEntry* e = impl_->cameras.get(camera)) {
         e->desc = desc;
         if (e->desc.zoom < 0.0001f) e->desc.zoom = 0.0001f;
+        impl_->nearViewsDirty = true;
     }
 }
 
@@ -1318,14 +1527,17 @@ CameraDesc RendererResource::camera(CameraHandle camera) const {
 
 void RendererResource::setCameraPosition(CameraHandle camera, Vec2 position) {
     if (CameraEntry* e = impl_->cameras.get(camera)) e->desc.position = position;
+    impl_->nearViewsDirty = true;
 }
 
 void RendererResource::setCameraZoom(CameraHandle camera, float zoom) {
     if (CameraEntry* e = impl_->cameras.get(camera)) e->desc.zoom = std::max(zoom, 0.0001f);
+    impl_->nearViewsDirty = true;
 }
 
 void RendererResource::setCameraRotation(CameraHandle camera, float rotation) {
     if (CameraEntry* e = impl_->cameras.get(camera)) e->desc.rotation = rotation;
+    impl_->nearViewsDirty = true;
 }
 
 Vec2 RendererResource::getCameraPosition(CameraHandle camera) const {
@@ -1376,6 +1588,21 @@ Rect RendererResource::cameraWorldBounds(CameraHandle camera) const {
     return cameraBounds(e->desc, e->desc.viewport.w * impl_->logicalW, e->desc.viewport.h * impl_->logicalH);
 }
 
+bool RendererResource::visible(Rect r, uint8_t layer) const {
+    return impl_->nearby(r.x, r.y, r.x + r.w, r.y + r.h, layer);
+}
+
+bool RendererResource::visible(const SpriteDraw& sprite) const {
+    if (sprite.layer == ScreenLayer) return true;
+    const TextureEntry* e = impl_->textures.get(sprite.texture);
+    if (!e) return false;   // draw() skips it too
+    PendingQuad pq{};
+    Impl::spriteExtents(sprite, *e, pq);
+    float x0, y0, x1, y1;
+    Impl::quadBounds(pq, &x0, &y0, &x1, &y1);
+    return impl_->nearby(x0, y0, x1, y1, sprite.layer);
+}
+
 // =============================================================================
 // Resolution
 // =============================================================================
@@ -1389,6 +1616,7 @@ void RendererResource::setLogicalSize(int w, int h) {
     impl_->configH = static_cast<float>(h);
     impl_->logicalW = impl_->configW;
     impl_->logicalH = impl_->configH;
+    impl_->nearViewsDirty = true;
 }
 
 ScaleMode RendererResource::scaleMode() const { return impl_->scaleMode; }

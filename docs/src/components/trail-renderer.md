@@ -120,7 +120,7 @@ The trail system manages a ring buffer of points per entity through the `TrailSy
    - If the entity has moved at least `minDistance` pixels since the last recorded point, a new point is added at the entity's current position.
 
 2. **Render phase** (Render):
-   - For each pair of consecutive trail points, draws a line segment.
+   - For each pair of consecutive trail points, draws a line segment, skipping segments no camera is near.
    - The color is interpolated between `colorStart` and `colorEnd` based on each point's age relative to `lifetime`.
    - The line width tapers from `width` at the newest point toward 0 at the oldest.
 

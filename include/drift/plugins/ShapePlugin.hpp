@@ -83,11 +83,26 @@ inline void drawShape(RendererResource& r, const Shape2D& s, Vec2 pos, float rot
     r.setLayer(before);
 }
 
-// Draws every Shape2D at its world transform (GlobalTransform2D in a
-// hierarchy, Transform2D otherwise).
+// A box around everything a shape covers, however it turns.
+inline Rect shapeReach(const Shape2D& s, Vec2 pos, Vec2 scale) {
+    float sx = std::abs(scale.x), sy = std::abs(scale.y);
+    float reach = s.kind == ShapeKind::Circle
+        ? s.radius * std::max(sx, sy)
+        : std::hypot(s.size.x * sx, s.size.y * sy) *
+              std::max({1.f, std::abs(s.anchor.x), std::abs(s.anchor.y),
+                        std::abs(1.f - s.anchor.x), std::abs(1.f - s.anchor.y)});
+    reach += std::max(s.outline, 0.f);
+    return {pos.x - reach, pos.y - reach, reach * 2.f, reach * 2.f};
+}
+
+// Draws every Shape2D some camera may show, at its world transform
+// (GlobalTransform2D in a hierarchy, Transform2D otherwise).
 inline void shapeRender(ResMut<RendererResource> renderer,
                         Query<Shape2D, Transform2D, Optional<GlobalTransform2D>> shapes) {
     shapes.iter([&](const Shape2D& s, const Transform2D& t, const GlobalTransform2D* g) {
+        Vec2 pos = g ? g->position : t.position;
+        Vec2 scale = g ? g->scale : t.scale;
+        if (!s.visible || !renderer->visible(shapeReach(s, pos, scale), s.layer)) return;
         if (g) drawShape(*renderer, s, g->position, g->rotation, g->scale);
         else drawShape(*renderer, s, t.position, t.rotation, t.scale);
     });

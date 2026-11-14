@@ -147,6 +147,12 @@ inline void trailRender(Res<TrailSystemResource> trailRes,
             float width = trail.width * (1.f - tMid);
             if (width < 0.5f) width = 0.5f;
 
+            // Segments no camera is near are skipped.
+            Rect reach = {std::min(a.position.x, b.position.x) - width, std::min(a.position.y, b.position.y) - width,
+                          std::fabs(a.position.x - b.position.x) + width * 2.f,
+                          std::fabs(a.position.y - b.position.y) + width * 2.f};
+            if (!renderer->visible(reach, renderer->layer())) continue;
+
             renderer->drawLine(a.position, b.position, color, width);
         }
     });
