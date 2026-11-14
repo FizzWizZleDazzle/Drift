@@ -31,7 +31,7 @@ runs:
       id: pin
       shell: bash
       env:
-        CANDELA_COMMIT: c15cd2d3a621856609d05fd6c969b61f0f10fdac
+        CANDELA_COMMIT: 606351a6de7bf0983a661483bd87aa55d4886d2c
       run: echo "commit=${CANDELA_COMMIT}" >> "$GITHUB_OUTPUT"
 
     - name: Check out candela
