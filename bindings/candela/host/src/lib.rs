@@ -3284,16 +3284,16 @@ fn build(entry: &str, module_dir: &str) -> Result<Vec<u8>, String> {
     let options = candela::BuildOptions { release: true, native: candela::NativeCode::None };
     let bytes = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| candela::build_artifact(source, entry, &resolver, &options)))
         .map_err(|_| String::from("the candela compiler stopped unexpectedly"))??;
-    // Bytecode exports only functions whose parameters a host can build
-    // without naming an enum; a system that takes one (a Text holds an
-    // Align) is called through the compiler instead, so such a game keeps
-    // compiling when its page loads.
+    // Bytecode exports only functions whose parameters it can take from a
+    // host; a game with a system that takes something else (with the pinned
+    // candela, a Text, whose align is an enum; a Lookup, whose slots are a
+    // map keyed by numbers) keeps compiling when its page loads.
     let program = candela::load_program(&bytes, &hosts()).map_err(|e| e.to_string())?;
     let exported: HashSet<&str> = program.exports().collect();
     let names: Vec<String> = calls.iter().map(|q| q.trim_matches('"').to_owned()).collect();
     for (k, name) in names.iter().enumerate() {
         if !exported.contains(format!("__drift_call_{k}").as_str()) {
-            return Err(format!("{name} cannot be called from bytecode, since a parameter holds an enum"));
+            return Err(format!("{name} cannot be called from bytecode: a parameter holds a value its exports do not take, such as an enum or a map keyed by numbers (a Lookup)"));
         }
     }
     Ok(bytes)
