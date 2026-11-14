@@ -33,6 +33,9 @@ public:
     SoundHandle addEncoded(Bytes bytes, LoadMode mode);
     SoundHandle addPcm(const float* samples, size_t frames, int channels, int rate);
     void destroySound(SoundHandle s);
+    // New file bytes for `s`, kept the way it was loaded (decoded or
+    // streamed). Its handle stays; voices playing it stop.
+    bool replaceSound(SoundHandle s, Bytes bytes);
     double soundDuration(SoundHandle s) const;
     uint64_t soundFrames(SoundHandle s) const;
     int soundChannels(SoundHandle s) const;
@@ -83,6 +86,8 @@ private:
     struct Music;
 
     SoundHandle store(Sound&& s);
+    bool decode(Bytes bytes, LoadMode mode, Sound& out);
+    void stopVoicesOf(uint32_t soundIndex);
     Sound* sound(SoundHandle s);
     const Sound* sound(SoundHandle s) const;
     Voice* voice(PlayingSoundHandle h);

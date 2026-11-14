@@ -107,6 +107,17 @@ SoundHandle AudioResource::loadSound(const char* path, LoadMode mode) {
     return h;
 }
 
+bool AudioResource::reloadSound(SoundHandle sound, const char* path) {
+    size_t size = 0;
+    void* data = path ? SDL_LoadFile(path, &size) : nullptr;
+    if (!data) return false;
+    auto* p = static_cast<const uint8_t*>(data);
+    auto bytes = std::make_shared<const std::vector<uint8_t>>(p, p + size);
+    SDL_free(data);
+    DRIFT_AUDIO_LOCK;
+    return impl_->mixer.replaceSound(sound, std::move(bytes));
+}
+
 SoundHandle AudioResource::loadSoundFromMemory(const void* data, size_t size, LoadMode mode) {
     if (!data || size == 0) return {};
     auto* p = static_cast<const uint8_t*>(data);

@@ -180,9 +180,14 @@ SoundHandle Mixer::store(Sound&& s) {
 }
 
 SoundHandle Mixer::addEncoded(Bytes bytes, LoadMode mode) {
-    auto dec = openDecoder(bytes, true);
-    if (!dec) return {};
     Sound s;
+    if (!decode(std::move(bytes), mode, s)) return {};
+    return store(std::move(s));
+}
+
+bool Mixer::decode(Bytes bytes, LoadMode mode, Sound& s) {
+    auto dec = openDecoder(bytes, true);
+    if (!dec) return false;
     s.channels = dec->channels();
     s.rate = dec->sampleRate();
     s.frames = dec->totalFrames();
@@ -200,8 +205,31 @@ SoundHandle Mixer::addEncoded(Bytes bytes, LoadMode mode) {
         s.frames = pcm.size() / s.channels;
         s.pcm = std::move(pcm);
     }
+    return true;
+}
 
-    return store(std::move(s));
+bool Mixer::replaceSound(SoundHandle s, Bytes bytes) {
+    Sound* d = sound(s);
+    if (!d) return false;
+    Sound next;
+    if (!decode(std::move(bytes), d->encoded ? LoadMode::Stream : LoadMode::Decode, next)) return false;
+    stopVoicesOf(s.index());
+    next.alive = true;
+    next.gen = d->gen;
+    next.maxInstances = d->maxInstances;
+    *d = std::move(next);
+    return true;
+}
+
+void Mixer::stopVoicesOf(uint32_t idx) {
+    for (Voice& v : voices_) {
+        if (!v.active) continue;
+        if (v.current == idx || v.sound == idx) {
+            kill(v);
+            continue;
+        }
+        v.queue.erase(std::remove(v.queue.begin(), v.queue.end(), idx), v.queue.end());
+    }
 }
 
 SoundHandle Mixer::addPcm(const float* samples, size_t frames, int channels, int rate) {
@@ -217,15 +245,7 @@ SoundHandle Mixer::addPcm(const float* samples, size_t frames, int channels, int
 void Mixer::destroySound(SoundHandle s) {
     Sound* d = sound(s);
     if (!d) return;
-    uint32_t idx = s.index();
-    for (Voice& v : voices_) {
-        if (!v.active) continue;
-        if (v.current == idx || v.sound == idx) {
-            kill(v);
-            continue;
-        }
-        v.queue.erase(std::remove(v.queue.begin(), v.queue.end(), idx), v.queue.end());
-    }
+    stopVoicesOf(s.index());
     uint32_t gen = d->gen;
     *d = Sound{};
     d->gen = gen;

@@ -78,7 +78,7 @@ Drift exposes several CMake options you can toggle at configure time:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `DRIFT_DEV` | `ON` | Enables the developer overlay (entity inspector, performance and physics panels) and hot reload of textures and scenes. Defines the `DRIFT_DEV=1` preprocessor macro. Turn this off for release/shipping builds. |
+| `DRIFT_DEV` | `ON` | Enables the developer overlay (entity inspector, performance and physics panels) and hot reload of textures, sounds, fonts and scenes. Defines the `DRIFT_DEV=1` preprocessor macro. Turn this off for release/shipping builds. |
 | `DRIFT_BUILD_EXAMPLES` | `ON` | Builds the example programs in the `examples/` directory. Turn this off if you only want the engine library. |
 | `DRIFT_BACKEND_GL` | `ON` | Builds the OpenGL 3.3 / WebGL2 renderer backend. |
 | `DRIFT_BUILD_TESTS` | `ON` when Drift is the top-level project | Builds the engine tests in `tests/`. Run them with `ctest --test-dir build`. Off when Drift is pulled in with `FetchContent`. |

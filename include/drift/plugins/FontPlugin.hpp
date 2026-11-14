@@ -54,6 +54,9 @@ public:
         assets->setFontLoader([font](const char* path, int sizePx) {
             return font->loadFont(path, static_cast<float>(sizePx));
         });
+        assets->setReloader("font", [font](uint32_t id, const std::string& path) {
+            return font->reloadFont(FontHandle{id}, path.c_str());
+        });
         app.world().registerComponent<Text>("Text");
         app.addSystem<font_begin_frame>("font_begin", Phase::PreUpdate);
         app.addSystem("text_render", Phase::Render, drawTextEntities);

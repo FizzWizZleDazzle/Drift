@@ -4,6 +4,7 @@
 #include <drift/Settings.hpp>
 #include <drift/plugins/LightingPlugin.hpp>
 #include <drift/plugins/InputActionsPlugin.hpp>
+#include <drift/plugins/HotReloadPlugin.hpp>
 
 #include <SDL3/SDL.h>
 
@@ -236,4 +237,26 @@ fire = "mouse:Left"
     CHECK(actions.has("jump"));
     CHECK(actions.has("fire"));
     CHECK(actions.bindings("jump", 0).size() == 2);
+}
+
+// A page that writes new files names them; the next poll reloads every asset
+// loaded from them, whatever path the game loaded them by, once.
+TEST(hot_reload_reloads_the_files_a_page_names) {
+    AssetServer assets;
+    int calls = 0;
+    std::string seen;
+    assets.track("thing", 7, "./levels/one.txt");
+    assets.track("thing", 8, "levels/two.txt");
+    assets.setReloader("thing", [&](uint32_t id, const std::string& path) {
+        ++calls;
+        seen = path;
+        return id == 7;
+    });
+    HotReloadResource hr;
+    HotReloadResource::filesChanged({"/levels/one.txt", "other.txt"});
+    CHECK(hr.poll(assets) == 1);
+    CHECK(calls == 1);
+    CHECK(seen == "./levels/one.txt");
+    CHECK(hr.poll(assets) == 0);
+    CHECK(calls == 1);
 }

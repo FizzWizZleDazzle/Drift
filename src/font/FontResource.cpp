@@ -710,6 +710,27 @@ void FontResource::destroyFont(FontHandle font) {
     impl_->fonts.destroy(font);
 }
 
+bool FontResource::reloadFont(FontHandle font, const char* path) {
+    if (!font.valid() || font == impl_->defaultFont || !impl_->fonts.get(font)) return false;
+    std::shared_ptr<FontData> old = *impl_->fonts.get(font);
+    FontOptions options;
+    options.filter = old->filter;
+    FontHandle fresh = loadFont(path, old->loadSize, options);
+    auto* made = impl_->fonts.get(fresh);
+    if (!made) return false;
+    std::shared_ptr<FontData> next = *made;
+    impl_->fonts.destroy(fresh);   // the slot only: its font moves to `font`
+    for (TextureHandle t : old->pages) impl_->renderer.destroyTexture(t);
+    for (auto it = impl_->cache.begin(); it != impl_->cache.end();) {
+        if ((it->first >> 44) == old->key) it = impl_->cache.erase(it);
+        else ++it;
+    }
+    next->key = old->key;
+    next->fallback = old->fallback;
+    *impl_->fonts.get(font) = std::move(next);
+    return true;
+}
+
 FontHandle FontResource::defaultFont() const { return impl_->defaultFont; }
 
 void FontResource::setFallbackFont(FontHandle font, FontHandle fallback) {

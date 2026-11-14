@@ -73,4 +73,4 @@ Register panels in a plugin's `finish()` (the UI exists by then). Pass `true` as
 
 ## Hot Reload
 
-Development builds also watch the files of loaded textures and scenes and reload them when they change on disk; see [Asset Server](asset-server.md#hot-reload).
+Development builds also watch the files of loaded textures, sounds, fonts and scenes and reload them when they change on disk; see [Asset Server](asset-server.md#hot-reload).

@@ -72,6 +72,9 @@ public:
     SoundHandle createSound(const float* samples, size_t frames, int channels,
                             int sampleRate);
     void destroySound(SoundHandle sound);
+    // Reads `sound` again from `path`, keeping its handle and how it was
+    // loaded; voices playing it stop. Hot reload uses it.
+    bool reloadSound(SoundHandle sound, const char* path);
     double soundDuration(SoundHandle sound) const; // seconds
     // Caps simultaneous instances of one sound; starting another fades out
     // the oldest. 0 = no cap.

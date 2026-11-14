@@ -21,7 +21,7 @@ This book covers the engine and C++ games. To write a game in Candela and play i
 - **Procedural generation**: cellular-automata caves, BSP dungeons, random walks, wave function collapse, Poisson-disk sampling and weighted tables, the same for a seed on the desktop and in the browser, and written straight into tilemaps
 - **ImGui integration**: Built-in debug UI via Dear ImGui
 - **Scenes and prefabs**: Save and load entities as JSON through component reflection; spawn prefabs with per-copy overrides
-- **Dev tools**: In-game entity inspector, performance panel, physics debug drawing, and hot reload of textures and scenes
+- **Dev tools**: In-game entity inspector, performance panel, physics debug drawing, and hot reload of textures, sounds, fonts and scenes
 - **Parallel scheduler**: Automatic multi-threaded system dispatch based on dependency analysis
 - **Candela scripting**: Write a game in [candela](candela/overview.md) instead of C++, as components and systems, on the desktop and in the browser
 

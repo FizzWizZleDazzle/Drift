@@ -33,6 +33,7 @@ FontHandle loadFont(const char* path, float sizePx, FontOptions options = {});
 FontHandle loadFontFromMemory(const uint8_t* data, size_t size, float sizePx,
                               FontOptions options = {});
 void       destroyFont(FontHandle font);
+bool       reloadFont(FontHandle font, const char* path);
 FontHandle defaultFont() const;
 void       setFallbackFont(FontHandle font, FontHandle fallback);
 ```
@@ -61,6 +62,8 @@ fonts->loadFont("assets/fonts/pixel.ttf", 16.f, {.filter = TextureFilter::Neares
 `setFallbackFont(font, fallback)` changes where missing characters come from; pass `{}` to turn fallback off. With no fallback, a missing character draws as the font's missing-glyph box (TrueType) or `?` (bitmap fonts).
 
 Destroyed handles draw nothing. The built-in font cannot be destroyed.
+
+`reloadFont` reads a font again from its file at the size it was loaded with, keeping its handle. [Hot reload](asset-server.md#hot-reload) uses it.
 
 ### Bitmap fonts
 

@@ -127,6 +127,9 @@ public:
         assets->setSoundLoader([audio](const char* path) {
             return audio->loadSound(path);
         });
+        assets->setReloader("sound", [audio](uint32_t id, const std::string& path) {
+            return audio->reloadSound(SoundHandle{id}, path.c_str());
+        });
         app.world().registerComponent<AudioSource>("AudioSource");
         app.world().registerComponent<AudioListener>("AudioListener");
         app.initResource<AudioSourceTracking>();

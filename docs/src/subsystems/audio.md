@@ -15,6 +15,7 @@ SoundHandle loadSound(const char* path, LoadMode mode = LoadMode::Decode);
 SoundHandle loadSoundFromMemory(const void* data, size_t size, LoadMode mode = LoadMode::Decode);
 SoundHandle createSound(const float* samples, size_t frames, int channels, int sampleRate);
 void        destroySound(SoundHandle sound);
+bool        reloadSound(SoundHandle sound, const char* path);
 double      soundDuration(SoundHandle sound) const;   // seconds
 ```
 
@@ -28,6 +29,8 @@ The format is detected from the file contents, so the extension does not matter.
 | `LoadMode::Stream` | Keeps the compressed file and decodes while playing. | Music and long ambience |
 
 `createSound` builds a sound from raw float samples (interleaved when stereo), which is how you play procedurally generated audio.
+
+`reloadSound` reads a sound again from a file, keeping its handle and its load mode; voices playing it stop. [Hot reload](asset-server.md#hot-reload) uses it.
 
 Load sounds once, in a startup system, and keep the handles. `assets->load<Sound>(path)` on the [Asset Server](asset-server.md) calls `loadSound(path)` in `Decode` mode.
 

@@ -85,7 +85,7 @@ Handles from the asset server are shared. Destroying one through `RendererResour
 
 ## Hot Reload
 
-In development builds (`DRIFT_DEV`) on desktop, `HotReloadPlugin` checks the files of loaded assets a couple of times per second and reloads the ones that changed on disk. Textures reload in place (the handle stays the same and the size may change), and [scenes](scenes.md) update their live entities in place. Edit an image or a scene file in another program and the running game shows it. The game's [drift.toml](../reference/configuration.md#live-reload) is watched the same way.
+In development builds (`DRIFT_DEV`) on desktop, `HotReloadPlugin` checks the files of loaded assets a couple of times per second and reloads the ones that changed on disk. Textures, sounds and fonts reload in place (the handle stays the same; a texture's size may change, and voices playing a reloaded sound stop), and [scenes](scenes.md) update their live entities in place. Edit an image or a scene file in another program and the running game shows it. The game's [drift.toml](../reference/configuration.md#live-reload) is watched the same way.
 
 `HotReloadResource` controls it, starting from the `[hot_reload]` section of drift.toml (`enabled`, `interval`):
 
@@ -96,7 +96,13 @@ hr->interval = 1.f;      // seconds between checks
 hr->poll(*assets);       // check now
 ```
 
-On the web there are no files to watch, so nothing reloads. Outside `DRIFT_DEV`, add `HotReloadPlugin` yourself to get the same behaviour: `app.addPlugin<HotReloadPlugin>()` (header `drift/plugins/HotReloadPlugin.hpp`).
+In the browser nothing is watched. A page that writes new files into the game's file system names them instead, and they reload at the next frame:
+
+```cpp
+HotReloadResource::filesChanged({"assets/hero.png"});   // paths in the game folder
+```
+
+From JavaScript, set `Module.driftChangedFiles` to the list of paths and call `Module._drift_files_changed()`. Candela pages built with `drift build --web --dev` do this when the game changes. Outside `DRIFT_DEV`, add `HotReloadPlugin` yourself to get the same behaviour: `app.addPlugin<HotReloadPlugin>()` (header `drift/plugins/HotReloadPlugin.hpp`).
 
 ## Other Asset Kinds
 
@@ -114,7 +120,7 @@ void setReloader(const char* kind, Reloader fn);
 bool reload(const char* path);   // reload every asset loaded from path
 ```
 
-Textures are kind `"texture"`, sounds `"sound"`, fonts `"font"` and scenes `"scene"`. A kind with a reloader takes part in hot reload; `RendererPlugin` registers the one for textures and `ScenePlugin` the one for scenes. Reloaders run inside an exclusive system, so they may change the world.
+Textures are kind `"texture"`, sounds `"sound"`, fonts `"font"` and scenes `"scene"`. A kind with a reloader takes part in hot reload; `RendererPlugin`, `AudioPlugin`, `FontPlugin` and `ScenePlugin` register the ones for their kinds (`reloadTexture`, `reloadSound`, `reloadFont`, `SceneResource::reload`). Reloaders run inside an exclusive system, so they may change the world.
 
 ## Accessing in Systems
 

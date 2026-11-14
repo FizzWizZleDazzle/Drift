@@ -58,6 +58,9 @@ public:
     FontHandle loadFontFromMemory(const uint8_t* data, size_t size, float sizePx,
                                   FontOptions options = {});
     void destroyFont(FontHandle font);
+    // Reads `font` again from `path` at the size it was loaded with,
+    // keeping its handle. Hot reload uses it.
+    bool reloadFont(FontHandle font, const char* path);
 
     // The font built into the engine (Noto Sans: Latin, Greek, Cyrillic).
     // An empty FontHandle passed to drawText or measureText means this font.
