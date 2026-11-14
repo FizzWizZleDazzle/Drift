@@ -17,7 +17,8 @@
 // frame intervals there say little about a real GPU; cpu times hold.
 // --webgpu runs the pages on the WebGPU backend (the runtime must be built
 // with it), through SwiftShader's Vulkan unless --gpu is given. --set passes
-// a drift.toml override to the game, as `drift run --set` does.
+// a drift.toml override to the game, as `drift run --set` does; quote text
+// values the TOML way, as in --set 'render.backend="gl"'.
 // Each page also prints the size of the wasm heap once the game has loaded
 // and at the end of the run, to show memory a long run keeps growing.
 // puppeteer-core is found through PUPPETEER_CORE (a path to the package) or
@@ -71,7 +72,7 @@ const gl = opt.gpu ? ['--use-angle=default', '--enable-gpu', '--ignore-gpu-block
 if (opt.webgpu) {
   gl.push('--enable-unsafe-webgpu');
   if (!opt.gpu) gl.push('--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader');
-  opt.set.push('render.backend=webgpu');
+  opt.set.push('render.backend="webgpu"');
 }
 const gameArgs = opt.set.flatMap(s => ['--set', s]);
 const browser = await puppeteer.launch({
