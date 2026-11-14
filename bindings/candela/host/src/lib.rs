@@ -766,6 +766,9 @@ struct Host {
     messages_kinds: HashSet<String>,
     resource_kinds: HashSet<String>,
     resources: HashMap<String, Value>,
+    /// Counts the writes to `resources`, so a copy of one can be reused
+    /// while nothing has written it.
+    resources_version: u64,
     messages: Vec<(u64, String, Value)>,
     /// Messages sent with a delay: seconds left, then the message.
     later: Vec<(f64, Value)>,
@@ -1189,9 +1192,22 @@ impl Host {
 
     /// Builds the arguments of one system and what each row came from.
     fn arguments(&self, sys: &System, time: (f64, f64, i64), focus: &Focus) -> Option<(Vec<Value>, Vec<Vec<u64>>)> {
-        let mut args = Vec::new();
-        let mut entities = Vec::new();
-        for p in &sys.params {
+        self.arguments_reusing(sys, time, focus, Vec::new())
+    }
+
+    /// arguments, taking resources from `reuse` (by parameter) when it
+    /// holds them: what the call before left unchanged, so a system that
+    /// runs once per entity does not copy each resource once per entity.
+    fn arguments_reusing(
+        &self,
+        sys: &System,
+        time: (f64, f64, i64),
+        focus: &Focus,
+        mut reuse: Vec<Option<Value>>,
+    ) -> Option<(Vec<Value>, Vec<Vec<u64>>)> {
+        let mut args = Vec::with_capacity(sys.params.len());
+        let mut entities = Vec::with_capacity(sys.params.len());
+        for (i, p) in sys.params.iter().enumerate() {
             let mut ids = Vec::new();
             let v = match p {
                 Param::Rows { row, fields, with, without } => {
@@ -1214,7 +1230,10 @@ impl Host {
                         ("slots".into(), Value::Map(BTreeMap::new())),
                     ],
                 },
-                Param::Resource(name) => self.resources.get(name)?.clone(),
+                Param::Resource(name) => match reuse.get_mut(i).and_then(Option::take) {
+                    Some(v) => v,
+                    None => self.resources.get(name)?.clone(),
+                },
                 Param::Messages(name) => Value::Array(
                     self.messages.iter().filter(|(seq, n, _)| *seq > sys.seen && n == name).map(|(_, _, v)| v.clone()).collect(),
                 ),
@@ -1353,6 +1372,7 @@ impl Host {
         for (name, v) in resources {
             publish_resource(&name, Some(&v));
             self.resources.insert(name, v);
+            self.resources_version += 1;
         }
     }
 
@@ -1437,11 +1457,13 @@ impl Host {
                     if let Value::Struct { name, .. } = &v {
                         publish_resource(name, Some(&v));
                         self.resources.insert(name.clone(), v.clone());
+                        self.resources_version += 1;
                     }
                 }
                 Command::RemoveResource(name) => {
                     publish_resource(&name, None);
                     self.resources.remove(&name);
+                    self.resources_version += 1;
                 }
                 Command::Switch(name, on) => {
                     for sys in self.systems.iter_mut().filter(|s| s.name == name) {
@@ -1587,14 +1609,29 @@ impl Host {
             return;
         }
         let mark = self.next_seq;
+        // The resources the last call of this system left unchanged, valid
+        // while no resource has been written since.
+        let mut stash: Vec<Option<Value>> = Vec::new();
+        let mut stash_version = u64::MAX;
         for focus in self.foci(&sys) {
-            let Some((mut args, entities)) = self.arguments(&sys, time, &focus) else { continue };
+            let reuse = if stash_version == self.resources_version { std::mem::take(&mut stash) } else { Vec::new() };
+            let Some((mut args, entities)) = self.arguments_reusing(&sys, time, &focus, reuse) else { continue };
             LOOKUP_SEEN.with(|seen| seen.borrow_mut().clear());
             let before = kept(&sys, &args);
             match self.program.call_in_out(&sys.name, &mut args) {
                 Ok(_) => {
                     self.write_back(&sys, &before, &mut args, &entities);
                     self.apply();
+                    stash = sys
+                        .params
+                        .iter()
+                        .zip(args.iter_mut())
+                        .map(|(p, a)| match p {
+                            Param::Resource(_) if !matches!(a, Value::Null) => Some(std::mem::replace(a, Value::Null)),
+                            _ => None,
+                        })
+                        .collect();
+                    stash_version = self.resources_version;
                 }
                 Err(d) => {
                     QUEUE.with(|q| q.borrow_mut().clear());
@@ -1739,6 +1776,7 @@ impl Host {
             unsafe { drift_bridge_despawn(e) };
         }
         self.resources = self.initial_resources.clone();
+        self.resources_version += 1;
         for (name, st) in self.states.iter_mut() {
             let first = self
                 .types
@@ -2591,6 +2629,7 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
         messages_kinds,
         resource_kinds,
         resources: HashMap::new(),
+        resources_version: 0,
         messages: Vec::new(),
         later: Vec::new(),
         next_seq: 0,
