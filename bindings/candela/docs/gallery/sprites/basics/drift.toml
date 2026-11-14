@@ -1,0 +1,10 @@
+[project]
+name = "Sprites and Shapes"
+entry = "main.cdl"
+
+[window]
+width = 560
+height = 230
+
+[render]
+clear_color = [0.09, 0.08, 0.11]

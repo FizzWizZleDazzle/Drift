@@ -4,14 +4,41 @@ Everything you see is a component: put a `Sprite`, `Rectangle`, `Circle` or `Tex
 
 ## Sprites
 
-A sprite draws a texture at its entity's position. `image` holds the `Texture`; `texture(path)` loads one from a file once and hands back the same texture for the same path:
+![One small cone image drawn as is, at scale 2, turned around its tip, mirrored, tinted green and half transparent; below, a rectangle, a rounded rectangle, a circle and a circle outline](../images/sprites/basics.png)
+
+A sprite draws a texture at its entity's position. To show an image from a file:
+
+1. Put the file in the game folder, for example `assets/cone.png`. PNG, JPEG, BMP, TGA and GIF files load; everything under `assets/` goes into the web page.
+2. Load it with `texture(path)`. The path is relative to the game folder. The first call loads the file; later calls with the same path give back the same texture, so calling it in a Startup system or every time you spawn costs the same.
+3. Spawn an entity with a `Transform` (here from `at(x, y)`) and a `Sprite` whose `image` is the texture.
 
 ```rust
-@system(schedule: Schedule::Startup)
-fn setup(cmd: Commands) {
-    cmd.spawn([at(320.0, 180.0), Sprite { image: texture("assets/ship.png"), .. }]);
+{{#include ../../gallery/sprites/basics/main.cdl:sprites}}
+```
+
+[Run it in the browser](../play/gallery/sprites/basics/).
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/sprites/basics/main.cdl:all}}
+```
+
+</details>
+
+A path that does not exist logs `loadTexture: cannot read 'assets/ship.png'` and throws. The throw reaches your code as the error `host_fn_error`, without the path in it, so `catch "drift_load_failed"` does not match it; use `catch e`. Uncaught, it stops the system that called `texture` (the rest of that Startup system does not run, so whatever it would have spawned is missing), logs `setup raised host_fn_error: ... drift_load_failed: assets/ship.png`, and the game keeps running:
+
+```rust
+let ship = Texture { .. };   // no texture: the sprite draws nothing
+try {
+    ship = texture("assets/ship.png");
+} catch e {
+    warn("no ship image: " + e);
 }
 ```
+
+A `Sprite` with no image (`Texture { .. }`) draws nothing; to draw a plain box, use a `Rectangle`.
 
 `Assets.create_texture(w, h, pixels)` makes a texture from colors instead, and a render target is a texture too. Textures sample with `Filter::Nearest` by default, which keeps pixel art crisp; call `set_filter(Filter::Linear)` for smooth scaling.
 
@@ -33,12 +60,21 @@ For a joint at pixel (jx, jy) of a w x h image, the anchor is `vec2(jx / w, jy /
 
 ## Shapes
 
-`Rectangle` and `Circle` draw filled shapes, or outlines when `outline` is above zero:
+`Rectangle` and `Circle` draw filled shapes, or only their outline, `outline` pixels thick, when `outline` is above zero. They need no image:
 
 ```rust
-cmd.spawn([at(100.0, 100.0), Rectangle { size: vec2(64.0, 16.0), color: rgb(80, 200, 120), corner_radius: 4.0, .. }]);
-cmd.spawn([at(200.0, 100.0), Circle { radius: 20.0, color: rgb(255, 255, 255), outline: 2.0, .. }]);
+{{#include ../../gallery/sprites/basics/main.cdl:shapes}}
 ```
+
+| Field | Default | Unit | Meaning |
+|-------|---------|------|---------|
+| `Rectangle.size` | (32, 32) | pixels | Width and height |
+| `Rectangle.corner_radius` | 0.0 | pixels | Rounds the corners |
+| `Rectangle.anchor` | (0.5, 0.5) | 0 to 1 | The point placed at the position, as for a sprite |
+| `Circle.radius` | 16.0 | pixels | |
+| `color` | white | `Color` | Fill, or outline color |
+| `outline` | 0.0 | pixels | Above 0 draws only the outline, this thick |
+| `z`, `layer`, `visible` | 0.0, 0, true | | Draw order and hiding, as below |
 
 An entity draws one of `Sprite`, `Rectangle` or `Circle`, plus any `Text`. For a shape made of several parts, spawn several entities and give the parts a `Parent`.
 

@@ -1,0 +1,46 @@
+// ANCHOR: all
+// One image, assets/cone.png (32 x 16 pixels), drawn six ways, and the
+// three shapes. Each has its label under it.
+
+import "drift" { * };
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    // ANCHOR: sprites
+    let cone = texture("assets/cone.png");   // loaded once; the same path gives the same texture
+
+    // As drawn, centered on its position.
+    cmd.spawn([at(60.0, 60.0), Sprite { image: cone, .. }]);
+    // Twice the size; the default Nearest filter keeps the pixels sharp.
+    cmd.spawn([Transform { position: vec2(160.0, 60.0), scale: vec2(2.0, 2.0), .. }, Sprite { image: cone, .. }]);
+    // Turned 0.6 radians (clockwise) around an anchor at its left tip.
+    cmd.spawn([Transform { position: vec2(250.0, 60.0), rotation: 0.6, .. },
+               Sprite { image: cone, anchor: vec2(0.0, 0.5), .. }]);
+    // Mirrored left to right.
+    cmd.spawn([at(340.0, 60.0), Sprite { image: cone, flip_x: true, .. }]);
+    // Tinted green: the image's colors times the tint.
+    cmd.spawn([at(420.0, 60.0), Sprite { image: cone, color: rgb(120, 255, 120), .. }]);
+    // Half transparent, over a white bar.
+    cmd.spawn([at(500.0, 60.0), Rectangle { size: vec2(8.0, 30.0), color: rgb(255, 255, 255), .. }]);
+    cmd.spawn([at(500.0, 60.0), Sprite { image: cone, color: rgb(255, 255, 255).alpha(0.5), z: 1.0, .. }]);
+    // ANCHOR_END: sprites
+
+    // ANCHOR: shapes
+    cmd.spawn([at(100.0, 170.0), Rectangle { size: vec2(64.0, 32.0), color: rgb(80, 200, 120), .. }]);
+    cmd.spawn([at(220.0, 170.0), Rectangle { size: vec2(64.0, 32.0), color: rgb(80, 160, 230), corner_radius: 10.0, .. }]);
+    cmd.spawn([at(340.0, 170.0), Circle { radius: 18.0, color: rgb(240, 200, 90), .. }]);
+    cmd.spawn([at(450.0, 170.0), Circle { radius: 18.0, color: rgb(255, 255, 255), outline: 2.0, .. }]);
+    // ANCHOR_END: shapes
+
+    let labels = ["as drawn", "scale 2", "anchor + turn", "flip_x", "tint", "alpha 0.5"];
+    let xs = [60.0, 160.0, 250.0, 340.0, 420.0, 500.0];
+    for i in range(6) {
+        cmd.spawn([at(xs[i], 100.0), Text { value: labels[i], size: 13.0, align: Align::Center, .. }]);
+    }
+    let shapes = ["Rectangle", "corner_radius", "Circle", "outline"];
+    let sx = [100.0, 220.0, 340.0, 450.0];
+    for i in range(4) {
+        cmd.spawn([at(sx[i], 200.0), Text { value: shapes[i], size: 13.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

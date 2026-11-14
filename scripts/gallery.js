@@ -125,6 +125,7 @@ const pictures = [
     ...animation.map(p => ({ guide: 'animation', ...p })),
     ...effects.map(p => ({ guide: 'effects', ...p })),
     ...cameras.map(p => ({ guide: 'cameras', ...p })),
+    { guide: 'sprites', name: 'basics', frames: 3 },
 ];
 
 function arg(name, fallback) {
