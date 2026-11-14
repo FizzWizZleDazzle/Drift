@@ -2385,6 +2385,8 @@ struct Reading {
     host: Host,
     resources_list: Vec<(u16, Option<String>)>,
     buildable: Vec<(u16, Option<String>)>,
+    /// The function that builds each buildable struct from its defaults.
+    default_fn: HashMap<u16, String>,
     message_ids: HashSet<u16>,
     errors: Vec<Finding>,
     warnings: Vec<Finding>,
@@ -2404,8 +2406,57 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
     let src = std::fs::read_to_string(entry).map_err(|e| Unread::NoEntry(format!("{entry}: {e}")))?;
     let main = if src.contains("fn main(") { String::new() } else { String::from("\nfn main() {}\n") };
 
-    // First the game alone, for its attributes.
-    let first = engine(module_dir).compile(&format!("{src}{main}"), entry).map_err(|d| Unread::Compile(d, src.clone()))?;
+    // The game is compiled with a function that builds each resource,
+    // component and message from its defaults; a resource with a field that
+    // has no default cannot be built and waits for cmd.insert_resource. Which
+    // structs those are, the attributes say once the game has compiled, so
+    // the first compile takes them from a reading of the game's files; when
+    // that reading missed one, the game compiles again with the list the
+    // attributes give.
+    let base = format!("{src}{main}");
+    // The glue for `names`, and where each function sits in the compiled text.
+    let glue = |names: &[(String, String)]| -> (String, Vec<std::ops::Range<usize>>) {
+        let mut g = String::new();
+        let mut at = Vec::with_capacity(names.len());
+        for (f, n) in names {
+            let start = base.len() + g.len();
+            g.push_str(&format!("\nfn {f}() -> {n} {{ return {n} {{ .. }}; }}\n"));
+            at.push(start..base.len() + g.len());
+        }
+        (g, at)
+    };
+    // Compiles with the glue for `names`, dropping each name whose function
+    // does not compile (found from where the error points), with the error,
+    // which costs one more compile per such struct. An error elsewhere is
+    // the game's.
+    let compile_with = |names: &mut Vec<(String, String)>, dropped: &mut Vec<(String, Diagnostic)>| -> Result<Program, Diagnostic> {
+        loop {
+            let (g, at) = glue(names);
+            match engine(module_dir).compile(&format!("{base}{g}"), entry) {
+                Ok(p) => return Ok(p),
+                Err(d) => {
+                    let ours = d.filename == entry || d.filename.is_empty();
+                    match at.iter().position(|r| ours && r.contains(&d.span.start)) {
+                        Some(i) => dropped.push((names.remove(i).1, d)),
+                        None => return Err(d),
+                    }
+                }
+            }
+        }
+    };
+    let mut guessed: Vec<(String, String)> =
+        marked_structs(entry, module_dir).into_iter().enumerate().map(|(i, n)| (format!("__drift_default_g{i}"), n)).collect();
+    let mut dropped: Vec<(String, Diagnostic)> = Vec::new();
+    let first = match compile_with(&mut guessed, &mut dropped) {
+        Ok(p) => p,
+        // The glue may be what failed (a default that raises somewhere the
+        // error cannot place): the game alone says whose error it is.
+        Err(_) => {
+            guessed.clear();
+            dropped.clear();
+            engine(module_dir).compile(&base, entry).map_err(|d| Unread::Compile(d, src.clone()))?
+        }
+    };
     let table = first.attributes();
     let types = std::rc::Rc::new(Types::new(table));
     let named = |n: &str| -> Vec<(u16, Option<String>)> {
@@ -2428,22 +2479,6 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
     resources_list.extend(settings.iter().cloned());
     let resource_kinds: HashSet<String> = resources_list.iter().map(|(id, _)| types.struct_name(*id).to_owned()).collect();
 
-    // Then with a function that builds each resource from its defaults. A
-    // resource with a field that has no default cannot be built; it waits for
-    // cmd.insert_resource.
-    // The glue, and where each item's function sits in the compiled text.
-    let base = format!("{src}{main}");
-    let glue_for = |list: &[&(u16, Option<String>)]| -> (String, Vec<std::ops::Range<usize>>) {
-        let mut g = String::new();
-        let mut at = Vec::with_capacity(list.len());
-        for (id, _) in list {
-            let n = types.struct_name(*id);
-            let start = base.len() + g.len();
-            g.push_str(&format!("\nfn __drift_default_{id}() -> {n} {{ return {n} {{ .. }}; }}\n"));
-            at.push(start..base.len() + g.len());
-        }
-        (g, at)
-    };
     // Components too, so a component another one requires can be added from
     // its defaults, and messages, whose new fields take their defaults when
     // a reload carries a waiting message over.
@@ -2452,40 +2487,52 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
     let message_ids: HashSet<u16> = message_list.iter().map(|m| m.0).collect();
     let all_defaults: Vec<(u16, Option<String>)> =
         resources_list.iter().cloned().chain(component_list.iter().cloned()).chain(message_list.iter().cloned()).collect();
-    let mut buildable: Vec<&(u16, Option<String>)> = all_defaults.iter().collect();
-    // Why each one left out does not build.
+
+    // The default function of each struct the first compile built, and
+    // whether it covered them all: a struct the reading found whose function
+    // did not compile has no defaults to build, and the error says why.
+    let mut default_fn: HashMap<u16, String> = HashMap::new();
     let mut unbuildable: Vec<(u16, Diagnostic)> = Vec::new();
-    let program = loop {
-        let (glue, at) = glue_for(&buildable);
-        match engine(module_dir).compile(&format!("{base}{glue}"), entry) {
-            Ok(p) => break p,
-            Err(d) if !buildable.is_empty() => {
-                // A default that does not compile is named by where the error
-                // points: drop that one and compile again, so a game pays one
-                // more compile per struct without defaults, not one per struct.
-                let ours = d.filename == entry || d.filename.is_empty();
-                if let Some(i) = at.iter().position(|r| ours && r.contains(&d.span.start)) {
-                    unbuildable.push((buildable.remove(i).0, d));
-                    continue;
-                }
-                // The error points elsewhere, such as a default inside the
-                // struct's own declaration: try each one alone.
-                buildable.retain(|r| match engine(module_dir).compile(&format!("{base}{}", glue_for(&[r]).0), entry) {
-                    Ok(_) => true,
-                    Err(d) => {
-                        unbuildable.push((r.0, d));
-                        false
-                    }
-                });
-                if let Ok(p) = engine(module_dir).compile(&format!("{base}{}", glue_for(&buildable).0), entry) {
-                    break p;
-                }
-                buildable.clear();
-            }
-            Err(d) => return Err(Unread::Compile(d, src.clone())),
+    let mut covered = true;
+    for (id, _) in &all_defaults {
+        let n = types.struct_name(*id);
+        if let Some((f, _)) = guessed.iter().find(|(_, g)| g == n) {
+            default_fn.insert(*id, f.clone());
+        } else if let Some((_, d)) = dropped.iter().find(|(g, _)| g == n) {
+            unbuildable.push((*id, d.clone()));
+        } else {
+            covered = false;
         }
+    }
+    let program = if covered {
+        first
+    } else {
+        default_fn.clear();
+        unbuildable.clear();
+        let mut names: Vec<(String, String)> =
+            all_defaults.iter().map(|(id, _)| (format!("__drift_default_{id}"), types.struct_name(*id).to_owned())).collect();
+        let mut failed = Vec::new();
+        let program = match compile_with(&mut names, &mut failed) {
+            Ok(p) => p,
+            // An error the glue cannot place: build no defaults rather than
+            // stop a game that compiles without them.
+            Err(d) => {
+                names.clear();
+                engine(module_dir).compile(&base, entry).map_err(|_| Unread::Compile(d, src.clone()))?
+            }
+        };
+        for (id, _) in &all_defaults {
+            let f = format!("__drift_default_{id}");
+            let n = types.struct_name(*id);
+            if names.iter().any(|(g, _)| *g == f) {
+                default_fn.insert(*id, f);
+            } else if let Some((_, d)) = failed.iter().find(|(g, _)| g == n) {
+                unbuildable.push((*id, d.clone()));
+            }
+        }
+        program
     };
-    let buildable: Vec<(u16, Option<String>)> = buildable.into_iter().cloned().collect();
+    let buildable: Vec<(u16, Option<String>)> = all_defaults.iter().filter(|(id, _)| default_fn.contains_key(id)).cloned().collect();
 
     let mut host = Host {
         program,
@@ -2691,7 +2738,7 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
         Ok(ordered) => host.systems = ordered,
         Err(why) => errors.push(Finding { item: Item::Fn(why.split(": ").nth(1).unwrap_or("").split(", ").next().unwrap_or("").to_owned()), message: why }),
     }
-    Ok(Reading { host, resources_list, buildable, message_ids, errors, warnings })
+    Ok(Reading { host, resources_list, buildable, default_fn, message_ids, errors, warnings })
 }
 
 fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
@@ -2705,14 +2752,14 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     for w in &reading.warnings {
         log(2, &w.message);
     }
-    let Reading { mut host, resources_list, buildable, message_ids, .. } = reading;
+    let Reading { mut host, resources_list, buildable, default_fn, message_ids, .. } = reading;
     STORES.with(|s| *s.borrow_mut() = host.components.iter().map(|c| (c.clone(), BTreeMap::new())).collect());
     let resource_ids: HashSet<u16> = resources_list.iter().map(|r| r.0).collect();
     for (id, section) in buildable.iter().map(|r| (r.0, r.1.clone())) {
         let name = host.types.struct_name(id).to_owned();
         let mut v = host
             .program
-            .call(&format!("__drift_default_{id}"), &[])
+            .call(&default_fn[&id], &[])
             .map_err(|d| format!("{name}: building its defaults raised {}: {}", d.code, d.message))?;
         if message_ids.contains(&id) {
             host.message_defaults.insert(name, v);
@@ -2734,6 +2781,163 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     host.initial_enabled = host.systems.iter().map(|s| s.enabled).collect();
     SWITCHES.with(|w| *w.borrow_mut() = host.systems.iter().map(|s| (s.name.clone(), s.enabled)).collect());
     Ok(host)
+}
+
+/// The structs the game's files mark @component, @resource, @settings or
+/// @message (with or without `drift::`), by name, read from the files in
+/// the entry's folder without compiling them, and those of the `drift`
+/// modules the game imports by glob (`import "drift" { * }`), whose names it
+/// then uses bare. A struct this misses, or a name that is not the struct's
+/// name in the entry, costs a second compile.
+fn marked_structs(entry: &str, module_dir: &str) -> Vec<String> {
+    let folder = std::path::Path::new(entry).parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
+    let mut files = Vec::new();
+    let mut dirs = vec![folder.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        let Ok(read) = std::fs::read_dir(&dir) else { continue };
+        for item in read.flatten() {
+            let path = item.path();
+            let name = item.file_name().to_string_lossy().into_owned();
+            if path.is_dir() {
+                let skip = name.starts_with('.')
+                    || name == "build"
+                    || name.starts_with("build-")
+                    || (cfg!(target_os = "emscripten") && ["dev", "proc", "tmp", "home", "drift-module"].contains(&name.as_str()));
+                if !skip {
+                    dirs.push(path);
+                }
+            } else if path.extension().is_some_and(|e| e == "cdl") {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    let module = std::path::Path::new(module_dir).join("src");
+    let mut modules = Vec::new();
+    for f in &files {
+        let Ok(text) = std::fs::read_to_string(f) else { continue };
+        for (i, _) in text.match_indices("import \"drift") {
+            let rest = &text[i + "import \"drift".len()..];
+            let Some(close) = rest.find('"') else { continue };
+            let sub = &rest[..close];
+            let glob = rest[close..].split(';').next().is_some_and(|tail| tail.contains('*'));
+            if !glob {
+                continue;
+            }
+            if sub.is_empty() {
+                modules.push(module.join("main.cdl"));
+                if let Ok(core) = std::fs::read_dir(module.join("core")) {
+                    let mut core: Vec<_> = core.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "cdl")).collect();
+                    core.sort();
+                    modules.extend(core);
+                }
+            } else if let Some(name) = sub.strip_prefix('/') {
+                modules.push(module.join(format!("{name}.cdl")));
+            }
+        }
+    }
+    for m in modules {
+        if !files.contains(&m) {
+            files.push(m);
+        }
+    }
+    let mut names = Vec::new();
+    for f in files {
+        let Ok(text) = std::fs::read_to_string(&f) else { continue };
+        for n in marked_in(&text) {
+            if !names.contains(&n) {
+                names.push(n);
+            }
+        }
+    }
+    names
+}
+
+/// The names of the structs `src` marks with a drift attribute that has
+/// defaults to build: `@component`, `@resource`, `@settings`, `@message`.
+fn marked_in(src: &str) -> Vec<String> {
+    let b = src.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    let mut marked = false;
+    let ident = |i: usize| -> (String, usize) {
+        let mut j = i;
+        while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'_' || b[j] == b':') {
+            j += 1;
+        }
+        (src[i..j].to_owned(), j)
+    };
+    while i < b.len() {
+        let c = b[i];
+        if c == b'/' && b.get(i + 1) == Some(&b'/') {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+        } else if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            i += 2;
+            while i + 1 < b.len() && !(b[i] == b'*' && b[i + 1] == b'/') {
+                i += 1;
+            }
+            i += 2;
+        } else if c == b'"' {
+            i += 1;
+            while i < b.len() && b[i] != b'"' {
+                i += if b[i] == b'\\' { 2 } else { 1 };
+            }
+            i += 1;
+        } else if c == b'@' {
+            let (name, j) = ident(i + 1);
+            let attr = name.rsplit("::").next().unwrap_or("");
+            if ["component", "resource", "settings", "message"].contains(&attr) {
+                marked = true;
+            }
+            i = j;
+            // The attribute's arguments.
+            let mut k = i;
+            while k < b.len() && b[k].is_ascii_whitespace() {
+                k += 1;
+            }
+            if b.get(k) == Some(&b'(') {
+                let mut depth = 0;
+                while k < b.len() {
+                    match b[k] {
+                        b'(' => depth += 1,
+                        b')' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                k += 1;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    k += 1;
+                }
+                i = k;
+            }
+        } else if c.is_ascii_alphabetic() || c == b'_' {
+            let (word, j) = ident(i);
+            i = j;
+            match word.as_str() {
+                "export" | "pub" => {}
+                "struct" if marked => {
+                    while i < b.len() && b[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    let (name, j) = ident(i);
+                    i = j;
+                    if !name.is_empty() {
+                        out.push(name);
+                    }
+                    marked = false;
+                }
+                _ => marked = false,
+            }
+        } else {
+            i += 1;
+        }
+    }
+    out
 }
 
 /// The parameters of a function the attribute table describes: an attributed
@@ -2897,3 +3101,28 @@ pub extern "C" fn drift_host_unload() {
     RESOURCE_VIEW.with(|r| r.borrow_mut().clear());
 }
 
+#[cfg(test)]
+mod tests {
+    use super::marked_in;
+
+    #[test]
+    fn marked_structs_are_read_from_source() {
+        let src = r#"
+import "drift" { * };
+// @component struct Commented {}
+/* @resource struct Hidden {} */
+@component struct Dice { change: Timer = repeating_timer(0.5) }
+@settings(section: "dungeon")
+/// Tuning.
+struct DungeonSettings { tiles: string[] = ["a(b)", "c"] }
+@drift::message
+export struct Hit { target: Entity }
+@system(schedule: Schedule::Startup)
+fn setup() {}
+@state enum Phase { Title, Play }
+@drift::component(requires: [Transform]) struct Torch {}
+struct Plain {}
+"#;
+        assert_eq!(marked_in(src), ["Dice", "DungeonSettings", "Hit", "Torch"]);
+    }
+}
