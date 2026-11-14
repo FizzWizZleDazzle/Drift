@@ -1,0 +1,117 @@
+import "drift" { * };
+import "std/math" as math;
+
+@settings(section: "torches")
+struct TorchSettings {
+    ambient: Color = Color { r: 0.13, g: 0.12, b: 0.16, a: 1.0 },
+    light_color: Color = Color { r: 1.0, g: 0.6, b: 0.28, a: 1.0 },
+    radius: float = 360.0,
+    intensity: float = 1.4,
+    falloff: float = 1.6,
+    flicker: float = 0.2,
+    flicker_speed: float = 1.0,
+    flame_color: Color = Color { r: 1.0, g: 0.72, b: 0.3, a: 1.0 },
+    flame_size: float = 7.0,
+    stick_color: Color = Color { r: 0.28, g: 0.18, b: 0.1, a: 1.0 },
+    embers: bool = true,
+    shadows: bool = false,
+    glow: bool = true,
+    glow_shader: string = "assets/shaders/torchglow",
+    vignette: float = 0.55,
+    vignette_radius: float = 0.85,
+    grain: float = 0.035,
+    shimmer: float = 1.0,
+    shimmer_height: float = 140.0,
+    tint: Color = Color { r: 1.0, g: 0.9, b: 0.75, a: 0.3 },
+}
+
+@resource
+struct TorchGlow { material: Material = Material { .. }, on: bool = false }
+
+@component
+struct Torch { phase: float = 0.0, radius: float = 360.0, intensity: float = 1.4 }
+
+@component
+struct TorchFlame { phase: float = 0.0, size: float = 7.0 }
+
+fn flicker(t: float, phase: float, speed: float) -> float {
+    let a = math::sin(t * 11.0 * speed + phase);
+    let b = math::sin(t * 23.0 * speed + phase * 1.7);
+    let c = math::sin(t * 5.3 * speed + phase * 0.6);
+    return (a * 0.45 + b * 0.25 + c * 0.3);
+}
+
+fn torch(cmd: Commands, pos: Vec2, s: TorchSettings, seed: int) -> Entity {
+    let r = rng(seed);
+    let phase = r.range_float(0.0, TAU);
+    let t = cmd.spawn([
+        at(pos.x, pos.y),
+        Torch { phase: phase, radius: s.radius, intensity: s.intensity },
+        PointLight { color: s.light_color, intensity: s.intensity, radius: s.radius, falloff: s.falloff, shadows: s.shadows, .. },
+    ]);
+    cmd.spawn_child(t, [
+        at(0.0, 16.0),
+        Rectangle { size: vec2(6.0, 26.0), color: s.stick_color, .. },
+    ]);
+    cmd.spawn_child(t, [
+        at(0.0, -1.0),
+        Circle { radius: s.flame_size, color: s.flame_color, .. },
+        TorchFlame { phase: phase, size: s.flame_size },
+    ]);
+    cmd.spawn_child(t, [
+        at(0.0, -2.0),
+        Circle { radius: s.flame_size * 0.45, color: Color { r: 1.0, g: 0.95, b: 0.75, a: 1.0 }, .. },
+        TorchFlame { phase: phase + 1.3, size: s.flame_size * 0.45 },
+    ]);
+    if s.embers {
+        cmd.spawn_child(t, [
+            at(0.0, -6.0),
+            ParticleEmitter {
+                rate: 6.0, lifetime_min: 0.6, lifetime_max: 1.4,
+                speed_min: 20.0, speed_max: 55.0, angle_min: -2.0, angle_max: -1.14,
+                size_start: 2.5, size_end: 0.5,
+                color_start: Color { r: 1.0, g: 0.7, b: 0.3, a: 1.0 },
+                color_end: Color { r: 1.0, g: 0.3, b: 0.1, a: 0.0 },
+                blend: Blend::Additive, max_particles: 32, z: 6.0, ..
+            },
+        ]);
+    }
+    return t;
+}
+
+@system(schedule: Schedule::Startup)
+fn torch_ambient(effects: Effects, assets: Assets, s: TorchSettings, glow: TorchGlow) {
+    effects.set_ambient(s.ambient);
+    if s.glow {
+        let m = assets.create_material(assets.shader(s.glow_shader));
+        m.set_param(0, s.vignette, s.vignette_radius, s.grain, s.shimmer);
+        m.set_color(1, s.tint);
+        effects.add_material(m, 50);
+        glow.material = m;
+        glow.on = true;
+    }
+}
+
+@system
+fn torch_glow(torches: (Torch, Transform)[], cameras: (Camera, Transform)[], glow: TorchGlow, window: Window, s: TorchSettings) {
+    if !glow.on {
+        return;
+    }
+    let origin = vec2(0.0, 0.0);
+    for (_, c) in cameras {
+        origin = c.position - vec2(window.width * 0.5, window.height * 0.5);
+    }
+    let i = 0;
+    for (_, t) in torches {
+        let p = t.position - origin;
+        let on_screen = p.x > -s.radius && p.x < window.width + s.radius && p.y > -s.radius && p.y < window.height + s.radius;
+        if i < 6 && on_screen {
+            glow.material.set_param(2 + i, p.x / window.width, p.y / window.height, s.shimmer_height / window.height, 1.0);
+            i += 1;
+        }
+    }
+    while i < 6 {
+        glow.material.set_param(2 + i, 0.0, 0.0, 0.0, 0.0);
+        i += 1;
+    }
+}

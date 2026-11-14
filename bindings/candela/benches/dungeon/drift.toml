@@ -1,0 +1,18 @@
+[project]
+name = "Bench: dungeon"
+organization = "Drift Benchmarks"
+entry = "main.cdl"
+
+[window]
+width = 1920
+height = 1080
+scale_mode = "letterbox"
+
+[physics]
+gravity = [0, 900]
+
+[lighting]
+enabled = true
+
+[torches]
+ambient = { r = 0.32, g = 0.29, b = 0.36, a = 1.0 }

@@ -1,0 +1,231 @@
+import "drift" { * };
+import "./torches.cdl" { * };
+
+@settings(section: "dungeon")
+struct DungeonSettings {
+    tiles: string[] = ["assets/creamTile.aseprite", "assets/brownTile.aseprite"],
+    variant_chance: float = 0.3,
+    mortar: int = 1,
+    stagger: bool = true,
+    scale: float = 2.0,
+    wall: float = 32.0,
+    ceiling: float = 28.0,
+    floor_height: float = 20.0,
+    mortar_color: Color = Color { r: 0.12, g: 0.12, b: 0.13, a: 1.0 },
+    wall_shade: float = 0.55,
+    crack_color: Color = Color { r: 0.05, g: 0.045, b: 0.04, a: 0.9 },
+    crack_edge: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.12 },
+    crack_density: float = 0.8,
+    crack_min: float = 40.0,
+    crack_max: float = 140.0,
+    crack_step: float = 3.0,
+    crack_jitter: float = 0.35,
+    crack_branch: float = 0.3,
+    pebble_color: Color = Color { r: 0.42, g: 0.39, b: 0.36, a: 1.0 },
+    pebble_spacing: float = 3.0,
+    pebble_min: float = 1.2,
+    pebble_max: float = 3.6,
+    cracks: bool = false,
+    wall_variants: int = 3,
+    ground_tile: int = 256,
+    torches_per_chunk: int = 2,
+    torch_height: float = 0.45,
+    chunks_behind: int = 1,
+    chunks_ahead: int = 2,
+    seed: int = 1234,
+}
+
+@component
+struct Chunk { index: int = 0 }
+
+@resource
+struct DungeonState {
+    ready: bool = false,
+    w: int = 0,
+    h: int = 0,
+    chunk_w: int = 0,
+    floor_top: float = 0.0,
+    spawned: int[] = [],
+    walls: Texture[] = [],
+    ground: Texture = Texture { .. },
+    ground_w: int = 0,
+}
+
+fn wall_shade(c: Color, k: float) -> Color {
+    return Color { r: c.r * k, g: c.g * k, b: c.b * k, a: c.a };
+}
+
+fn brick_wall(assets: Assets, w: int, h: int, s: DungeonSettings, seed: int) -> Image {
+    let bricks: Image[] = [];
+    for path in s.tiles {
+        let sheet = assets.aseprite(path);
+        bricks.push(sheet.texture.to_image().crop(sheet.frame_at(0)));
+    }
+    let bw = bricks[0].width();
+    let bh = bricks[0].height();
+    let cw = bw + s.mortar;
+    let ch = bh + s.mortar;
+    let img = assets.create_image(w, h, s.mortar_color);
+    let r = rng(seed);
+    for row in range(h / ch + 1) {
+        let shift = if s.stagger { (row % 2) * (cw / 2) } else { 0 };
+        for col in range(w / cw + 2) {
+            let pick = if bricks.len() > 1 && r.chance(s.variant_chance) { 1 + r.range(0, bricks.len() - 2) } else { 0 };
+            img.draw(bricks[pick], col * cw - shift, row * ch);
+        }
+    }
+    return img;
+}
+
+fn crack(img: Image, r: Rng, start: Vec2, angle: float, length: float, s: DungeonSettings) {
+    let p = start;
+    let a = angle;
+    let left = length;
+    while left > 0.0 {
+        a += r.range_float(-s.crack_jitter, s.crack_jitter);
+        let step = r.range_float(s.crack_step * 0.5, s.crack_step * 1.5);
+        let q = p + from_angle(a) * step;
+        img.line(p + vec2(0.0, 1.0), q + vec2(0.0, 1.0), s.crack_edge, 1.0);
+        img.line(p, q, s.crack_color, 1.0);
+        if left > s.crack_min * 0.5 && r.chance(s.crack_branch * step / length) {
+            crack(img, r, q, a + r.range_float(0.5, 1.1) * (if r.chance(0.5) { 1.0 } else { -1.0 }), left * r.range_float(0.3, 0.6), s);
+        }
+        p = q;
+        left -= step;
+    }
+}
+
+fn crack_overlay(assets: Assets, w: int, h: int, s: DungeonSettings, seed: int) -> Image {
+    let img = assets.create_image(w, h, Color { r: 0.0, g: 0.0, b: 0.0, a: 0.0 });
+    let r = rng(seed);
+    let count = int(float(w * h) / 10000.0 * s.crack_density) + 1;
+    for i in range(count) {
+        let start = vec2(r.range_float(0.0, float(w)), r.range_float(0.0, float(h)));
+        crack(img, r, start, r.range_float(0.0, TAU), r.range_float(s.crack_min, s.crack_max), s);
+    }
+    return img;
+}
+
+fn pebble_floor(assets: Assets, w: int, h: int, s: DungeonSettings, seed: int) -> Image {
+    let r = rng(seed);
+    let img = assets.create_image(w, h, wall_shade(s.pebble_color, 0.7));
+    let count = int(float(w * h) / s.pebble_spacing);
+    for i in range(count) {
+        let p = vec2(r.range_float(-2.0, float(w) + 2.0), r.range_float(-2.0, float(h) + 2.0));
+        let radius = r.range_float(s.pebble_min, s.pebble_max);
+        let k = r.range_float(0.75, 1.25);
+        let base = wall_shade(s.pebble_color, k);
+        img.circle(p + vec2(0.4, 0.5), radius, wall_shade(base, 0.6));
+        img.circle(p, radius, base);
+        if radius > 1.2 {
+            img.circle(p - vec2(radius * 0.35, radius * 0.35), radius * 0.35, wall_shade(base, 1.35));
+        }
+    }
+    return img;
+}
+
+fn block(cmd: Commands, index: int, x: float, y: float, w: float, h: float, scale: float) {
+    if w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    cmd.spawn([
+        at((x + w * 0.5) * scale, (y + h * 0.5) * scale),
+        RigidBody { kind: BodyKind::Static, .. },
+        BoxCollider { half_size: vec2(w * 0.5 * scale, h * 0.5 * scale), .. },
+        Chunk { index: index },
+    ]);
+}
+
+fn spawn_chunk(cmd: Commands, st: DungeonState, s: DungeonSettings, ts: TorchSettings, index: int) {
+    let k = s.scale;
+    let cw = st.chunk_w;
+    let x0 = index * cw;
+    let fcw = float(cw);
+    let fh = float(st.h);
+    let cx = (float(x0) + fcw * 0.5) * k;
+    let tint = Color { r: s.wall_shade, g: s.wall_shade, b: s.wall_shade, a: 1.0 };
+    let pick = ((index % st.walls.len()) + st.walls.len()) % st.walls.len();
+
+    cmd.spawn([Transform { position: vec2(cx, fh * k * 0.5), scale: vec2(k, k), .. },
+               Sprite { image: st.walls[pick], color: tint, z: -10.0, .. },
+               Chunk { index: index }]);
+
+    let ground_h = fh - st.floor_top;
+    let gw = float(st.ground_w);
+    let tiles = int(fcw / gw) + 1;
+    for i in range(tiles) {
+        let gx = float(x0) + gw * (float(i) + 0.5);
+        cmd.spawn([Transform { position: vec2(gx * k, (st.floor_top + ground_h * 0.5) * k), scale: vec2(k, k), .. },
+                   Sprite { image: st.ground, z: -5.0, .. },
+                   Chunk { index: index }]);
+    }
+
+    block(cmd, index, float(x0), 0.0, fcw, s.ceiling, k);
+    block(cmd, index, float(x0), st.floor_top, fcw, ground_h, k);
+
+    let n = s.torches_per_chunk;
+    let y = (s.ceiling + (st.floor_top - s.ceiling) * s.torch_height) * k;
+    for i in range(n) {
+        let x = (float(x0) + fcw * (float(i) + 0.5) / float(n)) * k;
+        let t = torch(cmd, vec2(x, y), ts, s.seed + index * 31 + i);
+        cmd.insert(t, Chunk { index: index });
+    }
+}
+
+fn start_dungeon(assets: Assets, window: Window, s: DungeonSettings, st: DungeonState) -> Rect {
+    let k = s.scale;
+    let sheet = assets.aseprite(s.tiles[0]);
+    let cw = int(sheet.frame_w) + s.mortar;
+    let w = int(window.width / k + 0.999);
+    let h = int(window.height / k + 0.999);
+    st.w = w;
+    st.h = h;
+    st.chunk_w = (w / cw + 1) * cw;
+    st.floor_top = float(h) - s.wall - s.floor_height;
+    let walls: Texture[] = [];
+    for v in range(max_int(s.wall_variants, 1)) {
+        let img = brick_wall(assets, st.chunk_w, h, s, s.seed + v * 7919);
+        if s.cracks {
+            img.draw(crack_overlay(assets, st.chunk_w, h, s, s.seed + v * 7919 + 1), 0, 0);
+        }
+        walls.push(img.to_texture());
+    }
+    st.walls = walls;
+    st.ground_w = s.ground_tile;
+    st.ground = pebble_floor(assets, s.ground_tile, int(float(h) - st.floor_top), s, s.seed + 2).to_texture();
+    st.ready = true;
+    return Rect { x: 0.0, y: s.ceiling * k, w: float(w) * k, h: (st.floor_top - s.ceiling) * k };
+}
+
+fn chunk_at(st: DungeonState, s: DungeonSettings, world_x: float) -> int {
+    return int((world_x / (float(st.chunk_w) * s.scale)).floor());
+}
+
+@system
+fn stream_dungeon(cameras: (Camera, Transform)[], chunks: (Entity, Chunk)[], st: DungeonState, s: DungeonSettings,
+                  ts: TorchSettings, cmd: Commands) {
+    if !st.ready {
+        return;
+    }
+    for (_, t) in cameras {
+        let here = chunk_at(st, s, t.position.x);
+        let keep: int[] = [];
+        for i in st.spawned {
+            if i >= here - s.chunks_behind && i <= here + s.chunks_ahead {
+                keep.push(i);
+            }
+        }
+        for (e, c) in chunks {
+            if !keep.contains(c.index) {
+                cmd.despawn(e);
+            }
+        }
+        for i in range(here - s.chunks_behind, here + s.chunks_ahead + 1) {
+            if !keep.contains(i) {
+                spawn_chunk(cmd, st, s, ts, i);
+                keep.push(i);
+            }
+        }
+        st.spawned = keep;
+    }
+}

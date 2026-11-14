@@ -1,0 +1,61 @@
+// Benchmark: the team's procedurally generated side-scroller.
+//
+// dungeon.cdl and torches.cdl are the game's own files, unchanged: brick
+// walls drawn into images at startup, chunks of wall, floor tiles and
+// static colliders streamed in and out around the camera, torches with
+// point lights, flames, ember particles, and a post effect shader that the
+// torches feed every frame. Here a ball runs right on its own, so the
+// camera scrolls across chunk after chunk, and each torch flickers from a
+// system that runs once per torch, the way a game would write it.
+//
+// `?speed=400` sets how fast the ball runs, in pixels a second.
+
+import "drift" { * };
+import "std/math" as math;
+import "./dungeon.cdl" { * };
+import "./torches.cdl" { * };
+
+@component struct Ball {}
+
+@resource
+struct Run { speed: float = 400.0 }
+
+@system(schedule: Schedule::Startup)
+fn build(cmd: Commands, assets: Assets, window: Window, settings: DungeonSettings, state: DungeonState,
+         platform: Platform, run: Run) {
+    run.speed = match platform.query("speed").parse<float>() { Some(v) => v, None => run.speed };
+    let open = start_dungeon(assets, window, settings, state);
+    let ball = cmd.spawn([
+        at(window.width * 0.5, open.y + open.h - 20.0),
+        Circle { radius: 16.0, color: rgb(240, 200, 80), .. },
+        RigidBody { fixed_rotation: true, .. },
+        CircleCollider { radius: 16.0, .. },
+        Velocity { .. },
+        Ball {},
+    ]);
+    cmd.spawn([
+        at(window.width * 0.5, window.height * 0.5),
+        Camera { .. },
+        CameraFollow { target: ball, smoothing: 6.0, .. },
+        CameraBounds { area: Rect { x: -1000000.0, y: 0.0, w: 2000000.0, h: window.height } },
+    ]);
+}
+
+@system
+fn run_right(balls: (Ball, Velocity)[], run: Run) {
+    for (_, v) in balls {
+        v.linear = vec2(run.speed, v.linear.y);
+    }
+}
+
+@system
+fn flicker_torch(torch: (Torch, PointLight), time: Time, s: TorchSettings) {
+    let (t, light) = torch;
+    light.intensity = t.intensity * (1.0 + flicker(time.elapsed, t.phase, s.flicker_speed) * s.flicker);
+}
+
+@system
+fn flicker_flame(flame: (TorchFlame, Circle), time: Time, s: TorchSettings) {
+    let (f, c) = flame;
+    c.radius = f.size * (1.0 + flicker(time.elapsed, f.phase, s.flicker_speed) * s.flicker * 0.5);
+}

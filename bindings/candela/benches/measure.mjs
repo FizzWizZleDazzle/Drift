@@ -2,6 +2,7 @@
 //
 //   node measure.mjs <pages dir> <page>[?query] ... [--seconds 6] [--warmup 3]
 //                    [--profile out.cpuprofile [--startup]] [--gpu]
+//                    [--webgpu] [--set section.key=value]...
 //
 // <pages dir> is the build folder holding the pages, such as
 // build-web/bindings/candela; each <page> is a folder in it, such as
@@ -14,6 +15,11 @@
 //
 // Chrome draws with SwiftShader (a CPU rasterizer) unless --gpu is given, so
 // frame intervals there say little about a real GPU; cpu times hold.
+// --webgpu runs the pages on the WebGPU backend (the runtime must be built
+// with it), through SwiftShader's Vulkan unless --gpu is given. --set passes
+// a drift.toml override to the game, as `drift run --set` does.
+// Each page also prints the size of the wasm heap once the game has loaded
+// and at the end of the run, to show memory a long run keeps growing.
 // puppeteer-core is found through PUPPETEER_CORE (a path to the package) or
 // the usual module resolution; CHROME names the browser executable.
 // --startup profiles loading the page and compiling the game instead of
@@ -28,7 +34,7 @@ const require = createRequire(import.meta.url);
 const puppeteer = require(process.env.PUPPETEER_CORE || 'puppeteer-core');
 
 const argv = process.argv.slice(2);
-const opt = { seconds: 6, warmup: 3, profile: '', startup: false, gpu: false };
+const opt = { seconds: 6, warmup: 3, profile: '', startup: false, gpu: false, webgpu: false, set: [] };
 const pages = [];
 let root = '';
 for (let i = 0; i < argv.length; i++) {
@@ -38,6 +44,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--profile') opt.profile = argv[++i];
   else if (a === '--gpu') opt.gpu = true;
   else if (a === '--startup') opt.startup = true;
+  else if (a === '--webgpu') opt.webgpu = true;
+  else if (a === '--set') opt.set.push(argv[++i]);
   else if (!root) root = a;
   else pages.push(a);
 }
@@ -60,6 +68,12 @@ const port = server.address().port;
 
 const gl = opt.gpu ? ['--use-angle=default', '--enable-gpu', '--ignore-gpu-blocklist']
                    : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+if (opt.webgpu) {
+  gl.push('--enable-unsafe-webgpu');
+  if (!opt.gpu) gl.push('--enable-features=Vulkan', '--use-webgpu-adapter=swiftshader');
+  opt.set.push('render.backend=webgpu');
+}
+const gameArgs = opt.set.flatMap(s => ['--set', s]);
 const browser = await puppeteer.launch({
   executablePath: process.env.CHROME || '/usr/bin/google-chrome-stable',
   headless: 'new',
@@ -68,7 +82,15 @@ const browser = await puppeteer.launch({
 });
 
 // Times each animation frame callback and notes when the game says it loaded.
-const probe = () => {
+const probe = gameArgs => {
+  // The page's `var Module = {...}` lands here, so the game gets the --set
+  // arguments the way a command line would pass them.
+  let module;
+  Object.defineProperty(window, 'Module', {
+    configurable: true,
+    get: () => module,
+    set: m => { module = m; if (gameArgs.length) m.arguments = gameArgs; },
+  });
   const raf = window.requestAnimationFrame.bind(window);
   const w = window.__bench = { cpu: [], at: [], loaded: 0, firstFrame: 0, errors: [] };
   window.requestAnimationFrame = cb => raf(t => {
@@ -91,10 +113,10 @@ const probe = () => {
 };
 
 const stats = xs => {
-  if (xs.length === 0) return { n: 0, median: 0, p95: 0, mean: 0 };
+  if (xs.length === 0) return { n: 0, median: 0, p95: 0, mean: 0, max: 0 };
   const s = [...xs].sort((a, b) => a - b);
   const q = p => s[Math.min(s.length - 1, Math.floor(p * s.length))];
-  return { n: s.length, median: q(0.5), p95: q(0.95), mean: s.reduce((a, b) => a + b, 0) / s.length };
+  return { n: s.length, median: q(0.5), p95: q(0.95), mean: s.reduce((a, b) => a + b, 0) / s.length, max: s[s.length - 1] };
 };
 const ms = x => x.toFixed(2);
 
@@ -130,7 +152,7 @@ function printProfile(profile) {
 for (const p of pages) {
   const page = await browser.newPage();
   await page.setViewport({ width: 960, height: 540 });
-  await page.evaluateOnNewDocument(probe);
+  await page.evaluateOnNewDocument(probe, gameArgs);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const [dir, query] = p.split('?');
@@ -157,10 +179,16 @@ for (const p of pages) {
     profiler = null;
   }
   await new Promise(r => setTimeout(r, opt.warmup * 1000));
+  const heap = () => page.evaluate(() => {
+    const h = window.HEAPU8 || (window.Module && window.Module.HEAPU8);
+    return h ? h.length : 0;
+  });
+  const heapLoaded = await heap();
   const from = await page.evaluate(() => window.__bench.cpu.length);
   if (opt.profile && !opt.startup) profiler = await startProfile();
   await new Promise(r => setTimeout(r, opt.seconds * 1000));
   if (profiler) await stopProfile(profiler);
+  const heapEnd = await heap();
   const r = await page.evaluate(from => {
     const w = window.__bench;
     const nav = performance.getEntriesByType('navigation')[0];
@@ -184,8 +212,10 @@ for (const p of pages) {
   console.log(`${p}`);
   console.log(`  startup: wasm fetched ${ms(r.wasm)} ms, pack ${ms(r.pack)} ms, first frame ${ms(r.firstFrame)} ms, ` +
               `game loaded ${ms(r.loaded)} ms (compile frame ${ms(r.loadedFrame)} ms)`);
-  console.log(`  cpu   median ${ms(cpu.median)} ms  p95 ${ms(cpu.p95)} ms  mean ${ms(cpu.mean)} ms  over ${cpu.n} frames`);
+  console.log(`  cpu   median ${ms(cpu.median)} ms  p95 ${ms(cpu.p95)} ms  mean ${ms(cpu.mean)} ms  max ${ms(cpu.max)} ms  over ${cpu.n} frames`);
   console.log(`  frame median ${ms(frame.median)} ms  p95 ${ms(frame.p95)} ms  (${(1000 / (frame.mean || 1)).toFixed(1)} fps)`);
+  const mib = b => (b / 1048576).toFixed(1);
+  console.log(`  heap  ${mib(heapLoaded)} MiB after warmup, ${mib(heapEnd)} MiB at the end`);
   for (const e of [...new Set([...errors, ...r.errors])].slice(0, 5)) console.log(`  error: ${e}`);
   await page.close();
 }

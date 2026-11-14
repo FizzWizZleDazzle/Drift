@@ -49,13 +49,13 @@ Every folder in `examples/` is a complete game built as a web page by the docs w
 
 ## Benchmarks
 
-`benches/` holds games that stress one thing each: sprites moved by per-entity systems, physics bodies, particles, a crowd of procedurally animated creatures, lookups, and HUD text. A web build makes each one a page, `bench_<name>/`, and `benches/measure.mjs` times the pages in headless Chrome, startup and frame time:
+`benches/` holds games that stress one thing each: sprites moved by per-entity systems, physics bodies, particles, a crowd of procedurally animated creatures, lookups, and HUD text, plus `dungeon`, a copy of a team's procedurally generated side-scroller that streams chunks of wall, torches, lights and a post effect while the camera scrolls. A web build makes each one a page, `bench_<name>/`, and `benches/measure.mjs` times the pages in headless Chrome: startup, CPU time per frame, and the size of the wasm heap after the warmup and at the end, to show memory a long run keeps:
 
 ```sh
 node bindings/candela/benches/measure.mjs build-web/bindings/candela bench_creatures 'bench_sprites?n=4000'
 ```
 
-Each page reads its size from the address, such as `?n=4000`; the comment at the top of each `main.cdl` lists what it takes.
+Each page reads its size from the address, such as `?n=4000`; the comment at the top of each `main.cdl` lists what it takes. `--webgpu` runs the pages on the WebGPU backend (a runtime built with `-DDRIFT_BACKEND_WEBGPU=ON`), and `--set section.key=value` overrides a drift.toml setting the way `drift run --set` does.
 
 ## Limitations
 
