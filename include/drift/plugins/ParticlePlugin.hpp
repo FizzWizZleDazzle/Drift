@@ -7,6 +7,7 @@
 #include <drift/resources/ParticleSystemResource.hpp>
 #include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
+#include <drift/components/GlobalTransform.hpp>
 #include <drift/components/ParticleEmitter.hpp>
 #include <drift/Query.hpp>
 
@@ -15,11 +16,11 @@ namespace drift {
 // New ECS-based particle system functions (defined in ParticleSystem.cpp)
 void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
                           Res<Time> time,
-                          QueryMut<ParticleEmitter, Transform2D> emitters);
+                          QueryMut<ParticleEmitter, Transform2D, Optional<GlobalTransform2D>> emitters);
 
 void particleSystemRender(Res<ParticleSystemResource> particles,
                           ResMut<RendererResource> renderer,
-                          Query<ParticleEmitter, Transform2D> emitters);
+                          Query<ParticleEmitter, Transform2D, Optional<GlobalTransform2D>> emitters);
 
 // Legacy system functions
 inline void particles_update(ResMut<ParticleResource> particles, Res<Time> time) { particles->update(time->delta); }

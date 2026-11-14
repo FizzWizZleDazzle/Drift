@@ -300,8 +300,9 @@ config.preWarmTime = 2.f;   // particles are already spread out on frame 1
 
 ## Notes
 
-- `ParticleEmitter` requires a `Transform2D` on the same entity to define where particles spawn.
+- `ParticleEmitter` requires a `Transform2D` on the same entity to define where particles spawn. An emitter in a hierarchy emits from its world position (`GlobalTransform2D`), so a child emitter follows its parent.
+- An emitter whose particles no camera is near keeps simulating but draws nothing, so effects look right the moment they come back on screen. `maxParticles` caps each emitter.
 - When `oneShot` is `true` and `looping` is `false`, the entity is despawned after the emitter's duration expires and all particles have died. This is the standard pattern for explosions and impacts.
 - The additive blend mode (`BlendMode::Additive`) creates a glowing effect where overlapping particles become brighter. Use it for fire, sparks, and energy effects.
 - `velocityInheritance` transfers the emitter entity's motion to newly spawned particles. A value of `1.0` means particles inherit the full velocity of the emitter, which creates natural-looking trails behind moving objects.
-- Particle rendering is batched internally for performance. Thousands of particles are typically fine.
+- Particles of one emitter share a texture, z-order and blend mode, so they draw together in one draw call. Thousands of particles are typically fine.

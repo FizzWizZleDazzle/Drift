@@ -1,5 +1,6 @@
 #include <drift/particles/ParticlePool.hpp>
 #include <drift/particles/EmitterConfig.hpp>
+#include <drift/components/GlobalTransform.hpp>
 #include <drift/components/ParticleEmitter.hpp>
 #include <drift/resources/ParticleSystemResource.hpp>
 #include <drift/resources/RendererResource.hpp>
@@ -8,6 +9,7 @@
 #include <drift/Query.hpp>
 #include <drift/Types.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -97,14 +99,17 @@ static void spawnParticle(EmitterState& state, const EmitterConfig& config,
 // ---------------------------------------------------------------------------
 void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
                           Res<Time> time,
-                          QueryMut<ParticleEmitter, Transform2D> emitters) {
+                          QueryMut<ParticleEmitter, Transform2D, Optional<GlobalTransform2D>> emitters) {
     float dt = time->delta;
 
     // Track which emitter entities still exist this frame
     std::vector<EntityId> activeEntities;
 
-    emitters.iterWithEntity([&](EntityId id, ParticleEmitter& emitter, Transform2D& transform) {
+    emitters.iterWithEntity([&](EntityId id, ParticleEmitter& emitter, Transform2D& local,
+                                GlobalTransform2D* global) {
         activeEntities.push_back(id);
+        // An emitter in a hierarchy emits from its place in the world.
+        Vec2 worldPos = global ? global->position : local.position;
 
         auto it = particles->emitters.find(id);
         if (it == particles->emitters.end()) {
@@ -125,7 +130,7 @@ void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
                     if (emitter.config.spawnRate > 0.f) {
                         state.spawnAccumulator += stepDt * emitter.config.spawnRate;
                         while (state.spawnAccumulator >= 1.f && state.pool.count < state.pool.capacity) {
-                            spawnParticle(state, emitter.config, transform.position);
+                            spawnParticle(state, emitter.config, worldPos);
                             state.spawnAccumulator -= 1.f;
                         }
                     }
@@ -161,7 +166,7 @@ void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
         EmitterState& state = it->second;
         if (state.finished) return;
 
-        Vec2 emitterPos = transform.position;
+        Vec2 emitterPos = worldPos;
 
         // Compute emitter velocity for velocity inheritance
         Vec2 emitterVel = {};
@@ -287,11 +292,9 @@ void particleSystemUpdate(ResMut<ParticleSystemResource> particles,
     });
 
     // Clean up emitter states for entities that no longer exist
+    std::sort(activeEntities.begin(), activeEntities.end());
     for (auto it = particles->emitters.begin(); it != particles->emitters.end();) {
-        bool found = false;
-        for (EntityId eid : activeEntities) {
-            if (eid == it->first) { found = true; break; }
-        }
+        bool found = std::binary_search(activeEntities.begin(), activeEntities.end(), it->first);
         if (!found) {
             it = particles->emitters.erase(it);
         } else {
@@ -309,8 +312,10 @@ static inline float lerpf(float a, float b, float t) {
 
 void particleSystemRender(Res<ParticleSystemResource> particles,
                           ResMut<RendererResource> renderer,
-                          Query<ParticleEmitter, Transform2D> emitters) {
-    emitters.iterWithEntity([&](EntityId id, const ParticleEmitter& emitter, const Transform2D& transform) {
+                          Query<ParticleEmitter, Transform2D, Optional<GlobalTransform2D>> emitters) {
+    emitters.iterWithEntity([&](EntityId id, const ParticleEmitter& emitter, const Transform2D& local,
+                                const GlobalTransform2D* global) {
+        Vec2 worldPos = global ? global->position : local.position;
         auto it = particles->emitters.find(id);
         if (it == particles->emitters.end()) return;
 
@@ -332,6 +337,19 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
         if (src.x <= 0.f || src.y <= 0.f) src = {1.f, 1.f};
         Vec2 origin = {src.x * 0.5f, src.y * 0.5f};
 
+        // An emitter whose particles no camera is near keeps simulating but
+        // queues nothing.
+        Vec2 offset = isLocal ? worldPos : Vec2{};
+        float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f, reach = 0.f;
+        for (int32_t i = 0; i < pool.count; ++i) {
+            x0 = std::min(x0, pool.positions[i].x); x1 = std::max(x1, pool.positions[i].x);
+            y0 = std::min(y0, pool.positions[i].y); y1 = std::max(y1, pool.positions[i].y);
+            reach = std::max(reach, std::fabs(pool.sizes[i]));
+        }
+        reach *= 0.75f;   // a turned square reaches half its diagonal from its center
+        Rect area = {x0 + offset.x - reach, y0 + offset.y - reach, x1 - x0 + reach * 2.f, y1 - y0 + reach * 2.f};
+        if (!renderer->visible(area, renderer->layer())) return;
+
         for (int32_t i = 0; i < pool.count; ++i) {
             float t = pool.lifetimes[i] > 0.f ? (pool.ages[i] / pool.lifetimes[i]) : 1.f;
 
@@ -346,8 +364,8 @@ void particleSystemRender(Res<ParticleSystemResource> particles,
             Vec2 pos = pool.positions[i];
             if (isLocal) {
                 // In local space, positions are relative to emitter
-                pos.x += transform.position.x;
-                pos.y += transform.position.y;
+                pos.x += worldPos.x;
+                pos.y += worldPos.y;
             }
 
             renderer->drawSprite(tex, pos, srcRect,
