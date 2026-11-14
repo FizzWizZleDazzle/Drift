@@ -41,7 +41,7 @@ A dev page is never an offline page: `--dev` ignores `[web] offline`. Publish a 
 
 ## The page
 
-While the engine and `game.pack` download, the page shows the game's name and a progress bar. Both downloads run at once, and the engine compiles while it arrives.
+While the engine and `game.pack` download, the page shows the game's name and a progress bar. Both downloads start as soon as the page does, side by side, and the engine compiles while it arrives.
 
 If the game cannot start, the page says so instead of showing a black canvas: a script that does not compile shows the compiler's message with its file and line, and a missing or broken `game.pack` shows what failed. The same text goes to the browser console.
 

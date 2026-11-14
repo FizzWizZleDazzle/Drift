@@ -359,7 +359,12 @@ bool buildWebPage(const std::string& folderArg, const std::string& outArg, const
     }
 
     // What the page's <head> says about the game, from [project] and [web].
-    std::string head;
+    // The runtime and the game start downloading while the browser is still
+    // reading drift.js, which asks for them only once it runs. A dev page
+    // asks for the pack in other ways too, which a preload would only warn
+    // about.
+    std::string head = "<link rel=\"preload\" href=\"drift.wasm\" as=\"fetch\" type=\"application/wasm\" crossorigin>\n";
+    if (!dev) head += "<link rel=\"preload\" href=\"game.pack\" as=\"fetch\" crossorigin>\n";
     std::vector<std::string> extras;   // files written beside index.html
     if (!project.description.empty()) {
         head += "<meta name=\"description\" content=\"" + escapeHtml(project.description) + "\">\n";
