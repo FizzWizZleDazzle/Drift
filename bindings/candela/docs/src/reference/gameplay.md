@@ -431,7 +431,9 @@ cmd.send(HitStop { seconds: 0.08 });
 
 ## Shake
 
-Send to shake every camera.
+Send to shake every `Camera` entity. With no camera entity nothing
+shakes: there is none until a game spawns one. The default intensity of
+0.4 pixels is too small to see; 8.0 is a solid hit.
 
 ```rust
 @message
@@ -445,7 +447,7 @@ struct Shake {
 | `intensity` | `float` | `0.4` | How far the cameras move at first, in pixels; the shake dies away by itself. |
 
 ```rust
-cmd.send(Shake { intensity: 6.0 });
+cmd.send(Shake { intensity: 8.0 });
 ```
 
 ## HitStopClock

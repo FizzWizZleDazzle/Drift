@@ -1,0 +1,38 @@
+// ANCHOR: all
+// Fades: to black and back, then halfway to black and held there, the way
+// a pause screen dims the game. No camera is needed.
+
+import "drift" { * };
+
+@resource
+struct Fades { step: int = 0, every: Timer = repeating_timer(0.8) }
+
+@component struct Caption {}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(240.0, 235.0), Rectangle { size: vec2(480.0, 70.0), color: rgb(36, 70, 52), .. }]);
+    cmd.spawn([at(240.0, 160.0), Circle { radius: 30.0, color: rgb(240, 200, 90), .. }]);
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+               layer: hud_layer(), .. }]);
+    cmd.spawn([at(10.0, 6.0), Text { value: "", size: 15.0, layer: hud_layer(), .. }, Caption {}]);
+}
+
+// ANCHOR: fade
+// Every 0.8 s the next step: out, back in, halfway, back in.
+@system
+fn fade_steps(fades: Fades, time: Time, effects: Effects, caption: (Caption, Text)[]) {
+    if fades.every.tick(time.dt) == 0 {
+        return;
+    }
+    let black = rgb(0, 0, 0);
+    let amounts = [1.0, 0.0, 0.6, 0.0];
+    let amount = amounts[fades.step % 4];
+    effects.fade_to(black, amount, 0.5);   // `amount` of the way to black over 0.5 s, then hold
+    for (_, text) in caption {
+        text.value = "effects.fade_to(black, " + string(amount) + ", 0.5)";
+    }
+    fades.step += 1;
+}
+// ANCHOR_END: fade
+// ANCHOR_END: all

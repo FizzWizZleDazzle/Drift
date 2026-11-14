@@ -881,7 +881,7 @@ struct CameraFollow {
 | `target` | `Entity` | `Entity { .. }` | The entity to follow |
 | `smoothing` | `float` | `5.0` | How quickly it catches up; higher is snappier |
 | `offset` | `Vec2` | `Vec2 { .. }` | Aims this far from the target |
-| `dead_zone` | `Vec2` | `Vec2 { .. }` | Half size of the box the target moves in without moving the camera |
+| `dead_zone` | `Vec2` | `Vec2 { .. }` | Half size of the box the target moves in without moving the camera; once it leaves, the camera moves to center it again |
 
 ```rust
 cmd.spawn([at(0.0, 0.0), Camera { .. }, CameraFollow { target: player, smoothing: 6.0, dead_zone: vec2(40.0, 24.0), .. }]);

@@ -88,7 +88,7 @@ struct CameraFollow {
     smoothing: float = 5.0,
     /// Aims this far from the target
     offset: Vec2 = Vec2 { .. },
-    /// Half size of the box the target moves in without moving the camera
+    /// Half size of the box the target moves in without moving the camera; once it leaves, the camera moves to center it again
     dead_zone: Vec2 = Vec2 { .. },
 }
 

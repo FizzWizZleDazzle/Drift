@@ -1,0 +1,41 @@
+// ANCHOR: all
+// Screen shake: a camera entity that shakes every second and a half. The
+// HUD line at the top stays still, because the HUD layer has no camera.
+
+import "drift" { * };
+
+// ANCHOR: camera
+// Shaking needs a camera entity to move. This one looks at the middle of
+// the screen, so world (0, 0) stays at the top-left, as without a camera.
+@resource
+struct View { camera: Entity = Entity { .. }, every: Timer = repeating_timer(1.5) }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, window: Window, view: View) {
+    view.camera = cmd.spawn([at(window.width / 2.0, window.height / 2.0), Camera { .. }]);
+    scene(cmd);
+}
+// ANCHOR_END: camera
+
+// ANCHOR: shake
+@system
+fn shake_now_and_then(view: View, time: Time, effects: Effects) {
+    if view.every.tick(time.dt) > 0 {
+        effects.shake(view.camera, 14.0);   // pixels at the start; dies away
+    }
+}
+// ANCHOR_END: shake
+
+fn scene(cmd: Commands) {
+    cmd.spawn([at(240.0, 235.0), Rectangle { size: vec2(560.0, 90.0), color: rgb(36, 70, 52), .. }]);
+    for i in range(5) {
+        let x = 60.0 + 90.0 * float(i);
+        cmd.spawn([at(x, 180.0), Rectangle { size: vec2(40.0, 40.0), color: rgb(170, 120, 70), .. }]);
+    }
+    cmd.spawn([at(240.0, 110.0), Circle { radius: 22.0, color: rgb(240, 200, 90), .. }]);
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+               layer: hud_layer(), .. }]);
+    cmd.spawn([at(10.0, 6.0), Text { value: "effects.shake(camera, 14.0) every 1.5 s", size: 15.0,
+               layer: hud_layer(), .. }]);
+}
+// ANCHOR_END: all

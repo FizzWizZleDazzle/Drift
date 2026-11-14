@@ -1,0 +1,61 @@
+// ANCHOR: all
+// Three particle emitters: fire rising from a point, smoke spreading from a
+// line, and sparks thrown up and pulled down by gravity.
+
+import "drift" { * };
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    // ANCHOR: fire
+    // Fire: additive blending makes overlapping particles glow brighter.
+    cmd.spawn([at(100.0, 200.0), ParticleEmitter {
+        rate: 90.0,                                   // particles per second
+        lifetime_min: 0.4, lifetime_max: 0.9,         // seconds each one lives
+        speed_min: 30.0, speed_max: 80.0,             // pixels per second
+        angle_min: -2.0, angle_max: -1.15,            // radians; -1.57 is straight up
+        size_start: 12.0, size_end: 1.0,              // pixels across
+        color_start: rgb(255, 200, 80), color_end: rgba(255, 40, 10, 0),
+        gravity: vec2(0.0, -60.0),                    // pixels per second squared; negative y rises
+        shape: EmitShape::Circle, shape_radius: 8.0,  // start anywhere in a circle of 8 pixels
+        blend: Blend::Additive,
+        prewarm: 1.0,                                 // already burning on the first frame
+        ..
+    }]);
+    // ANCHOR_END: fire
+
+    // ANCHOR: smoke
+    // Smoke: big, slow and soft, slowed by drag, from a line 60 pixels wide.
+    cmd.spawn([at(240.0, 210.0), ParticleEmitter {
+        rate: 25.0, lifetime_min: 1.5, lifetime_max: 2.5,
+        speed_min: 15.0, speed_max: 35.0,
+        angle_min: -1.9, angle_max: -1.25,
+        size_start: 10.0, size_end: 34.0,
+        color_start: rgba(170, 170, 180, 150), color_end: rgba(90, 90, 100, 0),
+        drag: 0.6,
+        shape: EmitShape::Box, shape_extents: vec2(30.0, 2.0),   // half sizes
+        prewarm: 2.5,
+        ..
+    }]);
+    // ANCHOR_END: smoke
+
+    // ANCHOR: sparks
+    // Sparks: fast and small, thrown upward and falling back.
+    cmd.spawn([at(380.0, 220.0), ParticleEmitter {
+        rate: 120.0, lifetime_min: 0.8, lifetime_max: 1.2,
+        speed_min: 140.0, speed_max: 200.0,
+        angle_min: -1.95, angle_max: -1.2,
+        size_start: 4.0, size_end: 2.0,
+        color_start: rgb(140, 210, 255), color_end: rgba(60, 100, 255, 0),
+        gravity: vec2(0.0, 300.0),
+        max_particles: 300,                           // never more alive at once
+        prewarm: 1.2,
+        ..
+    }]);
+    // ANCHOR_END: sparks
+
+    let names = ["fire", "smoke", "sparks"];
+    for i in range(3) {
+        cmd.spawn([at(100.0 + 140.0 * float(i), 240.0), Text { value: names[i], size: 15.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

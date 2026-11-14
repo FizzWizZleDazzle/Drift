@@ -1,0 +1,33 @@
+// ANCHOR: all
+// Screen flashes: white, then red, each jumping to full color and fading
+// back over a few tenths of a second. No camera is needed.
+
+import "drift" { * };
+
+@resource
+struct Flashes { every: Timer = repeating_timer(0.9), red: bool = false }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(240.0, 235.0), Rectangle { size: vec2(480.0, 70.0), color: rgb(36, 70, 52), .. }]);
+    cmd.spawn([at(240.0, 160.0), Circle { radius: 30.0, color: rgb(110, 170, 240), .. }]);
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+               layer: hud_layer(), .. }]);
+    cmd.spawn([at(10.0, 6.0), Text { value: "effects.flash(white, 0.3) and effects.flash(red, 0.5)", size: 15.0,
+               layer: hud_layer(), .. }]);
+}
+
+// ANCHOR: flash
+@system
+fn flash_now_and_then(flashes: Flashes, time: Time, effects: Effects) {
+    if flashes.every.tick(time.dt) > 0 {
+        if flashes.red {
+            effects.flash(rgb(255, 40, 40), 0.5);
+        } else {
+            effects.flash(rgb(255, 255, 255), 0.3);
+        }
+        flashes.red = !flashes.red;
+    }
+}
+// ANCHOR_END: flash
+// ANCHOR_END: all

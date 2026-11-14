@@ -616,13 +616,20 @@ struct Effects {
     id: int = 0,
 }
 impl Effects {
-    /// Covers the screen in a color that fades back to the picture over `seconds`.
+    /// Covers the screen in solid `c` that fades back to the picture over
+    /// `seconds`; the color's alpha is ignored. Needs no camera. It shares
+    /// one layer with `fade_to`, so a flash ends a held fade. See
+    /// [Flash](../guides/effects.md#flash).
     ///
     /// ```rust
     /// effects.flash(rgb(255, 255, 255), 0.2);
     /// ```
     fn flash(self, c: Color, seconds: float) { drift::flash(c.r, c.g, c.b, c.a, seconds); }
-    /// Shakes a camera entity; the shake dies away by itself.
+    /// Shakes a camera entity by up to `intensity` pixels. The shake dies
+    /// away by itself in about a second and the camera ends where it
+    /// started. Needs an entity with a `Camera`: there is none until you
+    /// spawn one, and with any other entity nothing happens. See
+    /// [Screen shake](../guides/effects.md#screen-shake).
     ///
     /// ```rust
     /// effects.shake(camera, 8.0);

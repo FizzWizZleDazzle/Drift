@@ -1,0 +1,28 @@
+// ANCHOR: all
+// The scene with no post effect, to compare the others with.
+
+import "drift" { * };
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    scene(cmd, "No post effect");
+}
+
+// A small night scene to run the effect on: hills, houses, a moon, street
+// lamps, and a label on the HUD layer, which post effects leave alone.
+fn scene(cmd: Commands, label: string) {
+    cmd.spawn([at(240.0, 235.0), Rectangle { size: vec2(480.0, 70.0), color: rgb(36, 70, 52), .. }]);
+    cmd.spawn([at(390.0, 60.0), Circle { radius: 26.0, color: rgb(255, 244, 200), .. }]);
+    let colors = [rgb(200, 90, 80), rgb(90, 140, 210), rgb(230, 190, 90), rgb(150, 110, 200)];
+    for i in range(4) {
+        let x = 70.0 + 110.0 * float(i);
+        cmd.spawn([at(x, 172.0), Rectangle { size: vec2(64.0, 56.0), color: colors[i], .. }]);
+        cmd.spawn([at(x, 178.0), Rectangle { size: vec2(16.0, 16.0), color: rgb(255, 230, 140), .. }]);
+        cmd.spawn([at(x + 50.0, 150.0), Rectangle { size: vec2(4.0, 50.0), color: rgb(70, 70, 80), .. }]);
+        cmd.spawn([at(x + 50.0, 124.0), Circle { radius: 6.0, color: rgb(255, 255, 255), .. }]);
+    }
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+               layer: hud_layer(), .. }]);
+    cmd.spawn([at(10.0, 6.0), Text { value: label, size: 15.0, layer: hud_layer(), .. }]);
+}
+// ANCHOR_END: all

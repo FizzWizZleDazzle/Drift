@@ -1,0 +1,45 @@
+// ANCHOR: all
+// 2D lights: a warm point light circling among crates that cast shadows,
+// and a spot light sweeping from the corner. drift.toml's [lighting]
+// section turns lighting on and sets the dark ambient color.
+
+import "drift" { * };
+
+@component struct Circling {}
+@component struct Sweeping {}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    // Something to light: a floor and four crates.
+    cmd.spawn([at(240.0, 135.0), Rectangle { size: vec2(480.0, 270.0), color: rgb(150, 140, 120), z: -10.0, .. }]);
+    let crates = [vec2(150.0, 90.0), vec2(330.0, 90.0), vec2(150.0, 190.0), vec2(330.0, 190.0)];
+    // ANCHOR: occluder
+    for p in crates {
+        cmd.spawn([at(p.x, p.y), Rectangle { size: vec2(36.0, 36.0), color: rgb(160, 110, 60), .. },
+                   LightOccluder { shape: OccluderShape::Box, half_size: vec2(18.0, 18.0), .. }]);
+    }
+    // ANCHOR_END: occluder
+
+    // ANCHOR: lights
+    cmd.spawn([at(240.0, 140.0), Circling {},
+               PointLight { color: rgb(255, 190, 110), intensity: 1.6, radius: 200.0, .. },
+               Circle { radius: 5.0, color: rgb(255, 230, 180), .. }]);
+    cmd.spawn([at(20.0, 20.0), Sweeping {},
+               SpotLight { color: rgb(150, 190, 255), intensity: 1.2, radius: 420.0,
+                           direction: 0.5, angle: 0.5, softness: 0.3, .. }]);
+    // ANCHOR_END: lights
+}
+
+@system
+fn circle_around(row: (Circling, Transform), time: Time) {
+    let (_, t) = row;
+    t.position = vec2(240.0 + 110.0 * cos(time.elapsed * 1.5), 140.0 + 60.0 * sin(time.elapsed * 1.5));
+}
+
+// The spot light's cone points along `direction` plus the entity's rotation.
+@system
+fn sweep(row: (Sweeping, Transform), time: Time) {
+    let (_, t) = row;
+    t.rotation = 0.35 * sin(time.elapsed * 1.2);
+}
+// ANCHOR_END: all

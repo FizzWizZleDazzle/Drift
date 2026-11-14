@@ -1187,7 +1187,10 @@ fn crash(_: Contact<Player, Rock>, effects: Effects) {
 fn flash(self, c: Color, seconds: float)
 ```
 
-Covers the screen in a color that fades back to the picture over `seconds`.
+Covers the screen in solid `c` that fades back to the picture over
+`seconds`; the color's alpha is ignored. Needs no camera. It shares
+one layer with `fade_to`, so a flash ends a held fade. See
+[Flash](../guides/effects.md#flash).
 
 ```rust
 effects.flash(rgb(255, 255, 255), 0.2);
@@ -1199,7 +1202,11 @@ effects.flash(rgb(255, 255, 255), 0.2);
 fn shake(self, camera: Entity, intensity: float)
 ```
 
-Shakes a camera entity; the shake dies away by itself.
+Shakes a camera entity by up to `intensity` pixels. The shake dies
+away by itself in about a second and the camera ends where it
+started. Needs an entity with a `Camera`: there is none until you
+spawn one, and with any other entity nothing happens. See
+[Screen shake](../guides/effects.md#screen-shake).
 
 ```rust
 effects.shake(camera, 8.0);
@@ -1357,8 +1364,9 @@ let soft = effects.blur(2.0, 2);
 fn fade_to(self, c: Color, amount: float, seconds: float)
 ```
 
-Moves the screen `amount` of the way to `c` over `seconds` and holds it there; amount 0
-fades back.
+Moves the screen `amount` (0 to 1) of the way to `c` over `seconds`
+and holds it there; amount 0 fades back. The color's alpha is
+ignored. See [Fade](../guides/effects.md#fade).
 
 ```rust
 effects.fade_to(rgb(0, 0, 0), 1.0, 0.5);   // to black over half a second

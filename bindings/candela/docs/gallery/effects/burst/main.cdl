@@ -1,0 +1,39 @@
+// ANCHOR: all
+// Bursts: a firework of 80 particles every half second, each in another
+// place and color. Each burst removes itself when its last particle dies.
+
+import "drift" { * };
+
+@resource
+struct Show { every: Timer = repeating_timer(0.5), n: int = 0 }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+               layer: hud_layer(), .. }]);
+    cmd.spawn([at(10.0, 6.0), Text { value: "effects.burst(position, ParticleEmitter { .. }, 80)", size: 15.0,
+               layer: hud_layer(), .. }]);
+}
+
+// ANCHOR: burst
+@system
+fn fireworks(show: Show, time: Time, effects: Effects) {
+    if show.every.tick(time.dt) == 0 {
+        return;
+    }
+    let places = [vec2(120.0, 110.0), vec2(330.0, 150.0), vec2(220.0, 200.0), vec2(390.0, 90.0)];
+    let colors = [rgb(255, 90, 90), rgb(255, 210, 80), rgb(110, 230, 140), rgb(110, 180, 255)];
+    let i = show.n % 4;
+    effects.burst(places[i], ParticleEmitter {
+        speed_min: 60.0, speed_max: 200.0,
+        lifetime_min: 0.6, lifetime_max: 1.1,
+        size_start: 5.0, size_end: 0.0,
+        color_start: colors[i], color_end: colors[i].alpha(0.0),
+        gravity: vec2(0.0, 120.0), drag: 0.8,
+        blend: Blend::Additive,
+        ..
+    }, 80);
+    show.n += 1;
+}
+// ANCHOR_END: burst
+// ANCHOR_END: all

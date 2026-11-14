@@ -1,0 +1,31 @@
+// ANCHOR: all
+// Trails: three comets going round, with short, medium and long trails.
+
+import "drift" { * };
+
+@component struct Comet { radius: float = 60.0, speed: float = 3.0 }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    // ANCHOR: trail
+    cmd.spawn([at(240.0, 75.0), Circle { radius: 5.0, color: rgb(255, 255, 255), .. },
+               Comet { radius: 60.0, speed: 3.0 },
+               Trail { width: 6.0, lifetime: 0.2, color_start: rgb(120, 200, 255), .. }]);
+    cmd.spawn([at(240.0, 45.0), Circle { radius: 5.0, color: rgb(255, 255, 255), .. },
+               Comet { radius: 90.0, speed: 2.4 },
+               Trail { width: 8.0, lifetime: 0.5, color_start: rgb(255, 200, 90), .. }]);
+    cmd.spawn([at(240.0, 15.0), Circle { radius: 5.0, color: rgb(255, 255, 255), .. },
+               Comet { radius: 120.0, speed: 2.0 },
+               Trail { width: 10.0, lifetime: 1.0, color_start: rgb(240, 120, 220), color_end: rgba(120, 60, 255, 0), .. }]);
+    // ANCHOR_END: trail
+    cmd.spawn([at(10.0, 248.0), Text { value: "Trail lifetime 0.2 s, 0.5 s and 1.0 s", size: 15.0, .. }]);
+}
+
+// The trail follows the Transform, however it moves.
+@system
+fn go_round(row: (Comet, Transform), time: Time) {
+    let (c, t) = row;
+    let a = time.elapsed * c.speed;
+    t.position = vec2(240.0 + c.radius * sin(a) * 1.6, 135.0 - c.radius * cos(a));
+}
+// ANCHOR_END: all

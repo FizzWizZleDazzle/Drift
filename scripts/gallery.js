@@ -99,9 +99,32 @@ const animation = [
       width: 480, mouse: f => [480 + 300 * Math.cos(2 * Math.PI * f / 360), 270 + 170 * Math.sin(2 * Math.PI * f / 360)] },
 ];
 
+// The particles and effects guide: post effects as stills of one scene, the
+// rest as short animations, each a period of what repeats in it.
+const effects = [
+    ...['plain', 'bloom', 'vignette', 'crt', 'grayscale', 'sepia', 'pixelate', 'blur', 'color_grading']
+        .map(name => ({ name, frames: 3, colors: 256 })),
+    { name: 'shake', frames: 84, count: 30, every: 3, fps: 20, width: 360 },
+    { name: 'flash', frames: 50, count: 36, every: 3, fps: 20, width: 360 },
+    { name: 'fade', frames: 40, count: 48, every: 4, fps: 15, width: 360 },
+    { name: 'particles', frames: 2, count: 30, every: 4, fps: 15, width: 320, colors: 32 },
+    { name: 'burst', frames: 2, count: 40, every: 3, fps: 20, width: 360 },
+    { name: 'trail', frames: 120, count: 40, every: 3, fps: 20, width: 360 },
+    { name: 'lights', frames: 2, count: 36, every: 7, fps: 9, width: 320, colors: 32 },
+];
+
+const cameras = [
+    { name: 'follow', frames: 2, count: 60, every: 4, fps: 15, width: 360 },
+    { name: 'bounds', frames: 2, count: 56, every: 4, fps: 15, width: 360 },
+    { name: 'split', frames: 150 },
+    { name: 'minimap', frames: 150 },
+];
+
 const pictures = [
     ...procgen.map(p => ({ guide: 'procgen', ...p })),
     ...animation.map(p => ({ guide: 'animation', ...p })),
+    ...effects.map(p => ({ guide: 'effects', ...p })),
+    ...cameras.map(p => ({ guide: 'cameras', ...p })),
 ];
 
 function arg(name, fallback) {
