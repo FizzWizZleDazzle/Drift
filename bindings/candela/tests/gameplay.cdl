@@ -6,13 +6,17 @@
 import "drift" { * };
 
 @resource
-struct Checks { failed: int = 0, ball: Entity = Entity { .. }, bob: Entity = Entity { .. }, mark: Entity = Entity { .. }, ticks: int = 0 }
+struct Checks { failed: int = 0, ball: Entity = Entity { .. }, bob: Entity = Entity { .. }, mark: Entity = Entity { .. }, ticks: int = 0,
+              fast_from: float = 0.0 }
 
 @component
 struct Ball {}
 
 @component
 struct Hp { n: int = 10 }
+
+@component
+struct Fast {}
 
 fn expect(checks: Checks, what: string, ok: bool) {
     if !ok {
@@ -29,6 +33,9 @@ fn setup(cmd: Commands, physics: Physics, checks: Checks, save: Save) {
     checks.ball = cmd.spawn([at(100.0, 300.0), RigidBody { .. }, CircleCollider { radius: 10.0, .. }, Velocity { .. },
                              Ball {}, SpatialBounds { .. }, Hp { .. }]);
     checks.mark = cmd.spawn([at(5.0, 6.0)]);
+    // Far from everything, with no gravity: nothing slows it.
+    cmd.spawn([at(-20000.0, -20000.0), RigidBody { gravity_scale: 0.0, .. }, CircleCollider { radius: 4.0, .. },
+               Velocity { linear: vec2(3000.0, 0.0), .. }, Fast {}]);
     checks.bob = cmd.spawn([at(560.0, 50.0), RigidBody { .. }, CircleCollider { radius: 8.0, mask: 1, .. },
                             Velocity { .. }, Joint { kind: JointKind::Distance, target_anchor: vec2(500.0, 50.0), .. }]);
 
@@ -108,6 +115,21 @@ fn drive(time: Time, input: Input, physics: Physics, spatial: Spatial, checks: C
         }
         if bodies.get(checks.bob) is Some(t) {
             expect(checks, "joint length", (t.position.distance(vec2(500.0, 50.0)) - 60.0).abs() < 2.0);
+        }
+    }
+}
+
+// Bodies keep speeds far above 400 pixels a second.
+@system
+fn fast_body(rows: (Fast, Velocity, Transform)[], checks: Checks, time: Time) {
+    if checks.ticks == 2 {
+        checks.fast_from = time.elapsed;
+    }
+    if checks.ticks == 30 {
+        for (_, v, t) in rows {
+            expect(checks, "fast body keeps its speed", (v.linear.x - 3000.0).abs() < 1.0);
+            // At least half of 3000 pixels a second since it started.
+            expect(checks, "fast body moves", t.position.x + 20000.0 > 1500.0 * (time.elapsed - checks.fast_from));
         }
     }
 }

@@ -48,16 +48,24 @@ struct PhysicsDebugDraw {
     bool joints = false;
 };
 
+// How many pixels make one meter for the physics world. Box2D's
+// tolerances are tuned in meters (how far shapes may overlap, how close
+// a contact starts, how slow a body sleeps, a top speed of 400 meters a
+// second); this scales them to pixels.
+constexpr float DefaultPixelsPerMeter = 32.f;
+
 class PhysicsResource : public Resource {
 public:
-    explicit PhysicsResource(Vec2 gravity = {0.f, 9.8f});
+    // Box2D keeps the length scale in a global it reads when worlds and
+    // bodies are made, so the last PhysicsResource made sets it.
+    explicit PhysicsResource(Vec2 gravity = {0.f, 9.8f}, float pixelsPerMeter = DefaultPixelsPerMeter);
     ~PhysicsResource() override;
 
     DRIFT_RESOURCE(PhysicsResource)
 
     void step(float dt);
 
-    // World gravity in units per second squared (default {0, 9.8}; +Y is down).
+    // World gravity in pixels per second squared (default {0, 9.8}; +Y is down).
     void setGravity(Vec2 gravity);
     Vec2 gravity() const;
 

@@ -331,6 +331,20 @@ void setGravity(ResMut<PhysicsResource> physics) {
 
 The default gravity is `{0, 9.8}` (downward in screen coordinates where Y increases downward). Units are pixels, so a game that wants a visible fall sets a larger value, such as `{0, 900}`. `physics->gravity()` returns the current value.
 
+## Units and Scale
+
+Positions, sizes, speeds, gravity, forces and impulses are in pixels; mass is density times area in square pixels. Box2D tunes its tolerances in meters: the overlap it allows between resting shapes, the distance at which a contact starts, the speed below which a body sleeps, the bounce cutoff, and a top speed of 400 meters a second. `PhysicsResource` scales those to the screen with a pixels-per-meter value, the second constructor argument, `DefaultPixelsPerMeter` (32) unless given. At the default a body can move 12800 pixels a second.
+
+`PhysicsPlugin` reads it from `[physics] pixels_per_meter` in `drift.toml` when the world is made:
+
+```toml
+[physics]
+gravity = [0, 900]
+pixels_per_meter = 32
+```
+
+Box2D keeps the scale in one global value that it reads when worlds and bodies are made, so every physics world in a program shares the scale of the last one made.
+
 ## Stats
 
 ```cpp

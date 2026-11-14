@@ -38,7 +38,7 @@ A dynamic body moves on screen only when its entity also has a `Velocity`, as th
 
 `fixed_rotation` keeps a character upright. `density`, `friction` and `restitution` (bounciness) live on the collider. `BoxCollider` and `CircleCollider` take an `offset` from the entity's position.
 
-Bodies move at most 400 pixels per second; a faster `Velocity` is held to that speed.
+The physics world measures lengths in meters of `pixels_per_meter` pixels, 32 unless `[physics]` sets another; see [Gravity and scale](#gravity-and-scale). Bodies can move as fast as 400 meters a second, 12800 pixels a second at the default.
 
 The body is created at the end of the frame its components are added. Changing a field of the `RigidBody` or the collider later makes the body again with the new settings, where it is and at the speed it has: set `gravity_scale` to 0 for a power-up that makes the player float, or switch `kind` to `Static` to freeze a crate in place.
 
@@ -66,16 +66,19 @@ fn knockback(hit: Contact<Player, Enemy>, physics: Physics) {
 
 Mass is density times area in pixels, so a 32 by 32 box of density 1 weighs 1024: impulses and forces in pixel units are large numbers. An impulse of `mass * speed` changes the speed by `speed` pixels per second.
 
-## Gravity
+## Gravity and scale
 
 Gravity starts from `[physics]` in `drift.toml`, in pixels per second squared. The default is small for pixel units, so most games set it:
 
 ```toml
 [physics]
 gravity = [0, 900]
+pixels_per_meter = 32
 ```
 
 A top-down game sets `[0, 0]`. `Physics` changes it while running with `set_gravity`, and `RigidBody.gravity_scale` scales it for one body.
+
+`pixels_per_meter` tells the physics world how big a meter is on screen. Box2D tunes its tolerances in meters: how far shapes may overlap before it pushes them apart, how close two shapes come before their contact starts, how slowly a body moves before it sleeps, and the top speed of 400 meters a second. Positions, speeds, gravity, mass and impulses stay in pixels whatever the scale. The default, 32, suits objects from a few pixels to a few hundred across; a game of much larger objects can raise it. It is read when the game starts.
 
 ## Colliders from images
 

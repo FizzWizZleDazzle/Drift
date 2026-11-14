@@ -100,7 +100,7 @@ Plugins read their own sections:
 
 | Section | Keys | Page |
 |---------|------|------|
-| `[physics]` | `gravity` = `[x, y]`, default `[0, 9.8]` | [Physics](../subsystems/physics-resource.md) |
+| `[physics]` | `gravity` = `[x, y]`, default `[0, 9.8]`; `pixels_per_meter`, default 32, restart-only | [Physics](../subsystems/physics-resource.md#units-and-scale) |
 | `[audio]` | `master_volume`, `music_volume`, `sfx_volume`, 0 to 1, default 1 | [Audio](../subsystems/audio.md) |
 | `[lighting]` | `enabled`, `ambient`, `layer_mask`, `resolution_scale` | [Lighting](../components/lighting.md) |
 | `[hot_reload]` | `enabled`, `interval` (seconds between checks) | [Asset Server](../subsystems/asset-server.md#hot-reload) |

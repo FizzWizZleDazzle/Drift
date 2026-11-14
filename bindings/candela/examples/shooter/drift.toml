@@ -20,7 +20,7 @@ restart = ["key:R", "button:Start"]
 
 [shooter]
 player_speed = 220.0
-bullet_speed = 390.0   # bodies move at most 400 pixels per second
+bullet_speed = 390.0
 fire_every = 0.12
 enemy_speed = 90.0
 spawn_every = 1.2      # seconds between enemies at the start

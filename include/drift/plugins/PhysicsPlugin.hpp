@@ -29,17 +29,20 @@ struct PhysicsSettings : public Resource {
     DRIFT_RESOURCE(PhysicsSettings)
 
     Vec2 gravity = {0.f, 9.8f};
+    // The physics world's length scale; read when the world is made.
+    float pixelsPerMeter = DefaultPixelsPerMeter;
 
     static void describe(reflect::TypeBuilder<PhysicsSettings>& t) {
         t.field("gravity", &PhysicsSettings::gravity);
+        t.field("pixels_per_meter", &PhysicsSettings::pixelsPerMeter);
     }
 };
 
 class PhysicsPlugin : public Plugin {
 public:
     void build(App& app) override {
-        auto& settings = app.settings<PhysicsSettings>("physics");
-        auto* physicsRes = app.addResource<PhysicsResource>(settings.gravity);
+        auto& settings = app.settings<PhysicsSettings>("physics", {.restart = {"pixels_per_meter"}});
+        auto* physicsRes = app.addResource<PhysicsResource>(settings.gravity, settings.pixelsPerMeter);
         app.onSettingsChanged("physics", [physicsRes, &settings](const std::vector<std::string>&) {
             physicsRes->setGravity(settings.gravity);
         });

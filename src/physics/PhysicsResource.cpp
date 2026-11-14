@@ -195,7 +195,8 @@ struct PhysicsResource::Impl {
 // Constructor / Destructor
 // =============================================================================
 
-PhysicsResource::PhysicsResource(Vec2 gravity) : impl_(new Impl) {
+PhysicsResource::PhysicsResource(Vec2 gravity, float pixelsPerMeter) : impl_(new Impl) {
+    b2SetLengthUnitsPerMeter(pixelsPerMeter > 0.f ? pixelsPerMeter : DefaultPixelsPerMeter);
     b2WorldDef worldDef = b2DefaultWorldDef();
     worldDef.gravity = to_b2_vec2(gravity);
 
@@ -203,8 +204,8 @@ PhysicsResource::PhysicsResource(Vec2 gravity) : impl_(new Impl) {
     if (B2_IS_NULL(impl_->worldId)) {
         DRIFT_LOG_ERROR("PhysicsResource: b2CreateWorld failed");
     } else {
-        DRIFT_LOG_INFO("PhysicsResource: world created (gravity=%.1f, %.1f)",
-                       gravity.x, gravity.y);
+        DRIFT_LOG_INFO("PhysicsResource: world created (gravity=%.1f, %.1f, %.0f pixels per meter)",
+                       gravity.x, gravity.y, b2GetLengthUnitsPerMeter());
     }
 }
 

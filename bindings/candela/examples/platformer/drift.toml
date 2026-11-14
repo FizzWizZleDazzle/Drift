@@ -19,8 +19,7 @@ gravity = [0, 800]
 jump = ["key:Space", "key:Up", "key:W", "button:South"]
 restart = ["key:R", "button:Start"]
 
-# Physics bodies move at most 400 pixels per second, so the jump speed
-# stays under that; gravity sets how high it goes (about four tiles).
+# The jump speed and gravity set how high a jump goes (about four tiles).
 [platformer]
 run_speed = 230.0
 jump_speed = 390.0

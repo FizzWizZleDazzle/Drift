@@ -51,7 +51,7 @@ Field names are the keys. Every field needs a default, used when the file leaves
 | `[project]` | `name`, `organization`, `version`, `entry` (the first script, default `main.cdl`), `assets` (the folder packed into the page, default `assets`), `description` and `icon` (an image path) for the web page |
 | `[window]` | `title` (empty uses `project.name`), `width`, `height`, `fullscreen`, `resizable`, `high_dpi`, `scale_mode` |
 | `[render]` | `backend` (`"gl"` or `"webgpu"`), `vsync`, `clear_color` |
-| `[physics]` | `gravity` in pixels per second squared, `[x, y]` with +Y down |
+| `[physics]` | `gravity` in pixels per second squared, `[x, y]` with +Y down; `pixels_per_meter`, the physics world's scale, default 32, read at start; see [Physics](../guides/collisions.md#gravity-and-scale) |
 | `[audio]` | `master_volume`, `music_volume`, `sfx_volume`, 0 to 1 |
 | `[lighting]` | `enabled`, `ambient`, `layer_mask`, `resolution_scale`. The section's presence turns lighting on; see [Particles and Effects](../guides/effects.md#lights) |
 | `[input]` | One key per action, a list of bindings; see below |

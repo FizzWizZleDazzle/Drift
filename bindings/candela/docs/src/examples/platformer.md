@@ -24,7 +24,7 @@ cd build/web && python3 -m http.server 8000
 
 The example is self-contained: every image and sound is made in code.
 
-Physics bodies move at most 400 pixels per second, so the jump speed stays under that and the gravity in `drift.toml` sets how high it goes.
+The jump sets the player's upward speed, and the gravity in `drift.toml` sets how high it goes.
 
 ## drift.toml
 
