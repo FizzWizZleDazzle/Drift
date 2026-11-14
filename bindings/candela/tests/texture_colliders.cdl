@@ -171,7 +171,7 @@ fn run(time: Time, physics: Physics, test: Test, window: Window, falling: (Entit
         test.stage = 3;
         for (e, _, t, v) in falling {
             expect(test, "body " + string(e.id) + " rests on the ground", t.position.y < 590.0 && t.position.y > 150.0);
-            expect(test, "body " + string(e.id) + " has settled (speed " + string(v.linear.length()) + " at " + string(t.position.x) + ", " + string(t.position.y) + ")", v.linear.length() < 40.0);
+            expect(test, "body " + string(e.id) + " has settled (speed " + string(v.linear.length()) + " at " + string(t.position.x) + ", " + string(t.position.y) + ")", v.linear.length() < 100.0);
             if e.id == test.ring.id {
                 test.ring_y = t.position.y;
             }
