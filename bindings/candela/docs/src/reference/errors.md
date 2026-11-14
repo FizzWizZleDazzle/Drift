@@ -47,6 +47,8 @@ try {
 
 Because the text goes on past the kind, `catch "drift_load_failed"` with a quoted kind does not match these errors; catch them with a name and test the start.
 
+`texture(path)` and `sound(path)` are the exception: a missing file reaches your code as the bare text `host_fn_error`, without the kind or the path (the log has both: `setup raised host_fn_error: Host function drift::texture_load failed: drift_load_failed: assets/ship.png`). Catch them with `catch e` and do not test the text.
+
 A file that a resource's field default loads, such as `ship: Texture = texture("assets/ship.png")`, is loaded when the game starts, and an error there stops the game before the first frame.
 
 ## Names that do not exist

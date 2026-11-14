@@ -82,7 +82,20 @@ When a system raises an error it does not catch, Drift discards that system's ch
 
 On a page built with `drift build --web --dev`, fix the code and build again: the page [hot reloads](publishing.md#hot-reload-while-you-work) the game without losing its state, and a system that was turned off by an error runs again with its new code. A change that does not compile leaves the game running the code it had and shows the error over it.
 
-Wrap a call you expect to fail, such as loading a file a player picked, in `try` and `catch "drift_load_failed"`. See [Errors](../reference/errors.md) for every kind.
+Wrap a call you expect to fail, such as loading a file a player picked, in `try` and `catch e`. A missing file does not match `catch "drift_load_failed"`: `texture` and `sound` throw `host_fn_error`, and `assets.font` throws the whole string `"drift_load_failed: <path>"`. See [Errors](../reference/errors.md) for every kind.
+
+What common mistakes look like, so you can recognize them in the log:
+
+| Mistake | What happens |
+|---------|--------------|
+| A file in a resource's field default is missing (`ship: Texture = texture("assets/ship.png")`) | The game does not start. The page shows "The game could not start" and `Art: building its defaults raised host_fn_error: ... drift_load_failed: assets/ship.png` |
+| A file loaded in a system is missing | `loadTexture: cannot read 'assets/ship.png'` (or `Failed to read sound`), then `setup raised host_fn_error`; that system ends there |
+| Reading an input action nothing declared | `reader raised drift_unknown_action: no input action "jmup"; the actions are ...`; that system is turned off |
+| A binding in `[input]` with a wrong name | `drift.toml: input.jump: '"key:Spcae"' is not a binding` at startup |
+| Shaking with no camera entity | Nothing happens and nothing is logged; spawn a `Camera` first, see [Screen shake](effects.md#screen-shake) |
+| A dynamic body without `Velocity` | It stays where it was spawned; nothing is logged |
+| Lights without `[lighting]` in `drift.toml` | Lights draw nothing; `set_ambient` logs `lighting is off; add a [lighting] section to drift.toml` |
+| `effects.add` with a struct that is not a post effect | `Candela: Vec2 is not a post effect` |
 
 ## Which systems run
 

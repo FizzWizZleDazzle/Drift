@@ -37,7 +37,7 @@ Third, systems that read the actions every frame. `axis2d` gives a direction fro
 
 </details>
 
-Reading an action nothing declared is an error, not a quiet `false`: `input.action_held("jmup")` stops that run of the system with `drift_unknown_action: no input action "jmup"; the actions are ...`, listing the names that exist, and logs it; the game keeps running. A binding drift.toml cannot read, such as `"key:Spcae"`, logs `drift.toml: input.jump: '"key:Spcae"' is not a binding` at startup and leaves it out; if it was the action's only binding, the action does not exist either. [Settings](../concepts/settings.md#input-bindings) lists the key and button names.
+Reading an action nothing declared is an error, not a quiet `false`: `input.action_held("jmup")` raises `drift_unknown_action: no input action "jmup"; the actions are ...`, listing the names that exist. Like any uncaught error it is logged and [turns that system off](debugging.md#errors-while-running) for the rest of the run, while the rest of the game keeps going. A binding drift.toml cannot read, such as `"key:Spcae"`, logs `drift.toml: input.jump: '"key:Spcae"' is not a binding` at startup and leaves it out; if it was the action's only binding, the action does not exist either. [Settings](../concepts/settings.md#input-bindings) lists the key and button names.
 
 ## Devices
 
