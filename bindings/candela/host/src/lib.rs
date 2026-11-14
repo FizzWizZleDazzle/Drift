@@ -18,6 +18,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{c_char, CStr, CString};
 
+mod check;
 mod reload;
 mod wire;
 
@@ -314,6 +315,72 @@ fn bare_type(name: &str) -> &str {
 
 impl Types {
     /// `base` with the fields `j` names replaced, for settings sections.
+    /// What is wrong with the drift.toml section `section`, `j`, as values of
+    /// struct `id`: keys the struct has no field for, and values that do
+    /// not fit their field, which the merge leaves at their defaults. Each
+    /// with its `section.key`.
+    fn section_problems(&self, j: &Json, id: u16, section: &str) -> Vec<(String, String)> {
+        let info = &self.table.structs[id as usize];
+        let Some(obj) = j.as_object() else { return Vec::new() };
+        let names: Vec<&str> = info.fields.iter().map(|(n, _)| n.as_str()).collect();
+        let mut out = Vec::new();
+        for (key, value) in obj {
+            let path = format!("{section}.{key}");
+            match info.fields.iter().find(|(n, _)| n == key) {
+                None => out.push((
+                    path,
+                    format!("drift_unknown_setting: [{section}] has no key '{key}' ({} has {})", bare(&info.name), names.join(", ")),
+                )),
+                Some((_, t)) => {
+                    if let Some(need) = self.json_needs(value, t) {
+                        out.push((
+                            path.clone(),
+                            format!("drift_bad_setting: {path} needs {need}; it keeps its default"),
+                        ));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// What `j` would have to be to fit `ty`, when it does not.
+    fn json_needs(&self, j: &Json, ty: &DataType) -> Option<String> {
+        let fits = |ok: bool, need: &str| (!ok).then(|| need.to_owned());
+        match ty {
+            DataType::Int => fits(j.is_i64() || j.is_u64(), "a whole number"),
+            DataType::Float => fits(j.is_number(), "a number"),
+            DataType::Bool => fits(j.is_boolean(), "true or false"),
+            DataType::String => fits(j.is_string(), "text in quotes"),
+            DataType::Array(elem) => {
+                let Some(items) = j.as_array() else { return Some(String::from("a list, [ ... ]")) };
+                let elem = elem.as_deref()?;
+                items.iter().find_map(|e| self.json_needs(e, elem).map(|n| format!("a list of {}", n)))
+            }
+            DataType::Map(kv) => {
+                let Some(map) = j.as_object() else { return Some(String::from("a table")) };
+                let elem = kv.1.as_ref()?;
+                map.values().find_map(|e| self.json_needs(e, elem).map(|n| format!("a table of {n}")))
+            }
+            DataType::Struct(id) => {
+                let info = &self.table.structs[*id as usize];
+                let fields: Vec<&str> = info.fields.iter().map(|(n, _)| n.as_str()).collect();
+                let table = || format!("a table with {}, as {{ {} }}", fields.join(", "), fields.iter().map(|f| format!("{f} = ...")).collect::<Vec<_>>().join(", "));
+                let Some(obj) = j.as_object() else { return Some(table()) };
+                if obj.keys().any(|k| !fields.contains(&k.as_str())) {
+                    return Some(table());
+                }
+                info.fields.iter().find_map(|(f, t)| obj.get(f).and_then(|v| self.json_needs(v, t)).map(|n| format!("{f} to be {n}")))
+            }
+            DataType::Enum(id) => {
+                let info = &self.table.enums[*id as usize];
+                let ok = j.as_str().is_some_and(|n| info.variants.iter().any(|v| v == n));
+                fits(ok, &format!("one of {}", info.variants.iter().map(|v| format!("\"{v}\"")).collect::<Vec<_>>().join(", ")))
+            }
+            _ => None,
+        }
+    }
+
     fn merge(&self, base: &Value, j: &Json, id: u16) -> Value {
         let Value::Struct { name, fields } = base else { return base.clone() };
         let info = &self.table.structs[id as usize];
@@ -414,6 +481,8 @@ thread_local! {
     static QUEUE: RefCell<Vec<Command>> = const { RefCell::new(Vec::new()) };
     static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
     static ERROR: RefCell<CString> = RefCell::new(CString::default());
+    /// The last drift_host_check answer.
+    static CHECKED: RefCell<CString> = RefCell::new(CString::default());
     /// The game's types, for host functions that build values of a type the
     /// script names.
     static TYPES: RefCell<Option<std::rc::Rc<Types>>> = const { RefCell::new(None) };
@@ -2125,13 +2194,54 @@ fn host_value(j: &Json, t: &HostType) -> Value {
 }
 
 /// Compiles the game and builds its systems and resources.
-fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
+/// Something wrong with a game, found while reading it, and the item it is
+/// about. The message starts with its code, `drift_...: `.
+#[derive(Clone, Debug)]
+struct Finding {
+    item: Item,
+    message: String,
+}
+
+#[derive(Clone, Debug)]
+enum Item {
+    /// A function of the game, by name: a system or a run_if condition.
+    Fn(String),
+    /// A struct of the game, by name.
+    Struct(String),
+    /// A drift.toml key, as `section.key`, or a section.
+    Setting(String),
+}
+
+/// What a load reads before it builds anything or runs any of the game:
+/// the program, its attributes, its systems and conditions in order, and
+/// which resources can be built from their defaults. `drift check` reports
+/// `errors` and `warnings`; a load refuses the game on an error and logs a
+/// warning.
+struct Reading {
+    host: Host,
+    resources_list: Vec<(u16, Option<String>)>,
+    buildable: Vec<(u16, Option<String>)>,
+    message_ids: HashSet<u16>,
+    errors: Vec<Finding>,
+    warnings: Vec<Finding>,
+}
+
+/// Why a game could not be read.
+enum Unread {
+    /// The entry cannot be read: the reason.
+    NoEntry(String),
+    /// The game does not compile: the compiler's error and the entry's text.
+    Compile(Diagnostic, String),
+}
+
+/// Compiles the game and reads it.
+fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
     LOOKUP_NAMES.with(|l| l.borrow_mut().clear());
-    let src = std::fs::read_to_string(entry).map_err(|e| format!("{entry}: {e}"))?;
+    let src = std::fs::read_to_string(entry).map_err(|e| Unread::NoEntry(format!("{entry}: {e}")))?;
     let main = if src.contains("fn main(") { String::new() } else { String::from("\nfn main() {}\n") };
 
     // First the game alone, for its attributes.
-    let first = engine(module_dir).compile(&format!("{src}{main}"), entry).map_err(|d| report(&d, entry, &src))?;
+    let first = engine(module_dir).compile(&format!("{src}{main}"), entry).map_err(|d| Unread::Compile(d, src.clone()))?;
     let table = first.attributes();
     let types = std::rc::Rc::new(Types::new(table));
     let named = |n: &str| -> Vec<(u16, Option<String>)> {
@@ -2174,20 +2284,29 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     let all_defaults: Vec<(u16, Option<String>)> =
         resources_list.iter().cloned().chain(component_list.iter().cloned()).chain(message_list.iter().cloned()).collect();
     let mut buildable: Vec<&(u16, Option<String>)> = all_defaults.iter().collect();
+    // Why each one left out does not build.
+    let mut unbuildable: Vec<(u16, Diagnostic)> = Vec::new();
     let program = loop {
         match engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&buildable)), entry) {
             Ok(p) => break p,
             Err(_) if !buildable.is_empty() => {
                 // Find the resources whose default does not compile.
-                buildable.retain(|r| engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&[r])), entry).is_ok());
+                buildable.retain(|r| match engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&[r])), entry) {
+                    Ok(_) => true,
+                    Err(d) => {
+                        unbuildable.push((r.0, d));
+                        false
+                    }
+                });
                 if let Ok(p) = engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&buildable)), entry) {
                     break p;
                 }
                 buildable.clear();
             }
-            Err(d) => return Err(report(&d, entry, &src)),
+            Err(d) => return Err(Unread::Compile(d, src.clone())),
         }
     };
+    let buildable: Vec<(u16, Option<String>)> = buildable.into_iter().cloned().collect();
 
     let mut host = Host {
         program,
@@ -2218,7 +2337,8 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         states: HashMap::new(),
         time_scale: (1.0, 0.0),
     };
-    // Resource defaults may load data files, which needs the types.
+    // Resource defaults may load data files, which needs the types, and a
+    // system may take a state, which needs the states.
     TYPES.with(|t| *t.borrow_mut() = Some(host.types.clone()));
     for a in host.types.table.named("drift", "state") {
         let AttributeTarget::Enum(id) = a.target else { continue };
@@ -2227,32 +2347,53 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
             host.states.insert(bare(&info.name).to_owned(), StateNow { now: first.clone(), since: 0.0, next: None });
         }
     }
-    STORES.with(|s| *s.borrow_mut() = host.components.iter().map(|c| (c.clone(), BTreeMap::new())).collect());
-    let resource_ids: HashSet<u16> = resources_list.iter().map(|r| r.0).collect();
-    for (id, section) in buildable.iter().map(|r| (r.0, r.1.clone())) {
-        let name = host.types.struct_name(id).to_owned();
-        let mut v = host
-            .program
-            .call(&format!("__drift_default_{id}"), &[])
-            .map_err(|d| format!("{name}: building its defaults raised {}: {}", d.code, d.message))?;
-        if message_ids.contains(&id) {
-            host.message_defaults.insert(name, v);
-            continue;
+    let mut errors: Vec<Finding> = Vec::new();
+    let mut warnings: Vec<Finding> = Vec::new();
+
+    // A resource that cannot be built from its defaults: settings always
+    // should be, and a resource the game's own scope cannot name is one it
+    // did not mean to leave out.
+    for (id, why) in &unbuildable {
+        let name = host.types.struct_name(*id).to_owned();
+        if let Some((_, section)) = settings.iter().find(|(s, _)| s == id) {
+            warnings.push(Finding {
+                item: Item::Struct(name.clone()),
+                message: if why.code.starts_with("unknown") {
+                    format!(
+                        "drift_settings_without_defaults: {name} [{}] is not in the entry's scope ({}), so it is never built and its section is never read. Import it by name, as import \"file.cdl\" {{ {} }};, not only through a namespace",
+                        section.clone().unwrap_or_default(),
+                        why.message,
+                        bare(&name)
+                    )
+                } else {
+                    format!(
+                        "drift_settings_without_defaults: {name} [{}] cannot be built from its defaults, so its section is never read: {}",
+                        section.clone().unwrap_or_default(),
+                        why.message
+                    )
+                },
+            });
+        } else if resources_list.iter().any(|(r, _)| r == id) && why.code.starts_with("unknown") {
+            warnings.push(Finding {
+                item: Item::Struct(name.clone()),
+                message: format!(
+                    "drift_resource_not_in_scope: {name} is a @resource the entry's scope cannot name ({}), so it is never built from its defaults and systems that take it do not run until cmd.insert_resource adds it. Import it by name, as import \"file.cdl\" {{ {} }};",
+                    why.message,
+                    bare(&name)
+                ),
+            });
         }
-        if !resource_ids.contains(&id) {
-            host.component_defaults.insert(name, v);
-            continue;
-        }
-        if let Some(section) = section {
-            let j = call("settings_section", json!([section]));
-            v = host.types.merge(&v, &j, id);
-        }
-        publish_resource(&name, Some(&v));
-        host.resources.insert(name, v);
     }
+
+    // What drift.toml sets for each @settings struct that is built.
     for (id, section) in &settings {
+        let Some(section) = section else { continue };
         if !buildable.iter().any(|r| r.0 == *id) {
-            log(2, &format!("drift_settings_without_defaults: {} [{}]", host.types.struct_name(*id), section.clone().unwrap_or_default()));
+            continue;
+        }
+        let j = call("settings_section", json!([section]));
+        for (key, why) in host.types.section_problems(&j, *id, section) {
+            warnings.push(Finding { item: Item::Setting(key), message: why });
         }
     }
 
@@ -2265,18 +2406,18 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
     }
 
     let mut systems = Vec::new();
-    let mut errors = Vec::new();
     for a in host.types.table.named("drift", "system") {
         let AttributeTarget::Fn { name, params } = &a.target else { continue };
+        let mut fail = |message: String| errors.push(Finding { item: Item::Fn(name.clone()), message });
         if let Some(why) = host.loose_components(name, params) {
-            errors.push(why);
+            fail(why);
             continue;
         }
         let mut ps = Vec::new();
         for (pname, ty) in params {
             match host.classify(ty) {
                 Ok(p) => ps.push(p),
-                Err(why) => errors.push(format!("drift_unknown_parameter: {name}({pname}): {why}")),
+                Err(why) => fail(format!("drift_unknown_parameter: {name}({pname}): {why}")),
             }
         }
         let rows: Vec<&String> = params
@@ -2292,17 +2433,17 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
             .map(|((pname, _), _)| pname)
             .collect();
         if rows.len() > 1 {
-            errors.push(format!(
+            fail(format!(
                 "drift_two_rows: {name} takes the rows {} and {}. A system runs once per entity for one row; read other entities with a query such as (Entity, Enemy)[]",
                 rows[0], rows[1]
             ));
         } else if !rows.is_empty() && !events.is_empty() {
-            errors.push(format!(
+            fail(format!(
                 "drift_row_and_event: {name} takes the row {} and the event {}. A system runs once per entity or once per event, not both; take the events as a list, such as Contact<A, B>[], or read the entity with a Lookup",
                 rows[0], events[0]
             ));
         } else if events.len() > 1 {
-            errors.push(format!(
+            fail(format!(
                 "drift_two_events: {name} takes the events {} and {}. A system runs once per event for one of them; take the other as a list, such as Overlap<A, B>[]",
                 events[0], events[1]
             ));
@@ -2330,9 +2471,6 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
             seen: 0,
         });
     }
-    if !errors.is_empty() {
-        return Err(errors.join("\n"));
-    }
     // run_if conditions take parameters the way systems do.
     for sys in &systems {
         for cond in &sys.run_if {
@@ -2340,15 +2478,19 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
                 continue;
             }
             let Some(params) = function_params(&host.types.table, cond) else {
-                errors.push(format!("drift_unknown_condition: {cond} in run_if of {}", sys.name));
+                errors.push(Finding {
+                    item: Item::Fn(sys.name.clone()),
+                    message: format!("drift_unknown_condition: {cond} in run_if of {}", sys.name),
+                });
                 continue;
             };
             let mut ps = Vec::new();
             for (pname, ty) in &params {
+                let mut fail = |message: String| errors.push(Finding { item: Item::Fn(cond.clone()), message });
                 match host.classify(ty) {
                     Ok(p @ (Param::Resource(_) | Param::Time(_) | Param::Engine(_) | Param::Rows { .. } | Param::Lookup { .. })) => ps.push(p),
-                    Ok(_) => errors.push(format!("drift_condition_parameter: {cond}({pname}): conditions read resources and queries")),
-                    Err(why) => errors.push(format!("drift_unknown_parameter: {cond}({pname}): {why}")),
+                    Ok(_) => fail(format!("drift_condition_parameter: {cond}({pname}): conditions read resources and queries")),
+                    Err(why) => fail(format!("drift_unknown_parameter: {cond}({pname}): {why}")),
                 }
             }
             host.conditions.insert(cond.clone(), System {
@@ -2366,10 +2508,48 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
             });
         }
     }
-    if !errors.is_empty() {
-        return Err(errors.join("\n"));
+    match order(systems) {
+        Ok(ordered) => host.systems = ordered,
+        Err(why) => errors.push(Finding { item: Item::Fn(why.split(": ").nth(1).unwrap_or("").split(", ").next().unwrap_or("").to_owned()), message: why }),
     }
-    host.systems = order(systems)?;
+    Ok(Reading { host, resources_list, buildable, message_ids, errors, warnings })
+}
+
+fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
+    let reading = read_game(entry, module_dir).map_err(|why| match why {
+        Unread::NoEntry(why) => why,
+        Unread::Compile(d, src) => report(&d, entry, &src),
+    })?;
+    if !reading.errors.is_empty() {
+        return Err(reading.errors.iter().map(|f| f.message.as_str()).collect::<Vec<_>>().join("\n"));
+    }
+    for w in &reading.warnings {
+        log(2, &w.message);
+    }
+    let Reading { mut host, resources_list, buildable, message_ids, .. } = reading;
+    STORES.with(|s| *s.borrow_mut() = host.components.iter().map(|c| (c.clone(), BTreeMap::new())).collect());
+    let resource_ids: HashSet<u16> = resources_list.iter().map(|r| r.0).collect();
+    for (id, section) in buildable.iter().map(|r| (r.0, r.1.clone())) {
+        let name = host.types.struct_name(id).to_owned();
+        let mut v = host
+            .program
+            .call(&format!("__drift_default_{id}"), &[])
+            .map_err(|d| format!("{name}: building its defaults raised {}: {}", d.code, d.message))?;
+        if message_ids.contains(&id) {
+            host.message_defaults.insert(name, v);
+            continue;
+        }
+        if !resource_ids.contains(&id) {
+            host.component_defaults.insert(name, v);
+            continue;
+        }
+        if let Some(section) = section {
+            let j = call("settings_section", json!([section]));
+            v = host.types.merge(&v, &j, id);
+        }
+        publish_resource(&name, Some(&v));
+        host.resources.insert(name, v);
+    }
     host.initial_resources = host.resources.clone();
     COMPONENT_NAMES.with(|n| *n.borrow_mut() = host.components.iter().map(|c| bare(c).to_owned()).collect());
     host.initial_enabled = host.systems.iter().map(|s| s.enabled).collect();
@@ -2443,6 +2623,27 @@ pub extern "C" fn drift_host_load(entry: *const c_char, module_dir: *const c_cha
             0
         }
     }
+}
+
+/// Checks the game at `entry` the way a load reads it, without building or
+/// running any of it, and answers what is wrong as a JSON list of
+/// diagnostics (see check.rs). `toml` is the drift.toml the engine read, or
+/// an empty string. The answer stays valid until the next call.
+#[no_mangle]
+pub extern "C" fn drift_host_check(entry: *const c_char, module_dir: *const c_char, toml: *const c_char) -> *const c_char {
+    let (Some(entry), Some(dir)) = (from_c(entry), from_c(module_dir)) else { return std::ptr::null() };
+    let toml = from_c(toml).unwrap_or_default();
+    let found = match std::panic::catch_unwind(|| check::check(&entry, &dir, &toml)) {
+        Ok(found) => found,
+        Err(_) => vec![json!({
+            "file": entry, "line": 1, "severity": "error", "code": "drift_check_failed",
+            "message": "the candela compiler stopped unexpectedly while checking the game",
+        })],
+    };
+    CHECKED.with(|c| {
+        *c.borrow_mut() = cstr(&Json::Array(found).to_string());
+        c.borrow().as_ptr()
+    })
 }
 
 #[no_mangle]

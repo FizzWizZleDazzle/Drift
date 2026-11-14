@@ -61,6 +61,8 @@ struct RenderConfig {
     // in; if the requested backend fails to start, the others are tried in
     // order.
     std::string backend;
+    // Every backend name, whichever this build has.
+    static constexpr const char* backendNames[] = {"gl", "webgpu"};
     bool vsync = true;
     ColorF clearColor = {0.f, 0.f, 0.f, 1.f};
 

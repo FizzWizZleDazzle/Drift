@@ -5,5 +5,8 @@ description = "The engine module for Candela games run by drift"
 # An editor's hover links each name here; the book's api-links.js reads
 # `name` and opens that name's reference entry.
 docs = "https://fizzwizzledazzle.github.io/Drift/candela-book/reference/index.html?name={name}"
+# After a save, an editor runs this for a game that imports drift and shows
+# what it reports: what loading the game would refuse or warn about.
+check = ["drift", "check", "--json", "{file}"]
 
 [dependencies]

@@ -114,6 +114,13 @@ if(EMSCRIPTEN)
         VERBATIM)
     set_property(TARGET drift_web APPEND PROPERTY LINK_DEPENDS ${_runner}/drift-dev.js)
 
+    # `drift check` run by Node.js, for a machine that has the web build and
+    # no desktop drift: the same program, reading the game and the module
+    # from the disk. `node drift_check.js check [folder | script] [--json]`.
+    drift_candela_program(drift_check)
+    target_compile_definitions(drift_check PRIVATE DRIFT_NODE_CHECK=1)
+    target_link_options(drift_check PRIVATE -sNODERAWFS=1 -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
+
     # The page writer of `drift build --web`, run by Node.js, so the pages
     # below are made the way `drift build --web` makes them.
     add_executable(drift_web_pack ${_runner}/web_pack.cpp ${_runner}/web_pack_tool.cpp)

@@ -62,7 +62,8 @@ public:
             for (const auto& b : bindings) {
                 InputBinding binding = b.is_string() ? InputBinding::parse(b.get<std::string>()) : InputBinding{};
                 if (!binding.valid()) {
-                    DRIFT_LOG_WARN("drift.toml: input.%s: '%s' is not a binding", name.c_str(), b.dump().c_str());
+                    settings.report("input." + name, "input." + name + ": " + b.dump() +
+                                                         " is not a binding; write one such as \"key:Space\"");
                     continue;
                 }
                 actions.bindAction(name, binding);

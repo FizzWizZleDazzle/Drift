@@ -113,9 +113,10 @@ struct AudioSettings : public Resource {
 
 class AudioPlugin : public Plugin {
 public:
+    void settings(App& app) override { app.settings<AudioSettings>("audio"); }
     void build(App& app) override {
         auto* audio = app.addResource<AudioResource>();
-        auto& settings = app.settings<AudioSettings>("audio");
+        auto& settings = *app.getResource<AudioSettings>();
         auto apply = [audio, &settings](const std::vector<std::string>&) {
             audio->setBusVolume(audio->masterBus(), settings.masterVolume);
             audio->setBusVolume(audio->musicBus(), settings.musicVolume);

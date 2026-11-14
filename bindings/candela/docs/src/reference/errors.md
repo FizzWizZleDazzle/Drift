@@ -2,7 +2,7 @@
 
 ## When the game loads
 
-The Candela compiler checks the game before it runs: syntax, types, attributes and their arguments. Drift then checks the systems and stops with one of these:
+The Candela compiler checks the game before it runs: syntax, types, attributes and their arguments. Drift then checks the systems and stops with one of these. [`drift check`](cli.md#drift-check) and the editor report all of them, and the warnings below, without running the game.
 
 | Error | Meaning |
 |-------|---------|
@@ -14,7 +14,15 @@ The Candela compiler checks the game before it runs: syntax, types, attributes a
 | `drift_unknown_condition` | `run_if:` names a function Drift cannot find |
 | `drift_condition_parameter` | A condition takes something other than resources, engine resources and queries |
 | `drift_order_cycle` | `after:` and `before:` make a loop; the message lists the systems in it |
-| `drift_settings_without_defaults` | A `@settings` struct has a field without a default |
+
+These only warn; the game runs without what they name:
+
+| Warning | Meaning |
+|---------|---------|
+| `drift_settings_without_defaults` | A `@settings` struct cannot be built from its defaults, so its `drift.toml` section is never read: a field has no default, a default does not compile, or the entry's scope cannot name the struct because it is imported only through a namespace (`import "tuning.cdl" as tuning;`). Import it by name, as `import "tuning.cdl" { Tuning };` |
+| `drift_resource_not_in_scope` | A `@resource` struct the entry's scope cannot name, for the same reason. It is never built from its defaults, and a system that takes it does not run until `cmd.insert_resource` adds it |
+| `drift_bad_setting` | A `drift.toml` value does not fit its key, such as `gravity = 900` for a pair `[0, 900]`, an empty input binding `""`, or text for a number in a `@settings` section; the key keeps its default. Also a `[render] backend` that is no renderer |
+| `drift_unknown_setting` | A `@settings` section has a key its struct has no field for |
 
 On the desktop the error prints in the terminal; in the browser it is in the developer console.
 
@@ -58,7 +66,8 @@ A name written as text, such as a system name or an input action, cannot be chec
 | Kind | Raised by |
 |------|-----------|
 | `drift_unknown_system` | `Systems.enable`, `disable` or `enabled` with a name that is not one of the game's systems; the message lists them |
-| `drift_unknown_action` | Reading an input action the game never declared in `[input]` or with an `Input.bind` method; the message lists the actions |
+| `drift_unknown_action` | Reading an input action the game never declared in `[input]` or with an `Input.bind` method; the message lists the actions. `drift check` reports a quoted name that is neither |
+| `drift_missing_asset` | Reported by `drift check`: a quoted path passed to `texture`, `sound`, `music`, `read_text`, `load_data` or an `Assets` method that loads a file (`image`, `font`, `shader`, `aseprite`, `tilemap`, `ldtk_level`, `scene`) names no file in the game folder. A shader's name counts when files of that name with an extension exist |
 | `drift_unknown_clip` | `Animator.play` or `play_once` with a name the animator has no clip for, and `Spritesheet.clip` with a tag the Aseprite file does not have; the message lists the names there are. An unknown name written into `Animator.play` logs the same error |
 | `drift_not_a_resource` | `resource_field<T>`, `bind_text<T>`, `bind_counter<T>` or `Debug.watch<T>` with a type that is not a `@resource` or `@settings` struct; the message says what the type is |
 | `drift_no_such_field` | The same with a field the resource does not have; the message lists its fields |

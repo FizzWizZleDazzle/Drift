@@ -8,6 +8,10 @@ class App;
 class Plugin {
 public:
     virtual ~Plugin() = default;
+    // Binds the drift.toml sections the plugin reads (app.settings<T>).
+    // Runs when the plugin is added, before build(), and also for a check
+    // that reads the settings without starting the app (App::loadSettings).
+    virtual void settings(App& app) {}
     virtual void build(App& app) = 0;
     virtual void finish(App& app) {}
     virtual const char* name() const = 0;

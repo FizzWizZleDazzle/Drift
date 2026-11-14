@@ -204,6 +204,7 @@ struct App::Impl {
     bool running = false;
     bool initialised = false;
     bool started = false;
+    bool groupsBuilt = false;   // see buildPluginGroups()
     bool frameOpen = false;   // beginFrame() ran, endFrame() not yet
 
     // Phase durations of the current frame, in microseconds
@@ -659,6 +660,7 @@ void App::onSettingsChanged(const char* section, std::function<void(const std::v
 App& App::addPlugin(Plugin* plugin) {
     if (!plugin) return *this;
     impl_->plugins.push_back(plugin);
+    plugin->settings(*this);
     // build() is deferred until run(), after SDL init
     return *this;
 }
@@ -668,6 +670,24 @@ App& App::addPlugins(PluginGroup* group) {
     impl_->pluginGroups.push_back(group);
     // build() is deferred until run(), after SDL init
     return *this;
+}
+
+void App::loadSettings() {
+    auto& s = *impl_;
+    buildPluginGroups();
+    s.settings->load();
+    s.settings->applyOverrides();
+    s.settings->warnUnknownKeys();
+    checkBackend();
+}
+
+void App::buildPluginGroups() {
+    auto& s = *impl_;
+    if (s.groupsBuilt) return;
+    s.groupsBuilt = true;
+    for (auto* g : s.pluginGroups) {
+        g->build(*this);
+    }
 }
 
 void App::addEventHandler(EventHandler* handler) {
@@ -918,9 +938,7 @@ bool App::start() {
     }
 
     // ---- Build plugins (deferred so window/GPU are available) ----
-    for (auto* g : s.pluginGroups) {
-        g->build(*this);
-    }
+    buildPluginGroups();
     for (auto* p : s.plugins) {
         p->build(*this);
     }
@@ -1149,10 +1167,33 @@ void App::endFrame() {
     s.frame++;
 }
 
-bool App::createWindowAndDevice() {
+const std::vector<gfx::BackendInfo>& App::checkBackend() {
     auto& s = *impl_;
     gfx::registerBuiltinBackends();
     const auto& available = gfx::backends();
+    const std::string& wanted = s.config.render.backend;
+    bool built = wanted.empty();
+    for (const auto& b : available) built = built || wanted == b.name;
+    if (built) return available;
+    bool known = false;
+    std::string names;
+    for (const char* name : RenderConfig::backendNames) {
+        known = known || wanted == name;
+        names += (names.empty() ? "\"" : ", \"") + std::string(name) + "\"";
+    }
+    // A backend this build leaves out falls back to the others, as [render]
+    // promises; a name that is no backend is a mistake in the file.
+    if (known) {
+        DRIFT_LOG_WARN("Renderer '%s' is not available in this build", wanted.c_str());
+    } else {
+        s.settings->report("render.backend", "render.backend \"" + wanted + "\" is not a renderer; the renderers are " + names);
+    }
+    return available;
+}
+
+bool App::createWindowAndDevice() {
+    auto& s = *impl_;
+    const auto& available = checkBackend();
     if (available.empty()) {
         DRIFT_LOG_ERROR("No graphics backend compiled in");
         return false;
@@ -1164,9 +1205,6 @@ bool App::createWindowAndDevice() {
     std::vector<const gfx::BackendInfo*> order;
     for (const auto& b : available) {
         if (wanted == b.name) order.push_back(&b);
-    }
-    if (!wanted.empty() && order.empty()) {
-        DRIFT_LOG_WARN("Renderer '%s' is not available in this build", wanted.c_str());
     }
     for (const auto& b : available) {
         if (wanted != b.name) order.push_back(&b);

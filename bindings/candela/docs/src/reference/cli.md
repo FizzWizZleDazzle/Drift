@@ -1,6 +1,6 @@
 # The drift Command
 
-`drift` builds Candela games as web pages and runs them on the desktop. It reads `drift.toml` in the game folder.
+`drift` builds Candela games as web pages, runs them on the desktop and checks them. It reads `drift.toml` in the game folder.
 
 ## drift build --web
 
@@ -39,6 +39,21 @@ While the game runs, `drift run` watches its files. Saving a script, a data file
 | `--set section.key=value` | Override one setting for this run; repeat for more |
 
 Settings also come from `DRIFT_<SECTION>_<KEY>` environment variables; `--set` wins over them. See [Settings and drift.toml](../concepts/settings.md#overriding-settings).
+
+## drift check
+
+```sh
+drift check                  # the game in this folder
+drift check path/to/game     # the game in that folder
+drift check main.cdl         # the game whose folder holds this script
+drift check --json           # the same, as JSON, for an editor
+```
+
+Reads the game the way loading it does, without opening a window or running any of it, and prints every problem it finds with its file and line: what would stop the game ([When the game loads](errors.md#when-the-game-loads)), the `drift.toml` values the engine would skip, and two mistakes a run meets only when it gets there: a quoted asset path that names no file (`drift_missing_asset`) and a quoted input action that is neither in `[input]` nor bound in code (`drift_unknown_action`). Given a script, the game folder is the nearest folder above it with a `drift.toml`. It exits with status 1 when there is an error, and 0 when there are only warnings or nothing.
+
+With `--json` it prints a list of objects with `file`, `line`, `column`, `end_line`, `end_column`, `severity` (`error` or `warning`), `code` and `message`; a `drift.toml` problem has no column and covers its line. The editor runs `drift check --json` after each save and shows what it prints; see [Editor support](../getting-started/install.md#editor-support).
+
+A machine with only the web build has no desktop `drift`; the same checker runs under Node.js from the web build: `node build-web/bindings/candela/drift_check.js check path/to/game`, built by the `drift_check` target.
 
 ## Other commands
 

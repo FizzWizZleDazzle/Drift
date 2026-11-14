@@ -52,5 +52,6 @@ Paths in scripts are relative to the game folder: `texture("assets/ship.png")`. 
 | `drift build --web` | Writes the game as a web page in `build/web` |
 | `drift build --web --dev` | The same page, which [hot reloads](../guides/publishing.md#hot-reload-while-you-work) the game when you build again |
 | `drift run` | Plays the game in a desktop window |
+| `drift check` | Reports what loading the game would refuse or warn about, without running it |
 
 See [The drift Command](../reference/cli.md) for every option, and [Publishing to the Web](../guides/publishing.md) for putting the page online.

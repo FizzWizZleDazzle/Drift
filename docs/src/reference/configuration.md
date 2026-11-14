@@ -152,6 +152,21 @@ void setup(Res<Settings> settings) {
 
 `has`, `getInt`, `getFloat`, `getBool` and `getString` see environment and `--set` values too. `valueJson(path)` returns a value or a whole table as JSON text, which is how a scripting host reads a section. The free function `tomlToJson(toml, json, error)` converts any TOML text the same way, for data files kept in TOML.
 
+## Checking the File
+
+A value that does not fit its key is logged as a warning naming its line, and the key keeps its default; so is a key a bound section has no field for. The `Settings` resource keeps each one: `problems()` returns them as `SettingsProblem { file, line, path, message }`, with `line` 0 for a value from `--set` or the environment. A section a plugin reads raw, as the input actions read `[input]`, reports its own with `report(path, message)`, which logs the same way and adds to the list.
+
+`App::loadSettings()` reads the file for the plugins added so far without opening a window: it binds every section they read (see `Plugin::settings` in [App and Plugins](../concepts/app-and-plugins.md)), applies overrides, reports unknown keys and a `[render] backend` that is no renderer, and returns. `drift check` reads a game's `drift.toml` this way.
+
+```cpp
+App app;
+app.addPlugins<DefaultPlugins>();
+app.loadSettings();
+for (const auto& p : app.settingsStore().problems()) {
+    std::printf("%s:%d: %s\n", p.file.c_str(), p.line, p.message.c_str());
+}
+```
+
 ## Live Reload
 
 Builds with `DRIFT_DEV` (the default) watch `drift.toml` with the other assets. When you save it, the keys whose value changed in the file are applied while the game runs, and the log names them. A key removed from the file goes back to its default. A key the environment or `--set` pins keeps its value. A parse error leaves every setting as it was.

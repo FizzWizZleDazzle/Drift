@@ -2,6 +2,7 @@
 //
 //     drift run [folder | script] [--config <path>] [--set section.key=value]...
 //     drift build --web [folder] [-o <out folder>]
+//     drift check [folder | script] [--json]
 //
 // The engine runs as usual; one exclusive system hands each frame to the
 // Candela host (bindings/candela/host), which calls the game's systems. The
@@ -92,6 +93,7 @@ extern "C" {
 int32_t drift_host_load(const char* entry, const char* module_dir);
 int32_t drift_host_reload(const char* entry, const char* module_dir);
 const char* drift_host_error();
+const char* drift_host_check(const char* entry, const char* module_dir, const char* toml);
 void drift_host_contact(int32_t kind, uint64_t a, uint64_t b, float px, float py, float nx, float ny);
 void drift_host_frame(double dt, double elapsed, int64_t frame, double scale, double real_dt);
 void drift_host_unload();
@@ -3476,7 +3478,9 @@ std::string installed(const char* what) {
 // source tree this program was built from.
 std::string moduleDir() {
     if (const char* env = SDL_getenv("DRIFT_CANDELA_MODULE")) return env;
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) && defined(DRIFT_NODE_CHECK)
+    return DRIFT_CANDELA_MODULE_DIR;   // read from the disk through Node.js
+#elif defined(__EMSCRIPTEN__)
     return "/drift-module";   // embedded in drift.wasm
 #else
     std::string dir = installed("module");
@@ -3506,17 +3510,112 @@ void useStdLib() {
 }
 
 const char* usage =
-    "drift: runs Candela games and builds them for the web.\n"
+    "drift: runs Candela games, checks them and builds them for the web.\n"
     "\n"
     "Usage:\n"
     "  drift run [folder | script] [--config <path>] [--set section.key=value]...\n"
+    "  drift check [folder | script] [--json]\n"
     "  drift build --web [folder] [-o <out folder>] [--dev]\n"
     "  drift --version\n"
     "  drift --help\n"
     "\n"
     "run plays the game in a folder (default: this one) or starts at a script.\n"
+    "check reports what loading the game would refuse or warn about, without running it.\n"
+    "  --json prints the problems as JSON, for an editor.\n"
     "build --web writes a page to serve over HTTP (default: <folder>/build/web).\n"
     "  --dev makes a page that hot reloads the game when the page is written again.\n";
+
+// The plugins every game runs with; `drift run` and `drift check` add the
+// same ones, so a check reads drift.toml the way a run does.
+void addGamePlugins(App& app) {
+    app.addPlugins<DefaultPlugins>();
+    app.addPlugin<SavePlugin>();   // the slot named after [project]
+    if (app.settingsStore().has("lighting")) app.addPlugin<LightingPlugin>();
+}
+
+// drift check [folder | script] [--json]: the game folder is the one given,
+// or for a script the nearest folder above it with a drift.toml.
+int checkCommand(int argc, char** argv, int first) {
+    namespace fs = std::filesystem;
+    bool asJson = false;
+    std::string target;
+    for (int i = first; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--json") asJson = true;
+        else if (arg.rfind("-", 0) == 0) {
+            std::fprintf(stderr, "drift check: unknown option %s\n\n%s", arg.c_str(), usage);
+            return 2;
+        } else if (target.empty()) target = arg;
+        else {
+            std::fprintf(stderr, "drift check: one game at a time\n\n%s", usage);
+            return 2;
+        }
+    }
+    std::error_code ec;
+    fs::path given = fs::absolute(target.empty() ? fs::path(".") : fs::path(target), ec);
+    if (!fs::exists(given, ec)) {
+        std::fprintf(stderr, "drift check: %s: no such game folder or script\n", given.string().c_str());
+        return 2;
+    }
+    fs::path folder = fs::is_directory(given, ec) ? given : given.parent_path();
+    for (fs::path d = folder;; d = d.parent_path()) {
+        if (fs::is_regular_file(d / "drift.toml", ec)) {
+            folder = d;
+            break;
+        }
+        if (d == d.parent_path()) break;
+    }
+    fs::current_path(folder, ec);
+    if (ec) {
+        std::fprintf(stderr, "drift check: %s: %s\n", folder.string().c_str(), ec.message().c_str());
+        return 2;
+    }
+    useStdLib();
+
+    App app;
+    g_app = &app;
+    std::string entry = app.config().project.entry;
+    if (entry.empty()) entry = "main.cdl";
+    addGamePlugins(app);
+    app.loadSettings();
+    // [input], read the way the input actions read it.
+    {
+        InputActions probe;
+        InputActionsPlugin::bindFromSettings(probe, app.settingsStore(), {});
+    }
+
+    const Settings& settings = app.settingsStore();
+    json found = json::array();
+    for (const auto& p : settings.problems()) {
+        fs::path file = fs::absolute(p.file, ec);
+        json d = {{"file", file.string()}, {"severity", "warning"}, {"code", "drift_bad_setting"},
+                  {"message", p.message}};
+        if (p.line > 0) d["line"] = p.line;
+        found.push_back(d);
+    }
+    const char* host = drift_host_check(entry.c_str(), moduleDir().c_str(), settings.file().c_str());
+    json fromHost = json::parse(host ? host : "[]", nullptr, false);
+    if (fromHost.is_array()) {
+        for (auto& d : fromHost) found.push_back(d);
+    }
+    g_app = nullptr;
+
+    bool errors = false;
+    for (const auto& d : found) errors = errors || d.value("severity", "") == "error";
+    if (asJson) {
+        std::printf("%s\n", found.dump(2).c_str());
+    } else {
+        for (const auto& d : found) {
+            std::string where = d.value("file", "");
+            if (d.contains("line")) where += ":" + std::to_string(d["line"].get<int>());
+            if (d.contains("column")) where += ":" + std::to_string(d["column"].get<int>());
+            std::printf("%s: %s: %s [%s]\n", where.c_str(), d.value("severity", "").c_str(),
+                        d.value("message", "").c_str(), d.value("code", "").c_str());
+        }
+        if (found.empty()) std::printf("drift check: %s has no problems\n", folder.string().c_str());
+    }
+    return errors ? 1 : 0;
+}
 
 #ifndef __EMSCRIPTEN__
 // The web runtime `drift build --web` copies: DRIFT_WEB_RUNTIME, or the
@@ -3583,11 +3682,17 @@ int main(int argc, char** argv) {
             std::printf("drift %s\n", DRIFT_VERSION);
             return 0;
         }
-        if (arg == "run" || arg == "build") {
+        if (arg == "run" || arg == "build" || arg == "check") {
             command = arg;
             first = 2;
         }
     }
+    if (command == "check") return checkCommand(argc, argv, first);
+#ifdef DRIFT_NODE_CHECK
+    // The Node.js build runs checks only.
+    std::fprintf(stderr, "drift_check.js runs checks: node drift_check.js check [folder | script] [--json]\n");
+    return 2;
+#endif
 #ifndef __EMSCRIPTEN__
     if (command == "build") return buildCommand(argc, argv, first);
 #endif
@@ -3626,9 +3731,7 @@ int main(int argc, char** argv) {
     if (entry.empty()) entry = app.config().project.entry;
     if (entry.empty()) entry = "main.cdl";
 
-    app.addPlugins<DefaultPlugins>();
-    app.addPlugin<SavePlugin>();   // the slot named after [project]
-    if (app.settingsStore().has("lighting")) app.addPlugin<LightingPlugin>();
+    addGamePlugins(app);
     app.addPlugin(new CandelaPlugin(entry, moduleDir()));
     int code = app.run();
     drift_host_unload();

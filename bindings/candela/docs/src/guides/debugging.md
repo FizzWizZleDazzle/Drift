@@ -91,7 +91,7 @@ What common mistakes look like, so you can recognize them in the log:
 | A file in a resource's field default is missing (`ship: Texture = texture("assets/ship.png")`) | The game does not start. The page shows "The game could not start" and `Art: building its defaults raised host_fn_error: ... drift_load_failed: assets/ship.png` |
 | A file loaded in a system is missing | `loadTexture: cannot read 'assets/ship.png'` (or `Failed to read sound`), then `setup raised host_fn_error`; that system ends there |
 | Reading an input action nothing declared | `reader raised drift_unknown_action: no input action "jmup"; the actions are ...`; that system is turned off |
-| A binding in `[input]` with a wrong name | `drift.toml: input.jump: '"key:Spcae"' is not a binding` at startup |
+| A binding in `[input]` with a wrong name | `drift.toml:12: input.jump: "key:Spcae" is not a binding; write one such as "key:Space"` at startup |
 | Shaking with no camera entity | Nothing happens and nothing is logged; spawn a `Camera` first, see [Screen shake](effects.md#screen-shake) |
 | A dynamic body without `Velocity` | It stays where it was spawned; nothing is logged |
 | Lights without `[lighting]` in `drift.toml` | Lights draw nothing; `set_ambient` logs `lighting is off; add a [lighting] section to drift.toml` |

@@ -20,7 +20,7 @@ union SDL_Event;
 
 namespace drift {
 
-namespace gfx { class Device; }
+namespace gfx { class Device; struct BackendInfo; }
 
 class Commands;
 
@@ -113,6 +113,12 @@ public:
     // until beginFrame() returns false. Returns 0, or 1 if start() failed.
     int run();
     void quit();
+
+    // Reads drift.toml for the plugins added so far without starting: the
+    // sections they read are bound and checked, so settingsStore().problems()
+    // lists what a run would warn about. For a checker; run() and start()
+    // read the settings themselves.
+    void loadSettings();
 
     // ---- Driving the loop yourself ----
     // For a host that owns its own loop (an embedding program or a language
@@ -459,6 +465,12 @@ private:
     }
 
 private:
+    // Adds the plugins of every group added, once.
+    void buildPluginGroups();
+    // The graphics backends compiled in; reports a [render] backend that is
+    // not one of them.
+    const std::vector<gfx::BackendInfo>& checkBackend();
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

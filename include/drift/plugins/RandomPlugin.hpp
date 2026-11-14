@@ -53,8 +53,9 @@ private:
 
 class RandomPlugin : public Plugin {
 public:
+    void settings(App& app) override { app.settings<RandomSettings>("random", {.restart = {"seed"}}); }
     void build(App& app) override {
-        auto& settings = app.settings<RandomSettings>("random", {.restart = {"seed"}});
+        auto& settings = *app.getResource<RandomSettings>();
         uint64_t seed = static_cast<uint64_t>(settings.seed);
         if (seed == 0) {
             seed = static_cast<uint64_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());

@@ -180,6 +180,28 @@ struct Settings::Impl {
     std::vector<Binding> bindings;
     std::multimap<std::string, std::function<void(const std::vector<std::string>&)>> listeners;
 
+    mutable std::vector<SettingsProblem> problems;
+
+    // Logs a problem at `path` and keeps it; `source` names --set or the
+    // environment variable when the value came from there.
+    void report(const std::string& path, const std::string& message, const char* source = nullptr) const {
+        auto it = lines.find(path);
+        SettingsProblem p;
+        if (!source) {
+            p.file = file.empty() ? "drift.toml" : file;
+            p.line = it == lines.end() ? 0 : it->second;
+        } else {
+            p.file = source;
+        }
+        p.path = path;
+        p.message = message;
+        DRIFT_LOG_WARN("%s: %s", source ? source : where(path).c_str(), message.c_str());
+        for (const auto& seen : problems) {
+            if (seen.file == p.file && seen.line == p.line && seen.message == p.message) return;
+        }
+        problems.push_back(std::move(p));
+    }
+
     std::string where(const std::string& path) const {
         auto it = lines.find(path);
         std::string name = file.empty() ? "drift.toml" : file;
@@ -202,9 +224,10 @@ struct Settings::Impl {
             if (const char* need = mismatch(*f.type, value)) {
                 std::string extra;
                 if (f.type->kind == reflect::Kind::Enum) extra = " (" + enumChoices(*f.type) + ")";
-                DRIFT_LOG_WARN("%s: %s needs %s%s; keeping %s",
-                               source ? source : where(path).c_str(), path.c_str(), need,
-                               extra.c_str(), reflect::toJson(*f.type, static_cast<char*>(b.target) + f.offset, {}).dump().c_str());
+                report(path,
+                       path + " needs " + need + extra + "; keeping " +
+                           reflect::toJson(*f.type, static_cast<char*>(b.target) + f.offset, {}).dump(),
+                       source);
                 return false;
             }
             json v = value;
@@ -225,8 +248,7 @@ struct Settings::Impl {
         const json* section = lookup(data, b.section);
         if (!section) return;
         if (!section->is_object()) {
-            DRIFT_LOG_WARN("%s: %s should be a table, [%s]", where(b.section).c_str(),
-                           b.section.c_str(), b.section.c_str());
+            report(b.section, b.section + " should be a table, [" + b.section + "]");
             return;
         }
         for (const auto& [key, value] : section->items()) applyKey(b, key, value, nullptr);
@@ -260,6 +282,7 @@ struct Settings::Impl {
         }
         std::string text(static_cast<const char*>(bytes), size);
         SDL_free(bytes);
+        problems.clear();
         try {
             toml::table t = toml::parse(text, file);
             outLines.clear();
@@ -268,6 +291,7 @@ struct Settings::Impl {
         } catch (const toml::parse_error& e) {
             DRIFT_LOG_ERROR("%s:%u:%u: %s", file.c_str(), unsigned(e.source().begin.line),
                             unsigned(e.source().begin.column), std::string(e.description()).c_str());
+            problems.push_back({file, int(e.source().begin.line), "", std::string(e.description())});
             return false;
         }
     }
@@ -413,6 +437,14 @@ void Settings::onChange(const char* section, std::function<void(const std::vecto
     impl_->listeners.emplace(section, std::move(fn));
 }
 
+void Settings::report(const std::string& path, const std::string& message) const {
+    impl_->report(path, message);
+}
+
+const std::vector<SettingsProblem>& Settings::problems() const {
+    return impl_->problems;
+}
+
 void Settings::warnUnknownKeys() const {
     const auto& s = *impl_;
     for (const auto& b : s.bindings) {
@@ -428,9 +460,7 @@ void Settings::warnUnknownKeys() const {
             for (const auto& [key, value] : section->items()) {
                 if (known(key)) continue;
                 std::string path = b.section + "." + key;
-                DRIFT_LOG_WARN("%s: [%s] has no key '%s' (it has %s)",
-                               source ? source : s.where(path).c_str(), b.section.c_str(),
-                               key.c_str(), names.c_str());
+                s.report(path, "[" + b.section + "] has no key '" + key + "' (it has " + names + ")", source);
             }
         };
         check(s.data, nullptr);

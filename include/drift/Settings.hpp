@@ -31,6 +31,16 @@ struct SettingsOptions {
     std::vector<std::string> restart;
 };
 
+// A drift.toml value the engine could not use: the file and line it is on
+// (0 when it came from --set or the environment), its "section.key" path,
+// and what is wrong with it.
+struct SettingsProblem {
+    std::string file;
+    int line = 0;
+    std::string path;
+    std::string message;
+};
+
 class Settings : public Resource {
 public:
     Settings();
@@ -80,6 +90,15 @@ public:
     void onChange(const char* section, std::function<void(const std::vector<std::string>&)> fn);
     // Logs keys in bound sections that no field reads (typos).
     void warnUnknownKeys() const;
+
+    // ---- Problems ----
+    // Logs a problem with the value at `path` ("section.key", or "section"
+    // for a whole section) as a warning naming its line in the file, and
+    // keeps it for problems(). A section read raw reports its own problems
+    // this way.
+    void report(const std::string& path, const std::string& message) const;
+    // What was reported since the file was last read, each problem once.
+    const std::vector<SettingsProblem>& problems() const;
 
     // ---- Reloading ----
     // Reads the file again and applies the keys whose value changed in it,

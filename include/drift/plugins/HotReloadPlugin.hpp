@@ -50,8 +50,8 @@ private:
 
 class HotReloadPlugin : public Plugin {
 public:
+    void settings(App& app) override { app.settings<HotReloadResource>("hot_reload"); }
     void build(App& app) override {
-        app.settings<HotReloadResource>("hot_reload");
         // Exclusive: a reload may change entities (scenes) or GL textures.
         app.addSystem("hot_reload", Phase::PreUpdate, [](App& a) {
             auto* hr = a.getResource<HotReloadResource>();

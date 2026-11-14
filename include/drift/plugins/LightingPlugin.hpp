@@ -32,6 +32,7 @@ struct LightingSettings : public Resource {
 // own. Not part of DefaultPlugins; add it when a game wants lighting.
 class LightingPlugin : public Plugin {
 public:
+    void settings(App& app) override;
     void build(App& app) override;
     void finish(App& app) override;
     DRIFT_PLUGIN(LightingPlugin)

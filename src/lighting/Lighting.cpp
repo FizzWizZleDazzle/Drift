@@ -387,12 +387,15 @@ struct LightRenderer {
 
 } // namespace
 
+void LightingPlugin::settings(App& app) {
+    app.settings<LightingSettings>("lighting");
+}
+
 void LightingPlugin::build(App& app) {
     World& world = app.world();
     world.registerComponent<PointLight2D>("PointLight2D");
     world.registerComponent<SpotLight2D>("SpotLight2D");
     world.registerComponent<LightOccluder2D>("LightOccluder2D");
-    app.settings<LightingSettings>("lighting");
     app.initResource<LightingState>();
     app.addSystem<lighting_collect>("lighting_collect", Phase::Render);
 }

@@ -59,7 +59,7 @@ Run the installer again to update. It replaces the old version and removes files
 
 ## Editor support
 
-The Candela extension for VS Code, from version 0.4.0, gives `.cdl` files completion, hover, signature help and go-to-definition for the `drift` module, attributes included. Hovering a name shows its documentation, the same text as its entry in this book's [reference](../reference/index.md), with an "Open docs" link to that entry; a struct's hover lists its fields with their defaults, and an enum's its variants. Version 0.4.0 is not on the marketplace yet; it comes from lumen-fx/candela#251. Two settings point it at the right files:
+The Candela extension for VS Code, from version 0.5.0, checks `.cdl` files while you type and gives completion, hover, signature help and go-to-definition for the `drift` module, attributes included. Two settings point it at the right files:
 
 ```json
 {
@@ -68,7 +68,13 @@ The Candela extension for VS Code, from version 0.4.0, gives `.cdl` files comple
 }
 ```
 
-`candela.importRoots` tells it where `import "drift"` lives; with an installed toolchain that is `~/.drift/lib/drift/module`. `candela.languageServerPath` points at a `candela-lsp` built from lumen-fx/candela#251, which reads `export import` (the `drift` module is written with it) and the module's `///` doc comments. One built before lumen-fx/candela#250 reports an error on the import and knows none of the engine's names; one built before #251 shows no documentation and no docs link. Without the two settings the editor colors the code but does not know the engine's names.
+`candela.importRoots` tells it where `import "drift"` lives; with an installed toolchain that is `~/.drift/lib/drift/module`. `candela.languageServerPath` points at the `candela-lsp` that comes with the extension's release. Version 0.5.0 is not on the marketplace yet; it and its `candela-lsp` come from lumen-fx/candela#253. An older `candela-lsp` reports one error at a time, and one built before lumen-fx/candela#250 cannot read the `drift` module at all. Without the two settings the editor colors the code but does not know the engine's names.
+
+A moment after you stop typing, the editor marks every type and name mistake in the game, in each file it is in: a call with its arguments in the wrong order marks each argument that does not fit and names the parameter it lands on, and a misspelled field in a struct literal or a field read is marked where it is written. A file that imports one you change is checked again.
+
+After each save the editor also runs [`drift check`](../reference/cli.md#drift-check) and marks what it reports: systems Drift would refuse, `@settings` and `@resource` structs it cannot build, `drift.toml` values it would skip (on `drift.toml` itself), asset paths that name no file, and input actions the game never declares. This needs `drift` on your `PATH`; the `drift` module's `candela.toml` names the command. Set `candela.packageChecks` to `false` to turn it off.
+
+Hovering a name shows its documentation, the same text as its entry in this book's [reference](../reference/index.md), with an "Open docs" link to that entry; a struct's hover lists its fields with their defaults, and an enum's its variants.
 
 ## Building drift from source
 

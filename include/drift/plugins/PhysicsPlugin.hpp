@@ -40,8 +40,11 @@ struct PhysicsSettings : public Resource {
 
 class PhysicsPlugin : public Plugin {
 public:
+    void settings(App& app) override {
+        app.settings<PhysicsSettings>("physics", {.restart = {"pixels_per_meter"}});
+    }
     void build(App& app) override {
-        auto& settings = app.settings<PhysicsSettings>("physics", {.restart = {"pixels_per_meter"}});
+        auto& settings = *app.getResource<PhysicsSettings>();
         auto* physicsRes = app.addResource<PhysicsResource>(settings.gravity, settings.pixelsPerMeter);
         app.onSettingsChanged("physics", [physicsRes, &settings](const std::vector<std::string>&) {
             physicsRes->setGravity(settings.gravity);

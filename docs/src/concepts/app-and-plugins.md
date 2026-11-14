@@ -144,6 +144,8 @@ public:
 };
 ```
 
+**`settings(App&)`** is called when the plugin is added, before anything is built. A plugin that reads a `drift.toml` section binds it here with `app.settings<T>("section")`, and reads the resource in `build()` with `app.getResource<T>()`. Binding here is what lets [`App::loadSettings()`](../reference/configuration.md#checking-the-file) check the section without starting the app. It is optional: the default does nothing.
+
 **`build(App&)`** is called first for every plugin, in registration order. This is where you register resources, systems, and components.
 
 **`finish(App&)`** is called after all plugins have been built. Use it when your plugin depends on resources created by other plugins. `finish()` is optional: the default implementation is a no-op.
