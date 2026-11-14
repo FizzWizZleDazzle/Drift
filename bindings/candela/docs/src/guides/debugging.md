@@ -80,6 +80,8 @@ Press **F1** in a running game, in the browser too, to show or hide the engine's
 
 When a system raises an error it does not catch, Drift discards that system's changes and commands from that call, logs the error, and turns the system off for the rest of the run. The other systems keep running. A compile error stops the game before it starts and names the file and line.
 
+On a page built with `drift build --web --dev`, fix the code and build again: the page [hot reloads](publishing.md#hot-reload-while-you-work) the game without losing its state, and a system that was turned off by an error runs again with its new code. A change that does not compile leaves the game running the code it had and shows the error over it.
+
 Wrap a call you expect to fail, such as loading a file a player picked, in `try` and `catch "drift_load_failed"`. See [Errors](../reference/errors.md) for every kind.
 
 ## Which systems run

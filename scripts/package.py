@@ -135,7 +135,7 @@ def stage_web(build: Path, stage: Path) -> None:
         encoding="utf-8")
 
 
-WEB_RUNTIME = ("drift.html", "drift.js", "drift.wasm")
+WEB_RUNTIME = ("drift.html", "drift.js", "drift.wasm", "drift-dev.js")
 
 
 def stage_toolchain(build: Path, runtime: Path, stage: Path) -> None:

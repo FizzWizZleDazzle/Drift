@@ -233,7 +233,7 @@ bool sameFolder(const fs::path& a, const fs::path& b) {
 } // namespace
 
 bool buildWebPage(const std::string& folderArg, const std::string& outArg, const std::string& runtimeArg,
-                  std::string& error, std::string& summary) {
+                  bool dev, std::string& error, std::string& summary) {
     std::error_code ec;
     fs::path folder = fs::absolute(folderArg, ec);
     if (!fs::is_directory(folder)) {
@@ -247,6 +247,10 @@ bool buildWebPage(const std::string& folderArg, const std::string& outArg, const
             error = "no web runtime at " + runtime.string() + " (it needs drift.html, drift.js and drift.wasm)";
             return false;
         }
+    }
+    if (dev && !fs::is_regular_file(runtime / "drift-dev.js")) {
+        error = "the web runtime at " + runtime.string() + " has no drift-dev.js, which dev pages need; it is older than hot reload";
+        return false;
     }
 
     Project project;
@@ -399,6 +403,20 @@ bool buildWebPage(const std::string& folderArg, const std::string& outArg, const
                              {"sizes", {{"drift.wasm", fs::file_size(out / "drift.wasm", ec)},
                                         {"game.pack", pack.size()}}}};
     head += "<script>window.DRIFT_PAGE = " + scriptJson(config) + ";</script>\n";
+
+    // A dev page hot reloads; it must not be served from an offline copy.
+    if (dev) {
+        fs::copy_file(runtime / "drift-dev.js", out / "drift-dev.js", fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            error = (out / "drift-dev.js").string() + ": " + ec.message();
+            return false;
+        }
+        extras.push_back("drift-dev.js");
+        head += "<script src=\"drift-dev.js\" defer></script>\n";
+        web.offline = false;
+    } else {
+        fs::remove(out / "drift-dev.js", ec);
+    }
 
     if (web.offline) {
         std::string name = project.name.empty() ? "Drift" : project.name;

@@ -90,6 +90,7 @@ using nlohmann::json;
 
 extern "C" {
 int32_t drift_host_load(const char* entry, const char* module_dir);
+int32_t drift_host_reload(const char* entry, const char* module_dir);
 const char* drift_host_error();
 void drift_host_contact(int32_t kind, uint64_t a, uint64_t b, float px, float py, float nx, float ny);
 void drift_host_frame(double dt, double elapsed, int64_t frame, double scale, double real_dt);
@@ -1764,6 +1765,15 @@ EM_JS(char*, web_query, (const char* name), {
 EM_JS(void, web_show_error, (const char* text), {
     if (Module['driftError']) Module['driftError'](UTF8ToString(text));
 });
+// Hot reload on pages built with `drift build --web --dev` (drift-dev.js):
+// the game runs ("" after a start or reload) or its new code failed (the
+// error), and a change that needs the whole page loaded again.
+EM_JS(void, web_dev_status, (const char* error), {
+    if (Module['driftDevStatus']) Module['driftDevStatus'](UTF8ToString(error));
+});
+EM_JS(void, web_dev_reload_page, (const char* why), {
+    if (Module['driftDevReload']) Module['driftDevReload'](UTF8ToString(why));
+});
 
 std::string takeString(char* s) {
     std::string out = s ? s : "";
@@ -3323,6 +3333,14 @@ public:
 
     void build(App& app) override {
         app.addSystem("candela", Phase::Update, [this](App& a) { frame(a); });
+        // Scripts and the data files the game read are assets: when hot
+        // reload sees one change, the game's code is compiled again and
+        // swapped in while it runs. drift.toml is tracked as a script too,
+        // so @settings resources read their sections again.
+        auto* assets = app.getResource<AssetServer>();
+        auto reload = [this](uint32_t, const std::string&) { return reloadGame(); };
+        assets->setReloader("script", reload);
+        assets->setReloader("data", reload);
     }
     DRIFT_PLUGIN(CandelaPlugin)
 
@@ -3340,6 +3358,10 @@ private:
             }
             loaded_ = true;
             handScriptComponentsToHost();
+            trackScripts(a);
+#ifdef __EMSCRIPTEN__
+            web_dev_status("");
+#endif
         }
         if (auto* cb = a.getResource<CollisionBridge>()) {
             for (int i = 0; i < cb->collisionStartCount(); ++i) {
@@ -3357,10 +3379,81 @@ private:
                          time ? time->scale : 1.0, time ? time->realDelta : 0.0);
     }
 
+    // Every .cdl file in the game's folder, and drift.toml, as "script"
+    // assets. Hidden folders and build output are skipped, and in the
+    // browser the runtime's own folders.
+    void trackScripts(App& a) {
+        auto* assets = a.getResource<AssetServer>();
+        if (!assets) return;
+        namespace fs = std::filesystem;
+        fs::path folder = fs::path(entry_).parent_path();
+        std::error_code ec;
+        for (auto it = fs::recursive_directory_iterator(folder.empty() ? fs::path(".") : folder, ec);
+             !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+            std::string name = it->path().filename().string();
+            if (it->is_directory(ec)) {
+                bool skip = name.rfind('.', 0) == 0 || name == "build" || name.rfind("build-", 0) == 0;
+#ifdef __EMSCRIPTEN__
+                skip = skip || name == "dev" || name == "proc" || name == "tmp" || name == "home" ||
+                       name == "drift-module";
+#endif
+                if (skip) it.disable_recursion_pending();
+                continue;
+            }
+            if (it->path().extension() != ".cdl") continue;
+            std::string path = it->path().lexically_normal().generic_string();
+            if (!assets->find("script", path.c_str())) assets->track("script", ++scriptIds_, path.c_str());
+        }
+        const std::string& toml = a.settingsStore().file();
+        if (!toml.empty() && !assets->find("script", toml.c_str())) assets->track("script", ++scriptIds_, toml.c_str());
+    }
+
+    // Compiles the game again and swaps it in, once per frame however many
+    // of its files changed. The old code keeps running when the new code
+    // does not compile or the running game cannot move into it.
+    bool reloadGame() {
+        if (!loaded_ || !g_app) return false;
+        auto* time = g_app->getResource<Time>();
+        uint64_t frame = time ? uint64_t(time->frame) : 0;
+        if (reloadedAt_ == frame) return reloadedOk_;
+        reloadedAt_ = frame;
+        int result = drift_host_reload(entry_.c_str(), moduleDir_.c_str());
+        reloadedOk_ = result == 1;
+        if (reloadedOk_) {
+            trackScripts(*g_app);
+#ifdef __EMSCRIPTEN__
+            web_dev_status("");
+#endif
+            return true;
+        }
+        std::string why = drift_host_error();
+        if (result == 0) {
+            DRIFT_LOG_ERROR("Candela: the changed code does not compile; the game keeps running the code it had.\n%s",
+                            why.c_str());
+#ifdef __EMSCRIPTEN__
+            web_dev_status(why.c_str());
+#endif
+        } else {
+#ifdef __EMSCRIPTEN__
+            DRIFT_LOG_WARN("Candela: the changed code cannot take over the running game: %s. Loading the page again.",
+                           why.c_str());
+            web_dev_reload_page(why.c_str());
+#else
+            DRIFT_LOG_WARN("Candela: the changed code cannot take over the running game: %s. "
+                           "The game keeps running the code it had; start it again to run the new code.",
+                           why.c_str());
+#endif
+        }
+        return false;
+    }
+
     std::string entry_;
     std::string moduleDir_;
     bool loaded_ = false;
     bool failed_ = false;
+    uint32_t scriptIds_ = 0;
+    uint64_t reloadedAt_ = UINT64_MAX;
+    bool reloadedOk_ = false;
 };
 
 // Where the installed toolchain keeps what `drift` reads at run time:
@@ -3417,12 +3510,13 @@ const char* usage =
     "\n"
     "Usage:\n"
     "  drift run [folder | script] [--config <path>] [--set section.key=value]...\n"
-    "  drift build --web [folder] [-o <out folder>]\n"
+    "  drift build --web [folder] [-o <out folder>] [--dev]\n"
     "  drift --version\n"
     "  drift --help\n"
     "\n"
     "run plays the game in a folder (default: this one) or starts at a script.\n"
-    "build --web writes a page to serve over HTTP (default: <folder>/build/web).\n";
+    "build --web writes a page to serve over HTTP (default: <folder>/build/web).\n"
+    "  --dev makes a page that hot reloads the game when the page is written again.\n";
 
 #ifndef __EMSCRIPTEN__
 // The web runtime `drift build --web` copies: DRIFT_WEB_RUNTIME, or the
@@ -3432,13 +3526,14 @@ std::string webRuntimeDir() {
     return installed("web");
 }
 
-// drift build --web [folder] [-o <out>]
+// drift build --web [folder] [-o <out>] [--dev]
 int buildCommand(int argc, char** argv, int first) {
-    bool web = false;
+    bool web = false, dev = false;
     std::string folder, out;
     for (int i = first; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--web") web = true;
+        else if (arg == "--dev") dev = true;
         else if (arg == "-o" && i + 1 < argc) out = argv[++i];
         else if (arg.rfind("-", 0) == 0) {
             std::fprintf(stderr, "drift build: unknown option %s\n\n%s", arg.c_str(), usage);
@@ -3462,7 +3557,7 @@ int buildCommand(int argc, char** argv, int first) {
         return 1;
     }
     std::string error, summary;
-    if (!drift::web::buildWebPage(folder, out, runtime, error, summary)) {
+    if (!drift::web::buildWebPage(folder, out, runtime, dev, error, summary)) {
         std::fprintf(stderr, "drift build: %s\n", error.c_str());
         return 1;
     }

@@ -18,6 +18,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{c_char, CStr, CString};
 
+mod reload;
 mod wire;
 
 // ---- The C++ side ----
@@ -599,6 +600,8 @@ struct Host {
     required: HashMap<String, std::rc::Rc<Vec<String>>>,
     /// Script components built from their defaults, for requires.
     component_defaults: HashMap<String, Value>,
+    /// Messages built from their defaults, for reloads.
+    message_defaults: HashMap<String, Value>,
     /// @drift::state enums by name.
     states: HashMap<String, StateNow>,
     /// This frame's time scale and unscaled frame time.
@@ -608,6 +611,14 @@ struct Host {
     initial_resources: HashMap<String, Value>,
     initial_enabled: Vec<bool>,
     restart_pending: bool,
+    /// Systems turned off because they raised an error; a reload with new
+    /// code turns them on again.
+    failed: HashSet<String>,
+    /// After a reload: startup systems the old program did not have, which
+    /// run once at the next frame, and states entered without their
+    /// on_enter systems having run.
+    pending_startup: Vec<String>,
+    pending_enter: Vec<(String, String)>,
 }
 
 struct StateNow {
@@ -1392,6 +1403,7 @@ impl Host {
                     QUEUE.with(|q| q.borrow_mut().clear());
                     log(2, &format!("{} raised {}: {}", sys.name, d.code, d.message));
                     self.systems[index].enabled = false;
+                    self.failed.insert(sys.name.clone());
                     SWITCHES.with(|w| w.borrow_mut().insert(sys.name.clone(), false));
                     break;
                 }
@@ -1434,6 +1446,20 @@ impl Host {
             // The first state of each enum is entered once Startup has run.
             let entered: Vec<(String, String)> = self.states.iter().map(|(e, s)| (e.clone(), s.now.clone())).collect();
             for (e, v) in entered {
+                self.run_transition(&order, time, |s| s.on_enter.as_ref() == Some(&(e.clone(), v.clone())));
+            }
+            self.pending_startup.clear();
+            self.pending_enter.clear();
+        } else {
+            // What a reload brought: new startup systems, and states that
+            // were entered without their on_enter systems.
+            let fresh = std::mem::take(&mut self.pending_startup);
+            for &i in &order {
+                if self.systems[i].startup && fresh.contains(&self.systems[i].name) {
+                    self.run(i, time);
+                }
+            }
+            for (e, v) in std::mem::take(&mut self.pending_enter) {
                 self.run_transition(&order, time, |s| s.on_enter.as_ref() == Some(&(e.clone(), v.clone())));
             }
         }
@@ -1509,6 +1535,7 @@ impl Host {
         SWITCHES.with(|w| *w.borrow_mut() = self.systems.iter().map(|s| (s.name.clone(), s.enabled)).collect());
         self.next_seq = 0;
         self.started = false;
+        self.failed.clear();
     }
 }
 
@@ -2139,9 +2166,13 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         g
     };
     // Components too, so a component another one requires can be added from
-    // its defaults.
+    // its defaults, and messages, whose new fields take their defaults when
+    // a reload carries a waiting message over.
     let component_list: Vec<(u16, Option<String>)> = named("component").iter().map(|(id, _)| (*id, None)).collect();
-    let all_defaults: Vec<(u16, Option<String>)> = resources_list.iter().cloned().chain(component_list.iter().cloned()).collect();
+    let message_list: Vec<(u16, Option<String>)> = named("message").iter().map(|(id, _)| (*id, None)).collect();
+    let message_ids: HashSet<u16> = message_list.iter().map(|m| m.0).collect();
+    let all_defaults: Vec<(u16, Option<String>)> =
+        resources_list.iter().cloned().chain(component_list.iter().cloned()).chain(message_list.iter().cloned()).collect();
     let mut buildable: Vec<&(u16, Option<String>)> = all_defaults.iter().collect();
     let program = loop {
         match engine(module_dir).compile(&format!("{src}{main}{}", glue_for(&buildable)), entry) {
@@ -2174,12 +2205,16 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
         initial_resources: HashMap::new(),
         initial_enabled: Vec::new(),
         restart_pending: false,
+        failed: HashSet::new(),
+        pending_startup: Vec::new(),
+        pending_enter: Vec::new(),
         reported: HashSet::new(),
         conditions: HashMap::new(),
         condition_cache: HashMap::new(),
         requires: HashMap::new(),
         required: HashMap::new(),
         component_defaults: HashMap::new(),
+        message_defaults: HashMap::new(),
         states: HashMap::new(),
         time_scale: (1.0, 0.0),
     };
@@ -2200,6 +2235,10 @@ fn load(entry: &str, module_dir: &str) -> Result<Host, String> {
             .program
             .call(&format!("__drift_default_{id}"), &[])
             .map_err(|d| format!("{name}: building its defaults raised {}: {}", d.code, d.message))?;
+        if message_ids.contains(&id) {
+            host.message_defaults.insert(name, v);
+            continue;
+        }
         if !resource_ids.contains(&id) {
             host.component_defaults.insert(name, v);
             continue;
@@ -2435,6 +2474,41 @@ pub extern "C" fn drift_host_frame(dt: f64, elapsed: f64, frame: i64, scale: f64
             }
         }
     });
+}
+
+/// Compiles the game again from its files and swaps the new program in while
+/// the game runs, keeping its entities, script components, resources and
+/// states (reload.rs says how values move). Returns 1 when the new program
+/// runs, 0 when it does not compile and 2 when it compiles but a value of the
+/// running game cannot move into it; in both refusals the old program keeps
+/// running and drift_host_error says why.
+#[no_mangle]
+pub extern "C" fn drift_host_reload(entry: *const c_char, module_dir: *const c_char) -> i32 {
+    let (Some(entry), Some(dir)) = (from_c(entry), from_c(module_dir)) else { return 0 };
+    match std::panic::catch_unwind(|| reload::reload(&entry, &dir)) {
+        Ok(Ok(notes)) => {
+            let names: Vec<String> = HOST.with(|h| {
+                h.borrow().as_ref().map(|host| host.systems.iter().map(|s| s.name.clone()).collect()).unwrap_or_default()
+            });
+            log(0, &format!("Candela: reloaded {entry}; {} systems: {}", names.len(), names.join(", ")));
+            for note in notes {
+                log(1, &format!("Candela: reload: {note}"));
+            }
+            1
+        }
+        Ok(Err(reload::Refused::Compile(e))) => {
+            set_error(&e);
+            0
+        }
+        Ok(Err(reload::Refused::Layout(e))) => {
+            set_error(&e);
+            2
+        }
+        Err(_) => {
+            set_error("the candela compiler stopped unexpectedly");
+            0
+        }
+    }
 }
 
 #[no_mangle]

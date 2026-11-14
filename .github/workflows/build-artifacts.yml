@@ -55,8 +55,9 @@ jobs:
           path: dist/drift-src.tar.gz
           if-no-files-found: error
 
-  # The page every Candela game shares in the browser: drift.html, drift.js
-  # and drift.wasm. The desktop jobs pack it into the toolchain archives.
+  # The page every Candela game shares in the browser: drift.html, drift.js,
+  # drift.wasm and drift-dev.js. The desktop jobs pack it into the toolchain
+  # archives.
   web-runtime:
     name: web runtime
     runs-on: ubuntu-24.04

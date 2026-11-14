@@ -1,8 +1,8 @@
 // Web pages for Candela games: a game folder packed into one file the web
 // runtime loads at startup.
 //
-// The web runtime (drift.html, drift.js, drift.wasm) is the same for every
-// game. A page is that runtime beside game.pack, which holds the game's
+// The web runtime (drift.html, drift.js, drift.wasm, and drift-dev.js for
+// dev pages) is the same for every game. A page is that runtime beside game.pack, which holds the game's
 // drift.toml, every .cdl script and the asset folder. The runtime fetches the
 // pack before main() runs and writes each file into its file system at the
 // path it had in the game folder, so the game starts as it does on the
@@ -26,11 +26,13 @@
 namespace drift::web {
 
 // Writes the page for the game in `folder` to `out`: index.html, drift.js,
-// drift.wasm from `runtime` and the game's game.pack. Returns false and sets
-// `error` when the folder, its entry script or the runtime is missing, or a
-// file cannot be read or written. `summary` gets one line saying what was
+// drift.wasm from `runtime` and the game's game.pack. A `dev` page also
+// loads drift-dev.js, which watches game.pack and hot reloads the game when
+// it changes, and is never an offline page. Returns false and sets `error`
+// when the folder, its entry script or the runtime is missing, or a file
+// cannot be read or written. `summary` gets one line saying what was
 // written.
 bool buildWebPage(const std::string& folder, const std::string& out, const std::string& runtime,
-                  std::string& error, std::string& summary);
+                  bool dev, std::string& error, std::string& summary);
 
 } // namespace drift::web

@@ -7,6 +7,10 @@
 // drift.wasm, and reports progress to Module.driftDownload (drift_web.js)
 // for the loading screen. A failure goes to Module.driftError when the page
 // has one.
+//
+// Module.driftInstallPack(buffer) writes a pack's files and returns the
+// paths whose contents changed; drift-dev.js uses it to bring in a newer
+// pack while the game runs.
 
 (function () {
   var url = Module['gamePack'] || 'game.pack';
@@ -57,13 +61,21 @@
     var indexLength = view.getUint32(12, true);
     var index = JSON.parse(new TextDecoder().decode(bytes.subarray(16, 16 + indexLength)));
     var base = 16 + indexLength;
+    var changed = [];
     index.files.forEach(function (file) {
       var path = '/' + file.path;
+      var data = bytes.subarray(base + file.offset, base + file.offset + file.size);
+      var old = null;
+      try { old = FS.readFile(path); } catch (e) {}
+      if (old && old.length === data.length && old.every(function (b, i) { return b === data[i]; })) return;
       var dir = path.substring(0, path.lastIndexOf('/'));
       if (dir) FS.mkdirTree(dir);
-      FS.writeFile(path, bytes.subarray(base + file.offset, base + file.offset + file.size));
+      FS.writeFile(path, data);
+      changed.push(file.path);
     });
+    return changed;
   };
+  Module['driftInstallPack'] = install;
 
   Module['preRun'] = [].concat(Module['preRun'] || []);
   Module['preRun'].push(function () {

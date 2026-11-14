@@ -11,6 +11,34 @@ cd build/web && python3 -m http.server     # open http://localhost:8000
 
 The folder holds `index.html`, the engine (`drift.js`, `drift.wasm`), `game.pack` with your scripts, `drift.toml` and assets, and the files the settings below add (`icon.png`, `manifest.webmanifest`, `sw.js`). Every link in it is relative, so the folder works at any address: the root of a site, a subfolder, or inside an iframe. Browsers do not run it from `file://`; serve it over HTTP.
 
+## Hot reload while you work
+
+Build with `--dev` and the open page picks up every new build without reloading:
+
+```sh
+drift build --web --dev                    # writes build/web/ with hot reload
+cd build/web && python3 -m http.server     # open http://localhost:8000
+# edit, then run `drift build --web --dev` again: the page changes in place
+```
+
+A dev page asks the server about `game.pack` twice a second. When the pack changes, the page fetches it, compiles the new code and swaps it into the running game. The player stays where it was, the score stays, and the next frame runs the new code. Any static server works: the page compares the `ETag`, `Last-Modified` and `Content-Length` the server sends for the pack.
+
+What a reload keeps:
+
+- **Entities and engine components**: every `Transform`, `Sprite`, body and particle stays as it was.
+- **Your components and resources**, matched to the new structs field by field. A field keeps its value; a new field gets its default; a removed field is dropped. A value the game never changed follows a new default: change `speed: float = 200.0` to `300.0` and every entity whose `speed` was still 200 now has 300.
+- **States** stay in the variant they were in. A removed variant, or a new `@state` enum, starts at its first variant and runs its `on_enter` systems.
+- **Messages** not read yet, and messages sent with `send_after`.
+- **Systems switched off** with `Systems` stay off. A system that raised an error and was turned off runs again with its new code.
+
+Startup systems do not run again, so an edit to `setup` shows the next time the game starts: reload the page, or start over with `cmd.restart()`. A startup system added by the edit runs once at the next frame.
+
+Changed textures, sounds, fonts and scenes load again in place. A changed data file or `drift.toml` reloads the code too, so resource defaults built with `load_data` read the new file.
+
+When the new code does not compile, the game keeps running the code it had, and the compiler's message shows over the game until the next build compiles or you close it. The same message goes to the browser console. When a value cannot move into the new code, the page loads again from the start and the console says which value: this happens when a field's type changes while it holds a value the game set, such as `hp: int` becoming `hp: float` after the player took damage.
+
+A dev page is never an offline page: `--dev` ignores `[web] offline`. Publish a build made without `--dev`; it carries no hot reload and asks the server nothing.
+
 ## The page
 
 While the engine and `game.pack` download, the page shows the game's name and a progress bar. Both downloads run at once, and the engine compiles while it arrives.

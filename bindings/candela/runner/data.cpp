@@ -5,6 +5,7 @@
 #include "services.hpp"
 
 #include <drift/App.hpp>
+#include <drift/AssetServer.hpp>
 #include <drift/Log.hpp>
 #include <drift/Settings.hpp>
 
@@ -172,7 +173,16 @@ std::string systemLanguage() {
 
 bool dataService(App& app, const std::string& f, const json& a, json& out) {
     if (f == "data_read") {
-        out = readData(a[0].get<std::string>(), a[1].get<std::string>());
+        std::string path = a[0].get<std::string>();
+        out = readData(path, a[1].get<std::string>());
+        // A file the game read is a "data" asset, so hot reload notices
+        // when it changes (the runner reloads the game's code then, and
+        // values built from the file are read again).
+        auto* assets = app.getResource<AssetServer>();
+        if (assets && !out.get<std::string>().empty() && !assets->find("data", path.c_str())) {
+            static uint32_t ids = 0;
+            assets->track("data", ++ids, path.c_str());
+        }
         return true;
     }
     if (f == "system_language") {

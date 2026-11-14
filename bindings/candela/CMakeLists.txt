@@ -90,8 +90,8 @@ function(drift_candela_program target)
 endfunction()
 
 if(EMSCRIPTEN)
-    # The web runtime: build/.../web/drift.html, drift.js and drift.wasm, the
-    # files every game page is made of. The `drift` module is built in; the
+    # The web runtime: build/.../web/drift.html, drift.js, drift.wasm and
+    # drift-dev.js, the files every game page is made of. The `drift` module is built in; the
     # game comes from game.pack, which pack_loader.js fetches before main().
     drift_candela_program(drift_web)
     set_target_properties(drift_web PROPERTIES
@@ -107,6 +107,12 @@ if(EMSCRIPTEN)
     file(GLOB_RECURSE _module_files CONFIGURE_DEPENDS ${_module}/*)
     set_property(TARGET drift_web APPEND PROPERTY LINK_DEPENDS
         ${DRIFT_WEB_SHELL} ${_runner}/pack_loader.js ${_module_files})
+    # drift-dev.js: hot reload, loaded only by pages built with --dev.
+    add_custom_command(TARGET drift_web POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_runner}/drift-dev.js
+            ${CMAKE_CURRENT_BINARY_DIR}/web/drift-dev.js
+        VERBATIM)
+    set_property(TARGET drift_web APPEND PROPERTY LINK_DEPENDS ${_runner}/drift-dev.js)
 
     # The page writer of `drift build --web`, run by Node.js, so the pages
     # below are made the way `drift build --web` makes them.
