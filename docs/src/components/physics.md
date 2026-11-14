@@ -199,7 +199,7 @@ void setup(ResMut<AssetServer> assets, Commands& cmd) {
 
 ### Static platform
 
-Static bodies do not move, but other bodies can collide with them:
+Static bodies do not move, but other bodies can collide with them. A level can hold thousands of them: each static body is made once, and the physics system moves it again only when its `Transform2D` or collider changes, so walls and floors that stay put cost almost nothing per frame.
 
 ```cpp
 cmd.spawn().insert(
@@ -386,7 +386,8 @@ int main() {
 
 ## Notes
 
-- Physics bodies require a `Transform2D` on the same entity. The physics system reads the initial position from it and writes back every frame.
+- Physics bodies require a `Transform2D` on the same entity. The physics system reads the initial position from it, writes the position of moving bodies back every frame, and places a body at its `Transform2D` again only when that changed.
+- Bodies that come to rest fall asleep and cost nothing until something touches them or your code moves them, so piles of crates and debris settle for free.
 - Changing a `RigidBody2D` or collider field on an entity that already has a body makes the body again with the new settings, at its current position and velocity.
 - Do not manually move a `Dynamic` body's `Transform2D` each frame: let the physics engine control it through velocity and forces. To teleport a body, set its position once via `Commands::entity().insert<Transform2D>(...)`.
 - Collision events are delivered via the event system. Events from frame N are readable on frame N+1. See the [Events](../concepts/events.md) chapter for details on `EventReader` and `EventWriter`.

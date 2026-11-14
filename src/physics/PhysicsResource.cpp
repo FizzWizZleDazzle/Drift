@@ -297,6 +297,15 @@ void PhysicsResource::setBodyRotation(PhysicsBody body, float rotation) {
     b2Body_SetTransform(id, pos, b2MakeRot(rotation));
 }
 
+bool PhysicsResource::bodyIsAt(PhysicsBody body, Vec2 pos, float rotation) const {
+    b2BodyId id = to_b2(body);
+    if (!b2Body_IsValid(id)) return false;
+    b2Transform t = b2Body_GetTransform(id);
+    b2Vec2 p = to_b2_vec2(pos);
+    b2Rot r = b2MakeRot(rotation);
+    return t.p.x == p.x && t.p.y == p.y && t.q.c == r.c && t.q.s == r.s;
+}
+
 Vec2 PhysicsResource::getBodyVelocity(PhysicsBody body) const {
     b2BodyId id = to_b2(body);
     if (!b2Body_IsValid(id)) return Vec2::zero();

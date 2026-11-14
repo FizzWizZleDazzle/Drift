@@ -19,6 +19,8 @@ cmd.spawn().insert(
 );
 ```
 
+The bridge keeps the cost of a big level low: a body is made once and made again only when its `RigidBody2D` or collider settings change, a static body is moved only when its `Transform2D` changes, and a moving body is placed only when it is not already where its `Transform2D` says, so bodies at rest can sleep. Box2D keeps static shapes in their own broadphase tree that the step never rebuilds, and sleeping is on, so a level of thousands of static colliders adds little to the step, and to the sync a check per collider that its settings did not change.
+
 Use the `PhysicsResource` directly for operations that go beyond component-driven behavior: raycasting, AABB queries, manual force application, or custom body management outside the ECS.
 
 ## Bodies
@@ -59,6 +61,7 @@ Vec2  getBodyPosition(PhysicsBody body) const;
 float getBodyRotation(PhysicsBody body) const;
 void  setBodyPosition(PhysicsBody body, Vec2 pos);
 void  setBodyRotation(PhysicsBody body, float rotation);
+bool  bodyIsAt(PhysicsBody body, Vec2 pos, float rotation) const;  // already exactly there?
 
 Vec2  getBodyVelocity(PhysicsBody body) const;
 void  setBodyVelocity(PhysicsBody body, Vec2 vel);
@@ -72,6 +75,8 @@ void  setBodyAngularVelocity(PhysicsBody body, float omega);
 void  setGravityScale(PhysicsBody body, float scale);
 bool  bodyValid(PhysicsBody body) const;
 ```
+
+Moving a body with `setBodyPosition` or `setBodyRotation` wakes it; `bodyIsAt` tells you whether the move would change anything.
 
 **Forces** are continuous and accumulate over a frame. **Impulses** are instantaneous velocity changes. Use forces for engines and thrusters; use impulses for jumps and knockback.
 

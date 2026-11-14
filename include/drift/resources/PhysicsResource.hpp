@@ -76,6 +76,10 @@ public:
     float getBodyRotation(PhysicsBody body) const;
     void setBodyPosition(PhysicsBody body, Vec2 pos);
     void setBodyRotation(PhysicsBody body, float rotation);
+    // True when the body sits exactly where setBodyPosition(pos) and
+    // setBodyRotation(rotation) would put it, to skip moves that change
+    // nothing (a move wakes the body).
+    bool bodyIsAt(PhysicsBody body, Vec2 pos, float rotation) const;
     Vec2 getBodyVelocity(PhysicsBody body) const;
     void setBodyVelocity(PhysicsBody body, Vec2 vel);
     void applyForce(PhysicsBody body, Vec2 force);
