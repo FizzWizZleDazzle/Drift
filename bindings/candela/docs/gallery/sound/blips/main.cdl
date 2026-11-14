@@ -1,0 +1,63 @@
+// ANCHOR: all
+// Sound without files: a blip made from samples plays on Space, higher
+// each time; a looping hum plays from a circle that drifts left and right
+// of the listener, so it pans and fades with distance. The browser starts
+// sound after the first click or key on the page.
+
+import "drift" { * };
+
+@resource
+struct Sfx { blip: Sound = Sound { .. }, hum: Sound = Sound { .. }, pitch: float = 1.0 }
+
+@component struct Drifter {}
+
+// A square wave of `hz` for `seconds`, fading out: samples from -1 to 1.
+fn tone(assets: Assets, hz: float, seconds: float) -> Sound {
+    let rate = 22050;
+    let samples: float[] = [];
+    let n = int(seconds * float(rate));
+    for i in range(n) {
+        let t = float(i) / float(rate);
+        let wave = 1.0;
+        if sin(6.2831853 * hz * t) < 0.0 {
+            wave = -1.0;
+        }
+        samples.push(wave * 0.3 * (1.0 - float(i) / float(n)));
+    }
+    return assets.create_sound(samples, rate);
+}
+
+// ANCHOR: load
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets, sfx: Sfx) {
+    sfx.blip = tone(assets, 660.0, 0.12);
+    sfx.hum = tone(assets, 110.0, 1.0);
+    // The listener: spatial sounds are heard from here.
+    cmd.spawn([at(240.0, 135.0), AudioListener { .. }, Rectangle { size: vec2(12.0, 12.0), .. }]);
+    // A looping hum that starts when spawned and follows its entity.
+    cmd.spawn([at(240.0, 80.0), Drifter {}, Circle { radius: 10.0, color: rgb(110, 180, 255), .. },
+               AudioSource { sound: sfx.hum, looping: true, volume: 0.5,
+                             spatial: true, min_distance: 40.0, max_distance: 220.0, .. }]);
+    cmd.spawn([at(10.0, 8.0), Text { value: "Space: blip   the blue hum pans as it drifts", size: 14.0, .. }]);
+}
+// ANCHOR_END: load
+
+// ANCHOR: play
+@system
+fn blip(input: Input, sfx: Sfx) {
+    if input.key_pressed(Key::Space) {
+        sfx.blip.play_with(PlayOptions { volume: 0.7, pitch: sfx.pitch, .. });
+        sfx.pitch = sfx.pitch * 1.06;
+        if sfx.pitch > 2.0 {
+            sfx.pitch = 1.0;
+        }
+    }
+}
+// ANCHOR_END: play
+
+@system
+fn drift_about(row: (Drifter, Transform), time: Time) {
+    let (_, t) = row;
+    t.position.x = 240.0 + 200.0 * sin(time.elapsed * 0.7);
+}
+// ANCHOR_END: all

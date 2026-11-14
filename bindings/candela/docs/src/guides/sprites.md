@@ -27,7 +27,7 @@ A sprite draws a texture at its entity's position. To show an image from a file:
 
 </details>
 
-A path that does not exist logs `loadTexture: cannot read 'assets/ship.png'` and throws. The throw reaches your code as the error `host_fn_error`, without the path in it, so `catch "drift_load_failed"` does not match it; use `catch e`. Uncaught, it stops the system that called `texture` (the rest of that Startup system does not run, so whatever it would have spawned is missing), logs `setup raised host_fn_error: ... drift_load_failed: assets/ship.png`, and the game keeps running:
+A path that does not exist logs `loadTexture: cannot read 'assets/ship.png'` and throws. The throw reaches your code as the error `host_fn_error`, without the path in it, so `catch "drift_load_failed"` does not match it; use `catch e`. Uncaught, it stops the system that called `texture` (the rest of that Startup system does not run, so whatever it would have spawned is missing), logs `setup raised host_fn_error: ... drift_load_failed: assets/ship.png`, and the game keeps running. In a resource's field default, such as `struct Art { ship: Texture = texture("assets/ship.png") }`, a missing file stops the whole game before it starts, with "The game could not start" and `Art: building its defaults raised host_fn_error` on the page. To fall back instead:
 
 ```rust
 let ship = Texture { .. };   // no texture: the sprite draws nothing
