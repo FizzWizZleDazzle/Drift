@@ -1,0 +1,15 @@
+[project]
+name = "Text Map"
+entry = "main.cdl"
+
+[window]
+width = 480
+height = 224
+
+[render]
+clear_color = [0.09, 0.08, 0.11]
+
+# ANCHOR: physics
+[physics]
+gravity = [0, 900]   # pixels per second squared; +y is down
+# ANCHOR_END: physics

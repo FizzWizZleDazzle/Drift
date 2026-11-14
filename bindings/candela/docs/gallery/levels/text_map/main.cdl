@@ -1,0 +1,78 @@
+// ANCHOR: all
+// A level written as text, turned into a tilemap made in code: a tileset
+// image painted from code (no files), one tile per character, and
+// colliders from the solid tiles. Balls drop from the top and land on it.
+
+import "drift" { * };
+
+const TILE: int = 16;
+
+fn level_rows() -> string[] {
+    return [
+        "..............................",
+        "..............................",
+        "..............................",
+        "..............................",
+        "......====..........====......",
+        "..............................",
+        "..............................",
+        "...........========...........",
+        "..............................",
+        "#............................#",
+        "#............................#",
+        "##########.........###########",
+        "##########.........###########",
+        "##############################",
+    ];
+}
+
+// ANCHOR: tileset
+// Two 16 x 16 tiles side by side: tile 1 is a wall block, tile 2 a ledge.
+// Tile ids count from 1 at the image's top-left, left to right.
+fn tileset(assets: Assets) -> Texture {
+    let img = assets.create_image(TILE * 2, TILE, rgba(0, 0, 0, 0));
+    img.fill_rect(rect(0.0, 0.0, 16.0, 16.0), rgb(90, 80, 110));
+    img.fill_rect(rect(1.0, 1.0, 14.0, 14.0), rgb(120, 110, 150));
+    img.fill_rect(rect(16.0, 0.0, 16.0, 6.0), rgb(200, 150, 80));
+    return img.to_texture();
+}
+// ANCHOR_END: tileset
+
+// ANCHOR: map
+@system(schedule: Schedule::Startup)
+fn build(cmd: Commands, assets: Assets) {
+    let rows = level_rows();
+    let map = assets.create_tilemap(rows[0].len(), rows.len(), TILE, tileset(assets), ["Ground"]);
+    for y in range(rows.len()) {
+        let chars = rows[y].chars();
+        for x in range(chars.len()) {
+            if chars[x] == "#" {
+                map.set_tile(0, cell(x, y), 1);
+            } else if chars[x] == "=" {
+                map.set_tile(0, cell(x, y), 2);
+            }
+        }
+    }
+    map.set_layer_solid(0, true, []);   // every tile on layer 0 collides
+    cmd.spawn([at(0.0, 0.0), Tilemap { map: map, colliders: true, .. }]);
+}
+// ANCHOR_END: map
+
+@resource
+struct Drops { every: Timer = repeating_timer(0.4), n: int = 0 }
+
+@component struct Ball {}
+
+// A ball every 0.4 s from along the top; each is removed after 4 s.
+@system
+fn drop_balls(cmd: Commands, drops: Drops, time: Time) {
+    if drops.every.tick(time.dt) == 0 {
+        return;
+    }
+    let x = 40.0 + float((drops.n * 137) % 400);
+    drops.n += 1;
+    cmd.spawn([at(x, 10.0), Ball {}, Circle { radius: 6.0, color: rgb(110, 180, 255), .. },
+               RigidBody { .. }, CircleCollider { radius: 6.0, restitution: 0.4, .. }, Velocity { .. },
+               Lifetime { seconds: 4.0 }]);
+}
+// ANCHOR_END: all

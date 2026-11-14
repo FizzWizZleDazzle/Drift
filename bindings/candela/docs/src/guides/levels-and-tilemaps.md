@@ -20,6 +20,27 @@ fn level_rows() -> string[] {
 
 A startup system walks the rows and spawns what each character stands for. Merge runs of wall characters into one wide collider rather than one per tile: fewer bodies, and nothing for a player to snag on between tiles. The [Platformer](../examples/platformer.md) builds its whole level this way.
 
+The quickest way to get such a level on screen with collision is to write it into a tilemap, which draws every tile at once and merges the solid ones into colliders for you. This program needs no files: it paints a two-tile tileset image from code, writes one tile per character, and marks the layer solid. Balls dropped on it land on the walls and ledges.
+
+![A level of purple wall tiles and orange ledges with blue balls falling onto it and bouncing](../images/levels/text_map.gif)
+
+```rust
+{{#include ../../gallery/levels/text_map/main.cdl:tileset}}
+
+{{#include ../../gallery/levels/text_map/main.cdl:map}}
+```
+
+What each step needs: the tileset image is cut into squares of the tile size (here 16 pixels), tile ids count from 1 at its top-left, `set_layer_solid` names the tile ids that collide (an empty list, as here, makes every tile on the layer solid), and `colliders: true` on the `Tilemap`, the default, builds the colliders. [Run it in the browser](../play/gallery/levels/text_map/).
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/levels/text_map/main.cdl:all}}
+```
+
+</details>
+
 ## Loading and showing a map
 
 Load the map through `Assets`, keep it in a resource, and put it in the world with a `Tilemap` component:
@@ -43,7 +64,7 @@ The map draws at its entity's `Transform`, with `z` and `layer` from the `Tilema
 
 ## Maps made in code
 
-`assets.create_tilemap(width, height, tile_size, tileset, layers)` makes an empty map of tile layers over one tileset image, for levels your systems build, such as [generated](procedural-generation.md) ones. Tile ids count from 1 at the image's top-left, left to right and then down. Fill it tile by tile with `set_tile`, or a whole [grid](procedural-generation.md#grids) at once with `fill`:
+`assets.create_tilemap(width, height, tile_size, tileset, layers)` makes an empty map of tile layers over one tileset image, for levels your systems build, such as [generated](procedural-generation.md) ones. Tile ids count from 1 at the image's top-left, left to right and then down. Fill it tile by tile with `set_tile`, or a whole [grid](procedural-generation.md#grids) at once with `write_grid`:
 
 ```rust
 let map = assets.create_tilemap(60, 32, 16, art.tiles, ["Ground", "Walls"]);
