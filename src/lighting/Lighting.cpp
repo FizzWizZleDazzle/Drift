@@ -405,14 +405,15 @@ void LightingPlugin::build(App& app) {
         "lights", "Each light's reach and cone, and the occluders that cast shadows", [](App& a, RendererResource& r) {
         const auto* st = a.getResource<LightingState>();
         if (!st) return;
+        const float px = debugPixel(r);
         for (const LightData& l : st->lights) {
             if (!r.visible(l.bounds, OverlayLayer)) continue;
             float m = std::max({l.color.r, l.color.g, l.color.b, 1e-3f});
             Color c{static_cast<uint8_t>(255.f * l.color.r / m), static_cast<uint8_t>(255.f * l.color.g / m),
                     static_cast<uint8_t>(255.f * l.color.b / m), 255};
-            r.drawCircleFilled(l.position, 5.f, c, 12);
+            r.drawCircleFilled(l.position, 5.f * px, c, 12);
             if (l.cosOuter < -1.5f) {
-                r.drawCircle(l.position, l.radius, c, 2.f, 64);
+                r.drawCircle(l.position, l.radius, c, 2.f * px, 64);
                 continue;
             }
             // A spot light: its cone's edges and the arc between them.
@@ -421,14 +422,14 @@ void LightingPlugin::build(App& app) {
             for (float s : {-1.f, 1.f}) {
                 float e = aim + s * half;
                 r.drawLine(l.position, {l.position.x + std::cos(e) * l.radius, l.position.y + std::sin(e) * l.radius},
-                           c, 2.f);
+                           c, 2.f * px);
             }
-            r.drawArc(l.position, l.radius, aim - half, aim + half, c, 2.f);
+            r.drawArc(l.position, l.radius, aim - half, aim + half, c, 2.f * px);
         }
         for (const OccluderData& o : st->occluders) {
             if (o.count < 2 || !r.visible(o.bounds, OverlayLayer)) continue;
             r.drawPolyline(st->points.data() + o.first, static_cast<int32_t>(o.count), Color{200, 200, 255, 255},
-                           2.f, true);
+                           2.f * px, true);
         }
     });
 }

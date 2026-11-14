@@ -71,6 +71,10 @@ private:
     std::vector<OutlineSource> outlines_;
 };
 
+// One screen pixel in world units through the default camera, so debug
+// drawing can keep its lines a fixed number of pixels wide.
+float debugPixel(const RendererResource& renderer);
+
 // The corners of a w x h box with its pivot `origin` (in box units) placed
 // at `pos`, scaled and turned like a sprite.
 void debugBox(Vec2 pos, float rotation, Vec2 scale, Vec2 size, Vec2 origin, Vec2 out[4]);

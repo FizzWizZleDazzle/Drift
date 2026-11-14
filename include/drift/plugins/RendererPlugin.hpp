@@ -29,6 +29,7 @@ public:
         views->add("bounds", "Outlines what each entity draws and marks its position",
                    [](App& a, RendererResource& r) {
             const Color line{255, 235, 80, 255}, pivot{255, 80, 220, 255};
+            const float px = debugPixel(r);
             a.getResource<DebugViews>()->forEachOutline(a, [&](const DebugOutline& o) {
                 uint8_t layer = o.layer == ScreenLayer ? ScreenLayer : OverlayLayer;
                 float x0 = o.corners[0].x, y0 = o.corners[0].y, x1 = x0, y1 = y0;
@@ -38,9 +39,11 @@ public:
                 }
                 if (!r.visible(Rect{x0, y0, x1 - x0, y1 - y0}, layer)) return;
                 r.setLayer(layer);
-                r.drawPolyline(o.corners, 4, line, 1.5f, true, 1e6f);
-                r.drawLine({o.pivot.x - 6.f, o.pivot.y}, {o.pivot.x + 6.f, o.pivot.y}, pivot, 2.f, 1e6f);
-                r.drawLine({o.pivot.x, o.pivot.y - 6.f}, {o.pivot.x, o.pivot.y + 6.f}, pivot, 2.f, 1e6f);
+                // Screen-layer outlines are in logical screen units.
+                float u = layer == ScreenLayer ? 1.f : px;
+                r.drawPolyline(o.corners, 4, line, 1.5f * u, true, 1e6f);
+                r.drawLine({o.pivot.x - 6.f * u, o.pivot.y}, {o.pivot.x + 6.f * u, o.pivot.y}, pivot, 2.f * u, 1e6f);
+                r.drawLine({o.pivot.x, o.pivot.y - 6.f * u}, {o.pivot.x, o.pivot.y + 6.f * u}, pivot, 2.f * u, 1e6f);
             });
         });
         app.addSystem("debug_views", Phase::Render, [](App& a) {

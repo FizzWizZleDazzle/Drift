@@ -50,7 +50,7 @@ struct Debug {
 | `keys` | `bool` | `true` | The keys work. Turn them off for a release. |
 | `slow` | `float` | `0.25` | The time scale of slow motion. |
 | `views` | `string[]` | `[]` | The debug views that are on, by name: `colliders`, `bounds`, `camera`, `lights` (with `[lighting]`) and `tiles`. drift.toml sets the ones on at the start. |
-| `size` | `float` | `0.0` | Text size in pixels; 0 picks one from the screen height (about 20 at 1080). |
+| `size` | `float` | `0.0` | Text size in screen pixels; 0 picks one from the window height (20 at 1080). The overlay keeps this size however the game's logical resolution is scaled. |
 | `watches` | `ResourceField[]` | `[]` | Resource fields the overlay shows; add them with watch&lt;Game>("score"). |
 | `lines` | `string[]` | `[]` | The lines `print` added that are still on the overlay, oldest first; at most eight. |
 | `ages` | `float[]` | `[]` | Seconds each of `lines` has been shown, in real time; a line goes after five. |

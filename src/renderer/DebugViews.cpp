@@ -15,6 +15,15 @@ void debugBox(Vec2 pos, float rotation, Vec2 scale, Vec2 size, Vec2 origin, Vec2
     }
 }
 
+float debugPixel(const RendererResource& renderer) {
+    Rect out = renderer.outputRect();
+    float lw = renderer.logicalWidth();
+    float scale = out.w > 0.f && lw > 0.f ? out.w / lw : 1.f;
+    float zoom = renderer.getCameraZoom(renderer.getDefaultCamera());
+    if (zoom <= 0.f) zoom = 1.f;
+    return 1.f / (scale * zoom);
+}
+
 void DebugViews::add(const std::string& name, const std::string& description, Draw draw) {
     for (View& v : views_) {
         if (v.name == name) {

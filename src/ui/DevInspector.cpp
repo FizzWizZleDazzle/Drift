@@ -308,12 +308,13 @@ void highlight(App& app, EntityId e, Color c) {
     auto* views = app.getResource<DebugViews>();
     if (!renderer) return;
     uint8_t oldLayer = renderer->layer();
+    const float px = debugPixel(*renderer);
     bool outlined = false;
     if (views) {
         views->forEachOutline(app, [&](const DebugOutline& o) {
             if (o.entity != e) return;
             renderer->setLayer(o.layer == ScreenLayer ? ScreenLayer : OverlayLayer);
-            renderer->drawPolyline(o.corners, 4, c, 2.f, true, 1e6f);
+            renderer->drawPolyline(o.corners, 4, c, o.layer == ScreenLayer ? 2.f : 2.f * px, true, 1e6f);
             outlined = true;
         });
     }
@@ -328,8 +329,8 @@ void highlight(App& app, EntityId e, Color c) {
         return;
     }
     if (!outlined) renderer->setLayer(OverlayLayer);
-    renderer->drawLine({pos.x - 8.f, pos.y}, {pos.x + 8.f, pos.y}, c, 2.f, 1e6f);
-    renderer->drawLine({pos.x, pos.y - 8.f}, {pos.x, pos.y + 8.f}, c, 2.f, 1e6f);
+    renderer->drawLine({pos.x - 8.f * px, pos.y}, {pos.x + 8.f * px, pos.y}, c, 2.f * px, 1e6f);
+    renderer->drawLine({pos.x, pos.y - 8.f * px}, {pos.x, pos.y + 8.f * px}, c, 2.f * px, 1e6f);
     renderer->setLayer(oldLayer);
 }
 

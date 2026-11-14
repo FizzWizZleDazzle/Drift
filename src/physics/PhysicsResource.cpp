@@ -6,6 +6,7 @@
 // =============================================================================
 
 #include <drift/resources/PhysicsResource.hpp>
+#include <drift/DebugViews.hpp>
 #include <drift/Log.hpp>
 #include <drift/resources/RendererResource.hpp>
 
@@ -779,7 +780,10 @@ int32_t PhysicsResource::bodyCount() const {
 
 namespace {
 
-constexpr float kDebugLine = 2.f;
+// One screen pixel in world units, and the line width, for this drawing
+// pass (set by drawDebug).
+float gPx = 1.f;
+float gLine = 2.f;
 
 RendererResource& rr(void* ctx) { return *static_cast<RendererResource*>(ctx); }
 
@@ -787,7 +791,7 @@ RendererResource& rr(void* ctx) { return *static_cast<RendererResource*>(ctx); }
 // velocities are drawn below, where the body kind, sleep and sensor flags
 // are known.
 void ddSegment(b2Vec2 p1, b2Vec2 p2, b2HexColor, void* ctx) {
-    rr(ctx).drawLine({p1.x, p1.y}, {p2.x, p2.y}, Color{230, 230, 230, 255}, kDebugLine);
+    rr(ctx).drawLine({p1.x, p1.y}, {p2.x, p2.y}, Color{230, 230, 230, 255}, gLine);
 }
 void ddPolygon(const b2Vec2*, int, b2HexColor, void*) {}
 void ddSolidPolygon(b2Transform, const b2Vec2*, int, float, b2HexColor, void*) {}
@@ -807,16 +811,16 @@ void dashed(RendererResource& r, Vec2 a, Vec2 b, Color c) {
     float len = std::sqrt(dx * dx + dy * dy);
     if (len <= 0.f) return;
     float ux = dx / len, uy = dy / len;
-    constexpr float on = 7.f, off = 5.f;
+    const float on = 7.f * gPx, off = 5.f * gPx;
     for (float t = 0.f; t < len; t += on + off) {
         float e = std::min(t + on, len);
-        r.drawLine({a.x + ux * t, a.y + uy * t}, {a.x + ux * e, a.y + uy * e}, c, kDebugLine);
+        r.drawLine({a.x + ux * t, a.y + uy * t}, {a.x + ux * e, a.y + uy * e}, c, gLine);
     }
 }
 
 void outline(RendererResource& r, const Vec2* pts, int n, Color c, bool sensor) {
     if (!sensor) {
-        r.drawPolyline(pts, n, c, kDebugLine, true);
+        r.drawPolyline(pts, n, c, gLine, true);
         return;
     }
     for (int i = 0; i < n; ++i) dashed(r, pts[i], pts[(i + 1) % n], c);
@@ -830,14 +834,14 @@ void circlePoints(Vec2 center, float radius, Vec2* out, int n) {
 }
 
 void arrow(RendererResource& r, Vec2 from, Vec2 to, Color c) {
-    r.drawLine(from, to, c, kDebugLine);
+    r.drawLine(from, to, c, gLine);
     float dx = to.x - from.x, dy = to.y - from.y;
     float len = std::sqrt(dx * dx + dy * dy);
     if (len < 1.f) return;
     float ux = dx / len, uy = dy / len;
-    float h = std::min(10.f, len * 0.4f);
-    r.drawLine(to, {to.x - ux * h - uy * h * 0.6f, to.y - uy * h + ux * h * 0.6f}, c, kDebugLine);
-    r.drawLine(to, {to.x - ux * h + uy * h * 0.6f, to.y - uy * h - ux * h * 0.6f}, c, kDebugLine);
+    float h = std::min(10.f * gPx, len * 0.4f);
+    r.drawLine(to, {to.x - ux * h - uy * h * 0.6f, to.y - uy * h + ux * h * 0.6f}, c, gLine);
+    r.drawLine(to, {to.x - ux * h + uy * h * 0.6f, to.y - uy * h - ux * h * 0.6f}, c, gLine);
 }
 
 bool collectShape(b2ShapeId id, void* ctx) {
@@ -877,6 +881,8 @@ void PhysicsResource::drawDebug(RendererResource& renderer) const {
     if (!b2World_IsValid(impl_->worldId)) return;
     const PhysicsDebugDraw& opt = impl_->debug;
     impl_->drawn = true;
+    gPx = debugPixel(renderer);
+    gLine = 2.f * gPx;
     uint8_t before = renderer.layer();
     renderer.setLayer(OverlayLayer);
 
@@ -913,7 +919,7 @@ void PhysicsResource::drawDebug(RendererResource& renderer) const {
                     circlePoints(center, c.radius, ring, 32);
                     outline(renderer, ring, 32, line, sensor);
                     b2Vec2 axis = b2RotateVector(xf.q, b2Vec2{c.radius, 0.f});
-                    renderer.drawLine(center, {center.x + axis.x, center.y + axis.y}, line, kDebugLine);
+                    renderer.drawLine(center, {center.x + axis.x, center.y + axis.y}, line, gLine);
                     break;
                 }
                 case b2_capsuleShape: {
@@ -932,8 +938,8 @@ void PhysicsResource::drawDebug(RendererResource& renderer) const {
                         dashed(renderer, a1, b1, line);
                         dashed(renderer, a2, b2, line);
                     } else {
-                        renderer.drawLine(a1, b1, line, kDebugLine);
-                        renderer.drawLine(a2, b2, line, kDebugLine);
+                        renderer.drawLine(a1, b1, line, gLine);
+                        renderer.drawLine(a2, b2, line, gLine);
                     }
                     break;
                 }
@@ -941,7 +947,7 @@ void PhysicsResource::drawDebug(RendererResource& renderer) const {
                     b2Segment sg = b2Shape_GetSegment(id);
                     b2Vec2 a = b2TransformPoint(xf, sg.point1), b = b2TransformPoint(xf, sg.point2);
                     if (sensor) dashed(renderer, {a.x, a.y}, {b.x, b.y}, line);
-                    else renderer.drawLine({a.x, a.y}, {b.x, b.y}, line, kDebugLine);
+                    else renderer.drawLine({a.x, a.y}, {b.x, b.y}, line, gLine);
                     break;
                 }
                 case b2_smoothSegmentShape: {
@@ -949,7 +955,7 @@ void PhysicsResource::drawDebug(RendererResource& renderer) const {
                     b2SmoothSegment sg = b2Shape_GetSmoothSegment(id);
                     b2Vec2 a = b2TransformPoint(xf, sg.segment.point1);
                     b2Vec2 b = b2TransformPoint(xf, sg.segment.point2);
-                    renderer.drawLine({a.x, a.y}, {b.x, b.y}, line, kDebugLine);
+                    renderer.drawLine({a.x, a.y}, {b.x, b.y}, line, gLine);
                     break;
                 }
                 case b2_polygonShape: {
@@ -968,15 +974,15 @@ void PhysicsResource::drawDebug(RendererResource& renderer) const {
                     break;
                 }
             }
-            if (opt.aabbs) renderer.drawRect(bounds, Color{255, 215, 0, 255}, 1.f);
+            if (opt.aabbs) renderer.drawRect(bounds, Color{255, 215, 0, 255}, gPx);
             if (opt.velocities && type != BodyType::Static &&
                 std::find(arrowed.begin(), arrowed.end(), body.index1) == arrowed.end()) {
                 arrowed.push_back(body.index1);
                 b2Vec2 v = b2Body_GetLinearVelocity(body);
                 float speed = std::sqrt(v.x * v.x + v.y * v.y);
                 if (speed >= 1.f) {
-                    // A quarter second of travel, at most 160 pixels.
-                    float len = std::min(speed * 0.25f, 160.f);
+                    // A quarter second of travel, at most 160 screen pixels.
+                    float len = std::min(speed * 0.25f, 160.f * gPx);
                     b2Vec2 c = b2Body_GetWorldCenterOfMass(body);
                     arrow(renderer, {c.x, c.y}, {c.x + v.x / speed * len, c.y + v.y / speed * len},
                           Color{255, 255, 255, 255});
@@ -989,9 +995,9 @@ void PhysicsResource::drawDebug(RendererResource& renderer) const {
         // Each contact shows for half a second of game time after it began.
         for (const auto& c : impl_->recentContacts) {
             auto a = static_cast<uint8_t>(80.f + 175.f * std::clamp(c.left / 0.5f, 0.f, 1.f));
-            renderer.drawCircleFilled(c.point, 4.f, Color{255, 60, 60, a}, 10);
-            renderer.drawLine(c.point, {c.point.x + c.normal.x * 24.f, c.point.y + c.normal.y * 24.f},
-                              Color{255, 230, 90, a}, kDebugLine);
+            renderer.drawCircleFilled(c.point, 4.f * gPx, Color{255, 60, 60, a}, 10);
+            renderer.drawLine(c.point, {c.point.x + c.normal.x * 24.f * gPx, c.point.y + c.normal.y * 24.f * gPx},
+                              Color{255, 230, 90, a}, gLine);
         }
     }
 

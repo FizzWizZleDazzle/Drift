@@ -78,7 +78,7 @@ app.initResource<DebugViews>()->add("paths", "Each enemy's path", [](App& a, Ren
 });
 ```
 
-Use `initResource` rather than `getResource`, so the view is added whichever plugin is built first.
+Use `initResource` rather than `getResource`, so the view is added whichever plugin is built first. `debugPixel(renderer)` is one screen pixel in world units through the default camera; the built-in views size their lines and marks with it, so they look the same at any zoom and in a game drawn at a small logical size and scaled up.
 
 The `bounds` view and the inspector's picking read entity outlines from sources plugins add with `addOutlines`: a function that hands each entity's `DebugOutline` (four corners, the entity's position, its layer and z) to a sink. Sprites, shapes and text add theirs; `debugBox` builds the corners of a box placed like a sprite. `pick(app, screenPos)` answers the entity whose outline holds a point on the screen.
 

@@ -149,20 +149,20 @@ void tilemapDebug(App& app, RendererResource& r) {
         int32_t y0 = std::max(0, static_cast<int32_t>(std::floor((view.y - o.y) / th)));
         int32_t y1 = std::min(h, static_cast<int32_t>(std::ceil((view.y + view.h - o.y) / th)));
         if (x0 > x1 || y0 > y1) return;
-        float zoom = r.getCameraZoom(r.getDefaultCamera());
-        bool cells = tw * zoom >= 4.f && th * zoom >= 4.f;
+        float px = debugPixel(r);
+        bool cells = tw >= 4.f * px && th >= 4.f * px;
         const Color cell{255, 255, 255, 70}, chunk{255, 200, 60, 230};
         for (int32_t x = x0; x <= x1; ++x) {
             bool edge = x % tilemap::ChunkSize == 0 || x == w;
             if (!edge && !cells) continue;
             r.drawLine({o.x + x * tw, o.y + y0 * th}, {o.x + x * tw, o.y + y1 * th}, edge ? chunk : cell,
-                       edge ? 2.f : 1.f);
+                       (edge ? 2.f : 1.f) * px);
         }
         for (int32_t y = y0; y <= y1; ++y) {
             bool edge = y % tilemap::ChunkSize == 0 || y == h;
             if (!edge && !cells) continue;
             r.drawLine({o.x + x0 * tw, o.y + y * th}, {o.x + x1 * tw, o.y + y * th}, edge ? chunk : cell,
-                       edge ? 2.f : 1.f);
+                       (edge ? 2.f : 1.f) * px);
         }
     });
 }
