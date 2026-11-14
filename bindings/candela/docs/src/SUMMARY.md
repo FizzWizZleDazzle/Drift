@@ -42,6 +42,7 @@
 - [Localization](guides/localization.md)
 - [Publishing to the Web](guides/publishing.md)
 - [Debugging](guides/debugging.md)
+- [Performance](guides/performance.md)
 
 # Examples
 
