@@ -1,0 +1,44 @@
+// ANCHOR: all
+// Moving with input actions: arrows, WASD or a gamepad stick drive the
+// "move" axis, and Space or the gamepad's A button the "dash" action from
+// drift.toml. The label shows what the game reads each frame.
+
+import "drift" { * };
+
+@component struct Player {}
+@component struct Readout {}
+
+// ANCHOR: bind
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, input: Input) {
+    // Axes are bound in code, once. Either set of keys, or the stick, moves.
+    input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+    input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+
+    cmd.spawn([at(240.0, 135.0), Player {}, Rectangle { size: vec2(24.0, 24.0), color: rgb(255, 210, 90), .. }]);
+    cmd.spawn([at(10.0, 8.0), Readout {}, Text { value: "", size: 14.0, .. }]);
+}
+// ANCHOR_END: bind
+
+// ANCHOR: move
+@system
+fn walk(player: (Player, Transform), input: Input, time: Time) {
+    let (_, t) = player;
+    let dir = input.axis2d("move");        // -1 to 1 on each axis; up is -y
+    let speed = 140.0;                     // pixels per second
+    if input.action_held("dash") {
+        speed = 320.0;
+    }
+    t.position = t.position + dir * speed * time.dt;
+}
+// ANCHOR_END: move
+
+@system
+fn readout(row: (Readout, Text), input: Input) {
+    let (_, text) = row;
+    let d = input.axis2d("move");
+    text.value = "axis2d(\"move\") = (" + fixed(d.x, 2) + ", " + fixed(d.y, 2) + ")   dash held: "
+        + string(input.action_held("dash"));
+}
+// ANCHOR_END: all

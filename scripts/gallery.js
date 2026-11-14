@@ -126,6 +126,8 @@ const pictures = [
     ...effects.map(p => ({ guide: 'effects', ...p })),
     ...cameras.map(p => ({ guide: 'cameras', ...p })),
     { guide: 'sprites', name: 'basics', frames: 3 },
+    { guide: 'input', name: 'move', frames: 2, count: 50, every: 3, fps: 20, width: 360,
+      route: [[null, 10], ['ArrowRight', 40], ['ArrowDown', 25], ['KeyA', 40], ['ArrowUp', 25], [null, 10]] },
 ];
 
 function arg(name, fallback) {

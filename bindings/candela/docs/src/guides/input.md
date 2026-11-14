@@ -2,6 +2,43 @@
 
 `Input` gives a system the keyboard, mouse and gamepads, and input actions: names such as "jump" or "move" that any mix of keys, buttons and sticks can drive. Write game logic against actions, and players can rebind them.
 
+## Moving with actions
+
+![A square moved right, down, left and up by the arrow keys and WASD; a label at the top shows the move axis reading each frame](../images/input/move.gif)
+
+The usual setup has three parts, and the first two must exist before a system reads an action.
+
+First, single-button actions in the `[input]` section of `drift.toml`. Each key is an action name and its value a list of bindings:
+
+```toml
+{{#include ../../gallery/input/move/drift.toml:input}}
+```
+
+Second, axes, bound in code once, in a Startup system, before any system reads them:
+
+```rust
+{{#include ../../gallery/input/move/main.cdl:bind}}
+```
+
+Third, systems that read the actions every frame. `axis2d` gives a direction from -1 to 1 on each axis (up is -y, and diagonals have length 1), so multiply it by a speed in pixels per second and by `time.dt`:
+
+```rust
+{{#include ../../gallery/input/move/main.cdl:move}}
+```
+
+[Run it in the browser](../play/gallery/input/move/). On a page, keys reach the game once the player has clicked into it.
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/input/move/main.cdl:all}}
+```
+
+</details>
+
+Reading an action nothing declared is an error, not a quiet `false`: `input.action_held("jmup")` stops that run of the system with `drift_unknown_action: no input action "jmup"; the actions are ...`, listing the names that exist, and logs it; the game keeps running. A binding drift.toml cannot read, such as `"key:Spcae"`, logs `drift.toml: input.jump: '"key:Spcae"' is not a binding` at startup and leaves it out; if it was the action's only binding, the action does not exist either. [Settings](../concepts/settings.md#input-bindings) lists the key and button names.
+
 ## Devices
 
 Take `Input` as a parameter and ask about this frame:
@@ -58,7 +95,7 @@ Bindings of one action combine: the action is held while any of them is, and pre
 
 Axes come in two kinds. `bind_axis(name, negative, positive)` makes a 1D axis from -1 to 1, read with `axis(name)`. `bind_axis2d` and `bind_stick` make a 2D axis, read with `axis2d(name)`; up is -Y, and diagonal keyboard input has length 1. An axis also counts as held once it passes the press threshold, so menus can navigate with sticks.
 
-`set_action_tuning(dead_zone, press_threshold, pad)` sets the stick dead zone, the press threshold, and which gamepad actions read (-1 reads any connected pad). Names nothing binds read as idle.
+`set_action_tuning(dead_zone, press_threshold, pad)` sets the stick dead zone, the press threshold, and which gamepad actions read (-1 reads any connected pad). An action name that no binding declares raises `drift_unknown_action` when read; see [Moving with actions](#moving-with-actions).
 
 ## Rebinding menus
 
