@@ -16,7 +16,7 @@ fn setup(cmd: Commands) {
         let x = 120.0 + 240.0 * float(i);
         cmd.spawn([at(x, 170.0), Circle { radius: 26.0, color: rgb(90, 100, 120), .. }]);
         // The barrel turns around its left end, which sits on the base.
-        cmd.spawn([at(x, 170.0), Rectangle { size: vec2(52.0, 14.0), anchor: vec2(0.0, 0.5), corner_radius: 5.0,
+        cmd.spawn([at(x, 170.0), Rectangle { size: vec2(52.0, 14.0), pivot: vec2(0.0, 0.5), corner_radius: 5.0,
                                              color: rgb(230, 200, 120), z: 1.0, .. },
                    Turret { speed: SPEEDS[i] }]);
         let label = "look_at";

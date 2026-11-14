@@ -24,7 +24,7 @@ fn scene(cmd: Commands, label: string) {
         cmd.spawn([at(x + 50.0, 150.0), Rectangle { size: vec2(4.0, 50.0), color: rgb(70, 70, 80), .. }]);
         cmd.spawn([at(x + 50.0, 124.0), Circle { radius: 6.0, color: rgb(255, 255, 255), .. }]);
     }
-    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), pivot: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
                layer: hud_layer(), .. }]);
     cmd.spawn([at(10.0, 6.0), Text { value: label, size: 15.0, layer: hud_layer(), .. }]);
 }

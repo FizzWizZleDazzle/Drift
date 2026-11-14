@@ -26,7 +26,7 @@ Each animation on this page comes from the program printed under it, a small gam
 
 ## Parts and pivots
 
-Each part is an entity with a `Sprite` (or a `Rectangle` or `Circle`) whose `anchor` sits on its joint, so it turns around the joint. Parts that ride on another part get it as their `Parent`, and their `Transform` counts from it. See [Parts that move together](sprites.md) for building a rig; this page is about moving one.
+Each part is an entity with a `Sprite` (or a `Rectangle` or `Circle`) whose `pivot` sits on its joint, so it turns around the joint. Parts that ride on another part get it as their `Parent`, and their `Transform` counts from it. See [Parts that move together](sprites.md) for building a rig; this page is about moving one.
 
 Two ways to drive a part:
 
@@ -37,13 +37,13 @@ Two ways to drive a part:
 
 ![One plank image turning around its center, around its left end, and around the middle of its bottom edge; a white dot marks the pivot](../images/animation/pivot.gif)
 
-A sprite turns and scales around its `anchor`, the point of the image that sits on the `Transform`'s position: (0, 0) is the top-left corner, (1, 1) the bottom-right, and the default (0.5, 0.5) the center. Put the anchor on the joint and the part swings like a limb instead of spinning like a propeller:
+A sprite turns and scales around its `pivot`, the point of the image that sits on the `Transform`'s position: (0, 0) is the top-left corner, (1, 1) the bottom-right, and the default (0.5, 0.5) the center. Put the anchor on the joint and the part swings like a limb instead of spinning like a propeller:
 
 ```rust
 {{#include ../../gallery/animation/pivot/main.cdl:pivot}}
 ```
 
-For a joint at pixel (jx, jy) of a w x h image, the anchor is `vec2(jx / w, jy / h)`. `Rectangle` has the same `anchor`; a `Circle` turns around its center. [Run it in the browser](../play/gallery/animation/pivot/).
+For a joint at pixel (jx, jy) of a w x h image, the pivot is `vec2(jx / w, jy / h)`. `Rectangle` has the same `pivot`; a `Circle` turns around its center. [Run it in the browser](../play/gallery/animation/pivot/).
 
 <details>
 <summary>The whole program</summary>
@@ -248,7 +248,7 @@ A soft spring (stiffness 60 to 90, damping 3 to 5) trails and wobbles after the 
 {{#include ../../gallery/animation/two_bone/main.cdl:arm}}
 ```
 
-`bend` 1.0 puts the joint clockwise of the root-to-target line on screen, -1.0 counter-clockwise: pick the side the knee points to, and flip it when the character turns around. Draw each bone anchored at its start, `anchor: vec2(0.0, 0.5)`, pointing along +x. When the bones are children of each other, as in the creature below, set local rotations instead: the thigh's is `angle_diff(body_rotation, pose.upper)` and the shin's `angle_diff(pose.upper, pose.lower)`. [Run it in the browser](../play/gallery/animation/two_bone/) and move the mouse.
+`bend` 1.0 puts the joint clockwise of the root-to-target line on screen, -1.0 counter-clockwise: pick the side the knee points to, and flip it when the character turns around. Draw each bone with its pivot at its start, `pivot: vec2(0.0, 0.5)`, pointing along +x. When the bones are children of each other, as in the creature below, set local rotations instead: the thigh's is `angle_diff(body_rotation, pose.upper)` and the shin's `angle_diff(pose.upper, pose.lower)`. [Run it in the browser](../play/gallery/animation/two_bone/) and move the mouse.
 
 <details>
 <summary>The whole program</summary>
@@ -420,13 +420,13 @@ let eye = cmd.spawn_child(head, [at(6.0, 7.0 * side), Circle { radius: 5.0, .. }
 cmd.spawn_child(eye, [at(0.0, 0.0), Circle { radius: 2.5, color: rgb(20, 20, 30), .. }, Pupil {}]);
 ```
 
-The creature faces +x in its own space: the head is 30 pixels in front, and +y is its right side. Each leg is a chain of three children, thigh, shin and paw, each placed at the end of the one before; the bones are rectangles anchored at their left middle, `anchor: vec2(0.0, 0.5)`, so they turn around the joint:
+The creature faces +x in its own space: the head is 30 pixels in front, and +y is its right side. Each leg is a chain of three children, thigh, shin and paw, each placed at the end of the one before; the bones are rectangles with their pivot at their left middle, `pivot: vec2(0.0, 0.5)`, so they turn around the joint:
 
 ```rust
 let thigh = cmd.spawn_child(body, [Transform { position: hip, .. },
-    Rectangle { size: vec2(leg.upper, 8.0), anchor: vec2(0.0, 0.5), corner_radius: 4.0, .. }, leg]);
+    Rectangle { size: vec2(leg.upper, 8.0), pivot: vec2(0.0, 0.5), corner_radius: 4.0, .. }, leg]);
 let shin = cmd.spawn_child(thigh, [Transform { position: vec2(leg.upper, 0.0), .. },
-    Rectangle { size: vec2(leg.lower, 6.0), anchor: vec2(0.0, 0.5), corner_radius: 3.0, .. }, Shin { leg: thigh }]);
+    Rectangle { size: vec2(leg.lower, 6.0), pivot: vec2(0.0, 0.5), corner_radius: 3.0, .. }, Shin { leg: thigh }]);
 cmd.spawn_child(shin, [at(leg.lower, 0.0), Circle { radius: 5.0, .. }]);
 ```
 
@@ -518,7 +518,7 @@ draw.line(base, t.position, rgb(60, 110, 70), 2.0);
 
 ### Where to go from here
 
-- Swap the shapes for sprites: put each bone's image on the same entity with `anchor` on its joint.
+- Swap the shapes for sprites: put each bone's image on the same entity with `pivot` on its joint.
 - Turn a side-view character around by setting the root's `scale.x` to -1: its children mirror with it, rotations included.
 - Give a spider eight legs in four groups, or a centipede a row of legs whose phases come from `sine_wave`.
 - Make a neck or a tentacle that reaches with an `IkChain`, and use `limit_all` so it curls instead of folding.

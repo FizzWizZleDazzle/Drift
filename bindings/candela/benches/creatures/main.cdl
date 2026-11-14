@@ -41,12 +41,12 @@ fn spawn_leg(cmd: Commands, body: Entity, start: Vec2, hip: Vec2, rest: Vec2, be
     let leg = Leg { body: body, hip: hip, rest: rest, bend: bend, foot: foot(start + rest), .. };
     let thigh = cmd.spawn_child(body, [
         Transform { position: hip, .. },
-        Rectangle { size: vec2(leg.upper, 6.0), anchor: vec2(0.0, 0.5), color: DARK, z: 1.0, .. },
+        Rectangle { size: vec2(leg.upper, 6.0), pivot: vec2(0.0, 0.5), color: DARK, z: 1.0, .. },
         leg,
     ]);
     let shin = cmd.spawn_child(thigh, [
         Transform { position: vec2(leg.upper, 0.0), .. },
-        Rectangle { size: vec2(leg.lower, 4.0), anchor: vec2(0.0, 0.5), color: DARK, z: 1.1, .. },
+        Rectangle { size: vec2(leg.lower, 4.0), pivot: vec2(0.0, 0.5), color: DARK, z: 1.1, .. },
         Shin { leg: thigh },
     ]);
     cmd.spawn_child(shin, [at(leg.lower, 0.0), Circle { radius: 3.0, color: SKIN, z: 1.2, .. }]);

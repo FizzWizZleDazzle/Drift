@@ -56,7 +56,7 @@ Draws a texture at the entity's position. Load the texture with
 struct Sprite {
     image: Texture = Texture { .. },
     frame: Rect = Rect { .. },
-    anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },
+    pivot: Vec2 = Vec2 { x: 0.5, y: 0.5 },
     color: Color = Color { .. },
     flip_x: bool = false,
     flip_y: bool = false,
@@ -72,7 +72,7 @@ struct Sprite {
 |-------|------|---------|---------|
 | `image` | `Texture` | `Texture { .. }` | The texture to draw |
 | `frame` | `Rect` | `Rect { .. }` | The part of the image to draw, in pixels; a zero-size rect draws all of it |
-| `anchor` | `Vec2` | `Vec2 { x: 0.5, y: 0.5 }` | The point of the image placed at the position, from (0, 0) top-left to (1, 1) bottom-right; it turns and scales around this point |
+| `pivot` | `Vec2` | `Vec2 { x: 0.5, y: 0.5 }` | The point of the image placed at the position, from (0, 0) top-left to (1, 1) bottom-right, as a fraction of the image; it turns and scales around this point |
 | `color` | `Color` | `Color { .. }` | Tint, multiplied with the image's colors |
 | `flip_x` | `bool` | `false` | Mirrors the image left to right |
 | `flip_y` | `bool` | `false` | Mirrors the image top to bottom |
@@ -83,7 +83,7 @@ struct Sprite {
 | `material` | `Material` | `Material { .. }` | a custom shader; Material {} draws as usual |
 
 ```rust
-cmd.spawn([at(160.0, 90.0), Sprite { image: texture("assets/ship.png"), anchor: vec2(0.5, 1.0), .. }]);
+cmd.spawn([at(160.0, 90.0), Sprite { image: texture("assets/ship.png"), pivot: vec2(0.5, 1.0), .. }]);
 ```
 
 ## Rectangle
@@ -96,7 +96,7 @@ struct Rectangle {
     color: Color = Color { .. },
     outline: float = 0.0,
     corner_radius: float = 0.0,
-    anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },
+    pivot: Vec2 = Vec2 { x: 0.5, y: 0.5 },
     z: float = 0.0,
     layer: int = 0,
     visible: bool = true,
@@ -109,7 +109,7 @@ struct Rectangle {
 | `color` | `Color` | `Color { .. }` | Fill or line color |
 | `outline` | `float` | `0.0` | Line width; 0 fills the rectangle |
 | `corner_radius` | `float` | `0.0` | Rounds the corners |
-| `anchor` | `Vec2` | `Vec2 { x: 0.5, y: 0.5 }` | The point placed at the position, from (0, 0) top-left to (1, 1) bottom-right |
+| `pivot` | `Vec2` | `Vec2 { x: 0.5, y: 0.5 }` | The point placed at the position, from (0, 0) top-left to (1, 1) bottom-right, as a fraction of `size`; it turns around this point |
 | `z` | `float` | `0.0` | Draw order within the layer |
 | `layer` | `int` | `0` | Render layer |
 | `visible` | `bool` | `true` | `false` hides it |
@@ -157,7 +157,7 @@ struct Text {
     color: Color = Color { .. },
     align: Align = Align::Left,
     valign: VAlign = VAlign::Top,
-    wrap: float = 0.0,
+    wrap_width: float = 0.0,
     line_spacing: float = 1.0,
     outline: float = 0.0,
     outline_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
@@ -178,7 +178,7 @@ struct Text {
 | `color` | `Color` | `Color { .. }` | Text color |
 | `align` | `Align` | `Align::Left` | Which point of the text sits on the position, left to right |
 | `valign` | `VAlign` | `VAlign::Top` | Which point of the text sits on the position, top to bottom |
-| `wrap` | `float` | `0.0` | Wraps lines at this width in pixels; 0 does not wrap |
+| `wrap_width` | `float` | `0.0` | Wraps lines at this width in pixels; 0 does not wrap |
 | `line_spacing` | `float` | `1.0` | Multiplies the distance between lines |
 | `outline` | `float` | `0.0` | Outline width around each glyph; 0 for none |
 | `outline_color` | `Color` | `Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }` | Outline color |
@@ -319,7 +319,7 @@ cmd.spawn([at(x, y), Circle { radius: 8.0, .. }, CircleCollider { radius: 8.0, s
 ## TextureCollider
 
 A collider the shape of the entity's `Sprite`: its solid pixels, holes included. It follows
-the sprite's frame, anchor, flips and the `Transform`'s scale. Without a `RigidBody`, or
+the sprite's frame, pivot, flips and the `Transform`'s scale. Without a `RigidBody`, or
 with a static one, it collides along the outlines, which suits large terrain; dynamic and
 kinematic bodies and sensors get convex pieces. Every entity showing the same image, frame
 and settings shares one tracing. See [Colliders from
@@ -345,7 +345,7 @@ struct TextureCollider {
 | `threshold` | `float` | `0.5` | A pixel is solid when its alpha, 0 to 1, is at least this |
 | `tolerance` | `float` | `1.0` | How far, in image pixels, the outline may stray from the pixels; higher gives fewer points |
 | `min_area` | `float` | `4.0` | Solid specks and holes smaller than this many square pixels are dropped |
-| `follow_sprite` | `bool` | `false` | Make the shape again when the frame, anchor, a flip or the scale changes, for animated sprites; each change costs a new body |
+| `follow_sprite` | `bool` | `false` | Make the shape again when the frame, pivot, a flip or the scale changes, for animated sprites; each change costs a new body |
 | `sensor` | `bool` | `false` | Detects overlaps without pushing anything |
 | `density` | `float` | `1.0` | Mass per area |
 | `friction` | `float` | `0.3` | 0 is ice |

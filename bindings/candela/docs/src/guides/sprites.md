@@ -43,20 +43,20 @@ A `Sprite` with no image (`Texture { .. }`) draws nothing; to draw a plain box, 
 `Assets.create_texture(w, h, pixels)` makes a texture from colors instead, and a render target is a texture too. Textures sample with `Filter::Nearest` by default, which keeps pixel art crisp; call `set_filter(Filter::Linear)` for smooth scaling.
 
 - `frame` draws part of the image, as a `Rect` in pixels. A zero-size rect draws all of it. Sprite sheets hand out these rects; see [Sprite sheets](#sprite-sheets).
-- `anchor` is the point of the image placed at the position, from (0, 0) top-left to (1, 1) bottom-right. The default (0.5, 0.5) centers it. It is also the pivot: the sprite turns and scales around it.
+- `pivot` is the point of the image placed at the position, from (0, 0) top-left to (1, 1) bottom-right. The default (0.5, 0.5) centers it. The sprite turns and scales around it.
 - `color` tints the image and its `a` sets the opacity: `color: rgb(255, 255, 255).alpha(0.5)` draws it half transparent. `flip_x` and `flip_y` mirror it, `blend` picks how it mixes with what is behind it (`Blend::Additive` for glows).
-- `Transform.rotation` (radians, clockwise on screen) and `Transform.scale` turn and size the sprite around its anchor. A negative scale mirrors it as well.
+- `Transform.rotation` (radians, clockwise on screen) and `Transform.scale` turn and size the sprite around its pivot. A negative scale mirrors it as well.
 
-To turn a limb around its joint rather than its middle, put the anchor on the joint. For an arm image 64 pixels wide whose shoulder is at its left edge, halfway down:
+To turn a limb around its joint rather than its middle, put the pivot on the joint. For an arm image 64 pixels wide whose shoulder is at its left edge, halfway down:
 
 ```rust
 cmd.spawn([
     Transform { position: vec2(200.0, 150.0), rotation: 0.6, .. },
-    Sprite { image: texture("assets/arm.png"), anchor: vec2(0.0, 0.5), .. },
+    Sprite { image: texture("assets/arm.png"), pivot: vec2(0.0, 0.5), .. },
 ]);
 ```
 
-For a joint at pixel (jx, jy) of a w x h image, the anchor is `vec2(jx / w, jy / h)`. With a `frame`, count from the frame's top-left and use its size.
+For a joint at pixel (jx, jy) of a w x h image, the pivot is `vec2(jx / w, jy / h)`. With a `frame`, count from the frame's top-left and use its size.
 
 ## Shapes
 
@@ -125,8 +125,8 @@ A `Parent` makes an entity's `Transform` count from another entity: its position
 fn build_arm(cmd: Commands) {
     let arm = texture("assets/arm.png");   // 64 x 12, shoulder at the left edge
     let body = cmd.spawn([at(200.0, 240.0), Rectangle { size: vec2(40.0, 60.0), .. }]);
-    let upper = cmd.spawn_child(body, [at(15.0, -20.0), Sprite { image: arm, anchor: vec2(0.0, 0.5), .. }, Joint { speed: 1.0 }]);
-    let fore = cmd.spawn_child(upper, [at(64.0, 0.0), Sprite { image: arm, anchor: vec2(0.0, 0.5), .. }, Joint { speed: 2.0 }]);
+    let upper = cmd.spawn_child(body, [at(15.0, -20.0), Sprite { image: arm, pivot: vec2(0.0, 0.5), .. }, Joint { speed: 1.0 }]);
+    let fore = cmd.spawn_child(upper, [at(64.0, 0.0), Sprite { image: arm, pivot: vec2(0.0, 0.5), .. }, Joint { speed: 2.0 }]);
     cmd.spawn_child(fore, [at(64.0, 0.0), Circle { radius: 8.0, .. }]);   // the hand, at the forearm's end
 }
 

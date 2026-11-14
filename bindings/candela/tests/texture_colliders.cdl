@@ -93,7 +93,7 @@ fn setup(cmd: Commands, assets: Assets, physics: Physics, test: Test) {
 
     test.ground = make_ground(assets);
     test.ground_texture = test.ground.to_texture();
-    cmd.spawn([at(0.0, 400.0), Sprite { image: test.ground_texture, anchor: vec2(0.0, 0.0), .. },
+    cmd.spawn([at(0.0, 400.0), Sprite { image: test.ground_texture, pivot: vec2(0.0, 0.0), .. },
                TextureCollider { .. }]);
 
     let blob_t = blob(assets).to_texture();
@@ -137,7 +137,7 @@ fn setup(cmd: Commands, assets: Assets, physics: Physics, test: Test) {
     // A sensor probe: the L flipped both ways, anchored at its bottom-right
     // corner and doubled, so it lies up and to the left of its position.
     test.probe = cmd.spawn([Transform { position: vec2(1200.0, 100.0), scale: vec2(2.0, 2.0), .. },
-                            Sprite { image: ell_t, anchor: vec2(1.0, 1.0), flip_x: true, flip_y: true, .. },
+                            Sprite { image: ell_t, pivot: vec2(1.0, 1.0), flip_x: true, flip_y: true, .. },
                             TextureCollider { sensor: true, .. }]);
 
     // A kinematic body whose collider follows its sprite sheet frame.

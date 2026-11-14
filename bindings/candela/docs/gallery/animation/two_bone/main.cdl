@@ -21,7 +21,7 @@ struct Arm {
 
 fn bone(cmd: Commands, length: float, width: float, color: Color) -> Entity {
     // Anchored at its start, pointing along +x, so its rotation aims it.
-    return cmd.spawn([Transform { .. }, Rectangle { size: vec2(length, width), anchor: vec2(0.0, 0.5),
+    return cmd.spawn([Transform { .. }, Rectangle { size: vec2(length, width), pivot: vec2(0.0, 0.5),
                                                     corner_radius: width / 2.0, color: color, z: 1.0, .. }]);
 }
 

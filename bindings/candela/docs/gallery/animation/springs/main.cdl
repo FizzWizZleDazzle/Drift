@@ -25,7 +25,7 @@ fn setup(cmd: Commands) {
     cmd.spawn([at(120.0, 270.0), Circle { radius: 10.0, color: rgb(120, 200, 140), z: 1.0, .. }, Bead { .. }]);
     cmd.spawn([at(120.0, 70.0), Circle { radius: 16.0, color: rgb(110, 170, 240), z: 1.0, .. }, Ball { .. }]);
     cmd.spawn([at(600.0, 140.0), Circle { radius: 30.0, color: rgb(70, 75, 95), .. }]);
-    cmd.spawn([at(600.0, 140.0), Rectangle { size: vec2(70.0, 8.0), anchor: vec2(0.0, 0.5), corner_radius: 4.0,
+    cmd.spawn([at(600.0, 140.0), Rectangle { size: vec2(70.0, 8.0), pivot: vec2(0.0, 0.5), corner_radius: 4.0,
                                              color: rgb(240, 200, 100), z: 1.0, .. }, Needle { .. }]);
     cmd.spawn([at(120.0, 70.0), Rectangle { size: vec2(14.0, 14.0), color: rgb(240, 90, 80), z: 2.0, .. }, Marker {}]);
     cmd.spawn([at(270.0, 284.0), Text { value: "Spring", size: 14.0, align: Align::Center, .. }]);

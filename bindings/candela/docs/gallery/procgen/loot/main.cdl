@@ -45,7 +45,7 @@ fn setup(cmd: Commands, assets: Assets) {
     for i in range(4) {
         let y = 40.0 + 44.0 * float(i);
         let w = float(counts[i]) * 0.4;
-        cmd.spawn([at(420.0, y), Rectangle { size: vec2(w, 26.0), color: COLORS[i], anchor: vec2(0.0, 0.5), .. }]);
+        cmd.spawn([at(420.0, y), Rectangle { size: vec2(w, 26.0), color: COLORS[i], pivot: vec2(0.0, 0.5), .. }]);
         cmd.spawn([at(410.0, y - 9.0), Text { value: NAMES[i], size: 16.0, align: Align::Right, .. }]);
         cmd.spawn([at(426.0 + w, y - 9.0), Text { value: string(counts[i]), size: 16.0, .. }]);
     }

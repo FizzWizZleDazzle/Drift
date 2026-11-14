@@ -242,8 +242,9 @@ struct MapObject {
     shape: ObjectShape = ObjectShape::Rect,
     /// Its bounding box: top-left and size, in pixels; zero size for a point
     bounds: Rect = Rect { .. },
-    /// the pivot: LDtk's pivot, a Tiled tile object's bottom-left
-    anchor: Vec2 = Vec2 { .. },
+    /// Where it stands in the world, in pixels: LDtk's pivot point, a Tiled tile object's
+    /// bottom-left; use it as the spawned entity's position
+    position: Vec2 = Vec2 { .. },
     /// radians
     rotation: float = 0.0,
     /// the tile of a Tile object
@@ -298,7 +299,7 @@ impl Map {
             let o = MapObject { map: self, layer: int(f[k]), index: int(f[k + 1]), id: int(f[k + 2]),
                                 name: names[n * 2], kind: names[n * 2 + 1], shape: object_shape(int(f[k + 3])),
                                 bounds: Rect { x: f[k + 4], y: f[k + 5], w: f[k + 6], h: f[k + 7] },
-                                anchor: Vec2 { x: f[k + 8], y: f[k + 9] }, rotation: f[k + 10], tile: int(f[k + 11]), .. };
+                                position: Vec2 { x: f[k + 8], y: f[k + 9] }, rotation: f[k + 10], tile: int(f[k + 11]), .. };
             let count = int(f[k + 12]);
             k += 13;
             for i in range(count) {

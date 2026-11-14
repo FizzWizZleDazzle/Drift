@@ -48,7 +48,7 @@ fn walk(row: (Walker, Transform), time: Time, cmd: Commands) {
 // ANCHOR_END: walker
 
 fn limb(cmd: Commands, length: float, width: float, z: float) -> Entity {
-    return cmd.spawn([Transform { .. }, Rectangle { size: vec2(length, width), anchor: vec2(0.0, 0.5),
+    return cmd.spawn([Transform { .. }, Rectangle { size: vec2(length, width), pivot: vec2(0.0, 0.5),
                                                     corner_radius: width / 2.0, color: rgb(110, 170, 240), z: z, .. }]);
 }
 
@@ -63,7 +63,7 @@ fn setup(cmd: Commands) {
             let z = float(leg) * 2.0;   // the far leg behind the body, the near one in front
             bones.push(limb(cmd, THIGH, 10.0, z));
             bones.push(limb(cmd, SHIN, 8.0, z));
-            bones.push(cmd.spawn([Transform { .. }, Rectangle { size: vec2(16.0, 6.0), anchor: vec2(0.3, 1.0),
+            bones.push(cmd.spawn([Transform { .. }, Rectangle { size: vec2(16.0, 6.0), pivot: vec2(0.3, 1.0),
                                                                 corner_radius: 3.0, color: rgb(240, 200, 90), z: z, .. }]));
             feet.push(foot(vec2(360.0, ground)));
         }

@@ -95,7 +95,7 @@ Map methods act on the map at once.
 
 ## Objects
 
-Tiled object layers and LDtk entity layers are data for your systems. `objects(kind)` lists the objects of one Tiled class or LDtk entity identifier, with their world `bounds` and `anchor` (the pivot point); spawn entities for the ones you care about:
+Tiled object layers and LDtk entity layers are data for your systems. `objects(kind)` lists the objects of one Tiled class or LDtk entity identifier, with their world `bounds` and `position` (the point they stand on); spawn entities for the ones you care about:
 
 ```rust
 @system(schedule: Schedule::Startup, after: [load_level])
@@ -107,14 +107,14 @@ fn spawn_objects(cmd: Commands, level: Level, art: Art) {   // Art holds the tex
             value = int(text);
         }
         cmd.spawn([
-            Transform { position: o.anchor, .. },
+            Transform { position: o.position, .. },
             Sprite { image: art.coin, .. },
             CircleCollider { radius: 8.0, sensor: true, .. },
             Coin { value: value },
         ]);
     }
     for o in level.map.objects("PlayerSpawn") {
-        cmd.spawn([Transform { position: o.anchor, .. }, Player { .. }]);
+        cmd.spawn([Transform { position: o.position, .. }, Player { .. }]);
     }
 }
 ```

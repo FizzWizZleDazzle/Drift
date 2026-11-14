@@ -9,7 +9,7 @@ struct Show { every: Timer = repeating_timer(0.5), n: int = 0 }
 
 @system(schedule: Schedule::Startup)
 fn setup(cmd: Commands) {
-    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), pivot: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
                layer: hud_layer(), .. }]);
     cmd.spawn([at(10.0, 6.0), Text { value: "effects.burst(position, ParticleEmitter { .. }, 80)", size: 15.0,
                layer: hud_layer(), .. }]);

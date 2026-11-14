@@ -20,18 +20,18 @@ fn spawn_arm(cmd: Commands, shoulder: Vec2, mirror: float) {
     // Each bone is anchored at its joint, (0, 0.5), and points along +x.
     let upper = cmd.spawn_child(root, [
         Transform { .. },
-        Rectangle { size: vec2(80.0, 20.0), anchor: vec2(0.0, 0.5), corner_radius: 10.0, color: SLEEVE, z: 1.0, .. },
+        Rectangle { size: vec2(80.0, 20.0), pivot: vec2(0.0, 0.5), corner_radius: 10.0, color: SLEEVE, z: 1.0, .. },
         Joint { rest: 0.5, swing: 0.5, phase: 0.0 },
     ]);
     // The forearm starts where the upper arm ends: 80 pixels along its +x.
     let fore = cmd.spawn_child(upper, [
         at(80.0, 0.0),
-        Rectangle { size: vec2(70.0, 16.0), anchor: vec2(0.0, 0.5), corner_radius: 8.0, color: SKIN, z: 2.0, .. },
+        Rectangle { size: vec2(70.0, 16.0), pivot: vec2(0.0, 0.5), corner_radius: 8.0, color: SKIN, z: 2.0, .. },
         Joint { rest: -1.0, swing: 0.6, phase: 1.2 },
     ]);
     cmd.spawn_child(fore, [
         at(70.0, 0.0),
-        Rectangle { size: vec2(30.0, 24.0), anchor: vec2(0.0, 0.5), corner_radius: 8.0, color: SKIN, z: 3.0, .. },
+        Rectangle { size: vec2(30.0, 24.0), pivot: vec2(0.0, 0.5), corner_radius: 8.0, color: SKIN, z: 3.0, .. },
         Joint { rest: 0.3, swing: 0.5, phase: 2.4 },
     ]);
 }

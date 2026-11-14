@@ -50,7 +50,7 @@ fn place(row: (Segment, Transform), tentacles: Tentacles) {
 fn spawn_segments(cmd: Commands, chain: int) {
     for s in range(COUNT) {
         let width = 22.0 - float(s) * 1.6;
-        cmd.spawn([Transform { .. }, Rectangle { size: vec2(LENGTH + width * 0.5, width), anchor: vec2(0.0, 0.5),
+        cmd.spawn([Transform { .. }, Rectangle { size: vec2(LENGTH + width * 0.5, width), pivot: vec2(0.0, 0.5),
                                                  corner_radius: width / 2.0, color: rgb(200, 110, 170), z: 1.0, .. },
                    Segment { chain: chain, index: s }]);
     }

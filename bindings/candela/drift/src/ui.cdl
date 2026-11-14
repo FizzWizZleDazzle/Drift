@@ -247,7 +247,7 @@ fn panel(theme: Theme, at: Anchor, size: Vec2) -> any[] {
     return [
         Transform { .. },
         Rectangle { size: size, color: theme.panel_color, corner_radius: theme.corner_radius,
-                    anchor: at.to, z: 0.0, layer: hud_layer(), .. },
+                    pivot: at.to, z: 0.0, layer: hud_layer(), .. },
         at,
     ];
 }
@@ -369,7 +369,7 @@ fn top_left(t: Transform, size: Vec2, pivot: Vec2) -> Vec2 {
 fn part_rect(at: Vec2, size: Vec2, c: Color, corner: float, z: float, visible: bool) -> any[] {
     return [
         Transform { position: at, .. },
-        Rectangle { size: size, color: c, corner_radius: corner, anchor: Vec2 { x: 0.0, y: 0.0 },
+        Rectangle { size: size, color: c, corner_radius: corner, pivot: Vec2 { x: 0.0, y: 0.0 },
                     z: z, layer: hud_layer(), visible: visible, .. },
     ];
 }
@@ -438,7 +438,7 @@ fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> E
     let e = cmd.spawn([
         Transform { .. },
         Rectangle { size: size, color: theme.bar_back, corner_radius: theme.corner_radius * 0.5,
-                    anchor: at.to, z: 0.0, layer: hud_layer(), .. },
+                    pivot: at.to, z: 0.0, layer: hud_layer(), .. },
         at,
     ]);
     let trail = cmd.spawn(part_rect(Vec2 { .. }, size, theme.bar_trail, 0.0, 0.5, false));
@@ -507,18 +507,18 @@ fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands) {
 
     let fade = fade_of(back, bar.alpha);
     let inner = Vec2 { x: back.size.x - bar.inset * 2.0, y: back.size.y - bar.inset * 2.0 };
-    let corner = top_left(t, back.size, back.anchor) + Vec2 { x: bar.inset, y: bar.inset };
+    let corner = top_left(t, back.size, back.pivot) + Vec2 { x: bar.inset, y: bar.inset };
     let z = back.z;
     let fill_color = bar.fill_color.alpha(bar.fill_color.a * fade);
     let trail_color = bar.trail_color.alpha(bar.trail_color.a * fade);
     cmd.insert(bar.trail_part, Transform { position: corner, .. });
     cmd.insert(bar.trail_part, Rectangle {
-        size: Vec2 { x: inner.x * bar.trail, y: inner.y }, color: trail_color, anchor: Vec2 { x: 0.0, y: 0.0 },
+        size: Vec2 { x: inner.x * bar.trail, y: inner.y }, color: trail_color, pivot: Vec2 { x: 0.0, y: 0.0 },
         z: z + 0.5, layer: back.layer, visible: back.visible && bar.trail > 0.0, ..
     });
     cmd.insert(bar.fill_part, Transform { position: corner, .. });
     cmd.insert(bar.fill_part, Rectangle {
-        size: Vec2 { x: inner.x * bar.shown, y: inner.y }, color: fill_color, anchor: Vec2 { x: 0.0, y: 0.0 },
+        size: Vec2 { x: inner.x * bar.shown, y: inner.y }, color: fill_color, pivot: Vec2 { x: 0.0, y: 0.0 },
         z: z + 1.0, layer: back.layer, visible: back.visible && bar.shown > 0.0, ..
     });
 }
@@ -711,7 +711,7 @@ fn spawn_widget(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, w: Widget, 
     let e = cmd.spawn([
         Transform { .. },
         Rectangle { size: size, color: theme.button_color, corner_radius: theme.corner_radius,
-                    anchor: at.to, z: 0.0, layer: hud_layer(), .. },
+                    pivot: at.to, z: 0.0, layer: hud_layer(), .. },
         at,
     ]);
     let pivot = Vec2 { x: 0.5, y: 0.5 };
@@ -848,7 +848,7 @@ fn ui_focus_nav(focus: UiFocus, input: Input, time: Time, widgets: (Widget, Rect
 fn ui_widgets(widget: (Entity, Widget, Rectangle, Transform), input: Input, focus: UiFocus,
               time: Time, cmd: Commands) {
     let (e, w, r, t) = widget;
-    let corner = top_left(t, r.size, r.anchor);
+    let corner = top_left(t, r.size, r.pivot);
     let box = Rect { x: corner.x, y: corner.y, w: r.size.x, h: r.size.y };
     let mouse = input.mouse_screen();
     w.hovered = r.visible && box.contains(mouse);
@@ -1164,7 +1164,7 @@ fn dialog_box(cmd: Commands, theme: Theme, id: string, pages: string[]) -> Entit
         first = pages[0];
     }
     let text = theme.text("", TOP_LEFT);
-    text.wrap = 720.0 - theme.padding.x * 2.0;
+    text.wrap_width = 720.0 - theme.padding.x * 2.0;
     text.z = 3.0;
     let part = cmd.spawn([Transform { .. }, text, Typewriter { full: first, .. }, PartOf { owner: box }]);
     cmd.insert(box, DialogBox { id: id, pages: pages, text_part: part, .. });
@@ -1177,7 +1177,7 @@ fn dialog_box(cmd: Commands, theme: Theme, id: string, pages: string[]) -> Entit
 fn ui_dialogs(dialog_box: (Entity, DialogBox, Rectangle, Transform), input: Input,
               writers: Lookup<Typewriter>, cmd: Commands) {
     let (e, d, r, t) = dialog_box;
-    let corner = top_left(t, r.size, r.anchor);
+    let corner = top_left(t, r.size, r.pivot);
     cmd.insert(d.text_part, Transform { position: corner + Vec2 { x: 16.0, y: 12.0 }, .. });
     let next = ui_activate(input) || input.mouse_pressed(MouseButton::Left);
     if !next {

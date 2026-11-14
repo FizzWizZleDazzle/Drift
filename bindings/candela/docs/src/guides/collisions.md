@@ -97,7 +97,7 @@ fn setup(cmd: Commands, assets: Assets) {
                    RigidBody { .. }, TextureCollider { .. }, Velocity { .. }]);
     }
     // Ground from a picture: no RigidBody, so it is static.
-    cmd.spawn([at(0.0, 400.0), Sprite { image: texture("ground.png"), anchor: vec2(0.0, 0.0), .. },
+    cmd.spawn([at(0.0, 400.0), Sprite { image: texture("ground.png"), pivot: vec2(0.0, 0.0), .. },
                TextureCollider { .. }]);
 }
 ```
@@ -108,7 +108,7 @@ The debug drawing (`physics.set_debug_draw(true)`, or F3 with [the debug overlay
 
 The outline is simplified: `tolerance` is how far, in image pixels, it may stray from the pixels, so a sprite becomes a few dozen points rather than one per pixel. Raise it for fewer points, lower it to follow the pixels closely. Solid specks and holes smaller than `min_area` square pixels are dropped, so a stray pixel does not become a collider.
 
-The collider follows the sprite's `frame`, `anchor`, `flip_x` and `flip_y` and the `Transform`'s scale as they are when the body is made. Tracing happens once per image, frame and settings: a hundred enemies showing one sprite share one tracing. For an animated sprite whose shape changes from frame to frame, set `follow_sprite: true` to make the collider again whenever the frame, anchor, a flip or the scale changes; each change makes a new body, so leave it off when one shape fits every frame.
+The collider follows the sprite's `frame`, `pivot`, `flip_x` and `flip_y` and the `Transform`'s scale as they are when the body is made. Tracing happens once per image, frame and settings: a hundred enemies showing one sprite share one tracing. For an animated sprite whose shape changes from frame to frame, set `follow_sprite: true` to make the collider again whenever the frame, anchor, a flip or the scale changes; each change makes a new body, so leave it off when one shape fits every frame.
 
 ### Changing the ground
 

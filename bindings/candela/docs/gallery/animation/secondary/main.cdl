@@ -67,14 +67,14 @@ fn setup(cmd: Commands, rig: Rig) {
         // Ears hang from the sides of the head, pointing out and down.
         let rest = PI / 2.0 - side * 1.1;
         cmd.spawn_child(head, [Transform { position: vec2(34.0 * side, 4.0), rotation: rest, .. },
-                               Rectangle { size: vec2(46.0, 18.0), anchor: vec2(0.0, 0.5), corner_radius: 9.0,
+                               Rectangle { size: vec2(46.0, 18.0), pivot: vec2(0.0, 0.5), corner_radius: 9.0,
                                            color: rgb(90, 160, 110), z: 1.0, .. },
                                Ear { rest: rest, lean: angle_spring(rest) }]);
         let base = vec2(16.0 * side, -34.0);
         let offset = vec2(40.0 * side, -90.0);
         let tip = cmd.spawn([at(start.x + offset.x, start.y + offset.y), Circle { radius: 7.0, color: rgb(250, 210, 90), z: 2.0, .. },
                              Tip { base: base, offset: offset, at: spring2(start + offset) }]);
-        cmd.spawn([Transform { .. }, Rectangle { size: vec2(60.0, 4.0), anchor: vec2(0.0, 0.5), color: rgb(90, 160, 110), z: 1.5, .. },
+        cmd.spawn([Transform { .. }, Rectangle { size: vec2(60.0, 4.0), pivot: vec2(0.0, 0.5), color: rgb(90, 160, 110), z: 1.5, .. },
                    Stalk { tip: tip, base: base }]);
     }
     rig.head = head;

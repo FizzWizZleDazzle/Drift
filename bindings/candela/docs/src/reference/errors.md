@@ -92,3 +92,6 @@ Names that read as one thing and did another were renamed, and an old name is no
 | `flash(cmd, e, f)` (drift/gameplay) | `flash_entity(cmd, e, f)` |
 | `quests.in_state(s)` (drift/rpg) | `quests.with_state(s)` |
 | `Typewriter { speed }` (drift/ui) | `Typewriter { chars_per_second }` |
+| `Sprite { anchor }`, `Rectangle { anchor }` | `Sprite { pivot }`, `Rectangle { pivot }`; `anchor` now names only the `drift/ui` `Anchor` and a `Joint`'s attach points |
+| `Text { wrap }` | `Text { wrap_width }` |
+| `MapObject.anchor` | `MapObject.position` |

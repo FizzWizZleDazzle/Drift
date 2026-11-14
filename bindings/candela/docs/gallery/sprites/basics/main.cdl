@@ -15,7 +15,7 @@ fn setup(cmd: Commands) {
     cmd.spawn([Transform { position: vec2(160.0, 60.0), scale: vec2(2.0, 2.0), .. }, Sprite { image: cone, .. }]);
     // Turned 0.6 radians (clockwise) around an anchor at its left tip.
     cmd.spawn([Transform { position: vec2(250.0, 60.0), rotation: 0.6, .. },
-               Sprite { image: cone, anchor: vec2(0.0, 0.5), .. }]);
+               Sprite { image: cone, pivot: vec2(0.0, 0.5), .. }]);
     // Mirrored left to right.
     cmd.spawn([at(340.0, 60.0), Sprite { image: cone, flip_x: true, .. }]);
     // Tinted green: the image's colors times the tint.

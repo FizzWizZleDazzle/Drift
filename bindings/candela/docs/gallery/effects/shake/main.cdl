@@ -33,7 +33,7 @@ fn scene(cmd: Commands) {
         cmd.spawn([at(x, 180.0), Rectangle { size: vec2(40.0, 40.0), color: rgb(170, 120, 70), .. }]);
     }
     cmd.spawn([at(240.0, 110.0), Circle { radius: 22.0, color: rgb(240, 200, 90), .. }]);
-    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), anchor: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
+    cmd.spawn([at(0.0, 0.0), Rectangle { size: vec2(480.0, 28.0), pivot: vec2(0.0, 0.0), color: rgba(0, 0, 0, 170),
                layer: hud_layer(), .. }]);
     cmd.spawn([at(10.0, 6.0), Text { value: "effects.shake(camera, 14.0) every 1.5 s", size: 15.0,
                layer: hud_layer(), .. }]);

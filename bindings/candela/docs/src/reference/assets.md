@@ -590,7 +590,7 @@ struct MapObject {
     kind: string = "",
     shape: ObjectShape = ObjectShape::Rect,
     bounds: Rect = Rect { .. },
-    anchor: Vec2 = Vec2 { .. },
+    position: Vec2 = Vec2 { .. },
     rotation: float = 0.0,
     tile: int = 0,
     points: Vec2[] = [],
@@ -607,7 +607,7 @@ struct MapObject {
 | `kind` | `string` | `""` | Tiled class; LDtk identifier |
 | `shape` | `ObjectShape` | `ObjectShape::Rect` | What kind of shape it is |
 | `bounds` | `Rect` | `Rect { .. }` | Its bounding box: top-left and size, in pixels; zero size for a point |
-| `anchor` | `Vec2` | `Vec2 { .. }` | the pivot: LDtk's pivot, a Tiled tile object's bottom-left |
+| `position` | `Vec2` | `Vec2 { .. }` | Where it stands in the world, in pixels: LDtk's pivot point, a Tiled tile object's bottom-left; use it as the spawned entity's position |
 | `rotation` | `float` | `0.0` | radians |
 | `tile` | `int` | `0` | the tile of a Tile object |
 | `points` | `Vec2[]` | `[]` | polygon and polyline points |

@@ -388,7 +388,7 @@ json readShape(EntityId e) {
     if (s.kind == ShapeKind::Rectangle) {
         j["size"] = vec(s.size);
         j["corner_radius"] = s.cornerRadius;
-        j["anchor"] = vec(s.anchor);
+        j["pivot"] = vec(s.anchor);
     } else {
         j["radius"] = s.radius;
     }
@@ -403,7 +403,7 @@ void writeShape(EntityId e, const json& j, ShapeKind kind) {
     s.color = color(j.value("color", json()));
     s.outline = j.value("outline", 0.f);
     s.cornerRadius = j.value("corner_radius", 0.f);
-    s.anchor = vec(j.value("anchor", json()), {0.5f, 0.5f});
+    s.anchor = vec(j.value("pivot", json()), {0.5f, 0.5f});
     s.zOrder = j.value("z", 0.f);
     s.layer = layer(j);
     s.visible = j.value("visible", true);
@@ -591,7 +591,7 @@ const std::vector<Codec>& codecs() {
              Vec2 size = s.srcRect.w > 0 ? Vec2{s.srcRect.w, s.srcRect.h} : textureSize(s.texture);
              return json{{"image", {{"id", s.texture.id}}},
                          {"frame", rectJ(s.srcRect)},
-                         {"anchor", vec(Vec2{size.x > 0 ? s.origin.x / size.x : 0.5f, size.y > 0 ? s.origin.y / size.y : 0.5f})},
+                         {"pivot", vec(Vec2{size.x > 0 ? s.origin.x / size.x : 0.5f, size.y > 0 ? s.origin.y / size.y : 0.5f})},
                          {"color", color(s.tint)},
                          {"flip_x", (int(s.flip) & int(Flip::H)) != 0},
                          {"flip_y", (int(s.flip) & int(Flip::V)) != 0},
@@ -607,8 +607,8 @@ const std::vector<Codec>& codecs() {
              s.texture = TextureHandle{j.value("image", json::object()).value("id", 0u)};
              s.srcRect = rectJ(j.value("frame", json()));
              Vec2 size = s.srcRect.w > 0 ? Vec2{s.srcRect.w, s.srcRect.h} : textureSize(s.texture);
-             Vec2 anchor = vec(j.value("anchor", json()), {0.5f, 0.5f});
-             s.origin = {anchor.x * size.x, anchor.y * size.y};
+             Vec2 pivot = vec(j.value("pivot", json()), {0.5f, 0.5f});
+             s.origin = {pivot.x * size.x, pivot.y * size.y};
              s.tint = color(j.value("color", json()));
              int flip = (j.value("flip_x", false) ? int(Flip::H) : 0) | (j.value("flip_y", false) ? int(Flip::V) : 0);
              s.flip = static_cast<Flip>(flip);
@@ -638,7 +638,7 @@ const std::vector<Codec>& codecs() {
              const Text& t = *get<Text>(e);
              return json{{"value", std::string(t.str())}, {"size", t.size}, {"color", color(t.color)},
                          {"align", textAligns[int(t.align)]}, {"valign", textVAligns[int(t.valign)]},
-                         {"wrap", t.wrapWidth}, {"line_spacing", t.lineSpacing},
+                         {"wrap_width", t.wrapWidth}, {"line_spacing", t.lineSpacing},
                          {"outline", t.outlineWidth}, {"outline_color", color(t.outlineColor)},
                          {"shadow_offset", vec(t.shadowOffset)}, {"shadow_color", color(t.shadowColor)},
                          {"rich_text", t.richText}, {"font", {{"id", t.font.id}}},
@@ -651,7 +651,7 @@ const std::vector<Codec>& codecs() {
              t.color = color(j.value("color", json()));
              t.align = pick<TextAlign>(j.value("align", json()), {"Left", "Center", "Right"});
              t.valign = pick<TextVAlign>(j.value("valign", json()), {"Top", "Middle", "Bottom"});
-             t.wrapWidth = j.value("wrap", 0.f);
+             t.wrapWidth = j.value("wrap_width", 0.f);
              t.lineSpacing = j.value("line_spacing", 1.f);
              t.outlineWidth = j.value("outline", 0.f);
              t.outlineColor = color(j.value("outline_color", json()), Color::black());
@@ -1412,7 +1412,7 @@ TextStyle textStyle(const json& j) {
     t.color = color(j.value("color", json()));
     t.align = pick<TextAlign>(j.value("align", json()), {"Left", "Center", "Right"});
     t.valign = pick<TextVAlign>(j.value("valign", json()), {"Top", "Middle", "Bottom"});
-    t.wrapWidth = j.value("wrap", 0.f);
+    t.wrapWidth = j.value("wrap_width", 0.f);
     t.lineSpacing = j.value("line_spacing", 1.f);
     t.outlineWidth = j.value("outline", 0.f);
     t.outlineColor = color(j.value("outline_color", json()), Color::black());
@@ -1498,8 +1498,8 @@ bool presentation(const std::string& f, const json& a, json& out) {
             d.texture = TextureHandle{idOf(s.value("image", json()))};
             d.srcRect = rectJ(s.value("frame", json()));
             Vec2 size = d.srcRect.w > 0 ? Vec2{d.srcRect.w, d.srcRect.h} : textureSize(d.texture);
-            Vec2 anchor = vec(s.value("anchor", json()), {0.5f, 0.5f});
-            d.origin = {anchor.x * size.x, anchor.y * size.y};
+            Vec2 pivot = vec(s.value("pivot", json()), {0.5f, 0.5f});
+            d.origin = {pivot.x * size.x, pivot.y * size.y};
             d.position = vec(t.value("position", json()));
             d.rotation = t.value("rotation", 0.f);
             d.scale = vec(t.value("scale", json()), {1, 1});
