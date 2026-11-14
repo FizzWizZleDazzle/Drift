@@ -360,8 +360,28 @@
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", resolve);
         else resolve();
     });
+    // A page opened as `...?name=BodyKind::Kinematic` goes on to that name's
+    // entry. The editor's "Open docs" link is built this way from the `docs`
+    // URL in bindings/candela/drift/candela.toml. A field or a variant
+    // without an entry of its own opens its type's (`RigidBody.kind` opens
+    // RigidBody); a name the index does not know stays on this page.
+    function openByName() {
+        let name = new URLSearchParams(window.location.search).get("name");
+        while (name) {
+            const entries = index[name];
+            const entry = entries && (entries.find((e) => e.module === "drift") || entries[0]);
+            if (entry) {
+                window.location.replace(new URL(entry.url, root));
+                return true;
+            }
+            const shorter = name.replace(/(?:\.|::)[A-Za-z0-9_]+$/, "");
+            name = shorter === name ? "" : shorter;
+        }
+        return false;
+    }
+
     fetch(new URL("reference/api-index.json", root))
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
-        .then((data) => ready.then(() => { index = data; markPage(); }))
+        .then((data) => ready.then(() => { index = data; if (!openByName()) markPage(); }))
         .catch((err) => console.warn("api-links: no API index:", err));
 })();

@@ -2,5 +2,8 @@
 name = "drift"
 version = "0.3.2"
 description = "The engine module for Candela games run by drift"
+# An editor's hover links each name here; the book's api-links.js reads
+# `name` and opens that name's reference entry.
+docs = "https://fizzwizzledazzle.github.io/Drift/candela-book/reference/index.html?name={name}"
 
 [dependencies]
