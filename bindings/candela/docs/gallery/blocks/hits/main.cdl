@@ -1,0 +1,55 @@
+// ANCHOR: all
+// Hit effects from drift/gameplay: every 0.6 s the target takes damage. It
+// flashes white (HitFlash), a damage number pops up, the camera shakes
+// (Shake) and the game freezes for a moment (HitStop). At 0 hp it dies and
+// a new one appears.
+
+import "drift" { * };
+import "drift/gameplay" { * };
+
+@component struct Target {}
+
+@resource
+struct Arena { hits: Timer = repeating_timer(0.6), target: Entity = Entity { .. } }
+
+// ANCHOR: setup
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, window: Window, arena: Arena) {
+    // Shake moves Camera entities, and there are none until you spawn one.
+    cmd.spawn([at(window.width / 2.0, window.height / 2.0), Camera { .. }]);
+    arena.target = spawn_target(cmd);
+    for i in range(12) {
+        cmd.spawn([at(20.0 + 40.0 * float(i), 230.0), Rectangle { size: vec2(36.0, 8.0), color: rgb(70, 70, 90), .. }]);
+    }
+}
+
+fn spawn_target(cmd: Commands) -> Entity {
+    return cmd.spawn([at(240.0, 140.0), Target {}, Rectangle { size: vec2(48.0, 48.0), color: rgb(220, 90, 90), .. },
+                      health(50.0), HitFlash { color: rgb(255, 255, 255), seconds: 0.1, .. }]);
+}
+// ANCHOR_END: setup
+
+// ANCHOR: hits
+@system
+fn hit_now_and_then(cmd: Commands, arena: Arena, time: Time) {
+    if arena.hits.tick(time.real_dt) > 0 {
+        damage(cmd, arena.target, 10.0, Entity { .. });
+    }
+}
+
+// Runs once for each Damaged message.
+@system
+fn juice(d: Damaged, places: Lookup<Transform>, cmd: Commands) {
+    if places.get(d.entity) is Some(t) {
+        popup(cmd, t.position - vec2(0.0, 30.0), "-" + string(int(d.amount)), rgb(255, 220, 90));
+    }
+    cmd.send(Shake { intensity: 8.0 });       // pixels; 0.4, the default, is too small to see
+    cmd.send(HitStop { seconds: 0.06 });
+}
+
+@system
+fn respawn(d: Died, cmd: Commands, arena: Arena) {
+    arena.target = spawn_target(cmd);
+}
+// ANCHOR_END: hits
+// ANCHOR_END: all

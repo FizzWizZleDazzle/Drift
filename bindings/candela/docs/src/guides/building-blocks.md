@@ -59,21 +59,31 @@ fn on_death(d: Died, score: Score) {
 
 - `HitFlash { color, seconds }` tints the entity's `Sprite`, `Rectangle` or `Circle` each time its `Health` takes a hit. `flash_entity(cmd, e, HitFlash { .. })` starts one from code.
 - `cmd.send(HitStop { seconds: 0.06 })` freezes the game for that long: physics, tweens, particles and `dt` stop, then carry on. It uses `Time.set_scale`.
-- `cmd.send(Shake { intensity: 0.5 })` shakes every camera.
+- `cmd.send(Shake { intensity: 8.0 })` shakes every `Camera` entity by up to that many pixels. It needs a camera: there is none until you spawn one, and without one nothing shakes, with no error. The default intensity, 0.4, is too small to see. See [Screen shake](effects.md#screen-shake).
 - `popup(cmd, pos, "-12", rgb(255, 90, 90))` puts a number or word at a world position that pops in, floats up and fades: damage numbers and pickups.
 - `FadeOut { seconds }` fades the entity's `Sprite`, `Text`, `Rectangle` or `Circle` and then despawns it.
 - `Trail` (see [Particles, Lights and Effects](effects.md)) draws a ribbon behind a fast object.
 
 ```rust
-@system
-fn juice(d: Damaged, places: Lookup<Transform>, cmd: Commands) {
-    if places.get(d.entity) is Some(t) {
-        popup(cmd, t.position, "-" + string(int(d.amount)), rgb(255, 90, 90));
-    }
-    cmd.send(Shake { intensity: 0.3 });
-    cmd.send(HitStop { seconds: 0.05 });
-}
+{{#include ../../gallery/blocks/hits/main.cdl:hits}}
 ```
+
+![A red square hit every 0.6 seconds: it flashes white, a -10 pops up, the view shakes and the game freezes for an instant; after five hits it dies and a new one appears](../images/blocks/hits.gif)
+
+What the picture needs, from its program: a `Camera` entity for the shake, and on the target a `Health` (from `health(50.0)`), a `HitFlash`, and a `Rectangle` for the flash to tint. [Run it in the browser](../play/gallery/blocks/hits/).
+
+```rust
+{{#include ../../gallery/blocks/hits/main.cdl:setup}}
+```
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/blocks/hits/main.cdl:all}}
+```
+
+</details>
 
 ## Screen bounds
 

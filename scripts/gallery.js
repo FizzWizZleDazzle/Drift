@@ -131,6 +131,7 @@ const pictures = [
     { guide: 'collisions', name: 'fall', frames: 2, count: 60, every: 4, fps: 15, width: 360 },
     { guide: 'ui', name: 'hud', frames: 2, count: 60, every: 8, fps: 15, width: 360 },
     { guide: 'levels', name: 'text_map', frames: 240, count: 48, every: 5, fps: 12, width: 360 },
+    { guide: 'blocks', name: 'hits', frames: 2, count: 60, every: 3, fps: 20, width: 360 },
 ];
 
 function arg(name, fallback) {
