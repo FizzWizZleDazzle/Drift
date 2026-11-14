@@ -377,7 +377,8 @@ Draw calls and sprites in the last frame.
 fn sprite_count(self) -> int
 ```
 
-Sprites drawn in the last frame.
+Sprites drawn in the last frame: the ones some camera showed. A sprite no camera sees is
+not drawn, so it is not counted.
 
 ```rust
 stats.value = string(window.draw_calls()) + " calls, " + string(window.sprite_count()) + " sprites";
