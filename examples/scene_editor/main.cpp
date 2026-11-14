@@ -7,6 +7,7 @@
 // =============================================================================
 
 #include <drift/App.hpp>
+#include <drift/DebugViews.hpp>
 #include <drift/Query.hpp>
 #include <drift/Reflect.hpp>
 #include <drift/Scene.hpp>
@@ -89,7 +90,7 @@ public:
             DRIFT_LOG_INFO("Loaded '%s': %zu entities", path, inst.entities.size());
             editor->coin = scenes->load("assets/coin.json");
 
-            a.getResource<PhysicsResource>()->setDebugDraw({.enabled = true});
+            a.getResource<DebugViews>()->set("colliders", true);
 #ifdef DRIFT_DEV
             a.getResource<UIResource>()->devToggle();
 #endif

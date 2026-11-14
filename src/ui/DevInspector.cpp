@@ -6,6 +6,9 @@
 #include <drift/AssetServer.hpp>
 #include <drift/Reflect.hpp>
 #include <drift/World.hpp>
+#include <drift/DebugViews.hpp>
+
+#include <nlohmann/json.hpp>
 #include <drift/Hierarchy.hpp>
 #include <drift/components/GlobalTransform.hpp>
 #include <drift/components/Hierarchy.hpp>
@@ -248,6 +251,8 @@ void drawTree(World& world, InspectorState& st, EntityId e,
     }
 }
 
+void drawForeign(App& app, EntityId e);
+
 void drawComponents(App& app, InspectorState& st) {
     World& world = app.world();
     EntityId e = st.selected;
@@ -279,6 +284,7 @@ void drawComponents(App& app, InspectorState& st) {
         ImGui::PopID();
     }
     if (removeMe) world.removeComponent(e, removeMe->id(world));
+    drawForeign(app, e);
 
     ImGui::Spacing();
     if (ImGui::BeginCombo("##add", "Add component")) {
@@ -294,42 +300,74 @@ void drawComponents(App& app, InspectorState& st) {
     }
 }
 
-// Outline the selected entity in the world.
-void highlight(App& app, EntityId e) {
+// Outline an entity in the world: what it draws (DebugViews outlines) and
+// a cross at its position, over lighting and post effects.
+void highlight(App& app, EntityId e, Color c) {
     World& world = app.world();
     auto* renderer = app.getResource<RendererResource>();
+    auto* views = app.getResource<DebugViews>();
     if (!renderer) return;
-    const auto& reg = world.componentRegistry();
+    uint8_t oldLayer = renderer->layer();
+    bool outlined = false;
+    if (views) {
+        views->forEachOutline(app, [&](const DebugOutline& o) {
+            if (o.entity != e) return;
+            renderer->setLayer(o.layer == ScreenLayer ? ScreenLayer : OverlayLayer);
+            renderer->drawPolyline(o.corners, 4, c, 2.f, true, 1e6f);
+            outlined = true;
+        });
+    }
     Vec2 pos;
-    float rot = 0.f;
-    Vec2 scale = Vec2::one();
-    ComponentId gid = reg.getByName("GlobalTransform2D");
+    ComponentId gid = world.componentRegistry().getByName("GlobalTransform2D");
     if (const auto* g = gid ? world.get<GlobalTransform2D>(e, gid) : nullptr) {
-        pos = g->position; rot = g->rotation; scale = g->scale;
+        pos = g->position;
     } else if (const auto* t = world.get<Transform2D>(e, world.transform2dId())) {
-        pos = t->position; rot = t->rotation; scale = t->scale;
+        pos = t->position;
     } else {
+        renderer->setLayer(oldLayer);
         return;
     }
-
-    Color c{255, 220, 0, 255};
-    uint8_t oldLayer = renderer->layer();
-    const auto* sprite = world.get<Sprite>(e, world.spriteId());
-    if (sprite && sprite->layer == ScreenLayer) renderer->setLayer(ScreenLayer);
-    if (sprite && sprite->texture) {
-        Vec2 size = renderer->textureSize(sprite->texture);
-        if (sprite->srcRect.w > 0.f) size = {sprite->srcRect.w, sprite->srcRect.h};
-        Vec2 corners[4] = {{0, 0}, {size.x, 0}, {size.x, size.y}, {0, size.y}};
-        float cs = std::cos(rot), sn = std::sin(rot);
-        for (auto& p : corners) {
-            Vec2 l = {(p.x - sprite->origin.x) * scale.x, (p.y - sprite->origin.y) * scale.y};
-            p = {pos.x + l.x * cs - l.y * sn, pos.y + l.x * sn + l.y * cs};
-        }
-        renderer->drawPolyline(corners, 4, c, 2.f, true, 1e6f);
-    }
+    if (!outlined) renderer->setLayer(OverlayLayer);
     renderer->drawLine({pos.x - 8.f, pos.y}, {pos.x + 8.f, pos.y}, c, 2.f, 1e6f);
     renderer->drawLine({pos.x, pos.y - 8.f}, {pos.x, pos.y + 8.f}, c, 2.f, 1e6f);
     renderer->setLayer(oldLayer);
+}
+
+// Shows a JSON value read-only: objects and lists as trees.
+void showJson(const char* label, const nlohmann::json& v) {
+    if (v.is_object() || v.is_array()) {
+        if (ImGui::TreeNode(label)) {
+            size_t i = 0;
+            for (auto it = v.begin(); it != v.end(); ++it, ++i) {
+                std::string key = v.is_object() ? it.key() : "[" + std::to_string(i) + "]";
+                ImGui::PushID(static_cast<int>(i));
+                showJson(key.c_str(), *it);
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+        return;
+    }
+    std::string text = v.is_string() ? v.get<std::string>() : v.dump();
+    ImGui::TextDisabled("%s", label);
+    ImGui::SameLine();
+    ImGui::TextUnformatted(text.c_str());
+}
+
+// The game's own components (a scripting host's), read-only.
+void drawForeign(App& app, EntityId e) {
+    auto* ui = app.getResource<UIResource>();
+    if (!ui || !ui->foreignComponents()) return;
+    nlohmann::json all = nlohmann::json::parse(ui->foreignComponents()(e), nullptr, false);
+    if (!all.is_object() || all.empty()) return;
+    for (auto it = all.begin(); it != all.end(); ++it) {
+        ImGui::PushID(it.key().c_str());
+        if (ImGui::CollapsingHeader(it.key().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (!it->is_object() || it->empty()) ImGui::TextDisabled("(no fields)");
+            else for (auto f = it->begin(); f != it->end(); ++f) showJson(f.key().c_str(), *f);
+        }
+        ImGui::PopID();
+    }
 }
 
 void drawInspector(App& app, InspectorState& st) {
@@ -384,12 +422,22 @@ void drawInspector(App& app, InspectorState& st) {
         if (st.selected != InvalidEntityId) {
             drawComponents(app, st);
         } else {
-            ImGui::TextDisabled("Select an entity");
+            ImGui::TextDisabled("Select an entity, or click one in the game");
         }
     }
     ImGui::EndChild();
 
-    if (st.selected != InvalidEntityId) highlight(app, st.selected);
+    // Picking: hover the game to outline what is under the mouse, click to
+    // select it. Clicks on ImGui windows stay with them.
+    ImGuiIO& io = ImGui::GetIO();
+    if (!io.WantCaptureMouse) {
+        if (auto* views = app.getResource<DebugViews>()) {
+            EntityId hovered = views->pick(app, {io.MousePos.x, io.MousePos.y});
+            if (hovered != InvalidEntityId && hovered != st.selected) highlight(app, hovered, Color{120, 220, 255, 255});
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) st.selected = hovered;
+        }
+    }
+    if (st.selected != InvalidEntityId) highlight(app, st.selected, Color{255, 220, 0, 255});
 }
 
 } // namespace

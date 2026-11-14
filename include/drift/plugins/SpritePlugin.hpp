@@ -3,6 +3,9 @@
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
 #include <drift/RenderSnapshot.hpp>
+#include <drift/DebugViews.hpp>
+#include <drift/Query.hpp>
+#include <drift/components/GlobalTransform.hpp>
 #include <drift/resources/SpriteResource.hpp>
 #include <drift/resources/RendererResource.hpp>
 
@@ -26,6 +29,24 @@ public:
                 [&](const std::vector<CameraSnapshot>& cams) { syncCameras(*renderer, cams); },
                 [&](const Transform2D& t, const Sprite& s) { return renderer->visible(spriteDraw(t, s)); });
             snapshot->swap();
+        });
+
+        // Sprite outlines for the "bounds" debug view and picking.
+        app.initResource<DebugViews>()->addOutlines([](App& a, const DebugViews::OutlineSink& out) {
+            auto* renderer = a.getResource<RendererResource>();
+            World& w = a.world();
+            Query<Sprite, Transform2D, Optional<GlobalTransform2D>> q(w, w.componentRegistry());
+            q.iterWithEntity([&](EntityId e, const Sprite& s, const Transform2D& t, const GlobalTransform2D* g) {
+                if (!s.visible || !s.texture) return;
+                Vec2 size = s.srcRect.w > 0.f ? Vec2{s.srcRect.w, s.srcRect.h} : renderer->textureSize(s.texture);
+                DebugOutline o;
+                o.entity = e;
+                o.pivot = g ? g->position : t.position;
+                o.layer = s.layer;
+                o.z = s.zOrder;
+                debugBox(o.pivot, g ? g->rotation : t.rotation, g ? g->scale : t.scale, size, s.origin, o.corners);
+                out(o);
+            });
         });
 
         // Auto-render system: draw the sprites of the snapshot.

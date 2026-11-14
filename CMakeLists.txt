@@ -167,6 +167,7 @@ set(DRIFT_SOURCES
 
     # Subsystem resources
     src/renderer/RendererResource.cpp
+    src/renderer/DebugViews.cpp
     src/renderer/Image.cpp
     src/input/InputResource.cpp
     src/audio/AudioResource.cpp
@@ -190,6 +191,7 @@ set(DRIFT_SOURCES
     src/ui/UIResource.cpp
     src/ui/DevInspector.cpp
     src/ui/DevPerformance.cpp
+    src/ui/DevLog.cpp
 
     # Scenes, prefabs and hot reload
     src/scene/SceneResource.cpp

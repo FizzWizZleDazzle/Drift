@@ -129,6 +129,10 @@ enum class ScaleMode : uint8_t {
 // last, in logical screen coordinates, without a camera (HUDs, menus).
 constexpr uint8_t ScreenLayer = 31;
 constexpr uint32_t AllWorldLayers = 0x7FFFFFFFu;
+// World coordinates, drawn through every camera that shows the screen after
+// lighting and post effects, so nothing darkens or tints it; for debug
+// drawing such as collider outlines. No camera's layer mask names it.
+constexpr uint8_t OverlayLayer = 32;
 
 // ---- Enums ----
 enum class Flip {

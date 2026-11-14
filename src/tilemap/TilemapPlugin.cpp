@@ -4,6 +4,7 @@
 #include <drift/plugins/TilemapPlugin.hpp>
 #include <drift/App.hpp>
 #include <drift/Commands.hpp>
+#include <drift/DebugViews.hpp>
 #include <drift/Query.hpp>
 #include <drift/resources/PhysicsResource.hpp>
 #include <drift/resources/RendererResource.hpp>
@@ -11,6 +12,8 @@
 
 #include "tilemap/TilemapInternal.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <unordered_set>
 
 namespace drift {
@@ -126,6 +129,44 @@ void tilemapRender(App& app) {
     });
 }
 
+// The "tiles" debug view: grid lines of every map near the default camera,
+// brighter on chunk edges.
+void tilemapDebug(App& app, RendererResource& r) {
+    auto* res = app.getResource<TilemapResource>();
+    auto& world = app.world();
+    auto& reg = world.componentRegistry();
+    if (!res || !reg.has<Tilemap>()) return;
+    Rect view = r.cameraWorldBounds(r.getDefaultCamera());
+    Query<Transform2D, Tilemap> maps(world, reg);
+    maps.iter([&](const Transform2D& t, const Tilemap& tm) {
+        float tw = res->tileWidth(tm.map) * t.scale.x, th = res->tileHeight(tm.map) * t.scale.y;
+        int32_t w = res->mapWidth(tm.map), h = res->mapHeight(tm.map);
+        if (tw <= 0.f || th <= 0.f || w <= 0 || h <= 0) return;
+        Vec2 o = t.position + res->worldOffset(tm.map);
+        // The cells in view; lines are skipped when a cell is under 4 pixels.
+        int32_t x0 = std::max(0, static_cast<int32_t>(std::floor((view.x - o.x) / tw)));
+        int32_t x1 = std::min(w, static_cast<int32_t>(std::ceil((view.x + view.w - o.x) / tw)));
+        int32_t y0 = std::max(0, static_cast<int32_t>(std::floor((view.y - o.y) / th)));
+        int32_t y1 = std::min(h, static_cast<int32_t>(std::ceil((view.y + view.h - o.y) / th)));
+        if (x0 > x1 || y0 > y1) return;
+        float zoom = r.getCameraZoom(r.getDefaultCamera());
+        bool cells = tw * zoom >= 4.f && th * zoom >= 4.f;
+        const Color cell{255, 255, 255, 70}, chunk{255, 200, 60, 230};
+        for (int32_t x = x0; x <= x1; ++x) {
+            bool edge = x % tilemap::ChunkSize == 0 || x == w;
+            if (!edge && !cells) continue;
+            r.drawLine({o.x + x * tw, o.y + y0 * th}, {o.x + x * tw, o.y + y1 * th}, edge ? chunk : cell,
+                       edge ? 2.f : 1.f);
+        }
+        for (int32_t y = y0; y <= y1; ++y) {
+            bool edge = y % tilemap::ChunkSize == 0 || y == h;
+            if (!edge && !cells) continue;
+            r.drawLine({o.x + x0 * tw, o.y + y * th}, {o.x + x1 * tw, o.y + y * th}, edge ? chunk : cell,
+                       edge ? 2.f : 1.f);
+        }
+    });
+}
+
 } // namespace
 
 void TilemapPlugin::build(App& app) {
@@ -136,6 +177,7 @@ void TilemapPlugin::build(App& app) {
     // Registered after SpritePlugin, so the ECS cameras are already synced
     // when parallax and culling read them.
     app.addSystem("tilemap_render", Phase::Render, tilemapRender);
+    app.initResource<DebugViews>()->add("tiles", "Tile grid lines and the chunks maps are drawn in", tilemapDebug);
 }
 
 } // namespace drift

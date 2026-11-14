@@ -203,7 +203,7 @@ Widgets draw with Dear ImGui's built-in font. For game text in your own fonts (H
 
 ## Dev Overlay
 
-When built with `DRIFT_DEV`, the UI resource hosts the developer overlay: an entity inspector, a performance panel, physics debug drawing and scene tools. Press F1 to show it. See [Dev Tools](dev-tools.md) for what each panel does.
+When built with `DRIFT_DEV`, the UI resource hosts the developer overlay: an entity inspector with picking, a performance panel, the recent warnings and errors, physics options, the debug views and scene tools. Press F1 to show it. See [Dev Tools](dev-tools.md) for what each panel does.
 
 ```cpp
 #ifdef DRIFT_DEV
@@ -213,6 +213,10 @@ void setDevToggleKey(Key key);   // default Key::F1
 void devToggle();
 void devRender();                // called by UIPlugin each frame
 bool devIsVisible() const;
+// Components kept outside the ECS, shown read-only in the inspector:
+// fn(entity) answers them as a JSON object by name.
+using ForeignComponents = std::function<std::string(EntityId)>;
+void setForeignComponents(ForeignComponents components);
 #endif
 ```
 

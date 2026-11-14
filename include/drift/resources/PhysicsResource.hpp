@@ -39,14 +39,20 @@ struct JointDef {
 
 class RendererResource;
 
-// What the physics debug overlay draws. Off by default.
+// What the "colliders" debug view draws (PhysicsPlugin adds the view; switch
+// it with DebugViews::set). It draws on OverlayLayer, so lighting and post
+// effects leave it at full brightness.
 struct PhysicsDebugDraw {
-    bool enabled = false;
-    bool shapes = true;       // collider outlines (filled for solid bodies)
+    bool shapes = true;       // colliders: filled outlines, sensors dashed; colors from physicsDebugColor
     bool aabbs = false;       // shape bounding boxes
-    bool contacts = false;    // contact points and normals
-    bool joints = false;
+    bool contacts = true;     // where contacts began, with their normals, for half a second of game time
+    bool velocities = true;   // each moving body's velocity as an arrow (a quarter second of travel)
+    bool joints = true;
 };
+
+// The debug view's color for a body: green static, blue kinematic, orange
+// dynamic; a sleeping body's color at under half brightness.
+Color physicsDebugColor(BodyType type, bool awake);
 
 // How many pixels make one meter for the physics world. Box2D's
 // tolerances are tuned in meters (how far shapes may overlap, how close
@@ -137,10 +143,11 @@ public:
 
     int32_t bodyCount() const;
 
-    // Debug overlay, drawn in world space by PhysicsPlugin's render system.
+    // What the "colliders" debug view shows.
     void setDebugDraw(const PhysicsDebugDraw& options);
     const PhysicsDebugDraw& debugDraw() const;
-    // Queue the debug shapes on the renderer now (Render phase).
+    // Queue the debug shapes on the renderer now (Render phase); the
+    // "colliders" view calls it.
     void drawDebug(RendererResource& renderer) const;
 
 private:

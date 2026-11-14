@@ -599,6 +599,8 @@ thread_local! {
     static ERROR: RefCell<CString> = RefCell::new(CString::default());
     /// The last drift_host_check answer.
     static CHECKED: RefCell<CString> = RefCell::new(CString::default());
+    /// The last drift_host_entity_components answer.
+    static INSPECTED: RefCell<CString> = RefCell::new(CString::default());
     /// The game's types, for host functions that build values of a type the
     /// script names.
     static TYPES: RefCell<Option<std::rc::Rc<Types>>> = const { RefCell::new(None) };
@@ -2333,6 +2335,11 @@ fn forwarded() -> Vec<(&'static str, Vec<HostType>, HostType)> {
         ("set_time_scale", vec![F], U),
         ("entity_alive", vec![I], B),
         ("entity_count", vec![], I),
+        // Debug views, frame numbers and the log, for drift/debug.
+        ("debug_view", vec![S, B], B),
+        ("debug_views", vec![], HostType::Array(Box::new(S))),
+        ("debug_stats", vec![], af()),
+        ("log_recent", vec![F, I], HostType::Array(Box::new(S))),
         // Hierarchy and procedural animation.
         ("hier_parent", vec![I], I),
         ("hier_children", vec![I], ai()),
@@ -3367,6 +3374,25 @@ pub extern "C" fn drift_host_is_component(name: *const c_char) -> i32 {
 pub extern "C" fn drift_host_scene_component(e: u64, name: *const c_char, value: *const c_char, ids: *const c_char) {
     let (Some(name), Some(value), Some(ids)) = (from_c(name), from_c(value), from_c(ids)) else { return };
     SCENE_COMPONENTS.with(|q| q.borrow_mut().push((e, name, value, ids)));
+}
+
+/// The game's components on entity `e` as a JSON object, by bare struct
+/// name, for the engine's inspector. The answer stays valid until the next
+/// call.
+#[no_mangle]
+pub extern "C" fn drift_host_entity_components(e: u64) -> *const c_char {
+    let mut found = serde_json::Map::new();
+    STORES.with(|s| {
+        for (name, store) in s.borrow().iter() {
+            if let Some(v) = store.get(&e) {
+                found.insert(bare(name).to_owned(), to_json(v));
+            }
+        }
+    });
+    INSPECTED.with(|c| {
+        *c.borrow_mut() = cstr(&Json::Object(found).to_string());
+        c.borrow().as_ptr()
+    })
 }
 
 /// Compiles `entry` against the `drift` module in `module_dir`. Returns 0 and

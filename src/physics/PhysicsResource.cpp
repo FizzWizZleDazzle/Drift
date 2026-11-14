@@ -12,6 +12,7 @@
 #include "box2d/box2d.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -110,6 +111,18 @@ struct PhysicsResource::Impl {
     std::vector<ContactEvent> sensorBegin;
     std::vector<ContactEvent> sensorEnd;
 
+    // Contacts that began recently, for the debug view: point, normal and
+    // seconds of simulated time left to show. Kept only while it draws.
+    struct RecentContact { Vec2 point, normal; float left; };
+    std::vector<RecentContact> recentContacts;
+    // Whether drawDebug ran since the last step (the colliders view is on),
+    // and whether it had when this step began.
+    bool drawn = false;
+    bool drawing = false;
+    // Scratch for drawDebug: the shapes found, the bodies given an arrow.
+    std::vector<b2ShapeId> debugShapes;
+    std::vector<int32_t> debugBodies;
+
     // The first manifold point and normal (A to B) of the contact between
     // two shapes that just began touching.
     std::vector<b2ContactData> contactScratch;
@@ -145,6 +158,7 @@ struct PhysicsResource::Impl {
             ce.shapeB = shape_to_u64(e.shapeIdB);
             contactPoint(e.shapeIdA, e.shapeIdB, ce);
             contactBegin.push_back(ce);
+            if (drawing && debug.contacts) recentContacts.push_back({ce.point, ce.normal, 0.5f});
         }
 
         for (int32_t i = 0; i < events.endCount; ++i) {
@@ -236,6 +250,14 @@ void PhysicsResource::step(float dt) {
 
     b2World_Step(impl_->worldId, dt, Impl::SUBSTEP_COUNT);
 
+    impl_->drawing = impl_->drawn;
+    impl_->drawn = false;
+    auto& recent = impl_->recentContacts;
+    if (!impl_->drawing) recent.clear();
+    for (auto& c : recent) c.left -= dt;
+    recent.erase(std::remove_if(recent.begin(), recent.end(),
+                                [](const Impl::RecentContact& c) { return c.left <= 0.f; }),
+                 recent.end());
     impl_->cacheContactEvents();
     impl_->cacheSensorEvents();
 }
@@ -757,79 +779,94 @@ int32_t PhysicsResource::bodyCount() const {
 
 namespace {
 
-constexpr float kDebugZ = 1e5f;
-constexpr float kDebugLine = 1.5f;
-
-Color debugColor(b2HexColor c, uint8_t alpha = 255) {
-    uint32_t v = static_cast<uint32_t>(c);
-    return Color{static_cast<uint8_t>((v >> 16) & 0xFF), static_cast<uint8_t>((v >> 8) & 0xFF),
-                 static_cast<uint8_t>(v & 0xFF), alpha};
-}
+constexpr float kDebugLine = 2.f;
 
 RendererResource& rr(void* ctx) { return *static_cast<RendererResource*>(ctx); }
 
-void ddPolygon(const b2Vec2* v, int n, b2HexColor color, void* ctx) {
-    rr(ctx).drawPolyline(reinterpret_cast<const Vec2*>(v), n, debugColor(color), kDebugLine, true, kDebugZ);
+// Box2D's own drawing is used for joints only; shapes, contacts and
+// velocities are drawn below, where the body kind, sleep and sensor flags
+// are known.
+void ddSegment(b2Vec2 p1, b2Vec2 p2, b2HexColor, void* ctx) {
+    rr(ctx).drawLine({p1.x, p1.y}, {p2.x, p2.y}, Color{230, 230, 230, 255}, kDebugLine);
 }
-
-void ddSolidPolygon(b2Transform xf, const b2Vec2* v, int n, float radius, b2HexColor color, void* ctx) {
-    (void)radius;
-    Vec2 pts[b2_maxPolygonVertices];
-    n = n > b2_maxPolygonVertices ? b2_maxPolygonVertices : n;
-    for (int i = 0; i < n; ++i) {
-        b2Vec2 p = b2TransformPoint(xf, v[i]);
-        pts[i] = {p.x, p.y};
-    }
-    rr(ctx).drawPolygonFilled(pts, n, debugColor(color, 60), kDebugZ);
-    rr(ctx).drawPolyline(pts, n, debugColor(color), kDebugLine, true, kDebugZ);
+void ddPolygon(const b2Vec2*, int, b2HexColor, void*) {}
+void ddSolidPolygon(b2Transform, const b2Vec2*, int, float, b2HexColor, void*) {}
+void ddCircle(b2Vec2, float, b2HexColor, void*) {}
+void ddSolidCircle(b2Transform, float, b2HexColor, void*) {}
+void ddCapsule(b2Vec2, b2Vec2, float, b2HexColor, void*) {}
+void ddSolidCapsule(b2Vec2, b2Vec2, float, b2HexColor, void*) {}
+void ddTransform(b2Transform, void*) {}
+void ddPoint(b2Vec2 p, float size, b2HexColor, void* ctx) {
+    rr(ctx).drawCircleFilled({p.x, p.y}, size * 0.5f + 1.f, Color{230, 230, 230, 255}, 8);
 }
-
-void ddCircle(b2Vec2 c, float radius, b2HexColor color, void* ctx) {
-    rr(ctx).drawCircle({c.x, c.y}, radius, debugColor(color), kDebugLine, 0, kDebugZ);
-}
-
-void ddSolidCircle(b2Transform xf, float radius, b2HexColor color, void* ctx) {
-    Vec2 c{xf.p.x, xf.p.y};
-    rr(ctx).drawCircleFilled(c, radius, debugColor(color, 60), 0, kDebugZ);
-    rr(ctx).drawCircle(c, radius, debugColor(color), kDebugLine, 0, kDebugZ);
-    b2Vec2 axis = b2RotateVector(xf.q, b2Vec2{radius, 0.f});
-    rr(ctx).drawLine(c, {c.x + axis.x, c.y + axis.y}, debugColor(color), kDebugLine, kDebugZ);
-}
-
-void ddCapsule(b2Vec2 p1, b2Vec2 p2, float radius, b2HexColor color, void* ctx) {
-    Color col = debugColor(color);
-    b2Vec2 d = b2Normalize(b2Sub(p2, p1));
-    b2Vec2 n{-d.y * radius, d.x * radius};
-    rr(ctx).drawCircle({p1.x, p1.y}, radius, col, kDebugLine, 0, kDebugZ);
-    rr(ctx).drawCircle({p2.x, p2.y}, radius, col, kDebugLine, 0, kDebugZ);
-    rr(ctx).drawLine({p1.x + n.x, p1.y + n.y}, {p2.x + n.x, p2.y + n.y}, col, kDebugLine, kDebugZ);
-    rr(ctx).drawLine({p1.x - n.x, p1.y - n.y}, {p2.x - n.x, p2.y - n.y}, col, kDebugLine, kDebugZ);
-}
-
-void ddSolidCapsule(b2Vec2 p1, b2Vec2 p2, float radius, b2HexColor color, void* ctx) {
-    ddCapsule(p1, p2, radius, color, ctx);
-}
-
-void ddSegment(b2Vec2 p1, b2Vec2 p2, b2HexColor color, void* ctx) {
-    rr(ctx).drawLine({p1.x, p1.y}, {p2.x, p2.y}, debugColor(color), kDebugLine, kDebugZ);
-}
-
-void ddTransform(b2Transform xf, void* ctx) {
-    (void)xf;
-    (void)ctx;
-}
-
-void ddPoint(b2Vec2 p, float size, b2HexColor color, void* ctx) {
-    // Box2D sizes points in screen pixels; draw them as small discs.
-    rr(ctx).drawCircleFilled({p.x, p.y}, size * 0.5f + 1.f, debugColor(color), 8, kDebugZ);
-}
-
 void ddString(b2Vec2, const char*, void*) {}
+
+// A dashed line, for sensors.
+void dashed(RendererResource& r, Vec2 a, Vec2 b, Color c) {
+    float dx = b.x - a.x, dy = b.y - a.y;
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len <= 0.f) return;
+    float ux = dx / len, uy = dy / len;
+    constexpr float on = 7.f, off = 5.f;
+    for (float t = 0.f; t < len; t += on + off) {
+        float e = std::min(t + on, len);
+        r.drawLine({a.x + ux * t, a.y + uy * t}, {a.x + ux * e, a.y + uy * e}, c, kDebugLine);
+    }
+}
+
+void outline(RendererResource& r, const Vec2* pts, int n, Color c, bool sensor) {
+    if (!sensor) {
+        r.drawPolyline(pts, n, c, kDebugLine, true);
+        return;
+    }
+    for (int i = 0; i < n; ++i) dashed(r, pts[i], pts[(i + 1) % n], c);
+}
+
+void circlePoints(Vec2 center, float radius, Vec2* out, int n) {
+    for (int i = 0; i < n; ++i) {
+        float a = 6.2831853f * static_cast<float>(i) / static_cast<float>(n);
+        out[i] = {center.x + std::cos(a) * radius, center.y + std::sin(a) * radius};
+    }
+}
+
+void arrow(RendererResource& r, Vec2 from, Vec2 to, Color c) {
+    r.drawLine(from, to, c, kDebugLine);
+    float dx = to.x - from.x, dy = to.y - from.y;
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 1.f) return;
+    float ux = dx / len, uy = dy / len;
+    float h = std::min(10.f, len * 0.4f);
+    r.drawLine(to, {to.x - ux * h - uy * h * 0.6f, to.y - uy * h + ux * h * 0.6f}, c, kDebugLine);
+    r.drawLine(to, {to.x - ux * h + uy * h * 0.6f, to.y - uy * h - ux * h * 0.6f}, c, kDebugLine);
+}
+
+bool collectShape(b2ShapeId id, void* ctx) {
+    static_cast<std::vector<b2ShapeId>*>(ctx)->push_back(id);
+    return true;
+}
+
+Color withAlpha(Color c, uint8_t a) {
+    c.a = a;
+    return c;
+}
 
 } // namespace
 
+Color physicsDebugColor(BodyType type, bool awake) {
+    Color c = type == BodyType::Static      ? Color{110, 230, 130, 255}
+              : type == BodyType::Kinematic ? Color{100, 180, 255, 255}
+                                            : Color{255, 175, 60, 255};
+    if (!awake && type != BodyType::Static) {
+        c.r = static_cast<uint8_t>(c.r * 0.45f);
+        c.g = static_cast<uint8_t>(c.g * 0.45f);
+        c.b = static_cast<uint8_t>(c.b * 0.45f);
+    }
+    return c;
+}
+
 void PhysicsResource::setDebugDraw(const PhysicsDebugDraw& options) {
     impl_->debug = options;
+    if (!options.contacts) impl_->recentContacts.clear();
 }
 
 const PhysicsDebugDraw& PhysicsResource::debugDraw() const {
@@ -838,24 +875,144 @@ const PhysicsDebugDraw& PhysicsResource::debugDraw() const {
 
 void PhysicsResource::drawDebug(RendererResource& renderer) const {
     if (!b2World_IsValid(impl_->worldId)) return;
-    b2DebugDraw dd = {};
-    dd.DrawPolygon = ddPolygon;
-    dd.DrawSolidPolygon = ddSolidPolygon;
-    dd.DrawCircle = ddCircle;
-    dd.DrawSolidCircle = ddSolidCircle;
-    dd.DrawCapsule = ddCapsule;
-    dd.DrawSolidCapsule = ddSolidCapsule;
-    dd.DrawSegment = ddSegment;
-    dd.DrawTransform = ddTransform;
-    dd.DrawPoint = ddPoint;
-    dd.DrawString = ddString;
-    dd.drawShapes = impl_->debug.shapes;
-    dd.drawAABBs = impl_->debug.aabbs;
-    dd.drawContacts = impl_->debug.contacts;
-    dd.drawContactNormals = impl_->debug.contacts;
-    dd.drawJoints = impl_->debug.joints;
-    dd.context = &renderer;
-    b2World_Draw(impl_->worldId, &dd);
+    const PhysicsDebugDraw& opt = impl_->debug;
+    impl_->drawn = true;
+    uint8_t before = renderer.layer();
+    renderer.setLayer(OverlayLayer);
+
+    if (opt.shapes || opt.aabbs || opt.velocities) {
+        std::vector<b2ShapeId>& shapes = impl_->debugShapes;
+        shapes.clear();
+        b2AABB everywhere = {{-1e9f, -1e9f}, {1e9f, 1e9f}};
+        b2World_OverlapAABB(impl_->worldId, everywhere, b2DefaultQueryFilter(), collectShape, &shapes);
+        std::vector<int32_t>& arrowed = impl_->debugBodies;
+        arrowed.clear();
+        for (b2ShapeId id : shapes) {
+            b2AABB box = b2Shape_GetAABB(id);
+            Rect bounds{box.lowerBound.x, box.lowerBound.y, box.upperBound.x - box.lowerBound.x,
+                        box.upperBound.y - box.lowerBound.y};
+            if (!renderer.visible(bounds, OverlayLayer)) continue;
+            b2BodyId body = b2Shape_GetBody(id);
+            b2BodyType bt = b2Body_GetType(body);
+            BodyType type = bt == b2_staticBody      ? BodyType::Static
+                            : bt == b2_kinematicBody ? BodyType::Kinematic
+                                                     : BodyType::Dynamic;
+            bool sensor = b2Shape_IsSensor(id);
+            Color line = physicsDebugColor(type, b2Body_IsAwake(body));
+            Color fill = withAlpha(line, 45);
+            b2Transform xf = b2Body_GetTransform(body);
+
+            if (opt.shapes) {
+                switch (b2Shape_GetType(id)) {
+                case b2_circleShape: {
+                    b2Circle c = b2Shape_GetCircle(id);
+                    b2Vec2 p = b2TransformPoint(xf, c.center);
+                    Vec2 center{p.x, p.y};
+                    if (!sensor) renderer.drawCircleFilled(center, c.radius, fill);
+                    Vec2 ring[32];
+                    circlePoints(center, c.radius, ring, 32);
+                    outline(renderer, ring, 32, line, sensor);
+                    b2Vec2 axis = b2RotateVector(xf.q, b2Vec2{c.radius, 0.f});
+                    renderer.drawLine(center, {center.x + axis.x, center.y + axis.y}, line, kDebugLine);
+                    break;
+                }
+                case b2_capsuleShape: {
+                    b2Capsule c = b2Shape_GetCapsule(id);
+                    b2Vec2 p1 = b2TransformPoint(xf, c.center1), p2 = b2TransformPoint(xf, c.center2);
+                    b2Vec2 d = b2Normalize(b2Sub(p2, p1));
+                    b2Vec2 n{-d.y * c.radius, d.x * c.radius};
+                    Vec2 ring[32];
+                    circlePoints({p1.x, p1.y}, c.radius, ring, 32);
+                    outline(renderer, ring, 32, line, sensor);
+                    circlePoints({p2.x, p2.y}, c.radius, ring, 32);
+                    outline(renderer, ring, 32, line, sensor);
+                    Vec2 a1{p1.x + n.x, p1.y + n.y}, b1{p2.x + n.x, p2.y + n.y};
+                    Vec2 a2{p1.x - n.x, p1.y - n.y}, b2{p2.x - n.x, p2.y - n.y};
+                    if (sensor) {
+                        dashed(renderer, a1, b1, line);
+                        dashed(renderer, a2, b2, line);
+                    } else {
+                        renderer.drawLine(a1, b1, line, kDebugLine);
+                        renderer.drawLine(a2, b2, line, kDebugLine);
+                    }
+                    break;
+                }
+                case b2_segmentShape: {
+                    b2Segment sg = b2Shape_GetSegment(id);
+                    b2Vec2 a = b2TransformPoint(xf, sg.point1), b = b2TransformPoint(xf, sg.point2);
+                    if (sensor) dashed(renderer, {a.x, a.y}, {b.x, b.y}, line);
+                    else renderer.drawLine({a.x, a.y}, {b.x, b.y}, line, kDebugLine);
+                    break;
+                }
+                case b2_smoothSegmentShape: {
+                    // One edge of a chain loop: static outlines, texture colliders.
+                    b2SmoothSegment sg = b2Shape_GetSmoothSegment(id);
+                    b2Vec2 a = b2TransformPoint(xf, sg.segment.point1);
+                    b2Vec2 b = b2TransformPoint(xf, sg.segment.point2);
+                    renderer.drawLine({a.x, a.y}, {b.x, b.y}, line, kDebugLine);
+                    break;
+                }
+                case b2_polygonShape: {
+                    b2Polygon poly = b2Shape_GetPolygon(id);
+                    Vec2 pts[b2_maxPolygonVertices];
+                    int n = std::min(poly.count, b2_maxPolygonVertices);
+                    for (int i = 0; i < n; ++i) {
+                        b2Vec2 p = b2TransformPoint(xf, poly.vertices[i]);
+                        pts[i] = {p.x, p.y};
+                    }
+                    if (!sensor) renderer.drawPolygonFilled(pts, n, fill);
+                    outline(renderer, pts, n, line, sensor);
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+            if (opt.aabbs) renderer.drawRect(bounds, Color{255, 215, 0, 255}, 1.f);
+            if (opt.velocities && type != BodyType::Static &&
+                std::find(arrowed.begin(), arrowed.end(), body.index1) == arrowed.end()) {
+                arrowed.push_back(body.index1);
+                b2Vec2 v = b2Body_GetLinearVelocity(body);
+                float speed = std::sqrt(v.x * v.x + v.y * v.y);
+                if (speed >= 1.f) {
+                    // A quarter second of travel, at most 160 pixels.
+                    float len = std::min(speed * 0.25f, 160.f);
+                    b2Vec2 c = b2Body_GetWorldCenterOfMass(body);
+                    arrow(renderer, {c.x, c.y}, {c.x + v.x / speed * len, c.y + v.y / speed * len},
+                          Color{255, 255, 255, 255});
+                }
+            }
+        }
+    }
+
+    if (opt.contacts) {
+        // Each contact shows for half a second of game time after it began.
+        for (const auto& c : impl_->recentContacts) {
+            auto a = static_cast<uint8_t>(80.f + 175.f * std::clamp(c.left / 0.5f, 0.f, 1.f));
+            renderer.drawCircleFilled(c.point, 4.f, Color{255, 60, 60, a}, 10);
+            renderer.drawLine(c.point, {c.point.x + c.normal.x * 24.f, c.point.y + c.normal.y * 24.f},
+                              Color{255, 230, 90, a}, kDebugLine);
+        }
+    }
+
+    if (opt.joints) {
+        b2DebugDraw dd = {};
+        dd.DrawPolygon = ddPolygon;
+        dd.DrawSolidPolygon = ddSolidPolygon;
+        dd.DrawCircle = ddCircle;
+        dd.DrawSolidCircle = ddSolidCircle;
+        dd.DrawCapsule = ddCapsule;
+        dd.DrawSolidCapsule = ddSolidCapsule;
+        dd.DrawSegment = ddSegment;
+        dd.DrawTransform = ddTransform;
+        dd.DrawPoint = ddPoint;
+        dd.DrawString = ddString;
+        dd.drawShapes = false;
+        dd.drawJoints = true;
+        dd.context = &renderer;
+        b2World_Draw(impl_->worldId, &dd);
+    }
+    renderer.setLayer(before);
 }
 
 } // namespace drift

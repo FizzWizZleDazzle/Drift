@@ -42,7 +42,20 @@ namespace drift {
 #define DRIFT_LOG_ERROR(...) ::drift::log(::drift::LogLevel::Error, __VA_ARGS__)
 ```
 
-The `log()` function is implemented in `src/core/Log.cpp`. It writes to standard output with a level prefix and timestamp.
+The `log()` function is implemented in `src/core/Log.cpp`. It writes each line to standard error with a level prefix; in the browser that is the developer console.
+
+## Recent Problems
+
+The log keeps the latest 64 warnings and errors for dev tools, such as the Log panel of the [dev overlay](../subsystems/dev-tools.md):
+
+```cpp
+for (const LogLine& line : recentProblems()) {
+    // line.id counts every kept line; line.seconds is logClock() when it was logged
+    show(line.level, line.text);
+}
+```
+
+`logClock()` is the log's clock: steady seconds since its first use.
 
 ## Log Levels
 

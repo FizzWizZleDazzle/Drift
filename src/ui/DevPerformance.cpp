@@ -8,6 +8,12 @@
 
 #include "imgui.h"
 
+#include <drift/World.hpp>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/heap.h>
+#endif
+
 #include <algorithm>
 #include <memory>
 #include <vector>
@@ -66,10 +72,27 @@ void drawPerformance(App& app, PerfState& st) {
         ImGui::Text("Backend %s  draw calls %d  sprites %d", r->backendName(), r->drawCalls(),
                     r->spriteCount());
     }
+    ImGui::Text("Entities %zu", app.world().entitiesWith(app.world().transform2dId()).size());
+#ifdef __EMSCRIPTEN__
+    ImGui::SameLine();
+    ImGui::Text("  memory %.1f MiB", static_cast<double>(emscripten_get_heap_size()) / (1024.0 * 1024.0));
+#endif
+
+    // Milliseconds per phase: the sum of its systems' last run.
+    std::vector<SystemTiming> timings = app.systemTimings();
+    uint64_t phaseUs[7] = {};
+    for (const auto& t : timings) {
+        int i = static_cast<int>(t.phase);
+        if (i >= 0 && i < 7) phaseUs[i] += t.microseconds;
+    }
+    ImGui::Separator();
+    for (Phase p : {Phase::PreUpdate, Phase::Update, Phase::PostUpdate, Phase::Extract, Phase::Render,
+                    Phase::RenderFlush}) {
+        ImGui::Text("%-11s %6.2f ms", phaseName(p), static_cast<double>(phaseUs[static_cast<int>(p)]) / 1000.0);
+    }
 
     ImGui::Separator();
     ImGui::Checkbox("Sort by time", &st.sortByTime);
-    std::vector<SystemTiming> timings = app.systemTimings();
     if (st.sortByTime) {
         std::stable_sort(timings.begin(), timings.end(), [](const SystemTiming& a, const SystemTiming& b) {
             return a.microseconds > b.microseconds;

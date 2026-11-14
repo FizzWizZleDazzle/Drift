@@ -17,6 +17,11 @@
 #include <drift/gameplay/ProceduralAnimation.hpp>
 #include <drift/math/Vector.hpp>
 #include <drift/Log.hpp>
+#include <drift/resources/UIResource.hpp>
+#include <drift/DebugViews.hpp>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/heap.h>
+#endif
 #include <drift/Reflect.hpp>
 #include <drift/Scene.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
@@ -101,6 +106,7 @@ void drift_host_frame(double dt, double elapsed, int64_t frame, double scale, do
 void drift_host_unload();
 int32_t drift_host_is_component(const char* name);
 void drift_host_scene_component(uint64_t e, const char* name, const char* value, const char* ids);
+const char* drift_host_entity_components(uint64_t e);
 const uint8_t* drift_host_build(const char* entry, const char* module_dir, size_t* len);
 }
 
@@ -1625,7 +1631,7 @@ TextStyle textStyle(const json& j) {
 // Immediate draws on `layer`, leaving the renderer's own layer as it was.
 template <typename F> void onLayer(RendererResource& r, int layer, F&& draw) {
     uint8_t before = r.layer();
-    r.setLayer(static_cast<uint8_t>(std::clamp(layer, 0, 31)));
+    r.setLayer(static_cast<uint8_t>(std::clamp(layer, 0, int(OverlayLayer))));
     draw();
     r.setLayer(before);
 }
@@ -1687,7 +1693,7 @@ bool presentation(const std::string& f, const json& a, json& out) {
             auto* fonts = res<FontResource>();
             if (!fonts) return true;
             TextStyle style = textStyle(a[2]);
-            style.layer = static_cast<uint8_t>(std::clamp(a[3].get<int>(), 0, 31));
+            style.layer = static_cast<uint8_t>(std::clamp(a[3].get<int>(), 0, int(OverlayLayer)));
             style.zOrder = a[4].get<float>();
             fonts->drawText(FontHandle{idOf(a[2].value("font", json()))}, a[0].get<std::string>(), vec(a[1]), style);
         } else if (f == "draw_sprite") {
@@ -1707,7 +1713,7 @@ bool presentation(const std::string& f, const json& a, json& out) {
             d.flip = static_cast<Flip>((s.value("flip_x", false) ? int(Flip::H) : 0) | (s.value("flip_y", false) ? int(Flip::V) : 0));
             d.blend = blend(s.value("blend", json()));
             d.material = MaterialHandle{idOf(s.value("material", json()))};
-            d.layer = static_cast<uint8_t>(std::clamp(a[2].get<int>(), 0, 31));
+            d.layer = static_cast<uint8_t>(std::clamp(a[2].get<int>(), 0, int(OverlayLayer)));
             d.zOrder = a[3].get<float>();
             made().drawn.insert(d.texture.id);
             if (d.texture.valid()) r->draw(d);
@@ -2982,9 +2988,7 @@ bool gameplayPhysics(const std::string& f, const json& a, json& out) {
         if (auto* cache = res<TextureShapeCache>())
             cache->rebuild(TextureHandle{a[0].get<uint32_t>()}, img == g_images.end() ? nullptr : &img->second);
     } else if (f == "physics_debug") {
-        PhysicsDebugDraw d = physics->debugDraw();
-        d.enabled = a[0].get<bool>();
-        physics->setDebugDraw(d);
+        if (auto* views = res<DebugViews>()) views->set("colliders", a[0].get<bool>());
     } else {
         return false;
     }
@@ -3291,6 +3295,12 @@ void handScriptComponentsToHost() {
         drift_host_scene_component(e, name.c_str(), value.dump().c_str(), map.dump().c_str());
         return true;
     });
+#ifdef DRIFT_DEV
+    // The inspector shows the game's components of an entity beside the engine's.
+    if (auto* ui = res<UIResource>()) {
+        ui->setForeignComponents([](EntityId e) { return std::string(drift_host_entity_components(e)); });
+    }
+#endif
 }
 
 bool gameplaySteering(const std::string& f, const json& a, json& out) {
@@ -3560,6 +3570,52 @@ json service(const std::string& f, const json& a) {
         std::string text = g_app->settingsStore().valueJson(a[0].get<std::string>().c_str());
         json out = json::parse(text.empty() ? "{}" : text, nullptr, false);
         return out.is_discarded() ? json::object() : out;
+    }
+    if (f == "debug_view") {
+        // name, on: false for a view no plugin added
+        auto* views = res<DebugViews>();
+        return views && views->set(a[0].get<std::string>(), a[1].get<bool>());
+    }
+    if (f == "debug_views") {
+        json out = json::array();
+        if (auto* views = res<DebugViews>())
+            for (const auto& [name, description] : views->list()) out.push_back(name);
+        return out;
+    }
+    if (f == "debug_stats") {
+        // draw calls, sprites, physics bodies, memory in MiB, then the
+        // milliseconds of PreUpdate, Update, PostUpdate, Extract, Render
+        // and RenderFlush in the last frame
+        auto* r = res<RendererResource>();
+        auto* physics = res<PhysicsResource>();
+        double heap = 0.0;
+#ifdef __EMSCRIPTEN__
+        heap = double(emscripten_get_heap_size()) / (1024.0 * 1024.0);
+#endif
+        double phases[7] = {};
+        for (const SystemTiming& t : g_app->systemTimings()) {
+            int i = int(t.phase);
+            if (i >= 0 && i < 7) phases[i] += double(t.microseconds) / 1000.0;
+        }
+        return json::array({r ? r->drawCalls() : 0, r ? r->spriteCount() : 0, physics ? physics->bodyCount() : 0,
+                            heap, phases[1], phases[2], phases[3], phases[4], phases[5], phases[6]});
+    }
+    if (f == "log_recent") {
+        // warnings and errors newer than `within` seconds, at most `count`,
+        // oldest first, each "warning: ..." or "error: ..."
+        double within = a[0].get<double>();
+        size_t count = size_t(std::max(0, a[1].get<int>()));
+        double now = logClock();
+        json out = json::array();
+        std::vector<LogLine> lines = recentProblems();
+        size_t from = lines.size() > count ? lines.size() - count : 0;
+        for (size_t i = from; i < lines.size(); ++i) {
+            if (now - lines[i].seconds > within) continue;
+            std::string text = lines[i].text.substr(0, lines[i].text.find('\n'));
+            if (text.size() > 110) text = text.substr(0, 107) + "...";
+            out.push_back(std::string(lines[i].level == LogLevel::Error ? "error: " : "warning: ") + text);
+        }
+        return out;
     }
     DRIFT_LOG_WARN("Candela: no engine function '%s'", f.c_str());
     return nullptr;

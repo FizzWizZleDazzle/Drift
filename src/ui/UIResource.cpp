@@ -6,6 +6,7 @@
 
 #ifdef DRIFT_DEV
 #include "ui/DevPanels.hpp"
+#include <drift/DebugViews.hpp>
 #endif
 
 #include "gfx/Device.hpp"
@@ -91,6 +92,7 @@ struct UIResource::Impl {
     };
     std::vector<Panel> panels;
     int nextSlot = 0;
+    ForeignComponents foreign;
 #endif
 
     Impl(App& a) : app(a) {}
@@ -171,6 +173,7 @@ UIResource::UIResource(App& app)
 #ifdef DRIFT_DEV
     addDevPanel("Inspector", makeInspectorPanel(), true);
     addDevPanel("Performance", makePerformancePanel(), false);
+    addDevPanel("Log", makeLogPanel(), false);
 #endif
 
     // ImGui draws on top of the presented frame. A frame with no windows
@@ -468,6 +471,15 @@ void UIResource::devRender() {
         for (auto& p : impl_->panels) {
             ImGui::Checkbox(p.name.c_str(), &p.open);
         }
+        // Debug views drawn over the game (see DebugViews).
+        if (auto* views = impl_->app.getResource<DebugViews>()) {
+            ImGui::SeparatorText("Views");
+            for (const auto& [name, description] : views->list()) {
+                bool on = views->enabled(name);
+                if (ImGui::Checkbox(name.c_str(), &on)) views->set(name, on);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", description.c_str());
+            }
+        }
     }
     ImGui::End();
 
@@ -495,6 +507,14 @@ void UIResource::devRender() {
 
 bool UIResource::devIsVisible() const {
     return impl_->devVisible;
+}
+
+void UIResource::setForeignComponents(ForeignComponents components) {
+    impl_->foreign = std::move(components);
+}
+
+const UIResource::ForeignComponents& UIResource::foreignComponents() const {
+    return impl_->foreign;
 }
 #endif
 

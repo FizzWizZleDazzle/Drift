@@ -2,6 +2,7 @@
 
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
+#include <drift/DebugViews.hpp>
 #include <drift/Query.hpp>
 #include <drift/Reflect.hpp>
 #include <drift/components/Camera.hpp>
@@ -130,6 +131,55 @@ public:
         app.addSystem<cameraFollowSystem>("camera_follow", Phase::PostUpdate);
         app.addSystem<cameraBoundsSystem>("camera_bounds", Phase::PostUpdate).after("camera_follow");
         app.addSystem<cameraShakeSystem>("camera_shake", Phase::PostUpdate).after("camera_bounds");
+
+        app.initResource<DebugViews>()->add(
+            "camera", "Each camera's view, its CameraBounds area, follow dead zone and target",
+            [](App& a, RendererResource& r) { drawCameraDebug(a, r); });
+    }
+
+    // The "camera" debug view: the view rect (cyan), the bounds area
+    // (magenta), the follow dead zone (yellow) and a line to the target.
+    static void drawCameraDebug(App& a, RendererResource& r) {
+        World& w = a.world();
+        const auto& reg = w.componentRegistry();
+        Query<Transform2D> targets(w, reg);
+        Query<Camera, Transform2D, Optional<CameraBounds>, Optional<CameraFollow>> q(w, reg);
+        q.iter([&](const Camera& cam, const Transform2D& t, const CameraBounds* bounds, const CameraFollow* follow) {
+            Vec2 half = cameraHalfView(r, cam);
+            // Inset a little, so a camera's own view rect shows inside the screen edge.
+            float in = 2.f / (cam.zoom > 0.f ? cam.zoom : 1.f);
+            r.drawRect({t.position.x - half.x + in, t.position.y - half.y + in, half.x * 2.f - in * 2.f,
+                        half.y * 2.f - in * 2.f},
+                       Color{80, 230, 255, 255}, 3.f);
+            r.drawLine({t.position.x - 10.f, t.position.y}, {t.position.x + 10.f, t.position.y},
+                       Color{80, 230, 255, 255}, 2.f);
+            r.drawLine({t.position.x, t.position.y - 10.f}, {t.position.x, t.position.y + 10.f},
+                       Color{80, 230, 255, 255}, 2.f);
+            if (bounds && bounds->area.w > 0.f && bounds->area.h > 0.f) {
+                // Clip the area to near the view so a huge area still draws its edges.
+                Rect a0 = bounds->area;
+                float x0 = std::max(a0.x, t.position.x - half.x * 4.f), x1 = std::min(a0.x + a0.w, t.position.x + half.x * 4.f);
+                float y0 = std::max(a0.y, t.position.y - half.y * 4.f), y1 = std::min(a0.y + a0.h, t.position.y + half.y * 4.f);
+                Color m{255, 90, 230, 255};
+                if (a0.x >= x0) r.drawLine({a0.x, y0}, {a0.x, y1}, m, 3.f);
+                if (a0.x + a0.w <= x1) r.drawLine({a0.x + a0.w, y0}, {a0.x + a0.w, y1}, m, 3.f);
+                if (a0.y >= y0) r.drawLine({x0, a0.y}, {x1, a0.y}, m, 3.f);
+                if (a0.y + a0.h <= y1) r.drawLine({x0, a0.y + a0.h}, {x1, a0.y + a0.h}, m, 3.f);
+            }
+            if (follow) {
+                Color y{255, 230, 60, 255};
+                if (follow->deadZone.x > 0.f || follow->deadZone.y > 0.f) {
+                    r.drawRect({t.position.x - follow->deadZone.x, t.position.y - follow->deadZone.y,
+                                follow->deadZone.x * 2.f, follow->deadZone.y * 2.f}, y, 2.f);
+                }
+                targets.iterWithEntity([&](EntityId id, const Transform2D& tt) {
+                    if (id != follow->target) return;
+                    Vec2 goal = {tt.position.x + follow->offset.x, tt.position.y + follow->offset.y};
+                    r.drawLine(t.position, goal, y, 2.f);
+                    r.drawCircle(goal, 6.f, y, 2.f);
+                });
+            }
+        });
     }
     DRIFT_PLUGIN(CameraPlugin)
 };

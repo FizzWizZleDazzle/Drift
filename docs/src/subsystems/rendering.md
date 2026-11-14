@@ -150,6 +150,8 @@ Polylines use mitered joins. `drawPolygonFilled` accepts concave polygons. Passi
 
 Every draw has a layer. World layers 0..30 are drawn by cameras whose `layerMask` includes them; higher layers draw on top of lower ones. `ScreenLayer` is drawn last, in logical screen coordinates, without a camera, after post effects. Use it for HUDs and menus.
 
+`OverlayLayer` is in world coordinates like the world layers, but it is drawn after lighting and post effects, through every camera that renders to the screen, just before `ScreenLayer`. Nothing darkens or tints it, which is what debug drawing needs: the [debug views](dev-tools.md#debug-views) draw on it. No `layerMask` names it, and render-target cameras do not draw it.
+
 ```cpp
 void drawHud(ResMut<RendererResource> r) {
     r->setLayer(ScreenLayer);

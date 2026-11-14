@@ -3,6 +3,7 @@
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
 #include <drift/Events.hpp>
+#include <drift/DebugViews.hpp>
 #include <drift/Reflect.hpp>
 #include <drift/PhysicsSyncSystem.hpp>
 #include <drift/CollisionBridge.hpp>
@@ -18,10 +19,6 @@
 namespace drift {
 
 inline void physics_step(ResMut<PhysicsResource> physics, Res<Time> time) { physics->step(time->delta); }
-
-inline void physics_debug_draw(Res<PhysicsResource> physics, ResMut<RendererResource> renderer) {
-    if (physics->debugDraw().enabled) physics->drawDebug(*renderer);
-}
 
 // The [physics] section of drift.toml: the world's starting settings.
 // Change them while running through PhysicsResource.
@@ -158,7 +155,11 @@ public:
         // 6. Populate CollisionBridge directly from PhysicsResource contact events
         //    (same-frame data, no double-buffer delay)
         app.initResource<CollisionBridge>();
-        app.addSystem<physics_debug_draw>("physics_debug_draw", Phase::Render);
+        app.initResource<DebugViews>()->add(
+            "colliders", "Colliders by body kind, sensors dashed, contacts and velocities",
+            [](App& a, RendererResource& r) {
+                if (auto* p = a.getResource<PhysicsResource>()) p->drawDebug(r);
+            });
 
         app.addSystem("collision_bridge_sync", Phase::PostUpdate, [](App& a) {
             auto* cb = a.getResource<CollisionBridge>();
@@ -202,12 +203,17 @@ public:
         ui->addDevPanel("Physics", [](App& a) {
             auto* physics = a.getResource<PhysicsResource>();
             if (!physics) return;
+            auto* views = a.getResource<DebugViews>();
+            if (!views) return;
+            bool on = views->enabled("colliders");
+            if (ImGui::Checkbox("Draw colliders", &on)) views->set("colliders", on);
             PhysicsDebugDraw dd = physics->debugDraw();
-            bool changed = ImGui::Checkbox("Debug draw", &dd.enabled);
-            ImGui::BeginDisabled(!dd.enabled);
+            bool changed = false;
+            ImGui::BeginDisabled(!on);
             changed |= ImGui::Checkbox("Shapes", &dd.shapes);
             changed |= ImGui::Checkbox("AABBs", &dd.aabbs);
             changed |= ImGui::Checkbox("Contacts", &dd.contacts);
+            changed |= ImGui::Checkbox("Velocities", &dd.velocities);
             changed |= ImGui::Checkbox("Joints", &dd.joints);
             ImGui::EndDisabled();
             if (changed) physics->setDebugDraw(dd);

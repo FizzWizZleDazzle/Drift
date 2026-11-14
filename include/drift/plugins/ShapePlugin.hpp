@@ -3,6 +3,7 @@
 #include <drift/Plugin.hpp>
 #include <drift/Reflect.hpp>
 #include <drift/App.hpp>
+#include <drift/DebugViews.hpp>
 #include <drift/Query.hpp>
 #include <drift/components/GlobalTransform.hpp>
 #include <drift/components/Shape.hpp>
@@ -125,6 +126,24 @@ public:
             .field("layer", &Shape2D::layer)
             .field("visible", &Shape2D::visible);
         app.addSystem<shapeRender>("shape_render", Phase::Render);
+        // Shape outlines for the "bounds" debug view and picking.
+        app.initResource<DebugViews>()->addOutlines([](App& a, const DebugViews::OutlineSink& out) {
+            World& w = a.world();
+            Query<Shape2D, Transform2D, Optional<GlobalTransform2D>> q(w, w.componentRegistry());
+            q.iterWithEntity([&](EntityId e, const Shape2D& s, const Transform2D& t, const GlobalTransform2D* g) {
+                if (!s.visible) return;
+                bool circle = s.kind == ShapeKind::Circle;
+                Vec2 size = circle ? Vec2{s.radius * 2.f, s.radius * 2.f} : s.size;
+                Vec2 origin = circle ? Vec2{s.radius, s.radius} : Vec2{s.anchor.x * size.x, s.anchor.y * size.y};
+                DebugOutline o;
+                o.entity = e;
+                o.pivot = g ? g->position : t.position;
+                o.layer = s.layer;
+                o.z = s.zOrder;
+                debugBox(o.pivot, g ? g->rotation : t.rotation, g ? g->scale : t.scale, size, origin, o.corners);
+                out(o);
+            });
+        });
     }
     DRIFT_PLUGIN(ShapePlugin)
 };

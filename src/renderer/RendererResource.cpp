@@ -168,6 +168,12 @@ bool pointInTriangle(Vec2 p, Vec2 a, Vec2 b, Vec2 c) {
     return !(neg && pos);
 }
 
+// Whether a camera with this layer mask draws `layer` in its pass, or, for
+// OverlayLayer, after the post effects.
+bool shows(uint32_t mask, uint8_t layer) {
+    return layer == OverlayLayer || (layer < 32 && (mask & (1u << layer)));
+}
+
 } // namespace
 
 // =============================================================================
@@ -297,7 +303,7 @@ struct RendererResource::Impl {
     bool nearby(float minX, float minY, float maxX, float maxY, uint8_t itemLayer) {
         if (itemLayer == ScreenLayer) return true;
         for (const CullView& v : nearbyViews()) {
-            if ((v.mask & (1u << itemLayer)) &&
+            if (shows(v.mask, itemLayer) &&
                 !(maxX < v.bounds.x || minX > v.bounds.x + v.bounds.w ||
                   maxY < v.bounds.y || minY > v.bounds.y + v.bounds.h)) {
                 return true;
@@ -721,7 +727,7 @@ struct RendererResource::Impl {
             bool seen = it.layer == ScreenLayer;
             for (size_t c = 0; c < cullViews.size() && !seen; ++c) {
                 const CullView& v = cullViews[c];
-                seen = (v.mask & (1u << it.layer)) &&
+                seen = shows(v.mask, it.layer) &&
                        !(it.maxX < v.bounds.x || it.minX > v.bounds.x + v.bounds.w ||
                          it.maxY < v.bounds.y || it.minY > v.bounds.y + v.bounds.h);
             }
@@ -904,7 +910,7 @@ void RendererResource::endFrame() {
         visible.clear();
         for (uint32_t ii : sorted) {
             const Item& it = q.items[ii];
-            if (it.layer == ScreenLayer || !(d.layerMask & (1u << it.layer))) continue;
+            if (it.layer >= ScreenLayer || !(d.layerMask & (1u << it.layer))) continue;
             if (it.maxX < bounds.x || it.minX > bounds.x + bounds.w ||
                 it.maxY < bounds.y || it.minY > bounds.y + bounds.h) continue;
             visible.push_back(ii);
@@ -939,6 +945,24 @@ void RendererResource::endFrame() {
         out.targetSize = {(float)sw, (float)sh};
         fx.fn(*this, s.scene[cur], out);
         cur = 1 - cur;
+    }
+
+    // ---- overlay layer: world drawing over the finished scene, through
+    // each camera that shows the screen ----
+    if (!sorted.empty() && q.items[sorted.back()].layer == OverlayLayer) {
+        for (const Cam& c : cams) {
+            if (!c.toScene) continue;
+            visible.clear();
+            for (uint32_t ii : sorted) {
+                const Item& it = q.items[ii];
+                if (it.layer != OverlayLayer) continue;
+                if (it.maxX < c.bounds.x || it.minX > c.bounds.x + c.bounds.w ||
+                    it.maxY < c.bounds.y || it.minY > c.bounds.y + c.bounds.h) continue;
+                visible.push_back(ii);
+            }
+            if (!visible.empty())
+                s.submit(q, visible, s.scene[cur], false, {}, c.vp, c.vpm, pxPerLogicalX, pxPerLogicalY);
+        }
     }
 
     // ---- screen layer ----

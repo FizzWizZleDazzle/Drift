@@ -57,6 +57,12 @@ public:
     void devToggle();
     void devRender();
     bool devIsVisible() const;
+    // Components kept outside the ECS, such as a scripting host's: the
+    // inspector shows them read-only beside the engine's. The function
+    // answers an entity's components as a JSON object by name.
+    using ForeignComponents = std::function<std::string(EntityId)>;
+    void setForeignComponents(ForeignComponents components);
+    const ForeignComponents& foreignComponents() const;
 #endif
 
 private:

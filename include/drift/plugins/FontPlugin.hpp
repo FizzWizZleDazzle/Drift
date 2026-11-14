@@ -3,6 +3,8 @@
 #include <drift/Plugin.hpp>
 #include <drift/App.hpp>
 #include <drift/AssetServer.hpp>
+#include <drift/DebugViews.hpp>
+#include <drift/Query.hpp>
 #include <drift/World.hpp>
 #include <drift/components/GlobalTransform.hpp>
 #include <drift/components/Text.hpp>
@@ -60,6 +62,27 @@ public:
         app.world().registerComponent<Text>("Text");
         app.addSystem<font_begin_frame>("font_begin", Phase::PreUpdate);
         app.addSystem("text_render", Phase::Render, drawTextEntities);
+        // Text outlines for the "bounds" debug view and picking.
+        app.initResource<DebugViews>()->addOutlines([](App& a, const DebugViews::OutlineSink& out) {
+            auto* fonts = a.getResource<FontResource>();
+            World& w = a.world();
+            Query<Text, Transform2D, Optional<GlobalTransform2D>> q(w, w.componentRegistry());
+            q.iterWithEntity([&](EntityId e, const Text& text, const Transform2D& t, const GlobalTransform2D* g) {
+                if (!text.visible || text.text[0] == '\0') return;
+                TextStyle style = text.style();
+                Vec2 size = fonts->measureText(text.font, text.str(), style);
+                float ax = text.align == TextAlign::Center ? 0.5f : text.align == TextAlign::Right ? 1.f : 0.f;
+                float ay = text.valign == TextVAlign::Middle ? 0.5f : text.valign == TextVAlign::Bottom ? 1.f : 0.f;
+                DebugOutline o;
+                o.entity = e;
+                o.pivot = g ? g->position : t.position;
+                o.layer = text.layer;
+                o.z = text.zOrder;
+                debugBox(o.pivot, g ? g->rotation : t.rotation, g ? g->scale : t.scale, size,
+                         {ax * size.x, ay * size.y}, o.corners);
+                out(o);
+            });
+        });
     }
     DRIFT_PLUGIN(FontPlugin)
 };

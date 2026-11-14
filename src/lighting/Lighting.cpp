@@ -15,6 +15,7 @@
 
 #include <drift/plugins/LightingPlugin.hpp>
 #include <drift/App.hpp>
+#include <drift/DebugViews.hpp>
 #include <drift/Query.hpp>
 #include <drift/components/GlobalTransform.hpp>
 #include <drift/components/Physics.hpp>
@@ -398,6 +399,38 @@ void LightingPlugin::build(App& app) {
     world.registerComponent<LightOccluder2D>("LightOccluder2D");
     app.initResource<LightingState>();
     app.addSystem<lighting_collect>("lighting_collect", Phase::Render);
+    // The "lights" debug view: each light's reach (a circle, or a spot
+    // light's cone) in its color, and the occluders' outlines.
+    app.initResource<DebugViews>()->add(
+        "lights", "Each light's reach and cone, and the occluders that cast shadows", [](App& a, RendererResource& r) {
+        const auto* st = a.getResource<LightingState>();
+        if (!st) return;
+        for (const LightData& l : st->lights) {
+            if (!r.visible(l.bounds, OverlayLayer)) continue;
+            float m = std::max({l.color.r, l.color.g, l.color.b, 1e-3f});
+            Color c{static_cast<uint8_t>(255.f * l.color.r / m), static_cast<uint8_t>(255.f * l.color.g / m),
+                    static_cast<uint8_t>(255.f * l.color.b / m), 255};
+            r.drawCircleFilled(l.position, 5.f, c, 12);
+            if (l.cosOuter < -1.5f) {
+                r.drawCircle(l.position, l.radius, c, 2.f, 64);
+                continue;
+            }
+            // A spot light: its cone's edges and the arc between them.
+            float aim = std::atan2(l.direction.y, l.direction.x);
+            float half = std::acos(std::clamp(l.cosOuter, -1.f, 1.f));
+            for (float s : {-1.f, 1.f}) {
+                float e = aim + s * half;
+                r.drawLine(l.position, {l.position.x + std::cos(e) * l.radius, l.position.y + std::sin(e) * l.radius},
+                           c, 2.f);
+            }
+            r.drawArc(l.position, l.radius, aim - half, aim + half, c, 2.f);
+        }
+        for (const OccluderData& o : st->occluders) {
+            if (o.count < 2 || !r.visible(o.bounds, OverlayLayer)) continue;
+            r.drawPolyline(st->points.data() + o.first, static_cast<int32_t>(o.count), Color{200, 200, 255, 255},
+                           2.f, true);
+        }
+    });
 }
 
 void LightingPlugin::finish(App& app) {

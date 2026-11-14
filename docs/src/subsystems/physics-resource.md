@@ -364,18 +364,26 @@ const PhysicsDebugDraw& debugDraw() const;
 void drawDebug(RendererResource& renderer) const;
 ```
 
-With `enabled` set, `PhysicsPlugin` draws Box2D's view of the world every frame in world space, above the scene: collider outlines (filled for solid bodies), and optionally bounding boxes, contact points and normals, and joints.
+`PhysicsPlugin` adds the `colliders` [debug view](dev-tools.md#debug-views); while it is on, the physics world is drawn every frame over the finished frame (on `OverlayLayer`, after lighting and post effects, at full brightness):
+
+- every collider: boxes, circles, capsules, polygons, segments and the edges of chain loops, so static texture colliders show their outlines and moving ones their convex pieces;
+- static bodies green, kinematic blue, dynamic orange (`physicsDebugColor`), a sleeping body at under half brightness;
+- solid shapes filled and outlined, sensors dashed and unfilled;
+- where each contact began, with its normal, for half a second of game time;
+- each moving body's velocity as an arrow a quarter second of travel long (at most 160 pixels);
+- joints, and optionally each shape's bounding box.
 
 ```cpp
 struct PhysicsDebugDraw {
-    bool enabled = false;
     bool shapes = true;
     bool aabbs = false;
-    bool contacts = false;
-    bool joints = false;
+    bool contacts = true;
+    bool velocities = true;
+    bool joints = true;
 };
 
-physics->setDebugDraw({.enabled = true, .contacts = true});
+app.getResource<DebugViews>()->set("colliders", true);
+physics->setDebugDraw({.aabbs = true});
 ```
 
-`drawDebug` queues the same shapes on the renderer yourself, for example into a different layer. In development builds the Physics panel of the [dev overlay](dev-tools.md) toggles these options.
+`setDebugDraw` picks what the view draws; `DebugViews::set` switches it. `drawDebug` queues the drawing on the renderer yourself, on `OverlayLayer`. Contacts are recorded only while the view is on. In development builds the Physics panel of the [dev overlay](dev-tools.md) has the same switches.
