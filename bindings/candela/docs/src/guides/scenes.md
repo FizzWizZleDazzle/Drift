@@ -46,16 +46,41 @@ Load the file through `Assets` and spawn it through `Commands`:
 fn load_level(cmd: Commands, assets: Assets) {
     let level = cmd.spawn_scene(assets.scene("assets/level1.json"), SceneOptions { .. });
     if level.find("Player") is Some(player) {
-        cmd.insert(player, CameraFollow { target: player, .. });
+        cmd.spawn([at(0.0, 0.0), Camera { .. }, CameraFollow { target: player, .. }]);
     }
 }
 ```
 
 `spawn_scene` returns a `SceneInstance` at once, with the new entities in file order (`entities`), the ones without a parent in the file (`roots`), and `find(name)` for the first entity with that `Name`. The entities and their components exist for the systems that run after this one.
 
+A path that does not exist logs `Scene: cannot read 'assets/level1.json'` and throws `"drift_load_failed: assets/level1.json"`; catch it with `catch e` and test `e.starts_with("drift_load_failed")`.
+
 ## Prefabs
 
-A prefab is a scene file you spawn many times. `SceneOptions` changes each copy:
+![Four street lamps from one scene file, the third with a red bulb](../images/scenes/prefab.png)
+
+A prefab is a scene file you spawn many times. This one, `assets/lamp.json`, is a lamp post with its bulb as a child; the bulb carries the game's own `Glow` component:
+
+```json
+{{#include ../../gallery/scenes/prefab/assets/lamp.json}}
+```
+
+The game loads it once and spawns four copies, moving each with `offset` and giving the third a red bulb with an override. [Run it in the browser](../play/gallery/scenes/prefab/).
+
+```rust
+{{#include ../../gallery/scenes/prefab/main.cdl:spawn}}
+```
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/scenes/prefab/main.cdl:all}}
+```
+
+</details>
+
+`SceneOptions` changes each copy:
 
 | Field | Does |
 |-------|------|

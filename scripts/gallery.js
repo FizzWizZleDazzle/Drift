@@ -132,6 +132,7 @@ const pictures = [
     { guide: 'ui', name: 'hud', frames: 2, count: 60, every: 8, fps: 15, width: 360 },
     { guide: 'levels', name: 'text_map', frames: 240, count: 48, every: 5, fps: 12, width: 360 },
     { guide: 'blocks', name: 'hits', frames: 2, count: 60, every: 3, fps: 20, width: 360 },
+    { guide: 'scenes', name: 'prefab', frames: 3 },
 ];
 
 function arg(name, fallback) {
