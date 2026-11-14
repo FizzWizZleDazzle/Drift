@@ -1689,7 +1689,38 @@ impl Host {
         if self.restart_pending {
             self.restart();
         }
+        self.sweep_made_assets();
         self.program.collect(2000);
+    }
+
+    /// Lets the engine free the textures and images the game made and no
+    /// longer holds, once enough of them have piled up (the engine says
+    /// when). Every value the game keeps between frames is here: resources,
+    /// components, waiting messages and the defaults things are rebuilt
+    /// from; candela has no global variables.
+    fn sweep_made_assets(&mut self) {
+        if !call("asset_sweep_wanted", json!([])).as_bool().unwrap_or(false) {
+            return;
+        }
+        let mut textures = BTreeSet::new();
+        let mut images = BTreeSet::new();
+        let mut note = |v: &Value| held_assets(v, &mut textures, &mut images);
+        self.resources.values().for_each(&mut note);
+        self.initial_resources.values().for_each(&mut note);
+        self.component_defaults.values().for_each(&mut note);
+        self.message_defaults.values().for_each(&mut note);
+        self.messages.iter().for_each(|(_, _, v)| note(v));
+        self.later.iter().for_each(|(_, v)| note(v));
+        STORES.with(|s| s.borrow().values().for_each(|store| store.values().for_each(&mut note)));
+        let freed = call("asset_sweep", json!([textures, images]));
+        let freed: Vec<i64> = freed.as_array().map(|a| a.iter().filter_map(Json::as_i64).collect()).unwrap_or_default();
+        if freed.iter().any(|n| *n > 0) && self.reported.insert("asset_sweep".into()) {
+            log(0, &format!(
+                "Candela: freed {} textures and {} images the game made and no longer holds; the engine does this whenever they pile up",
+                freed.first().copied().unwrap_or(0),
+                freed.get(1).copied().unwrap_or(0)
+            ));
+        }
     }
 
     /// Starts the game over: every entity the game spawned goes, resources
@@ -1800,6 +1831,24 @@ fn scene_json(v: &Value, local: &HashMap<u64, i64>) -> Json {
         Value::Array(items) => Json::Array(items.iter().map(|x| scene_json(x, local)).collect()),
         Value::Map(m) => Json::Object(m.iter().map(|(k, x)| (k.clone(), scene_json(x, local))).collect()),
         other => to_json(other),
+    }
+}
+
+/// The texture and image ids a value holds, however deep.
+fn held_assets(v: &Value, textures: &mut BTreeSet<i64>, images: &mut BTreeSet<i64>) {
+    match v {
+        Value::Struct { name, fields } => {
+            let id = || fields.iter().find(|(f, _)| f == "id").and_then(|(_, x)| x.as_i64());
+            match bare(name) {
+                "Texture" => textures.extend(id()),
+                "Image" => images.extend(id()),
+                _ => fields.iter().for_each(|(_, x)| held_assets(x, textures, images)),
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|x| held_assets(x, textures, images)),
+        Value::Map(m) => m.values().for_each(|x| held_assets(x, textures, images)),
+        Value::Enum { payload, .. } => payload.iter().for_each(|x| held_assets(x, textures, images)),
+        _ => {}
     }
 }
 

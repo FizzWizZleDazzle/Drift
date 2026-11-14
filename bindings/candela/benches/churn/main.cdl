@@ -1,0 +1,36 @@
+// Benchmark: textures and images made every frame and dropped, the way a
+// game redraws a procedural picture without freeing the old one.
+//
+// Each frame a system draws a fresh image, turns it into a texture and
+// shows it on a sprite in place of the last one, and crops a copy it never
+// keeps. `?size=256` sets the image's width and height in pixels. Watch the
+// heap line of measure.mjs: it should level off, not keep growing.
+
+import "drift" { * };
+
+@component struct Canvas {}
+
+@resource
+struct Bench { size: int = 256, frame: int = 0 }
+
+fn arg(platform: Platform, name: string, fallback: int) -> int {
+    return match platform.query(name).parse<int>() { Some(v) => v, None => fallback };
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, platform: Platform, bench: Bench) {
+    bench.size = arg(platform, "size", bench.size);
+    cmd.spawn([at(480.0, 270.0), Sprite { .. }, Canvas {}]);
+}
+
+@system
+fn redraw(canvas: (Canvas, Sprite), assets: Assets, bench: Bench) {
+    let (_, sprite) = canvas;
+    bench.frame += 1;
+    let n = bench.size;
+    let img = assets.create_image(n, n, hsv(float(bench.frame % 360), 0.5, 0.4));
+    let r = float(n) * 0.25 + float(bench.frame % 30);
+    img.fill_circle(vec2(float(n) * 0.5, float(n) * 0.5), r, rgb(255, 230, 120));
+    let corner = img.crop(rect(0.0, 0.0, float(n) * 0.5, float(n) * 0.5));
+    sprite.image = img.to_texture();
+}

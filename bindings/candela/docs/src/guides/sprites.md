@@ -112,7 +112,9 @@ img.circle(vec2(64.0, 64.0), 24.0, rgba(255, 255, 255, 200));
 cmd.spawn([at(200.0, 200.0), Sprite { image: img.to_texture(), .. }]);
 ```
 
-A texture's `to_image()` reads its pixels back from the GPU: for a render target, what its camera drew. `save_png` or `download` keeps them. See [`Image`](../reference/assets.md#image) for every method. [Save and Load](../examples/save-load.md) paints on a grid, and the [Roguelike](../examples/roguelike.md) draws its tileset this way.
+A texture's `to_image()` reads its pixels back from the GPU: for a render target, what its camera drew. `save_png` or `download` keeps them. See [`Image`](../reference/assets.md#image) for every method.
+
+Images and textures you make (`create_image`, `image`, `crop`, `to_image`, `to_texture`, `create_texture`, `render_target`) are freed once nothing holds them: no resource, component or message keeps their value, no sprite, particle emitter or camera uses the texture, and nothing drew it this frame. The engine looks for them when they pile up, so a system that makes a fresh image every frame and drops the old one does not run out of memory. A texture handed to a material, a tilemap, a sprite sheet or a colour grading table stays for the rest of the run. `img.free()` releases an image's pixels at once. [Save and Load](../examples/save-load.md) paints on a grid, and the [Roguelike](../examples/roguelike.md) draws its tileset this way.
 
 ## Parts that move together
 

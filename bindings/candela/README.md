@@ -49,7 +49,7 @@ Every folder in `examples/` is a complete game built as a web page by the docs w
 
 ## Benchmarks
 
-`benches/` holds games that stress one thing each: sprites moved by per-entity systems, physics bodies, particles, a crowd of procedurally animated creatures, lookups, and HUD text, plus `dungeon`, a copy of a team's procedurally generated side-scroller that streams chunks of wall, torches, lights and a post effect while the camera scrolls. A web build makes each one a page, `bench_<name>/`, and `benches/measure.mjs` times the pages in headless Chrome: startup, CPU time per frame, and the size of the wasm heap after the warmup and at the end, to show memory a long run keeps:
+`benches/` holds games that stress one thing each: sprites moved by per-entity systems, physics bodies, particles, a crowd of procedurally animated creatures, lookups, HUD text, and images and textures made every frame and dropped (`churn`), plus `dungeon`, a copy of a team's procedurally generated side-scroller that streams chunks of wall, torches, lights and a post effect while the camera scrolls. A web build makes each one a page, `bench_<name>/`, and `benches/measure.mjs` times the pages in headless Chrome: startup, CPU time per frame, and the size of the wasm heap after the warmup and at the end, to show memory a long run keeps:
 
 ```sh
 node bindings/candela/benches/measure.mjs build-web/bindings/candela bench_creatures 'bench_sprites?n=4000'

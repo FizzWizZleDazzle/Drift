@@ -8,7 +8,9 @@ import "drift/core/audio" { * };
 //! page: assets
 
 /// An image the engine can draw. Load one with `texture(path)`, make one with
-/// `Assets.create_texture` or `Assets.render_target`, or from an [`Image`](#image).
+/// `Assets.create_texture` or `Assets.render_target`, or from an [`Image`](#image). A texture
+/// made in code is freed once nothing uses it: no resource, component or message holds it, no
+/// sprite, particle emitter or camera shows it, and nothing drew it this frame.
 ///
 /// ```rust
 /// cmd.spawn([at(0.0, 0.0), Sprite { image: art.ship, .. }]);

@@ -368,8 +368,8 @@ impl Draw {
 //! page: assets
 
 /// Pixels in memory that you change from code and show through a texture: procedural art, paint
-/// programs, fog of war, minimaps, screenshots. The engine holds the pixels; `free()` lets them
-/// go.
+/// programs, fog of war, minimaps, screenshots. The engine holds the pixels and frees them once
+/// no resource, component or message holds the image; `free()` lets them go at once.
 ///
 /// ```rust
 /// @system(schedule: Schedule::Startup)
@@ -619,7 +619,8 @@ impl Image {
         self.save_png(path);
         drift::download(path);
     }
-    /// Releases the pixels. Textures made from the image stay.
+    /// Releases the pixels now, rather than when nothing holds the image any more. Textures made
+    /// from the image stay.
     ///
     /// ```rust
     /// img.free();

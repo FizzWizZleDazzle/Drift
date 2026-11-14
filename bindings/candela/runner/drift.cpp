@@ -219,6 +219,33 @@ Vec2 textureSize(TextureHandle t) {
     return r && t.valid() ? r->textureSize(t) : Vec2{};
 }
 
+// ---- Textures and images a game makes ----
+//
+// Candela values have no destructors, so a texture or image the game made
+// and then dropped would stay for the rest of the run. The host sweeps them
+// instead: once what the game made has grown enough, it lists the textures
+// and images its values still hold, and everything else it made that no
+// sprite, particle emitter or camera shows, that was not drawn this frame
+// and that the engine did not keep (a material, a tilemap, a sprite sheet,
+// a colour grading table) is freed.
+struct MadeAssets {
+    std::unordered_map<uint32_t, size_t> textures;   // id -> bytes
+    std::unordered_set<uint32_t> kept;               // handed to something that keeps it
+    std::unordered_set<uint32_t> drawn;              // drawn this frame
+    size_t keptBytes = 0;                            // what the last sweep left
+};
+MadeAssets& made() {
+    static MadeAssets m;
+    return m;
+}
+uint32_t madeTexture(TextureHandle t, int w, int h) {
+    if (t.valid()) made().textures[t.id] = size_t(std::max(0, w)) * size_t(std::max(0, h)) * 4;
+    return t.id;
+}
+void keepTexture(uint32_t id) {
+    if (id) made().kept.insert(id);
+}
+
 // Moves a body Box2D owns to a Transform the script set.
 void teleport(EntityId e, Vec2 position, float rotation) {
     auto* bridge = res<PhysicsBridge>();
@@ -1419,6 +1446,7 @@ bool procgen(const std::string& f, const json& a, json& out) {
         d.tileWidth = a[2].get<int32_t>();
         d.tileHeight = a[3].get<int32_t>();
         d.tileset = TextureHandle{a[4].get<uint32_t>()};
+        keepTexture(d.tileset.id);
         d.layers.clear();
         for (const auto& n : a[5]) d.layers.push_back(n.get<std::string>());
         if (d.layers.empty()) d.layers.push_back("Tiles");
@@ -1679,9 +1707,11 @@ bool presentation(const std::string& f, const json& a, json& out) {
             d.material = MaterialHandle{idOf(s.value("material", json()))};
             d.layer = static_cast<uint8_t>(std::clamp(a[2].get<int>(), 0, 31));
             d.zOrder = a[3].get<float>();
+            made().drawn.insert(d.texture.id);
             if (d.texture.valid()) r->draw(d);
         } else if (f == "draw_nine") {
             TextureHandle tex{a[0].get<uint32_t>()};
+            made().drawn.insert(tex.id);
             const json& n = a[1];
             Rect dest{num(n, 0), num(n, 1), num(n, 2), num(n, 3)};
             Rect src{num(n, 4), num(n, 5), num(n, 6), num(n, 7)};
@@ -1717,6 +1747,61 @@ bool presentation(const std::string& f, const json& a, json& out) {
 
 std::unordered_map<int64_t, Image> g_images;
 int64_t g_nextImage = 1;
+
+size_t imageBytes() {
+    size_t n = 0;
+    for (const auto& [id, img] : g_images) n += size_t(img.width()) * size_t(img.height()) * 4;
+    return n;
+}
+
+// Whether what the game made has grown enough since the last sweep to look
+// for what it dropped: double what the last sweep kept, and at least 8 MiB.
+bool sweepWanted() {
+    size_t bytes = imageBytes();
+    for (const auto& [id, b] : made().textures) bytes += b;
+    return bytes > std::max<size_t>(size_t(8) << 20, made().keptBytes * 2);
+}
+
+// Frees the textures and images the game made that nothing uses: `textures`
+// and `images` are the ids the game's values hold.
+std::pair<int, int> sweepMade(const std::unordered_set<uint32_t>& textures, const std::unordered_set<int64_t>& images) {
+    MadeAssets& m = made();
+    std::unordered_set<uint32_t> used(textures.begin(), textures.end());
+    for (EntityId e : world().entitiesWith(cid<Sprite>())) {
+        if (const Sprite* s = get<Sprite>(e)) used.insert(s->texture.id);
+    }
+    for (EntityId e : world().entitiesWith(cid<ParticleEmitter>())) {
+        if (const ParticleEmitter* pe = get<ParticleEmitter>(e)) used.insert(pe->config.texture.id);
+    }
+    for (EntityId e : world().entitiesWith(cid<Camera>())) {
+        if (const Camera* c = get<Camera>(e)) used.insert(c->target.id);
+    }
+    int freedTextures = 0, freedImages = 0;
+    size_t kept = 0;
+    auto* r = res<RendererResource>();
+    for (auto it = m.textures.begin(); it != m.textures.end();) {
+        uint32_t id = it->first;
+        if (used.count(id) || m.kept.count(id) || m.drawn.count(id) || !r) {
+            kept += it->second;
+            ++it;
+            continue;
+        }
+        r->destroyTexture(TextureHandle{id});
+        it = m.textures.erase(it);
+        ++freedTextures;
+    }
+    for (auto it = g_images.begin(); it != g_images.end();) {
+        if (images.count(it->first)) {
+            kept += size_t(it->second.width()) * size_t(it->second.height()) * 4;
+            ++it;
+            continue;
+        }
+        it = g_images.erase(it);
+        ++freedImages;
+    }
+    m.keptBytes = kept;
+    return {freedTextures, freedImages};
+}
 std::vector<std::pair<std::string, int>> g_downloads;   // path, frames left to wait for it
 
 Color colorOf(const json& c, Color fallback = {0, 0, 0, 0}) {
@@ -1806,7 +1891,7 @@ bool images(const std::string& f, const json& a, json& out) {
         return true;
     }
     if (f == "render_target") {
-        out = r ? r->createRenderTarget(a[0].get<int>(), a[1].get<int>()).id : 0u;
+        out = r ? madeTexture(r->createRenderTarget(a[0].get<int>(), a[1].get<int>()), a[0].get<int>(), a[1].get<int>()) : 0u;
         return true;
     }
     if (f == "window_screenshot") {
@@ -1889,7 +1974,7 @@ bool images(const std::string& f, const json& a, json& out) {
                 img.set(x, y, {uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v)});
             }
     } else if (f == "image_texture") {
-        out = r ? r->createTextureFromPixels(img.data(), img.width(), img.height()).id : 0u;
+        out = r ? madeTexture(r->createTextureFromPixels(img.data(), img.width(), img.height()), img.width(), img.height()) : 0u;
     } else if (f == "image_save") {
         out = img.savePng(a[1].get<std::string>().c_str());
     } else if (f == "image_free") {
@@ -2061,6 +2146,7 @@ bool effectSettings(const json& j, PostEffectParams& out) {
         g.saturation = j.value("saturation", 1.f);
         g.tint = colorF(j.value("tint", json()), {1.f, 1.f, 1.f, 1.f});
         g.lut = TextureHandle{idOf(j.value("lut", json()))};
+        keepTexture(g.lut.id);
         g.lutStrength = j.value("lut_strength", 1.f);
         out = g;
     } else if (kind == "Blur") {
@@ -2427,6 +2513,7 @@ bool windowAndAssets(const std::string& f, const json& a, json& out) {
         return true;
     }
     if (f == "material_texture") {
+        keepTexture(a[2].get<uint32_t>());
         if (r) r->setMaterialTexture(MaterialHandle{a[0].get<uint32_t>()}, a[1].get<int>(), TextureHandle{a[2].get<uint32_t>()});
         return true;
     }
@@ -2592,6 +2679,7 @@ bool animation(const std::string& f, const json& a, json& out) {
         out = json::array();
         if (!sprites) return true;
         uint32_t tex = a[0].get<uint32_t>();
+        keepTexture(tex);
         float w = a[1].get<float>(), h = a[2].get<float>();
         auto key = std::make_tuple(tex, w, h);
         auto it = made.find(key);
@@ -3355,7 +3443,7 @@ json service(const std::string& f, const json& a) {
         if (!r || w <= 0 || h <= 0 || px.size() < size_t(w) * size_t(h) * 4) return 0;
         std::vector<uint8_t> bytes(px.size());
         for (size_t i = 0; i < bytes.size(); ++i) bytes[i] = channel(px[i].get<double>());
-        return r->createTextureFromPixels(bytes.data(), w, h).id;
+        return madeTexture(r->createTextureFromPixels(bytes.data(), w, h), w, h);
     }
     if (f == "texture_size") {
         Vec2 s = textureSize(TextureHandle{a[0].get<uint32_t>()});
@@ -3449,6 +3537,16 @@ json service(const std::string& f, const json& a) {
         if (f == "save_erase") { save->erase(a[1].get<std::string>()); return nullptr; }
         if (f == "save_clear") { save->clear(); return nullptr; }
         if (f == "save_flush") return save->flush();
+    }
+    if (f == "asset_sweep_wanted") return sweepWanted();
+    if (f == "asset_sweep") {
+        // the texture ids and image ids the game's values hold
+        std::unordered_set<uint32_t> textures;
+        std::unordered_set<int64_t> images;
+        for (const auto& t : a[0]) textures.insert(t.get<uint32_t>());
+        for (const auto& i : a[1]) images.insert(i.get<int64_t>());
+        auto [t, i] = sweepMade(textures, images);
+        return json::array({t, i});
     }
     if (f == "entity_count") return int64_t(world().entitiesWith(cid<Transform2D>()).size());
     if (f == "entity_alive") return a[0].get<EntityId>() != 0 && world().isAlive(a[0].get<EntityId>());
@@ -3616,6 +3714,7 @@ private:
         }
         postFinishedAnimations(a);
         offerDownloads();
+        made().drawn.clear();
         auto* time = a.getResource<Time>();
         drift_host_frame(time ? time->delta : 0.0, time ? time->elapsed : 0.0, time ? int64_t(time->frame) : 0,
                          time ? time->scale : 1.0, time ? time->realDelta : 0.0);

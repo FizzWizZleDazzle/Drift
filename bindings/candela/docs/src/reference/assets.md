@@ -10,7 +10,9 @@ See [Assets](../concepts/assets.md).
 ## Texture
 
 An image the engine can draw. Load one with `texture(path)`, make one with
-`Assets.create_texture` or `Assets.render_target`, or from an [`Image`](#image).
+`Assets.create_texture` or `Assets.render_target`, or from an [`Image`](#image). A texture
+made in code is freed once nothing uses it: no resource, component or message holds it, no
+sprite, particle emitter or camera shows it, and nothing drew it this frame.
 
 ```rust
 struct Texture {
@@ -653,8 +655,8 @@ struct AutotileRules {
 ## Image
 
 Pixels in memory that you change from code and show through a texture: procedural art, paint
-programs, fog of war, minimaps, screenshots. The engine holds the pixels; `free()` lets them
-go.
+programs, fog of war, minimaps, screenshots. The engine holds the pixels and frees them once
+no resource, component or message holds the image; `free()` lets them go at once.
 
 ```rust
 struct Image {
@@ -1021,7 +1023,8 @@ img.download("drawing.png");
 fn free(self)
 ```
 
-Releases the pixels. Textures made from the image stay.
+Releases the pixels now, rather than when nothing holds the image any more. Textures made
+from the image stay.
 
 ```rust
 img.free();
