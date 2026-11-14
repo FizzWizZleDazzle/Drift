@@ -18,6 +18,9 @@ wheel: 0.0 red, 0.33 green, 0.67 blue).
 
 ## Hsv
 
+A color as hue, saturation and value, each 0.0 to 1.0. `Color.to_hsv` makes one; `hsv`
+turns the three numbers back into a `Color`.
+
 ```rust
 struct Hsv {
     h: float = 0.0,
@@ -26,11 +29,25 @@ struct Hsv {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `h` | `float` | `0.0` | Hue, once around the color wheel: 0.0 is red, 1/3 green, 2/3 blue. |
+| `s` | `float` | `0.0` | Saturation: 0.0 is grey, 1.0 the full color. |
+| `v` | `float` | `0.0` | Value: 0.0 is black, 1.0 the brightest. |
+
+```rust
+let c = sky.to_hsv();
+let paler = hsv(c.h, c.s * 0.5, c.v);
+```
+
 ## hex_digit
 
 ```rust
 fn hex_digit(c: string) -> int
 ```
+
+The value of one hex digit, 0 to 15, in either case. A character that is not a hex digit
+gives 0.
 
 ## hex
 
@@ -50,11 +67,17 @@ struct Palette {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `colors` | `Color[]` | `[]` | The colors, in order. |
+
 ### Palette.len
 
 ```rust
 fn len(self) -> int
 ```
+
+How many colors it holds.
 
 ### Palette.at
 
@@ -78,10 +101,24 @@ A gradient through every color: 0.0 is the first, 1.0 the last.
 fn random(self, rng: Rng) -> Color
 ```
 
+One of its colors, picked with `rng`. The palette must not be empty.
+
+```rust
+let tint = pico8().random(random.stream("tints"));
+```
+
 ## palette
 
 ```rust
 fn palette(hexes: string[]) -> Palette
+```
+
+A palette from hex colors, in the forms `hex` reads. A malformed color throws
+`drift_bad_color`.
+
+```rust
+let sunset = palette(["#2e1f47", "#c6505a", "#f2a65a"]);
+let sky = sunset.sample(time.elapsed / 60.0);
 ```
 
 ## pico8
@@ -106,6 +143,13 @@ struct SequenceStep {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `kind` | `int` | `0` | What the step does: 0 waits, 1 is a `then` name, 2 sends a message, 3 waits for a signal |
+| `seconds` | `float` | `0.0` | How long a wait step lasts, in seconds |
+| `name` | `string` | `""` | The name a `then` step returns or a `wait_for` step waits for |
+| `message` | `any` | `0` | The message a `send` step sends |
+
 ## Sequence
 
 Steps that run one after another across frames: waits, named events, messages, and waits for
@@ -121,11 +165,24 @@ struct Sequence {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `steps` | `SequenceStep[]` | `[]` | The steps, in order |
+| `at` | `int` | `0` | The index of the step it is on; equal to the number of steps once it has finished |
+| `waited` | `float` | `0.0` | Seconds spent so far in the current wait step |
+| `loops` | `int` | `0` | How many more times the steps run after they end; -1 forever |
+| `signals` | `string[]` | `[]` | Signals sent with `signal` that no `wait_for` step has used yet |
+
 ### Sequence.wait
 
 ```rust
 fn wait(self, seconds: float) -> Sequence
 ```
+
+Adds a step that waits `seconds` before the next one.
+
+The time left over in a frame carries into the steps after it, so a short wait does not
+cost a whole frame.
 
 ### Sequence.then
 
@@ -173,11 +230,15 @@ Lets a wait_for(name) step go on, now or when the sequence reaches it.
 fn finished(self) -> bool
 ```
 
+Whether every step has run. A sequence that repeats forever never finishes.
+
 ### Sequence.restart
 
 ```rust
 fn restart(self)
 ```
+
+Goes back to the first step and forgets pending signals. The `repeat` count is not reset.
 
 ### Sequence.tick
 
@@ -191,6 +252,12 @@ Advances by dt seconds; returns the names of the `then` steps reached.
 
 ```rust
 fn sequence() -> Sequence
+```
+
+An empty Sequence, to build with `wait`, `then`, `send`, `wait_for` and `repeat`.
+
+```rust
+let intro = sequence().wait(1.0).then("show_title").wait(2.0).send(StartGame {});
 ```
 
 ## format
@@ -249,13 +316,13 @@ Seconds as "m:ss", or "h:mm:ss" from an hour up: "1:05".
 fn format_clock_tenths(seconds: float) -> string
 ```
 
-The same with a digit of tenths after a point: "1:05.3".
+`seconds` as a clock like `format_clock`, with a digit of tenths after a point: "1:05.3".
 
 ## Strings
 
-[locale] folder = "assets/lang"   # files named &lt;language>.json or .toml language = "auto"
-# the browser's (or system's) language, or "fr" fallback = "en"          # where keys
-missing from a language come from
+The game's text in the player's language: one file per language, mapping keys to text, in
+JSON or TOML. `localization()` makes one; the `[locale]` section of `drift.toml` says where
+the files are:
 
 ```rust
 struct Strings {
@@ -263,6 +330,24 @@ struct Strings {
     table: {string: string} = {},
     fallback: {string: string} = {},
 }
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `language` | `string` | `""` | The language the text comes from, such as "fr"; the fallback language when no file matched. |
+| `table` | `{string: string}` | `{}` | Key to text in `language`. |
+| `fallback` | `{string: string}` | `{}` | Key to text in the fallback language, for keys `table` lacks. |
+
+```toml
+[locale]
+folder = "assets/lang"   # files named <language>.json or .toml
+language = "auto"        # the browser's (or system's) language, or "fr"
+fallback = "en"          # where keys missing from a language come from
+```
+
+```rust
+let strings = localization();
+title.value = strings.get("menu.start");
 ```
 
 ### Strings.get
@@ -288,11 +373,16 @@ The text for `key` with its {name} parts filled from `values`.
 fn locale_setting(key: string, fallback: string) -> string
 ```
 
+The `[locale]` setting `key` from `drift.toml`, or `fallback` when the file leaves it out.
+
 ## locale_table
 
 ```rust
 fn locale_table(folder: string, language: string) -> Option<
 ```
+
+The key-to-text table in `folder` for `language`, read from `<language>.json` or, failing
+that, `<language>.toml`; `None` when neither file exists.
 
 ## localization
 
@@ -317,12 +407,6 @@ fn read_text(path: string) -> string
 ```
 
 The text of a file, such as one under assets/.
-
-## read_data
-
-```rust
-fn read_data(path: string, format: string) -> string
-```
 
 ## load_data
 
@@ -360,6 +444,10 @@ struct Request {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's number for the request; compare it with `HttpResponse.request.id` |
+
 ## HttpResponse
 
 The answer to a request. `ok` is true for a 2xx status; `status` is 0 and `error` says why
@@ -376,10 +464,25 @@ struct HttpResponse {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `request` | `Request` | required | The request this answers |
+| `status` | `int` | required | The HTTP status code, such as 200 or 404; 0 when there was no answer |
+| `ok` | `bool` | required | Whether the status is in the 200s |
+| `body` | `string` | required | The answer's body, as text |
+| `error` | `string` | required | Why there was no answer; "" when there was one |
+
 ## http_get
 
 ```rust
 fn http_get(url: string) -> Request
+```
+
+Sends a GET request to `url`; the answer arrives later as an HttpResponse message.
+Requests work only in the web build; elsewhere the answer is an error.
+
+```rust
+let req = http_get("https://example.com/scores.json");
 ```
 
 ## http_post
@@ -388,7 +491,8 @@ fn http_get(url: string) -> Request
 fn http_post(url: string, body: string) -> Request
 ```
 
-Sends `body` as JSON: http_post(url, to_json(score)).
+Sends a POST request with `body` as JSON: `http_post(url, to_json(score))`. The answer
+arrives later as an HttpResponse message.
 
 ## http_request
 
@@ -396,7 +500,8 @@ Sends `body` as JSON: http_post(url, to_json(score)).
 fn http_request(method: string, url: string, body: string, headers: {string: string}) -> Request
 ```
 
-Any method, with headers.
+Sends a request with any method and headers; the answer arrives later as an HttpResponse
+message.
 
 ## Socket
 
@@ -407,6 +512,10 @@ struct Socket {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's number for the socket; compare it with `SocketEvent.socket.id` |
 
 ### Socket.send
 
@@ -422,13 +531,27 @@ False when the socket is not open.
 fn close(self)
 ```
 
+Closes the connection with code 1000; a Closed event follows.
+
 ## SocketEventKind
+
+What happened on a Socket.
 
 ```rust
 enum SocketEventKind { Opened, Message, Closed, Error }
 ```
 
+| Variant | Meaning |
+|---------|---------|
+| `Opened` | The connection is open; `send` works from now on |
+| `Message` | A message arrived; `text` holds it |
+| `Closed` | The connection closed; `code` is the close code and `text` the reason |
+| `Error` | Something went wrong; `text` says what. A Closed event follows when the connection ends |
+
 ## SocketEvent
+
+Something that happened on a WebSocket: it opened, a message arrived, it closed, or it
+failed. Sockets work only in the web build; elsewhere a socket reports an Error and closes.
 
 ```rust
 @message
@@ -437,6 +560,22 @@ struct SocketEvent {
     kind: SocketEventKind,
     text: string,
     code: int,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `socket` | `Socket` | required | The socket it happened on |
+| `kind` | `SocketEventKind` | required | What happened |
+| `text` | `string` | required | The message for Message, the reason for Closed, the cause for Error |
+| `code` | `int` | required | The WebSocket close code for Closed (1000 is a normal close, 1006 a lost connection); 0 otherwise |
+
+```rust
+@system
+fn chat(events: SocketEvent[]) {
+    for e in events {
+        if e.kind == SocketEventKind::Message { log(e.text); }
+    }
 }
 ```
 

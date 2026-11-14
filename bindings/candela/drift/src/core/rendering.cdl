@@ -45,6 +45,8 @@ fn layer_mask(layers: int[]) -> int {
 
 //! page: components
 
+/// Makes the entity a camera: the view centers on its position.
+///
 /// Without a camera, world position (0, 0) is the top-left of the screen and one world unit is
 /// one logical pixel. A camera centers its view on its entity's position. See
 /// [Cameras](../guides/cameras.md).
@@ -111,14 +113,17 @@ struct CameraBounds {
 ///     draw.circle_lines(p, 10.0, rgb(255, 255, 255), 1.0);
 /// }
 /// ```
-struct Camera2D { id: int = 0 }
+struct Camera2D {
+    /// Unused; the resource is a handle to the engine's cameras
+    id: int = 0,
+}
 impl Camera2D {
     /// Internal: a helper the module needs; games do not call it.
     fn convert(self, camera: Entity, dir: int, p: Vec2) -> Vec2 {
         let v = drift::camera_point(camera.id, dir, p.x, p.y);
         return Vec2 { x: v[0], y: v[1] };
     }
-    /// Through the main camera.
+    /// A logical screen point to a world point, through the main camera.
     ///
     /// ```rust
     /// let world = cams.screen_to_world(vec2(0.0, 0.0));   // the world point at the top-left
@@ -137,7 +142,7 @@ impl Camera2D {
     /// if !view.contains(t.position) { cmd.despawn(e); }
     /// ```
     fn visible(self) -> Rect { return self.visible_in(Entity { .. }); }
-    /// The same through a camera entity of your own.
+    /// A screen point to a world point through a camera entity of your own.
     ///
     /// ```rust
     /// let p = cams.screen_to_world_in(right_camera, input.mouse_screen());
@@ -162,6 +167,8 @@ impl Camera2D {
 
 // ---- Immediate drawing ----
 
+/// Draws shapes, lines, text and images for one frame, without entities.
+///
 /// For debugging, previews and anything with no entity of its own. See [UI and
 /// Score](../guides/ui-and-score.md#drawing-without-entities).
 ///
@@ -373,7 +380,10 @@ impl Draw {
 ///     img.free();
 /// }
 /// ```
-struct Image { id: int = 0 }
+struct Image {
+    /// The engine's handle for the image; 0 is no image
+    id: int = 0,
+}
 
 /// A color as one int, 0xRRGGBBAA, the form Image.pixels() and Image.write_rect use.
 ///
@@ -757,14 +767,21 @@ impl Spritesheet {
 // ---- Shaders and materials ----
 
 /// A fragment shader: WGSL for the WebGPU backend and GLSL for OpenGL and the browser's WebGL2.
-struct Shader { id: int = 0 }
+struct Shader {
+    /// The engine's handle for the shader; 0 is no shader
+    id: int = 0,
+}
 
 /// A shader with its settings: eight vec4 parameters and up to three extra textures. Sprites
 /// and post effects use materials.
-struct Material { id: int = 0 }
+struct Material {
+    /// The engine's handle for the material; 0 is no material
+    id: int = 0,
+}
 impl Material {
     /// Parameter 0 to 7, `material.params[i]` in the shader.
     fn set_param(self, i: int, x: float, y: float, z: float, w: float) { drift::material_param(self.id, i, x, y, z, w); }
+    /// Sets parameter `i`, 0 to 7, to a color: r, g, b and a in x, y, z and w.
     fn set_color(self, i: int, c: Color) { drift::material_param(self.id, i, c.r, c.g, c.b, c.a); }
     /// Texture slot 1 to 3; slot 0 is what is being drawn.
     fn set_texture(self, slot: int, t: Texture) { drift::material_texture(self.id, slot, t.id); }
@@ -779,6 +796,8 @@ impl Assets {
         }
         return Font { id: id };
     }
+    /// Loads a shader from `path`.
+    ///
     /// `path` without an extension finds path.wgsl and path.frag.glsl.
     fn shader(self, path: string) -> Shader {
         let id = drift::shader_load(path);
@@ -796,6 +815,12 @@ impl Assets {
         }
         return Shader { id: id };
     }
+    /// A new material running `s`, with every parameter zero and no extra textures.
+    ///
+    /// ```rust
+    /// let m = assets.create_material(assets.shader("shaders/glow"));
+    /// m.set_color(0, rgb(255, 200, 80));
+    /// ```
     fn create_material(self, s: Shader) -> Material { return Material { id: drift::material_create(s.id) }; }
 }
 

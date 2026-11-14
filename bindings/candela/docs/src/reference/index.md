@@ -283,7 +283,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Flags.set`](rpg.md#flagsset) method
 - [`flash_color`](gameplay.md#flash_color) function
 - [`flash_entity`](gameplay.md#flash_entity) function
-- [`flat`](values.md#flat) function
 - [`FLOOR`](procgen.md#floor) constant
 - [`flow_field`](procgen.md#flow_field) function
 - [`FlowField`](procgen.md#flowfield) type
@@ -577,7 +576,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 
 ## O
 
-- [`object_shape`](assets.md#object_shape) function
 - [`ObjectShape`](assets.md#objectshape) enum
 - [`OccluderShape`](enums.md#occludershape) enum
 - [`OffscreenArrow`](ui.md#offscreenarrow) type
@@ -669,7 +667,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Random.stream`](resources.md#randomstream) method
 - [`random_walk`](procgen.md#random_walk) function
 - [`RayHit`](resources.md#rayhit) type
-- [`read_data`](data.md#read_data) function
 - [`read_text`](data.md#read_text) function
 - [`Rect`](values.md#rect) type
 - [`rect`](values.md#rect-1) function
@@ -848,7 +845,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Stats.tick`](rpg.md#statstick) method
 - [`steer_alignment`](values.md#steer_alignment) function
 - [`steer_arrive`](values.md#steer_arrive) function
-- [`steer_call`](values.md#steer_call) function
 - [`steer_cohesion`](values.md#steer_cohesion) function
 - [`steer_evade`](values.md#steer_evade) function
 - [`steer_flee`](values.md#steer_flee) function
@@ -857,7 +853,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`steer_seek`](values.md#steer_seek) function
 - [`steer_separation`](values.md#steer_separation) function
 - [`steer_truncate`](values.md#steer_truncate) function
-- [`steer_vec`](values.md#steer_vec) function
 - [`steer_wander`](values.md#steer_wander) function
 - [`stretch`](animation.md#stretch) function
 - [`Strings`](data.md#strings) type

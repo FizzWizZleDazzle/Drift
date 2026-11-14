@@ -155,6 +155,13 @@ struct Lookup<T> {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `key` | `int` | `0` | The host's id for this lookup in this system call. |
+| `ids` | `int[]` | `[]` | The ids of the entities fetched so far, in fetch order. |
+| `rows` | `T[]` | `[]` | The components fetched so far, one per id; the host writes their changes back. |
+| `slots` | `{int: int}` | `{}` | Entity id to its index in `rows`, so a second `get` answers without the host. |
+
 ```rust
 @system
 fn hurt(hit: Contact<Bullet, Enemy>, health: Lookup<Health>) {
@@ -214,6 +221,10 @@ struct Commands {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the methods talk to the host directly. |
 
 ```rust
 @system(schedule: Schedule::Startup)

@@ -23,10 +23,38 @@ import "drift" { * };
 
 /// The state of one entity, over an enum of your own: keep it in a component, tick it every
 /// frame, and match on `now`.
-struct Fsm<S> { now: S, previous: S, time: float = 0.0, fresh: bool = true, entered: bool = false }
+///
+/// Make one with `fsm(start)`. Call `tick(dt)` once a frame before reading it, and `go(s)` to
+/// change state.
+///
+/// ```rust
+/// enum Mood { Idle, Chase }
+///
+/// @component
+/// struct Brain { mind: Fsm<Mood> = fsm(Mood::Idle) }
+/// ```
+struct Fsm<S> {
+    /// The current state.
+    now: S,
+    /// The state before the last change; the start state until the first change.
+    previous: S,
+    /// Seconds spent in `now`, counted by `tick`. The tick that enters a state adds nothing.
+    time: float = 0.0,
+    /// Set by `go` and at the start: the next `tick` counts as entering the state.
+    fresh: bool = true,
+    /// Whether the last `tick` was the first one in `now`; `just_entered` reads it.
+    entered: bool = false,
+}
+
+/// A state machine that starts in `start`; its first `tick` counts as entering it.
+///
+/// ```rust
+/// let mind = fsm(Mood::Idle);
+/// ```
 fn fsm<S>(start: S) -> Fsm<S> { return Fsm { now: start, previous: start, .. }; }
 impl Fsm<S> {
-    /// Changes state; the time in it starts again.
+    /// Changes state; the time in it starts again. Going to the state it is already in does
+    /// nothing.
     fn go(self, s: S) {
         if s == self.now {
             return;
@@ -36,7 +64,8 @@ impl Fsm<S> {
         self.time = 0.0;
         self.fresh = true;
     }
-    /// Call once a frame before reading the state.
+    /// Advances the time in the state by `dt` seconds; call it once a frame before reading the
+    /// state.
     fn tick(self, dt: float) {
         self.entered = self.fresh;
         self.fresh = false;
@@ -44,6 +73,7 @@ impl Fsm<S> {
             self.time += dt;
         }
     }
+    /// Whether the current state is `s`.
     fn in_state(self, s: S) -> bool { return self.now == s; }
     /// True on the first tick in state s: for one-off work on entering.
     fn just_entered(self, s: S) -> bool { return self.entered && self.now == s; }
@@ -53,19 +83,37 @@ impl Fsm<S> {
 
 /// Options scored by how good each is right now; best() picks the highest. Build one each time
 /// an AI decides.
-struct Choice<T> { options: T[], scores: float[] }
+///
+/// ```rust
+/// let pick = choice<Action>()
+///     .consider(Action::Attack, 1.0 - dist / 300.0)
+///     .consider(Action::Flee, 1.0 - hp)
+///     .best();
+/// ```
+struct Choice<T> {
+    /// The options, in the order `consider` added them.
+    options: T[],
+    /// The score of each option, at the same index.
+    scores: float[],
+}
+
+/// An empty choice to add options to with `consider`. Give the option type when nothing else
+/// says it, as in `choice<Action>()`.
 fn choice<T>() -> Choice<T> {
     let options: T[] = [];
     let scores: float[] = [];
     return Choice { options: options, scores: scores };
 }
 impl Choice<T> {
+    /// Adds an option with its score and returns the same choice, so calls chain. Higher scores
+    /// are better; any range works for `best`, while `weighted` skips scores at or below zero.
     fn consider(self, option: T, score: float) -> Choice<T> {
         self.options.push(option);
         self.scores.push(score);
         return self;
     }
-    /// The option with the highest score; None when there are none.
+    /// The option with the highest score; None when there are none. On a tie the option added
+    /// first wins.
     fn best(self) -> Option<T> {
         let at = -1;
         for i in range(self.scores.len()) {

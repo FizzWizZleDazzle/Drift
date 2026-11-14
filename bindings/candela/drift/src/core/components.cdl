@@ -33,7 +33,7 @@ struct Transform {
 fn at(x: float, y: float) -> Transform { return Transform { position: Vec2 { x: x, y: y }, .. }; }
 
 /// Draws a texture at the entity's position. Load the texture with
-/// [`texture`](assets.md#texture).
+/// [`texture`](assets.md#texture-1).
 ///
 /// ```rust
 /// cmd.spawn([at(160.0, 90.0), Sprite { image: texture("assets/ship.png"), anchor: vec2(0.5, 1.0), .. }]);
@@ -170,8 +170,8 @@ struct Velocity {
 /// cmd.spawn([at(200.0, 50.0), Rectangle { .. }, RigidBody { fixed_rotation: true, .. }, BoxCollider { .. }, Velocity { .. }]);
 /// ```
 struct RigidBody {
-    /// `Dynamic` falls and is pushed, `Kinematic` moves only by its Velocity, `Static` never
-    /// moves
+    /// How the body moves: `Static` never moves, `Dynamic` is moved by forces, gravity and
+    /// collisions and needs a Velocity, `Kinematic` moves only by its Velocity. See `BodyKind`.
     kind: BodyKind = BodyKind::Dynamic,
     /// Keeps it upright, for characters
     fixed_rotation: bool = false,
@@ -280,16 +280,43 @@ struct Lifetime {
 
 /// Swings the entity back and forth around where it is: `amplitude` pixels each way,
 /// `frequency` times a second. Adds to whatever else moves it.
-struct Oscillate { amplitude: Vec2 = Vec2 { x: 0.0, y: 8.0 }, frequency: float = 1.0, phase: float = 0.0 }
+struct Oscillate {
+    /// How far it swings each way, in pixels, per axis
+    amplitude: Vec2 = Vec2 { x: 0.0, y: 8.0 },
+    /// Swings per second
+    frequency: float = 1.0,
+    /// Where in the swing it starts, in radians; give entities different phases to stagger them
+    phase: float = 0.0,
+}
 
 /// Moves the entity toward `target` plus `offset` at `speed` pixels per second, stopping
 /// `distance` short. Nothing happens while the target is missing.
-struct Follow { target: Entity = Entity { .. }, speed: float = 100.0, distance: float = 0.0, offset: Vec2 = Vec2 { .. } }
+struct Follow {
+    /// The entity to move toward
+    target: Entity = Entity { .. },
+    /// Pixels per second
+    speed: float = 100.0,
+    /// How far short of the target point it stops, in pixels
+    distance: float = 0.0,
+    /// Added to the target's position to give the point it moves toward, in pixels
+    offset: Vec2 = Vec2 { .. },
+}
 
 /// Circles the entity around `center`, or around `point` while `center` is unset or gone:
 /// `radius` pixels out, `speed` radians per second (negative turns the other way), from
 /// `angle`.
-struct Orbit { center: Entity = Entity { .. }, point: Vec2 = Vec2 { .. }, radius: float = 64.0, speed: float = 1.0, angle: float = 0.0 }
+struct Orbit {
+    /// The entity to circle; while unset or gone, it circles `point`
+    center: Entity = Entity { .. },
+    /// The world point to circle when there is no `center`
+    point: Vec2 = Vec2 { .. },
+    /// Distance from the center, in pixels
+    radius: float = 64.0,
+    /// Radians per second; negative turns the other way
+    speed: float = 1.0,
+    /// The current angle in radians, from +x; set it to choose where it starts
+    angle: float = 0.0,
+}
 
 //! page: enums
 
@@ -300,17 +327,69 @@ struct Orbit { center: Entity = Entity { .. }, point: Vec2 = Vec2 { .. }, radius
 /// tween().move_to(vec2(400.0, 300.0), 0.6, Ease::OutBack)
 /// ```
 enum Ease {
+    /// Constant speed from start to end.
     Linear,
-    InSine, OutSine, InOutSine,
-    InQuad, OutQuad, InOutQuad,
-    InCubic, OutCubic, InOutCubic,
-    InQuart, OutQuart, InOutQuart,
-    InQuint, OutQuint, InOutQuint,
-    InExpo, OutExpo, InOutExpo,
-    InCirc, OutCirc, InOutCirc,
-    InBack, OutBack, InOutBack,
-    InElastic, OutElastic, InOutElastic,
-    InBounce, OutBounce, InOutBounce,
+    /// Sine curve: starts slow.
+    InSine,
+    /// Sine curve: ends slow.
+    OutSine,
+    /// Sine curve: slow at both ends.
+    InOutSine,
+    /// Squared: starts slow.
+    InQuad,
+    /// Squared: ends slow.
+    OutQuad,
+    /// Squared: slow at both ends.
+    InOutQuad,
+    /// Cubed: starts slower than InQuad.
+    InCubic,
+    /// Cubed: ends slower than OutQuad.
+    OutCubic,
+    /// Cubed: slow at both ends.
+    InOutCubic,
+    /// Fourth power: a sharper start.
+    InQuart,
+    /// Fourth power: a sharper stop.
+    OutQuart,
+    /// Fourth power: slow at both ends.
+    InOutQuart,
+    /// Fifth power: the sharpest of the power curves at the start.
+    InQuint,
+    /// Fifth power: the sharpest of the power curves at the end.
+    OutQuint,
+    /// Fifth power: slow at both ends.
+    InOutQuint,
+    /// Exponential: barely moves, then rushes to the end.
+    InExpo,
+    /// Exponential: rushes off, then creeps to the end.
+    OutExpo,
+    /// Exponential: slow at both ends, fast in the middle.
+    InOutExpo,
+    /// Quarter circle: starts slow and speeds up steeply.
+    InCirc,
+    /// Quarter circle: starts fast and stops steeply.
+    OutCirc,
+    /// Circular: slow at both ends.
+    InOutCirc,
+    /// Pulls back below the start before moving.
+    InBack,
+    /// Overshoots the end and comes back.
+    OutBack,
+    /// Pulls back at the start and overshoots the end.
+    InOutBack,
+    /// Wobbles around the start with growing swings, then snaps to the end.
+    InElastic,
+    /// Snaps past the end and wobbles to rest on it.
+    OutElastic,
+    /// Elastic wobble at both ends.
+    InOutElastic,
+    /// Bounces off the start with growing bounces before leaving it.
+    InBounce,
+    /// Drops onto the end and bounces to rest, like a ball.
+    OutBounce,
+    /// Bounces at both ends.
+    InOutBounce,
+    /// Overshoots the end and settles on it like a damped spring.
     Spring,
 }
 
@@ -334,13 +413,24 @@ enum EmitShape {
 
 //! page: components
 
+/// A group of particles a `ParticleEmitter` emits at once.
+///
 /// `count` particles at once, `time` seconds into the emitter's run, repeated `cycles` times (0
 /// forever) `interval` seconds apart.
 ///
 /// ```rust
 /// ParticleEmitter { rate: 0.0, bursts: [Burst { count: 30, cycles: 0, interval: 1.0, .. }], .. }   // 30 every second
 /// ```
-struct Burst { time: float = 0.0, count: int = 10, cycles: int = 1, interval: float = 0.0 }
+struct Burst {
+    /// Seconds into the emitter's run of the first burst
+    time: float = 0.0,
+    /// Particles in each burst
+    count: int = 10,
+    /// How many bursts; 0 repeats forever
+    cycles: int = 1,
+    /// Seconds between bursts
+    interval: float = 0.0,
+}
 
 /// Emits particles from its entity for as long as `playing` is on. A one-off burst does not
 /// need an entity: see [`Effects.burst`](resources.md#effectsburst). See [Particles and
@@ -406,11 +496,13 @@ struct ParticleEmitter {
     size_start_max: float = 0.0,
     /// The same for the size at death
     size_end_max: float = 0.0,
-    /// radians at birth
+    /// Smallest rotation at birth, in radians
     rotation_min: float = 0.0,
+    /// Largest rotation at birth, in radians
     rotation_max: float = 0.0,
-    /// radians per second
+    /// Slowest spin, in radians per second
     spin_min: float = 0.0,
+    /// Fastest spin, in radians per second
     spin_max: float = 0.0,
     /// share of the emitter's own motion particles keep
     inherit_velocity: float = 0.0,
@@ -489,13 +581,13 @@ impl Tween {
     /// tween().rotate_by(TAU, 1.0, Ease::Linear).repeat(-1)   // spins forever
     /// ```
     fn rotate_by(self, radians: float, seconds: float, e: Ease) -> Tween { return self.add_step(4, radians, 0.0, seconds, e); }
-    /// Sprite alpha, 0.0 to 1.0.
+    /// Fades the sprite's alpha to `alpha`, 0.0 to 1.0, over `seconds`.
     ///
     /// ```rust
     /// tween().delay(1.0).fade_to(0.0, 0.5, Ease::InQuad)
     /// ```
     fn fade_to(self, alpha: float, seconds: float, e: Ease) -> Tween { return self.add_step(5, alpha, 0.0, seconds, e); }
-    /// Camera zoom.
+    /// Zooms the camera to `zoom` over `seconds`.
     ///
     /// ```rust
     /// cmd.insert(camera, tween().zoom_to(2.0, 0.8, Ease::InOutCubic));
@@ -668,6 +760,8 @@ fn local_to_world(e: Entity, local: Vec2) -> Vec2 {
     return Vec2 { x: p[0], y: p[1] };
 }
 
+/// A world point in the entity's space: where a child would sit to be at `world`.
+///
 /// ```rust
 /// let local = world_to_local(ship, input.mouse_world());
 /// ```

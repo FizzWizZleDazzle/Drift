@@ -13,6 +13,8 @@ import "drift/core/text" { * };
 
 //! page: resources
 
+/// The frame's timing: how long the last frame took and how fast game time runs.
+///
 /// `dt` is the frame time times `scale`; `real_dt` ignores the scale, for menus and tools that
 /// keep running while the game is slowed or frozen.
 ///
@@ -86,12 +88,132 @@ impl Window {
 /// if input.key_pressed(Key::Escape) { phase.set(Phase::Paused); }
 /// ```
 enum Key {
-    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-    Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9, Num0,
-    Return, Escape, Backspace, Tab, Space,
-    F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
-    Right, Left, Down, Up,
-    LCtrl, LShift, LAlt, RCtrl, RShift, RAlt,
+    /// The A key.
+    A,
+    /// The B key.
+    B,
+    /// The C key.
+    C,
+    /// The D key.
+    D,
+    /// The E key.
+    E,
+    /// The F key.
+    F,
+    /// The G key.
+    G,
+    /// The H key.
+    H,
+    /// The I key.
+    I,
+    /// The J key.
+    J,
+    /// The K key.
+    K,
+    /// The L key.
+    L,
+    /// The M key.
+    M,
+    /// The N key.
+    N,
+    /// The O key.
+    O,
+    /// The P key.
+    P,
+    /// The Q key.
+    Q,
+    /// The R key.
+    R,
+    /// The S key.
+    S,
+    /// The T key.
+    T,
+    /// The U key.
+    U,
+    /// The V key.
+    V,
+    /// The W key.
+    W,
+    /// The X key.
+    X,
+    /// The Y key.
+    Y,
+    /// The Z key.
+    Z,
+    /// The 1 key in the row above the letters.
+    Num1,
+    /// The 2 key in the row above the letters.
+    Num2,
+    /// The 3 key in the row above the letters.
+    Num3,
+    /// The 4 key in the row above the letters.
+    Num4,
+    /// The 5 key in the row above the letters.
+    Num5,
+    /// The 6 key in the row above the letters.
+    Num6,
+    /// The 7 key in the row above the letters.
+    Num7,
+    /// The 8 key in the row above the letters.
+    Num8,
+    /// The 9 key in the row above the letters.
+    Num9,
+    /// The 0 key in the row above the letters.
+    Num0,
+    /// Return, or Enter.
+    Return,
+    /// Escape.
+    Escape,
+    /// Backspace.
+    Backspace,
+    /// Tab.
+    Tab,
+    /// The space bar.
+    Space,
+    /// The F1 function key.
+    F1,
+    /// The F2 function key.
+    F2,
+    /// The F3 function key.
+    F3,
+    /// The F4 function key.
+    F4,
+    /// The F5 function key.
+    F5,
+    /// The F6 function key.
+    F6,
+    /// The F7 function key.
+    F7,
+    /// The F8 function key.
+    F8,
+    /// The F9 function key.
+    F9,
+    /// The F10 function key.
+    F10,
+    /// The F11 function key.
+    F11,
+    /// The F12 function key.
+    F12,
+    /// The right arrow.
+    Right,
+    /// The left arrow.
+    Left,
+    /// The down arrow.
+    Down,
+    /// The up arrow.
+    Up,
+    /// The left Ctrl key.
+    LCtrl,
+    /// The left Shift key.
+    LShift,
+    /// The left Alt key, Option on a Mac.
+    LAlt,
+    /// The right Ctrl key.
+    RCtrl,
+    /// The right Shift key.
+    RShift,
+    /// The right Alt key, Option on a Mac.
+    RAlt,
 }
 
 /// Internal: The SDL scancode of a key.
@@ -113,10 +235,23 @@ fn key_code(k: Key) -> int {
     };
 }
 
+/// Mouse buttons.
+///
 /// ```rust
 /// if input.mouse_pressed(MouseButton::Left) { shoot(); }
 /// ```
-enum MouseButton { Left, Middle, Right, X1, X2 }
+enum MouseButton {
+    /// The left button, or the primary button on a mouse set up for the left hand.
+    Left,
+    /// The middle button, often the wheel pressed in.
+    Middle,
+    /// The right button.
+    Right,
+    /// The first side button, often Back in a browser.
+    X1,
+    /// The second side button, often Forward in a browser.
+    X2,
+}
 
 /// Internal: a helper the module needs; games do not call it.
 fn mouse_code(b: MouseButton) -> int {
@@ -132,8 +267,36 @@ fn mouse_code(b: MouseButton) -> int {
 /// input.bind_button("jump", GamepadButton::South);
 /// ```
 enum GamepadButton {
-    South, East, West, North, Back, Guide, Start, LeftStick, RightStick,
-    LeftShoulder, RightShoulder, DpadUp, DpadDown, DpadLeft, DpadRight,
+    /// The bottom face button: A on Xbox, Cross on PlayStation.
+    South,
+    /// The right face button: B on Xbox, Circle on PlayStation.
+    East,
+    /// The left face button: X on Xbox, Square on PlayStation.
+    West,
+    /// The top face button: Y on Xbox, Triangle on PlayStation.
+    North,
+    /// Back, View or Select.
+    Back,
+    /// The logo button in the middle.
+    Guide,
+    /// Start, Menu or Options.
+    Start,
+    /// Pressing the left stick in.
+    LeftStick,
+    /// Pressing the right stick in.
+    RightStick,
+    /// The left bumper.
+    LeftShoulder,
+    /// The right bumper.
+    RightShoulder,
+    /// Up on the d-pad.
+    DpadUp,
+    /// Down on the d-pad.
+    DpadDown,
+    /// Left on the d-pad.
+    DpadLeft,
+    /// Right on the d-pad.
+    DpadRight,
 }
 
 /// Internal: a helper the module needs; games do not call it.
@@ -153,7 +316,20 @@ fn button_code(b: GamepadButton) -> int {
 /// ```rust
 /// input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
 /// ```
-enum GamepadAxis { LeftX, LeftY, RightX, RightY, LeftTrigger, RightTrigger }
+enum GamepadAxis {
+    /// The left stick across: -1 left, 1 right.
+    LeftX,
+    /// The left stick up and down: -1 up, 1 down.
+    LeftY,
+    /// The right stick across: -1 left, 1 right.
+    RightX,
+    /// The right stick up and down: -1 up, 1 down.
+    RightY,
+    /// The left trigger: 0 released, 1 pulled all the way.
+    LeftTrigger,
+    /// The right trigger: 0 released, 1 pulled all the way.
+    RightTrigger,
+}
 
 /// Internal: a helper the module needs; games do not call it.
 fn axis_code(a: GamepadAxis) -> int {
@@ -179,7 +355,10 @@ fn axis_code(a: GamepadAxis) -> int {
 ///     }
 /// }
 /// ```
-struct Input { id: int = 0 }
+struct Input {
+    /// Unused; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Input {
     /// Whether the key is held.
     ///
@@ -361,7 +540,10 @@ fn action_number(name: string, v: float[]) -> float {
 ///     cmd.spawn([at(0.0, 0.0), Tilemap { map: map, .. }]);
 /// }
 /// ```
-struct Assets { id: int = 0 }
+struct Assets {
+    /// Unused; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Assets {
     /// A texture from colors, row by row from the top-left.
     ///
@@ -429,7 +611,10 @@ impl Assets {
 ///     effects.flash(rgb(255, 60, 60), 0.3);
 /// }
 /// ```
-struct Effects { id: int = 0 }
+struct Effects {
+    /// Unused; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Effects {
     /// Covers the screen in a color that fades back to the picture over `seconds`.
     ///
@@ -468,7 +653,10 @@ impl Effects {
 ///     }
 /// }
 /// ```
-struct Save { name: string = "" }
+struct Save {
+    /// The slot: "" is the game's main save, any other name a slot of its own from `slot()`.
+    name: string = "",
+}
 impl Save {
     /// The int under `key`, or `fallback` when there is none or it holds another type.
     ///
@@ -558,21 +746,37 @@ impl Save {
 
 //! page: values
 
-/// The local date and time. month counts from 1, weekday from 0 (Sunday).
+/// The local date and time, from `Platform.local_time()`. `month` counts from 1, `weekday`
+/// from 0 (Sunday).
+///
+/// ```rust
+/// let now = platform.local_time();
+/// let night = now.hour >= 20 || now.hour < 6;
+/// ```
 struct LocalTime {
+    /// The year, such as 2026.
     year: int = 0,
+    /// The month, 1 (January) to 12.
     month: int = 0,
+    /// The day of the month, 1 to 31.
     day: int = 0,
+    /// The hour, 0 to 23.
     hour: int = 0,
+    /// The minute, 0 to 59.
     minute: int = 0,
+    /// The second, 0 to 60 (60 only in a leap second).
     second: int = 0,
+    /// The day of the week, 0 (Sunday) to 6 (Saturday).
     weekday: int = 0,
     /// Seconds since 1970-01-01 UTC.
     unix: float = 0.0,
 }
 
 /// What the game runs on, and the browser page around it.
-struct Platform { id: int = 0 }
+struct Platform {
+    /// Unused; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Platform {
     /// True in a browser.
     fn is_web(self) -> bool { return drift::is_web(); }
@@ -589,6 +793,12 @@ impl Platform {
     /// A value from the page address: query("level") is "3" for index.html?level=3, "" when
     /// absent, and always "" on the desktop.
     fn query(self, name: string) -> string { return drift::page_query(name); }
+    /// The date and time on the player's device, in its time zone.
+    ///
+    /// ```rust
+    /// let now = platform.local_time();
+    /// let daily_seed = seed_from(string(now.year) + "-" + string(now.month) + "-" + string(now.day));
+    /// ```
     fn local_time(self) -> LocalTime {
         let t = drift::local_time();
         return LocalTime {
@@ -603,13 +813,66 @@ impl Platform {
 
 //! page: resources
 
-enum ScaleMode { Letterbox, Stretch, Integer, Expand }
-enum Cursor { Default, Pointer, Text, Crosshair, Move, Wait, NotAllowed }
+/// How the game's logical size fits the window or the browser canvas; `[window] scale_mode` in
+/// `drift.toml` picks the starting one, `Window.set_scale_mode` changes it.
+///
+/// ```rust
+/// window.set_scale_mode(ScaleMode::Integer);   // crisp pixel art
+/// ```
+enum ScaleMode {
+    /// Keeps the aspect ratio; bars fill the rest. The default.
+    Letterbox,
+    /// Fills the window, distorting the aspect ratio.
+    Stretch,
+    /// Pixel perfect: scales by whole numbers only.
+    Integer,
+    /// Keeps pixels square and grows the logical size, so wider screens see more.
+    Expand,
+}
+
+/// The mouse pointer's shape over the window, from the system's set; see `Window.set_cursor`.
+///
+/// ```rust
+/// window.set_cursor(if hovered { Cursor::Pointer } else { Cursor::Default });
+/// ```
+enum Cursor {
+    /// The ordinary arrow.
+    Default,
+    /// A pointing hand, for things to click.
+    Pointer,
+    /// The text cursor, an I-beam.
+    Text,
+    /// A crosshair, for aiming.
+    Crosshair,
+    /// Arrows in four directions, for dragging.
+    Move,
+    /// The busy cursor.
+    Wait,
+    /// A crossed-out circle, for something that cannot be used.
+    NotAllowed,
+}
 
 impl Window {
+    /// The host call most Window methods go through: the operation `name` with its numbers and
+    /// text, answering numbers. Call the named methods instead.
     fn op(self, name: string, nums: float[], text: string) -> float[] { return drift::window_op(name, nums, text); }
+    /// Sets the window's title.
+    ///
+    /// ```rust
+    /// window.set_title("Level " + string(level));
+    /// ```
     fn set_title(self, title: string) { self.op("title", [], title); }
+    /// The color the screen is cleared to each frame, behind everything drawn.
+    ///
+    /// ```rust
+    /// window.set_clear_color(hex("#1d2b53"));
+    /// ```
     fn set_clear_color(self, c: Color) { self.op("clear_color", color_list(c), ""); }
+    /// Changes how the logical size fits the window; see `ScaleMode`.
+    ///
+    /// ```rust
+    /// window.set_scale_mode(ScaleMode::Expand);
+    /// ```
     fn set_scale_mode(self, m: ScaleMode) {
         let code = match m { ScaleMode::Letterbox => 0.0, ScaleMode::Stretch => 1.0, ScaleMode::Integer => 2.0, ScaleMode::Expand => 3.0 };
         self.op("scale_mode", [code], "");
@@ -621,12 +884,24 @@ impl Window {
         let v = self.op("size", [], "");
         return Vec2 { x: v[0], y: v[1] };
     }
+    /// Resizes the window, in pixels.
     fn set_size(self, w: int, h: int) { self.op("set_size", [float(w), float(h)], ""); }
+    /// Whether the game is fullscreen; in the browser, whether the page is.
     fn fullscreen(self) -> bool { return self.op("fullscreen", [], "")[0] > 0.5; }
     /// Browsers allow fullscreen only right after a tap, click or key; asked for at another
     /// time, it waits for the next one.
     fn set_fullscreen(self, on: bool) { self.op("set_fullscreen", [flag(on)], ""); }
+    /// Shows or hides the mouse pointer over the window.
+    ///
+    /// ```rust
+    /// window.show_cursor(false);   // the game draws its own crosshair
+    /// ```
     fn show_cursor(self, visible: bool) { self.op("show_cursor", [flag(visible)], ""); }
+    /// Changes the mouse pointer's shape; see `Cursor`.
+    ///
+    /// ```rust
+    /// window.set_cursor(Cursor::Pointer);
+    /// ```
     fn set_cursor(self, c: Cursor) {
         let code = match c {
             Cursor::Default => 0.0, Cursor::Pointer => 1.0, Cursor::Text => 2.0, Cursor::Crosshair => 3.0,
@@ -636,6 +911,11 @@ impl Window {
     }
     /// Draw calls and sprites in the last frame.
     fn draw_calls(self) -> int { return int(self.op("stats", [], "")[0]); }
+    /// Sprites drawn in the last frame.
+    ///
+    /// ```rust
+    /// stats.value = string(window.draw_calls()) + " calls, " + string(window.sprite_count()) + " sprites";
+    /// ```
     fn sprite_count(self) -> int { return int(self.op("stats", [], "")[1]); }
     /// "gl" or "webgpu".
     fn backend(self) -> string { return drift::window_backend(); }

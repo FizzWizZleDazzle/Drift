@@ -22,6 +22,8 @@ struct Vec2 {
     y: float = 0.0,
 }
 
+/// A `Vec2` from its two parts, in pixels for positions.
+///
 /// ```rust
 /// let up = vec2(0.0, -1.0);
 /// ```
@@ -32,14 +34,21 @@ impl Vec2 {
     fn -(self) -> Vec2 { return Vec2 { x: -self.x, y: -self.y }; }
     fn *(self, s: float) -> Vec2 { return Vec2 { x: self.x * s, y: self.y * s }; }
     fn /(self, s: float) -> Vec2 { return Vec2 { x: self.x / s, y: self.y / s }; }
+    /// The dot product, `x * o.x + y * o.y`: positive when the two point the same way, 0 when
+    /// they are at right angles.
+    ///
     /// ```rust
     /// let facing = dir.dot(to_player) > 0.0;
     /// ```
     fn dot(self, o: Vec2) -> float { return self.x * o.x + self.y * o.y; }
+    /// The vector's length.
+    ///
     /// ```rust
     /// if v.linear.length() > 300.0 { v.linear = v.linear.normalized() * 300.0; }
     /// ```
     fn length(self) -> float { return (self.x * self.x + self.y * self.y).sqrt(); }
+    /// The distance between two points.
+    ///
     /// ```rust
     /// if t.position.distance(goal) < 8.0 { arrived = true; }
     /// ```
@@ -56,6 +65,9 @@ impl Vec2 {
         }
         return self / l;
     }
+    /// The point `t` of the way from this one to `o`: 0.0 gives this one, 1.0 gives `o`, and a
+    /// `t` outside 0 to 1 goes past either end.
+    ///
     /// ```rust
     /// t.position = t.position.lerp(target, 0.1);   // eases toward the target
     /// ```
@@ -78,6 +90,8 @@ struct Rect {
     h: float = 0.0,
 }
 
+/// A `Rect` from its top-left corner and its size, in pixels.
+///
 /// ```rust
 /// let r = rect(10.0, 10.0, 100.0, 40.0);
 /// ```
@@ -108,7 +122,16 @@ impl Rect {
 }
 
 /// A width for each side of a box: nine-slice borders, padding.
-struct Edges { left: float = 0.0, top: float = 0.0, right: float = 0.0, bottom: float = 0.0 }
+struct Edges {
+    /// The left side's width.
+    left: float = 0.0,
+    /// The top side's width.
+    top: float = 0.0,
+    /// The right side's width.
+    right: float = 0.0,
+    /// The bottom side's width.
+    bottom: float = 0.0,
+}
 
 /// The same width on every side.
 fn edges(all: float) -> Edges { return Edges { left: all, top: all, right: all, bottom: all }; }
@@ -243,14 +266,28 @@ fn warn(message: string) { drift::log_message(1, message); }
 /// ```rust
 /// Text { value: "Title", align: Align::Center, .. }
 /// ```
-enum Align { Left, Center, Right }
+enum Align {
+    /// The position is the text's left edge.
+    Left,
+    /// The position is the text's middle.
+    Center,
+    /// The position is the text's right edge.
+    Right,
+}
 
 /// Which point of a `Text` sits on its position, top to bottom.
 ///
 /// ```rust
 /// Text { value: "Paused", align: Align::Center, valign: VAlign::Middle, .. }
 /// ```
-enum VAlign { Top, Middle, Bottom }
+enum VAlign {
+    /// The position is the text's top edge.
+    Top,
+    /// The position is the text's middle.
+    Middle,
+    /// The position is the text's bottom edge.
+    Bottom,
+}
 
 /// How a drawable mixes with what is behind it.
 ///
@@ -284,17 +321,23 @@ enum Filter {
     Linear,
 }
 
-/// What kind of physics body a `RigidBody` is.
+/// What kind of physics body a `RigidBody` is: whether it moves, and what moves it.
+///
+/// A static body is level geometry, a dynamic body is moved by the physics world, and a
+/// kinematic body is moved by your code through its `Velocity`. Two bodies collide only when
+/// at least one of them is dynamic.
 ///
 /// ```rust
 /// RigidBody { kind: BodyKind::Kinematic, .. }
 /// ```
 enum BodyKind {
-    /// Never moves
+    /// Never moves; collides with dynamic bodies only. Floors and walls.
     Static,
-    /// Falls, collides and is pushed
+    /// Moved by forces, gravity and collisions. Needs a `Velocity` to show its motion: without
+    /// one the entity stays where it was drawn.
     Dynamic,
-    /// Moves only by its Velocity; pushes dynamic bodies and is not pushed
+    /// Moves only by its `Velocity`, set by code; pushes dynamic bodies and is not pushed back.
+    /// Ignores static and other kinematic bodies. Moving platforms and doors.
     Kinematic,
 }
 
@@ -336,10 +379,18 @@ fn sign(x: float) -> float {
     }
     return 0.0;
 }
+/// Degrees converted to radians.
+///
+/// ```rust
+/// t.rotation = radians(90.0);
+/// ```
 fn radians(degrees: float) -> float { return degrees * PI / 180.0; }
+/// Radians converted to degrees.
 fn degrees(radians: float) -> float { return radians * 180.0 / PI; }
 
 impl Vec2 {
+    /// The 2D cross product, `x * o.y - y * o.x`. Its sign says which side of this vector `o`
+    /// lies on: with y growing downward, positive means `o` is clockwise from it on screen.
     fn cross(self, o: Vec2) -> float { return self.x * o.y - self.y * o.x; }
     /// Toward target by at most max_distance, never past it.
     fn move_towards(self, target: Vec2, max_distance: float) -> Vec2 {
@@ -429,8 +480,24 @@ fn hsv(h: float, s: float, v: float) -> Color {
     return Color { r: v, g: p, b: q, a: 1.0 };
 }
 
-struct Hsv { h: float = 0.0, s: float = 0.0, v: float = 0.0 }
+/// A color as hue, saturation and value, each 0.0 to 1.0. `Color.to_hsv` makes one; `hsv`
+/// turns the three numbers back into a `Color`.
+///
+/// ```rust
+/// let c = sky.to_hsv();
+/// let paler = hsv(c.h, c.s * 0.5, c.v);
+/// ```
+struct Hsv {
+    /// Hue, once around the color wheel: 0.0 is red, 1/3 green, 2/3 blue.
+    h: float = 0.0,
+    /// Saturation: 0.0 is grey, 1.0 the full color.
+    s: float = 0.0,
+    /// Value: 0.0 is black, 1.0 the brightest.
+    v: float = 0.0,
+}
 
+/// The value of one hex digit, 0 to 15, in either case. A character that is not a hex digit
+/// gives 0.
 fn hex_digit(c: string) -> int {
     let digits = "0123456789abcdef";
     return match digits.index_of(c.lowercase()) { Some(i) => i, None => 0 };
@@ -456,6 +523,11 @@ fn hex(text: string) -> Color {
 }
 
 impl Color {
+    /// The color as hue, saturation and value; alpha is dropped.
+    ///
+    /// ```rust
+    /// let hue = c.to_hsv().h;
+    /// ```
     fn to_hsv(self) -> Hsv {
         let hi = max(self.r, max(self.g, self.b));
         let lo = min(self.r, min(self.g, self.b));
@@ -506,7 +578,18 @@ impl Color {
 }
 
 /// An ordered set of colors: pick by index, or blend along it as a gradient.
-struct Palette { colors: Color[] = [] }
+struct Palette {
+    /// The colors, in order.
+    colors: Color[] = [],
+}
+
+/// A palette from hex colors, in the forms `hex` reads. A malformed color throws
+/// `drift_bad_color`.
+///
+/// ```rust
+/// let sunset = palette(["#2e1f47", "#c6505a", "#f2a65a"]);
+/// let sky = sunset.sample(time.elapsed / 60.0);
+/// ```
 fn palette(hexes: string[]) -> Palette {
     let colors: Color[] = [];
     for h in hexes {
@@ -515,6 +598,7 @@ fn palette(hexes: string[]) -> Palette {
     return Palette { colors: colors };
 }
 impl Palette {
+    /// How many colors it holds.
     fn len(self) -> int { return self.colors.len(); }
     /// The color at i, wrapping around the end.
     fn at(self, i: int) -> Color {
@@ -534,6 +618,11 @@ impl Palette {
         }
         return self.colors[i].lerp(self.colors[i + 1], x - float(i));
     }
+    /// One of its colors, picked with `rng`. The palette must not be empty.
+    ///
+    /// ```rust
+    /// let tint = pico8().random(random.stream("tints"));
+    /// ```
     fn random(self, rng: Rng) -> Color { return self.colors[rng.below(self.colors.len())]; }
 }
 

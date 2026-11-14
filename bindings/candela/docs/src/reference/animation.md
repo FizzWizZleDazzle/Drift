@@ -56,6 +56,9 @@ The rotation that points +x from `from` toward `to`.
 fn lerp(a: float, b: float, t: float) -> float
 ```
 
+The number `t` of the way from `a` to `b`: 0 gives a, 1 gives b. `t` outside 0 to 1 goes
+past either end.
+
 ## move_towards
 
 ```rust
@@ -77,6 +80,13 @@ the frame rate: higher `rate` is snappier.
 
 ```rust
 fn damp2(current: Vec2, target: Vec2, rate: float, dt: float) -> Vec2
+```
+
+`damp` for a position: from `current` toward `target`, the same share of the distance each
+second whatever the frame rate.
+
+```rust
+cam.position = damp2(cam.position, player_pos, 6.0, time.dt);
 ```
 
 ## smoothstep
@@ -103,11 +113,17 @@ out of step.
 fn cosine_wave(t: float, frequency: float, amplitude: float, phase: float) -> float
 ```
 
+`sine_wave` a quarter cycle ahead: at `t` 0 with no phase it starts at `amplitude`. Pair it
+with `sine_wave` for motion around a circle or an ellipse.
+
 ## wobble_hash
 
 ```rust
 fn wobble_hash(i: int, seed: int) -> float
 ```
+
+A repeatable random number from -1 to 1 for whole step `i` of a wobble with `seed`;
+`wobble` blends between neighbouring steps.
 
 ## wobble
 
@@ -123,6 +139,9 @@ idle sway, hover, trembling. Different seeds give different wobbles.
 ```rust
 fn wobble2(t: float, frequency: float, amplitude: float, seed: int) -> Vec2
 ```
+
+`wobble` in two directions: x and y wobble independently with the same frequency and
+amplitude, for drifting hovers and shakes.
 
 ## squash
 
@@ -156,11 +175,26 @@ struct Spring {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `value` | `float` | `0.0` | Where it is now. |
+| `velocity` | `float` | `0.0` | How fast it moves, in units per second. |
+
+```rust
+@component
+struct Bob { y: Spring = spring(0.0) }
+
+let y = bob.y.update(target_y, 200.0, 20.0, time.dt);
+```
+
 ### Spring.update
 
 ```rust
 fn update(self, target: float, stiffness: float, damping: float, dt: float) -> float
 ```
+
+One step of `dt` seconds toward `target` with `stiffness` and `damping`; returns the new
+value.
 
 ### Spring.smooth
 
@@ -168,15 +202,20 @@ fn update(self, target: float, stiffness: float, damping: float, dt: float) -> f
 fn smooth(self, target: float, seconds: float, dt: float) -> float
 ```
 
+One step of `dt` seconds toward `target`, easing in over about `seconds` without
+overshooting; returns the new value.
+
 ## spring
 
 ```rust
 fn spring(value: float) -> Spring
 ```
 
+A spring at rest at `value`.
+
 ## Spring2
 
-The same for a position.
+A `Spring` for a position: the value chases a target point, x and y each on their own spring.
 
 ```rust
 struct Spring2 {
@@ -185,11 +224,23 @@ struct Spring2 {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `value` | `Vec2` | `Vec2 { .. }` | Where it is now. |
+| `velocity` | `Vec2` | `Vec2 { .. }` | How fast it moves, in units per second. |
+
+```rust
+t.position = follower.at.update(leader_pos, 150.0, 18.0, time.dt);
+```
+
 ### Spring2.run
 
 ```rust
 fn run(self, kind: int, target: Vec2, a: float, b: float, dt: float) -> Vec2
 ```
+
+One step of kind 0, a spring with stiffness `a` and damping `b`, or kind 2, a smooth ease
+over `a` seconds; returns the new value. `update` and `smooth` call it.
 
 ### Spring2.update
 
@@ -197,11 +248,17 @@ fn run(self, kind: int, target: Vec2, a: float, b: float, dt: float) -> Vec2
 fn update(self, target: Vec2, stiffness: float, damping: float, dt: float) -> Vec2
 ```
 
+One step of `dt` seconds toward `target` with `stiffness` and `damping`; returns the new
+value.
+
 ### Spring2.smooth
 
 ```rust
 fn smooth(self, target: Vec2, seconds: float, dt: float) -> Vec2
 ```
+
+One step of `dt` seconds toward `target`, easing in over about `seconds` without
+overshooting; returns the new value.
 
 ## spring2
 
@@ -209,9 +266,11 @@ fn smooth(self, target: Vec2, seconds: float, dt: float) -> Vec2
 fn spring2(value: Vec2) -> Spring2
 ```
 
+A position spring at rest at `value`.
+
 ## AngleSpring
 
-The same for a rotation, turning the short way round.
+A `Spring` for a rotation in radians, turning the short way round.
 
 ```rust
 struct AngleSpring {
@@ -220,17 +279,31 @@ struct AngleSpring {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `value` | `float` | `0.0` | The angle now, in radians. It is not wrapped, so it can pass PI. |
+| `velocity` | `float` | `0.0` | How fast it turns, in radians per second. |
+
+```rust
+t.rotation = head.turn.update(look_at(t.position, target), 120.0, 15.0, time.dt);
+```
+
 ### AngleSpring.update
 
 ```rust
 fn update(self, target: float, stiffness: float, damping: float, dt: float) -> float
 ```
 
+One step of `dt` seconds toward `target` radians the short way round, with `stiffness`
+and `damping`; returns the new angle.
+
 ## angle_spring
 
 ```rust
 fn angle_spring(value: float) -> AngleSpring
 ```
+
+An angle spring at rest at `value` radians.
 
 ## TwoBone
 
@@ -246,6 +319,14 @@ struct TwoBone {
     reached: bool = false,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `joint` | `Vec2` | `Vec2 { .. }` | Where the middle joint (elbow or knee) goes. |
+| `end` | `Vec2` | `Vec2 { .. }` | Where the end (hand or foot) ends up: the target when reached. |
+| `upper` | `float` | `0.0` | The world rotation of the upper bone, from the root to the joint, in radians. |
+| `lower` | `float` | `0.0` | The world rotation of the lower bone, from the joint to the end, in radians. |
+| `reached` | `bool` | `false` | Whether the end got to the target. |
 
 ## two_bone_ik
 
@@ -277,6 +358,22 @@ struct IkChain {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `joints` | `Vec2[]` | `[]` | The joint positions; segment i runs from joint i to joint i + 1. |
+| `lengths` | `float[]` | `[]` | The length of each segment, in pixels. |
+| `min_angles` | `float[]` | `[]` | The least each segment may turn from the one before it, in radians; empty for no limit. |
+| `max_angles` | `float[]` | `[]` | The most each segment may turn from the one before it, in radians; empty for no limit. |
+| `base_angle` | `float` | `0.0` | The rotation the first segment's limits are measured from, in radians. |
+| `iterations` | `int` | `10` | The most solver passes per `solve`. |
+| `tolerance` | `float` | `0.5` | How close the end must get to the target, in pixels, to stop early. |
+
+```rust
+let arm = ik_chain(shoulder, 6, 12.0, 0.0);
+arm.limit_all(0.6);
+arm.solve(shoulder, input.mouse_world());
+```
+
 ### IkChain.limit_all
 
 ```rust
@@ -300,6 +397,8 @@ got within `tolerance`.
 fn end(self) -> Vec2
 ```
 
+Where the last joint is: the tip of the chain.
+
 ### IkChain.angle
 
 ```rust
@@ -313,6 +412,8 @@ The world rotation of segment i, for the sprite drawn along it.
 ```rust
 fn len(self) -> int
 ```
+
+How many segments it has: one less than its joints.
 
 ## ik_chain
 
@@ -344,6 +445,26 @@ struct Rope {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `points` | `Vec2[]` | `[]` | The point positions in the world; the first follows the anchor. |
+| `previous` | `Vec2[]` | `[]` | Where each point was the step before; the difference is its velocity. |
+| `segment` | `float` | `10.0` | The length of each link, in pixels. |
+| `gravity` | `Vec2` | `Vec2 { x: 0.0, y: 400.0 }` | Pulls every point, in pixels per second squared; +y is down. |
+| `damping` | `float` | `0.98` | The share of velocity kept per 1/60 second, 0 to 1: lower settles sooner. |
+| `iterations` | `int` | `8` | Link passes per step; more holds the lengths tighter. |
+| `stiffness` | `float` | `0.0` | Resistance to bending, 0 to 1: 0 hangs like a rope, toward 1 holds a tail's shape. |
+| `ground` | `float` | `1000000.0` | The largest y a point may have: points stay above this line. |
+| `pin_end` | `bool` | `false` | Whether the last point is held at `end_target`; `pin` and `release` set it. |
+| `end_target` | `Vec2` | `Vec2 { .. }` | Where the last point is held while `pin_end` is on. |
+
+```rust
+tail.rope.update(t.position, time.dt);
+for i in range(tail.rope.len() - 1) {
+    draw.line(tail.rope.points[i], tail.rope.points[i + 1], 3.0, rgb(200, 120, 60));
+}
+```
+
 ### Rope.update
 
 ```rust
@@ -367,6 +488,8 @@ lets it go.
 fn release(self)
 ```
 
+Lets the last point go after `pin`.
+
 ### Rope.push
 
 ```rust
@@ -380,6 +503,8 @@ Pushes every point by `v` this step, as a gust of wind or a hit.
 ```rust
 fn len(self) -> int
 ```
+
+How many points it has: one more than its links.
 
 ### Rope.angle
 
@@ -413,6 +538,14 @@ struct Gait {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `distance` | `float` | `30.0` | How far, in pixels, the foot may stray from where it should stand before it steps. |
+| `duration` | `float` | `0.15` | Seconds a step takes. |
+| `height` | `float` | `12.0` | How high the foot lifts mid-step, in pixels. |
+| `lead` | `float` | `0.3` | How far past the rest point the foot lands, as a share of `distance`. |
+| `up` | `Vec2` | `Vec2 { x: 0.0, y: -1.0 }` | The direction the foot lifts; up the screen by default. |
+
 ## Foot
 
 A foot that stays planted where it landed while the body moves on, and steps when it strays.
@@ -427,11 +560,24 @@ struct Foot {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `position` | `Vec2` | `Vec2 { .. }` | Where the foot is now; draw it here. |
+| `from` | `Vec2` | `Vec2 { .. }` | Where the current step started. |
+| `to` | `Vec2` | `Vec2 { .. }` | Where the current step lands. |
+| `progress` | `float` | `1.0` | How far through the step it is, 0 to 1; 1 is planted. |
+
+```rust
+let left_lands = legs.left.update(t.position + vec2(-10.0, 20.0), Gait { .. }, legs.right.planted(), time.dt);
+```
+
 ### Foot.planted
 
 ```rust
 fn planted(self) -> bool
 ```
+
+Whether the foot is on the ground and not mid-step.
 
 ### Foot.update
 
@@ -448,3 +594,5 @@ legs take turns. Returns true on the frame it lands.
 ```rust
 fn foot(at: Vec2) -> Foot
 ```
+
+A foot planted at `at`.

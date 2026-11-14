@@ -33,6 +33,9 @@ let p = vec2(10.0, 20.0) + vec2(1.0, 0.0) * 5.0;
 fn dot(self, o: Vec2) -> float
 ```
 
+The dot product, `x * o.x + y * o.y`: positive when the two point the same way, 0 when
+they are at right angles.
+
 ```rust
 let facing = dir.dot(to_player) > 0.0;
 ```
@@ -43,6 +46,8 @@ let facing = dir.dot(to_player) > 0.0;
 fn length(self) -> float
 ```
 
+The vector's length.
+
 ```rust
 if v.linear.length() > 300.0 { v.linear = v.linear.normalized() * 300.0; }
 ```
@@ -52,6 +57,8 @@ if v.linear.length() > 300.0 { v.linear = v.linear.normalized() * 300.0; }
 ```rust
 fn distance(self, o: Vec2) -> float
 ```
+
+The distance between two points.
 
 ```rust
 if t.position.distance(goal) < 8.0 { arrived = true; }
@@ -75,6 +82,9 @@ let dir = (target - t.position).normalized();
 fn lerp(self, o: Vec2, t: float) -> Vec2
 ```
 
+The point `t` of the way from this one to `o`: 0.0 gives this one, 1.0 gives `o`, and a
+`t` outside 0 to 1 goes past either end.
+
 ```rust
 t.position = t.position.lerp(target, 0.1);   // eases toward the target
 ```
@@ -84,6 +94,9 @@ t.position = t.position.lerp(target, 0.1);   // eases toward the target
 ```rust
 fn cross(self, o: Vec2) -> float
 ```
+
+The 2D cross product, `x * o.y - y * o.x`. Its sign says which side of this vector `o`
+lies on: with y growing downward, positive means `o` is clockwise from it on screen.
 
 ### Vec2.move_towards
 
@@ -166,6 +179,8 @@ v.linear = v.linear.clamp_length(250.0);
 ```rust
 fn vec2(x: float, y: float) -> Vec2
 ```
+
+A `Vec2` from its two parts, in pixels for positions.
 
 ```rust
 let up = vec2(0.0, -1.0);
@@ -261,6 +276,8 @@ A rect of size w x h centred on c.
 fn rect(x: float, y: float, w: float, h: float) -> Rect
 ```
 
+A `Rect` from its top-left corner and its size, in pixels.
+
 ```rust
 let r = rect(10.0, 10.0, 100.0, 40.0);
 ```
@@ -277,6 +294,13 @@ struct Edges {
     bottom: float = 0.0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `left` | `float` | `0.0` | The left side's width. |
+| `top` | `float` | `0.0` | The top side's width. |
+| `right` | `float` | `0.0` | The right side's width. |
+| `bottom` | `float` | `0.0` | The bottom side's width. |
 
 ## edges
 
@@ -327,6 +351,12 @@ let faded = gold.alpha(0.3);
 
 ```rust
 fn to_hsv(self) -> Hsv
+```
+
+The color as hue, saturation and value; alpha is dropped.
+
+```rust
+let hue = c.to_hsv().h;
 ```
 
 ### Color.lighten
@@ -538,11 +568,19 @@ fn sign(x: float) -> float
 fn radians(degrees: float) -> float
 ```
 
+Degrees converted to radians.
+
+```rust
+t.rotation = radians(90.0);
+```
+
 ## degrees
 
 ```rust
 fn degrees(radians: float) -> float
 ```
+
+Radians converted to degrees.
 
 ## circles_overlap
 
@@ -636,6 +674,8 @@ let muzzle = local_to_world(gun, vec2(18.0, 0.0));
 fn world_to_local(e: Entity, world: Vec2) -> Vec2
 ```
 
+A world point in the entity's space: where a child would sit to be at `world`.
+
 ```rust
 let local = world_to_local(ship, input.mouse_world());
 ```
@@ -656,7 +696,8 @@ cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}]));
 
 ## LocalTime
 
-The local date and time. month counts from 1, weekday from 0 (Sunday).
+The local date and time, from `Platform.local_time()`. `month` counts from 1, `weekday`
+from 0 (Sunday).
 
 ```rust
 struct LocalTime {
@@ -673,14 +714,19 @@ struct LocalTime {
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `year` | `int` | `0` |  |
-| `month` | `int` | `0` |  |
-| `day` | `int` | `0` |  |
-| `hour` | `int` | `0` |  |
-| `minute` | `int` | `0` |  |
-| `second` | `int` | `0` |  |
-| `weekday` | `int` | `0` |  |
+| `year` | `int` | `0` | The year, such as 2026. |
+| `month` | `int` | `0` | The month, 1 (January) to 12. |
+| `day` | `int` | `0` | The day of the month, 1 to 31. |
+| `hour` | `int` | `0` | The hour, 0 to 23. |
+| `minute` | `int` | `0` | The minute, 0 to 59. |
+| `second` | `int` | `0` | The second, 0 to 60 (60 only in a leap second). |
+| `weekday` | `int` | `0` | The day of the week, 0 (Sunday) to 6 (Saturday). |
 | `unix` | `float` | `0.0` | Seconds since 1970-01-01 UTC. |
+
+```rust
+let now = platform.local_time();
+let night = now.hour >= 20 || now.hour < 6;
+```
 
 ## Platform
 
@@ -691,6 +737,10 @@ struct Platform {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the methods talk to the host directly. |
 
 ### Platform.is_web
 
@@ -747,6 +797,13 @@ absent, and always "" on the desktop.
 
 ```rust
 fn local_time(self) -> LocalTime
+```
+
+The date and time on the player's device, in its time zone.
+
+```rust
+let now = platform.local_time();
+let daily_seed = seed_from(string(now.year) + "-" + string(now.month) + "-" + string(now.day));
 ```
 
 ## Timer
@@ -969,24 +1026,6 @@ A cooldown of `seconds`, ready at once.
 let dash = cooldown(0.8);
 ```
 
-## flat
-
-```rust
-fn flat(points: Vec2[]) -> float[]
-```
-
-## steer_call
-
-```rust
-fn steer_call(op: string, nums: float[], a: Vec2[], b: Vec2[]) -> float[]
-```
-
-## steer_vec
-
-```rust
-fn steer_vec(r: float[]) -> Vec2
-```
-
 ## steer_truncate
 
 ```rust
@@ -1072,6 +1111,13 @@ struct Wander {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `angle` | `float` | `0.0` | The wander angle in radians; `steer_wander` changes it on every call |
+| `distance` | `float` | `40.0` | How far ahead the wander circle sits, in pixels |
+| `radius` | `float` | `20.0` | The wander circle's radius, in pixels; larger gives wider turns |
+| `jitter` | `float` | `0.5` | The most the angle changes per call, in radians |
+
 ## steer_wander
 
 ```rust
@@ -1092,6 +1138,12 @@ struct PathFollow {
     slow_radius: float = 0.0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `index` | `int` | `0` | The index of the path point it is heading for; `steer_follow_path` moves it on |
+| `reach_radius` | `float` | `8.0` | How close, in pixels, counts as reaching a point |
+| `slow_radius` | `float` | `0.0` | Inside this distance of the last point it slows to stop on it, in pixels; 0 arrives at full speed |
 
 ## steer_follow_path
 
@@ -1166,6 +1218,8 @@ t.position = vec2(x, 100.0 + sin(time.elapsed * 2.0) * 20.0);
 ```rust
 fn cos(x: float) -> float
 ```
+
+The cosine of `x` radians, without importing std/math.
 
 ```rust
 let x = cos(angle) * radius;

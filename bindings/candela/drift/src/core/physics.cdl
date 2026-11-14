@@ -67,7 +67,10 @@ fn entity_list(ids: int[]) -> Entity[] {
 ///     }
 /// }
 /// ```
-struct Physics { id: int = 0 }
+struct Physics {
+    /// Unused; the resource is a handle to the engine's physics world
+    id: int = 0,
+}
 impl Physics {
     /// World gravity in pixels per second squared. `[physics] gravity` in `drift.toml` sets
     /// where it starts.
@@ -94,7 +97,7 @@ impl Physics {
     fn raycast(self, origin: Vec2, direction: Vec2, distance: float) -> RayHit {
         return self.raycast_mask(origin, direction, distance, ALL_CATEGORIES);
     }
-    /// The same, seeing only colliders whose category is in `mask`.
+    /// The first collider along the ray whose category is in `mask`. Sensors count.
     ///
     /// ```rust
     /// let ray = physics.raycast_mask(eye, dir, 400.0, WALLS);   // WALLS: a category bit of your own
@@ -146,6 +149,9 @@ impl Physics {
     /// physics.apply_impulse(player, vec2(0.0, -350.0));   // a jump
     /// ```
     fn apply_impulse(self, e: Entity, impulse: Vec2) { drift::physics_push(0, e.id, impulse.x, impulse.y); }
+    /// Pushes on a dynamic body over this physics step, in mass times pixels per second
+    /// squared; call it every frame for a steady push such as thrust or wind.
+    ///
     /// ```rust
     /// physics.apply_force(ship, from_angle(t.rotation) * 400.0);   // thrust while held
     /// ```
@@ -225,6 +231,9 @@ fn texture_pieces(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][] {
 
 //! page: enums
 
+/// What a `Joint` lets its two bodies do: keep a distance, turn about a point, slide along an
+/// axis, or move as one.
+///
 /// ```rust
 /// Joint { kind: JointKind::Revolute, target: wheel, .. }
 /// ```
@@ -265,6 +274,7 @@ struct Joint {
     length: float = 0.0,
     /// Distance: with max_length above min_length, a rope's slack
     min_length: float = 0.0,
+    /// Distance: the longest it stretches, in pixels, when above `min_length`
     max_length: float = 0.0,
     /// Distance and Weld: spring frequency in Hz; 0 is rigid
     stiffness: float = 0.0,
@@ -272,8 +282,11 @@ struct Joint {
     damping: float = 0.0,
     /// Revolute: angle range; Prismatic: travel range
     limit: bool = false,
+    /// With `limit`: the lowest angle in radians (Revolute) or position in pixels (Prismatic)
     lower: float = 0.0,
+    /// With `limit`: the highest angle or position
     upper: float = 0.0,
+    /// Revolute and Prismatic: drives the joint at `motor_speed`
     motor: bool = false,
     /// radians or pixels per second
     motor_speed: float = 0.0,
@@ -281,6 +294,7 @@ struct Joint {
     max_motor_force: float = 0.0,
     /// Prismatic: the slide direction
     axis: Vec2 = Vec2 { x: 1.0, y: 0.0 },
+    /// Whether the two joined bodies still collide with each other
     collide_connected: bool = false,
 }
 
@@ -290,13 +304,31 @@ struct Joint {
 
 /// Puts the entity in the spatial index: a box of `half_size` around its position plus
 /// `offset`; a zero size indexes the point.
-struct SpatialBounds { half_size: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. } }
+struct SpatialBounds {
+    /// Half the box's width and height, in pixels; zero indexes a point
+    half_size: Vec2 = Vec2 { .. },
+    /// Moves the box from the entity's position, in pixels
+    offset: Vec2 = Vec2 { .. },
+}
 
 /// "What is near here" over the entities with SpatialBounds, without colliders. The index holds
 /// where they were at the start of the frame.
-struct Spatial { id: int = 0 }
+struct Spatial {
+    /// Unused; the resource is a handle to the engine's spatial index
+    id: int = 0,
+}
 impl Spatial {
+    /// The entities whose boxes touch the rectangle.
+    ///
+    /// ```rust
+    /// let picked = spatial.in_rect(rect(x, y, 64.0, 64.0));
+    /// ```
     fn in_rect(self, r: Rect) -> Entity[] { return entity_list(drift::spatial_query(0, r.x, r.y, r.w, r.h, 0)); }
+    /// The entities whose boxes touch the circle around `center`, `radius` pixels out.
+    ///
+    /// ```rust
+    /// let near = spatial.in_radius(t.position, 120.0);
+    /// ```
     fn in_radius(self, center: Vec2, radius: float) -> Entity[] {
         return entity_list(drift::spatial_query(1, center.x, center.y, radius, 0.0, 0));
     }

@@ -209,7 +209,10 @@ impl Rng {
 ///     level.rng = random.stream("levels");
 /// }
 /// ```
-struct Random { id: int = 0 }
+struct Random {
+    /// Unused; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Random {
     /// The seed in use. With `seed = 0` in `[random]`, a new one is picked each run and logged.
     ///
@@ -217,6 +220,8 @@ impl Random {
     /// hud.value = "Seed " + string(random.seed());
     /// ```
     fn seed(self) -> int { return drift::random_seed(); }
+    /// A generator of its own for `name`, drawn from the game's seed.
+    ///
     /// The same name gives the same generator for the same seed.
     ///
     /// ```rust

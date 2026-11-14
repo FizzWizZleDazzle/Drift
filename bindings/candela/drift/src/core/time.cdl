@@ -185,13 +185,43 @@ impl Commands {
 //! page: data
 
 /// One step of a Sequence; build them with sequence() and its methods.
-struct SequenceStep { kind: int = 0, seconds: float = 0.0, name: string = "", message: any = 0 }
+struct SequenceStep {
+    /// What the step does: 0 waits, 1 is a `then` name, 2 sends a message, 3 waits for a signal
+    kind: int = 0,
+    /// How long a wait step lasts, in seconds
+    seconds: float = 0.0,
+    /// The name a `then` step returns or a `wait_for` step waits for
+    name: string = "",
+    /// The message a `send` step sends
+    message: any = 0,
+}
 
 /// Steps that run one after another across frames: waits, named events, messages, and waits for
 /// a signal. Keep one in a component or resource and tick it every frame.
-struct Sequence { steps: SequenceStep[] = [], at: int = 0, waited: float = 0.0, loops: int = 0, signals: string[] = [] }
+struct Sequence {
+    /// The steps, in order
+    steps: SequenceStep[] = [],
+    /// The index of the step it is on; equal to the number of steps once it has finished
+    at: int = 0,
+    /// Seconds spent so far in the current wait step
+    waited: float = 0.0,
+    /// How many more times the steps run after they end; -1 forever
+    loops: int = 0,
+    /// Signals sent with `signal` that no `wait_for` step has used yet
+    signals: string[] = [],
+}
+
+/// An empty Sequence, to build with `wait`, `then`, `send`, `wait_for` and `repeat`.
+///
+/// ```rust
+/// let intro = sequence().wait(1.0).then("show_title").wait(2.0).send(StartGame {});
+/// ```
 fn sequence() -> Sequence { return Sequence { .. }; }
 impl Sequence {
+    /// Adds a step that waits `seconds` before the next one.
+    ///
+    /// The time left over in a frame carries into the steps after it, so a short wait does not
+    /// cost a whole frame.
     fn wait(self, seconds: float) -> Sequence {
         self.steps.push(SequenceStep { kind: 0, seconds: seconds, .. });
         return self;
@@ -218,7 +248,9 @@ impl Sequence {
     }
     /// Lets a wait_for(name) step go on, now or when the sequence reaches it.
     fn signal(self, name: string) { self.signals.push(name); }
+    /// Whether every step has run. A sequence that repeats forever never finishes.
     fn finished(self) -> bool { return self.at >= self.steps.len(); }
+    /// Goes back to the first step and forgets pending signals. The `repeat` count is not reset.
     fn restart(self) {
         self.at = 0;
         self.waited = 0.0;

@@ -96,6 +96,8 @@ fog.update_rect(fog_image, rect(px, py, 16.0, 16.0));
 fn texture(path: string) -> Texture
 ```
 
+Loads the image file at `path` as a texture.
+
 Works anywhere, field defaults included, and hands back the same texture for the same path.
 A file that does not load stops the game with the path and the error. Images load from PNG,
 JPG, BMP, TGA and GIF files.
@@ -135,6 +137,12 @@ Widest line and height of `s` in this font at `size`.
 
 ```rust
 fn line_height(self, size: float) -> float
+```
+
+The distance from one line's top to the next line's top for this font at `size` pixels.
+
+```rust
+let y = top + float(row) * font.line_height(20.0);
 ```
 
 ### Font.set_fallback
@@ -218,6 +226,8 @@ sfx.step.set_max_instances(3);
 ```rust
 fn sound(path: string) -> Sound
 ```
+
+Loads the sound file at `path`.
 
 Works anywhere, field defaults included. The whole file is decoded when it loads.
 
@@ -549,9 +559,21 @@ neighbours are terrain too.
 
 ## ObjectShape
 
+The shape of a map object, as the map editor drew it. LDtk entities are always `Rect`.
+
 ```rust
 enum ObjectShape { Rect, Point, Ellipse, Polygon, Polyline, Tile, Text }
 ```
+
+| Variant | Meaning |
+|---------|---------|
+| `Rect` | A rectangle; `bounds` is the whole shape |
+| `Point` | A single point; `bounds` has zero size |
+| `Ellipse` | An ellipse inside `bounds` |
+| `Polygon` | A closed polygon through `points` |
+| `Polyline` | An open line through `points` |
+| `Tile` | A tile placed as an object; `tile` names it |
+| `Text` | A Tiled text object |
 
 ## MapObject
 
@@ -577,30 +599,31 @@ struct MapObject {
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `map` | `Map` | `Map { .. }` |  |
-| `layer` | `int` | `0` |  |
+| `map` | `Map` | `Map { .. }` | The map it comes from |
+| `layer` | `int` | `0` | The index of its layer in the map |
 | `index` | `int` | `0` | place in its layer |
 | `id` | `int` | `0` | the Tiled object id |
 | `name` | `string` | `""` | Tiled name; LDtk identifier |
 | `kind` | `string` | `""` | Tiled class; LDtk identifier |
-| `shape` | `ObjectShape` | `ObjectShape::Rect` |  |
-| `bounds` | `Rect` | `Rect { .. }` |  |
+| `shape` | `ObjectShape` | `ObjectShape::Rect` | What kind of shape it is |
+| `bounds` | `Rect` | `Rect { .. }` | Its bounding box: top-left and size, in pixels; zero size for a point |
 | `anchor` | `Vec2` | `Vec2 { .. }` | the pivot: LDtk's pivot, a Tiled tile object's bottom-left |
 | `rotation` | `float` | `0.0` | radians |
 | `tile` | `int` | `0` | the tile of a Tile object |
 | `points` | `Vec2[]` | `[]` | polygon and polyline points |
 
-## object_shape
-
-```rust
-fn object_shape(code: int) -> ObjectShape
-```
-
 ## AutotileMode
+
+Which neighbours `Map.autotile` looks at to pick a tile.
 
 ```rust
 enum AutotileMode { Neighbours4, Neighbours8 }
 ```
+
+| Variant | Meaning |
+|---------|---------|
+| `Neighbours4` | The four edge neighbours: 16 tiles, one per mask of N, E, S and W |
+| `Neighbours8` | All eight neighbours, corners included: 256 tile entries, for blob tilesets |
 
 ## AutotileRules
 
@@ -619,6 +642,14 @@ struct AutotileRules {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `mode` | `AutotileMode` | `AutotileMode::Neighbours4` | Which neighbours count |
+| `terrain` | `int[]` | `[]` | The source values that are terrain; empty means any non-zero value |
+| `tiles` | `int[]` | `[]` | A tile id per neighbour mask: 16 entries for Neighbours4, 256 for Neighbours8 |
+| `fallback` | `int` | `0` | The tile for a mask whose `tiles` entry is 0 |
+| `edges_are_terrain` | `bool` | `false` | Cells outside the layer count as terrain, so terrain runs off the map's edge |
+
 ## Image
 
 Pixels in memory that you change from code and show through a texture: procedural art, paint
@@ -630,6 +661,10 @@ struct Image {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's handle for the image; 0 is no image |
 
 ```rust
 @system(schedule: Schedule::Startup)
@@ -1108,6 +1143,10 @@ struct Shader {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's handle for the shader; 0 is no shader |
+
 ## Material
 
 A shader with its settings: eight vec4 parameters and up to three extra textures. Sprites
@@ -1118,6 +1157,10 @@ struct Material {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's handle for the material; 0 is no material |
 
 ### Material.set_param
 
@@ -1132,6 +1175,8 @@ Parameter 0 to 7, `material.params[i]` in the shader.
 ```rust
 fn set_color(self, i: int, c: Color)
 ```
+
+Sets parameter `i`, 0 to 7, to a color: r, g, b and a in x, y, z and w.
 
 ### Material.set_texture
 
@@ -1151,6 +1196,10 @@ struct Voice {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's id of the playing sound; 0 is none. |
 
 ```rust
 @resource
@@ -1295,6 +1344,10 @@ struct Bus {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's id of the bus. |
+
 ```rust
 let voices = audio.bus("voice", Bus { .. });
 voices.set_volume(options.voice_volume, 0.0);
@@ -1394,6 +1447,10 @@ struct Scene {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's id of the loaded file. |
+
 ## SceneOptions
 
 How one copy of a scene spawns: `offset` moves its root entities, `parent` makes them
@@ -1408,6 +1465,12 @@ struct SceneOptions {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `offset` | `Vec2` | `Vec2 { .. }` | Added to the position of each root entity, in pixels. |
+| `parent` | `Entity` | `Entity { .. }` | The entity the roots become children of; no entity leaves them without a parent. |
+| `overrides` | `{string: string}` | `{}` | An entity's Name to a JSON patch of its components, applied to that copy only. |
+
 ## SceneInstance
 
 The entities one spawn made, in file order.
@@ -1419,6 +1482,12 @@ struct SceneInstance {
     names: string[] = [],
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `entities` | `Entity[]` | `[]` | Every entity the spawn made, in file order. |
+| `roots` | `Entity[]` | `[]` | The entities without a parent in the file. |
+| `names` | `string[]` | `[]` | Each entity's Name, at the same index as `entities`; "" for one without a Name. |
 
 ### SceneInstance.find
 

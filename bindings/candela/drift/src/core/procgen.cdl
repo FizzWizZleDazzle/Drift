@@ -42,6 +42,8 @@ struct Cell {
     y: int = 0,
 }
 
+/// The Cell at column `x`, row `y`.
+///
 /// ```rust
 /// let start = cell(1, 1);
 /// ```
@@ -189,7 +191,7 @@ fn grid_answer(rng: Rng, r: int[]) -> Grid {
 /// let caves = cave(r, 60, 32, CaveOptions { wall_chance: 0.48, steps: 4, .. });
 /// ```
 struct CaveOptions {
-    /// chance a cell starts as wall, 0 to 1
+    /// Chance a cell starts as wall, 0 to 1; higher gives narrower caves
     wall_chance: float = 0.45,
     /// Smoothing passes
     steps: int = 5,
@@ -203,6 +205,9 @@ struct CaveOptions {
     keep_largest: bool = true,
 }
 
+/// A cave level: random walls smoothed into caverns, `width` by `height` cells of `FLOOR` and
+/// `WALL`. The same `rng` state gives the same cave; the call moves `rng` on.
+///
 /// ```rust
 /// let g = cave(level.rng, 60, 32, CaveOptions { .. });
 /// ```
@@ -243,6 +248,8 @@ impl GridRect {
     fn contains(self, c: Cell) -> bool { return c.x >= self.x && c.y >= self.y && c.x < self.x + self.w && c.y < self.y + self.h; }
 }
 
+/// Settings for `dungeon`: room sizes, corridors and doors. Sizes are in cells.
+///
 /// ```rust
 /// let d = dungeon(r, 40, 25, DungeonOptions { min_room: 4, max_room: 8, extra_corridors: 3, .. });
 /// ```
@@ -293,6 +300,8 @@ fn dungeon(rng: Rng, width: int, height: int, o: DungeonOptions) -> Dungeon {
     return Dungeon { grid: g, rooms: rooms };
 }
 
+/// Settings for `random_walk`: how much to carve, how many walkers and how they turn.
+///
 /// ```rust
 /// let tunnels = random_walk(r, 60, 32, WalkOptions { walkers: 4, brush: 2, .. });
 /// ```
@@ -343,8 +352,8 @@ fn poisson_disk(rng: Rng, area: Rect, min_distance: float) -> Vec2[] {
     return points_answer(rng, drift::gen_poisson(rng.hi, rng.lo, rng.inc, area.x, area.y, area.w, area.h, min_distance, 30));
 }
 
-/// The same over the cells of `g` holding `value`, in cell units: a point at (3.5, 2.5) is the
-/// middle of cell (3, 2).
+/// Points at least `min_distance` apart, spread over the cells of `g` holding `value`, in cell
+/// units: a point at (3.5, 2.5) is the middle of cell (3, 2).
 ///
 /// ```rust
 /// for p in poisson_on_grid(r, level.grid, FLOOR, 6.0) {
@@ -356,6 +365,8 @@ fn poisson_on_grid(rng: Rng, g: Grid, value: int, min_distance: float) -> Vec2[]
                                                       min_distance, 30));
 }
 
+/// Settings for `wfc`: retries, wrapping and cells fixed in advance.
+///
 /// ```rust
 /// let ruins = wfc(r, sample, 60, 32, WfcOptions { attempts: 20, .. });
 /// ```
@@ -392,7 +403,13 @@ fn wfc(rng: Rng, sample: Grid, width: int, height: int, o: WfcOptions) -> Option
 
 /// Which neighbours a step on a grid can go to: the four beside a cell, or the diagonals too
 /// (never cutting a blocked corner).
-enum Moves { FourWay, EightWay }
+enum Moves {
+    /// Up, down, left and right.
+    FourWay,
+    /// The four sides and the four diagonals; a diagonal step that would cut past a blocked
+    /// cell is not taken.
+    EightWay,
+}
 
 /// The cells from start to goal, both included, avoiding cells whose value is in `blocked`;
 /// empty when there is no way.
@@ -492,7 +509,8 @@ impl FlowField {
         let n = self.step(c);
         return Vec2 { x: float(n.x - c.x), y: float(n.y - c.y) }.normalized();
     }
-    /// The same for a world position, with cells `cell_size` wide from the origin.
+    /// Unit vector toward the next step from world position `p`, with cells `cell_size` wide
+    /// from the origin.
     ///
     /// ```rust
     /// v.linear = field.direction_at(t.position, 16.0) * speed;
@@ -539,6 +557,7 @@ fn grid_line(a: Cell, b: Cell) -> Cell[] {
 
 //! page: values
 
+/// Internal: the points as one list of x, y pairs, the shape the host's steering call takes.
 fn flat(points: Vec2[]) -> float[] {
     let out: float[] = [];
     for p in points {
@@ -547,7 +566,9 @@ fn flat(points: Vec2[]) -> float[] {
     }
     return out;
 }
+/// Internal: one steering operation on the host.
 fn steer_call(op: string, nums: float[], a: Vec2[], b: Vec2[]) -> float[] { return drift::steer(op, nums, flat(a), flat(b), []); }
+/// Internal: the first two numbers of a steering answer as a Vec2.
 fn steer_vec(r: float[]) -> Vec2 { return Vec2 { x: r[0], y: r[1] }; }
 
 /// `v` shortened to at most `max_length`.
@@ -596,7 +617,16 @@ fn steer_alignment(pos: Vec2, vel: Vec2, positions: Vec2[], velocities: Vec2[], 
 }
 
 /// An agent's wandering: keep one per agent, in a component.
-struct Wander { angle: float = 0.0, distance: float = 40.0, radius: float = 20.0, jitter: float = 0.5 }
+struct Wander {
+    /// The wander angle in radians; `steer_wander` changes it on every call
+    angle: float = 0.0,
+    /// How far ahead the wander circle sits, in pixels
+    distance: float = 40.0,
+    /// The wander circle's radius, in pixels; larger gives wider turns
+    radius: float = 20.0,
+    /// The most the angle changes per call, in radians
+    jitter: float = 0.5,
+}
 
 /// Aimless but smooth: each call turns the wander angle by up to `jitter` radians and steers
 /// toward a point on a circle ahead.
@@ -610,7 +640,15 @@ fn steer_wander(vel: Vec2, w: Wander, rng: Rng, max_speed: float) -> Vec2 {
 }
 
 /// An agent's place along a path: keep one per agent, starting at 0.
-struct PathFollow { index: int = 0, reach_radius: float = 8.0, slow_radius: float = 0.0 }
+struct PathFollow {
+    /// The index of the path point it is heading for; `steer_follow_path` moves it on
+    index: int = 0,
+    /// How close, in pixels, counts as reaching a point
+    reach_radius: float = 8.0,
+    /// Inside this distance of the last point it slows to stop on it, in pixels; 0 arrives at
+    /// full speed
+    slow_radius: float = 0.0,
+}
 
 /// Seeks each point in turn, moving on within `reach_radius`, and arrives at the last one.
 fn steer_follow_path(pos: Vec2, vel: Vec2, path: Vec2[], f: PathFollow, max_speed: float) -> Vec2 {

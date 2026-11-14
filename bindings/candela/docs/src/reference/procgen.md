@@ -485,6 +485,8 @@ let c = Cell { x: 3, y: 4 };
 fn cell(x: int, y: int) -> Cell
 ```
 
+The Cell at column `x`, row `y`.
+
 ```rust
 let start = cell(1, 1);
 ```
@@ -662,7 +664,7 @@ struct CaveOptions {
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `wall_chance` | `float` | `0.45` | chance a cell starts as wall, 0 to 1 |
+| `wall_chance` | `float` | `0.45` | Chance a cell starts as wall, 0 to 1; higher gives narrower caves |
 | `steps` | `int` | `5` | Smoothing passes |
 | `birth` | `int` | `5` | Wall neighbours, of 8, that turn a cell into wall |
 | `survive` | `int` | `4` | Wall neighbours that keep a wall |
@@ -678,6 +680,9 @@ let caves = cave(r, 60, 32, CaveOptions { wall_chance: 0.48, steps: 4, .. });
 ```rust
 fn cave(rng: Rng, width: int, height: int, o: CaveOptions) -> Grid
 ```
+
+A cave level: random walls smoothed into caverns, `width` by `height` cells of `FLOOR` and
+`WALL`. The same `rng` state gives the same cave; the call moves `rng` on.
 
 ```rust
 let g = cave(level.rng, 60, 32, CaveOptions { .. });
@@ -734,6 +739,8 @@ if room.contains(c) { lit = true; }
 ```
 
 ## DungeonOptions
+
+Settings for `dungeon`: room sizes, corridors and doors. Sizes are in cells.
 
 ```rust
 struct DungeonOptions {
@@ -795,6 +802,8 @@ level.grid = d.grid;
 
 ## WalkOptions
 
+Settings for `random_walk`: how much to carve, how many walkers and how they turn.
+
 ```rust
 struct WalkOptions {
     coverage: float = 0.4,
@@ -850,8 +859,8 @@ for p in poisson_disk(r, rect(0.0, 0.0, 960.0, 540.0), 48.0) {
 fn poisson_on_grid(rng: Rng, g: Grid, value: int, min_distance: float) -> Vec2[]
 ```
 
-The same over the cells of `g` holding `value`, in cell units: a point at (3.5, 2.5) is the
-middle of cell (3, 2).
+Points at least `min_distance` apart, spread over the cells of `g` holding `value`, in cell
+units: a point at (3.5, 2.5) is the middle of cell (3, 2).
 
 ```rust
 for p in poisson_on_grid(r, level.grid, FLOOR, 6.0) {
@@ -860,6 +869,8 @@ for p in poisson_on_grid(r, level.grid, FLOOR, 6.0) {
 ```
 
 ## WfcOptions
+
+Settings for `wfc`: retries, wrapping and cells fixed in advance.
 
 ```rust
 struct WfcOptions {
@@ -904,6 +915,11 @@ Which neighbours a step on a grid can go to: the four beside a cell, or the diag
 ```rust
 enum Moves { FourWay, EightWay }
 ```
+
+| Variant | Meaning |
+|---------|---------|
+| `FourWay` | Up, down, left and right. |
+| `EightWay` | The four sides and the four diagonals; a diagonal step that would cut past a blocked cell is not taken. |
 
 ## find_path
 
@@ -1001,7 +1017,8 @@ v.linear = field.direction(c) * speed;
 fn direction_at(self, p: Vec2, cell_size: float) -> Vec2
 ```
 
-The same for a world position, with cells `cell_size` wide from the origin.
+Unit vector toward the next step from world position `p`, with cells `cell_size` wide
+from the origin.
 
 ```rust
 v.linear = field.direction_at(t.position, 16.0) * speed;
@@ -1058,6 +1075,11 @@ struct SpatialBounds {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `half_size` | `Vec2` | `Vec2 { .. }` | Half the box's width and height, in pixels; zero indexes a point |
+| `offset` | `Vec2` | `Vec2 { .. }` | Moves the box from the entity's position, in pixels |
+
 ## Spatial
 
 "What is near here" over the entities with SpatialBounds, without colliders. The index holds
@@ -1069,16 +1091,32 @@ struct Spatial {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the resource is a handle to the engine's spatial index |
+
 ### Spatial.in_rect
 
 ```rust
 fn in_rect(self, r: Rect) -> Entity[]
 ```
 
+The entities whose boxes touch the rectangle.
+
+```rust
+let picked = spatial.in_rect(rect(x, y, 64.0, 64.0));
+```
+
 ### Spatial.in_radius
 
 ```rust
 fn in_radius(self, center: Vec2, radius: float) -> Entity[]
+```
+
+The entities whose boxes touch the circle around `center`, `radius` pixels out.
+
+```rust
+let near = spatial.in_radius(t.position, 120.0);
 ```
 
 ### Spatial.nearest

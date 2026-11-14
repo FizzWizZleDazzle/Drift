@@ -29,23 +29,42 @@ import "drift" { * };
 /// components.
 @settings(section: "theme")
 struct Theme {
+    /// The font of every label, button and toast; the default is the engine's built-in font.
     font: Font = Font { .. },
+    /// Text height in pixels.
     text_size: float = 22.0,
+    /// The color of text.
     text_color: Color = Color { r: 0.93, g: 0.94, b: 0.97, a: 1.0 },
+    /// Outline thickness around text in pixels; 0 draws none.
     outline: float = 0.0,
+    /// The color of the text outline.
     outline_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+    /// How far the text's drop shadow sits from the text, in pixels.
     shadow_offset: Vec2 = Vec2 { x: 0.0, y: 2.0 },
+    /// The color of the text's drop shadow; alpha 0 hides it.
     shadow_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.55 },
+    /// The fill of panels and dialog boxes.
     panel_color: Color = Color { r: 0.08, g: 0.09, b: 0.14, a: 0.86 },
+    /// The mark of a toggle that is on and the knob of a slider.
     accent: Color = Color { r: 0.35, g: 0.67, b: 1.0, a: 1.0 },
+    /// The fill of a button, toggle or slider at rest.
     button_color: Color = Color { r: 0.18, g: 0.21, b: 0.32, a: 1.0 },
+    /// The fill while the mouse is over the widget or it has the focus.
     button_hover: Color = Color { r: 0.26, g: 0.31, b: 0.46, a: 1.0 },
+    /// The fill while the left mouse button is held down on the widget.
     button_pressed: Color = Color { r: 0.13, g: 0.15, b: 0.24, a: 1.0 },
+    /// The toggle mark and slider knob color while the widget has the keyboard or gamepad focus.
     button_focus: Color = Color { r: 0.35, g: 0.67, b: 1.0, a: 1.0 },
+    /// The background of a bar; its alpha is the bar's full opacity.
     bar_back: Color = Color { r: 0.05, g: 0.06, b: 0.09, a: 0.9 },
+    /// The fill of a bar whose own `fill_color` is unset.
     bar_fill: Color = Color { r: 0.36, g: 0.85, b: 0.45, a: 1.0 },
+    /// The damage trail of a bar whose own `trail_color` is unset.
     bar_trail: Color = Color { r: 0.95, g: 0.85, b: 0.4, a: 1.0 },
+    /// Space between a widget's text and its edges, in pixels: x on the left and right, y above
+    /// and below.
     padding: Vec2 = Vec2 { x: 16.0, y: 10.0 },
+    /// Corner radius of panels and widgets in pixels; bars use half of it.
     corner_radius: float = 6.0,
     /// The narrowest a button, toggle or slider is; slider tracks add half.
     widget_width: float = 220.0,
@@ -74,6 +93,13 @@ impl Theme {
         t.button_focus = c;
         return t;
     }
+    /// A copy of the theme that shares no fields with it, to change for one widget.
+    ///
+    /// ```rust
+    /// let big = theme.copy();
+    /// big.text_size = 40.0;
+    /// big.outline = 2.0;
+    /// ```
     fn copy(self) -> Theme {
         return Theme {
             font: self.font, text_size: self.text_size, text_color: self.text_color,
@@ -101,23 +127,43 @@ impl Theme {
 
 // ---- Anchors and layout ----
 
-/// Points of the window, for Anchor.to: (0, 0) is the top-left, (1, 1) the bottom-right.
+/// The top-left corner of the window, for Anchor.to. Window points run from (0, 0) at the
+/// top-left to (1, 1) at the bottom-right.
 const TOP_LEFT: Vec2 = Vec2 { x: 0.0, y: 0.0 };
+/// The middle of the window's top edge, for Anchor.to.
 const TOP: Vec2 = Vec2 { x: 0.5, y: 0.0 };
+/// The top-right corner of the window, for Anchor.to.
 const TOP_RIGHT: Vec2 = Vec2 { x: 1.0, y: 0.0 };
+/// The middle of the window's left edge, for Anchor.to.
 const LEFT: Vec2 = Vec2 { x: 0.0, y: 0.5 };
+/// The middle of the window, for Anchor.to.
 const CENTER: Vec2 = Vec2 { x: 0.5, y: 0.5 };
+/// The middle of the window's right edge, for Anchor.to.
 const RIGHT: Vec2 = Vec2 { x: 1.0, y: 0.5 };
+/// The bottom-left corner of the window, for Anchor.to.
 const BOTTOM_LEFT: Vec2 = Vec2 { x: 0.0, y: 1.0 };
+/// The middle of the window's bottom edge, for Anchor.to.
 const BOTTOM: Vec2 = Vec2 { x: 0.5, y: 1.0 };
+/// The bottom-right corner of the window, for Anchor.to.
 const BOTTOM_RIGHT: Vec2 = Vec2 { x: 1.0, y: 1.0 };
 
 /// Keeps the entity at a point of the window plus `offset` pixels, inside the theme's safe
 /// margin. Widgets made here also take `to` as their pivot, so a TOP_RIGHT widget hangs from
 /// the top-right corner.
 @component
-struct Anchor { to: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. } }
+struct Anchor {
+    /// The point of the window, from (0, 0) at the top-left to (1, 1) at the bottom-right;
+    /// TOP_LEFT and the other constants name the usual ones.
+    to: Vec2 = Vec2 { .. },
+    /// Pixels added to that point; positive x goes right, positive y goes down.
+    offset: Vec2 = Vec2 { .. },
+}
 
+/// An Anchor at the window point `to`, moved `x` and `y` pixels from it.
+///
+/// ```rust
+/// cmd.spawn(label(theme, "Score 0", anchor(TOP_RIGHT, -16.0, 16.0)));
+/// ```
 fn anchor(to: Vec2, x: float, y: float) -> Anchor { return Anchor { to: to, offset: Vec2 { x: x, y: y } }; }
 
 /// Internal: a helper the module needs; games do not call it.
@@ -129,6 +175,8 @@ fn anchor_point(a: Anchor, win: Window, theme: Theme) -> Vec2 {
     };
 }
 
+/// Moves every anchored entity to its window point each frame, so widgets follow the window's
+/// size.
 @system
 fn ui_anchor(anchor: (Anchor, Transform), win: Window, theme: Theme) {
     let (a, t) = anchor;
@@ -147,7 +195,7 @@ fn row(start: Vec2, gap: float, count: int) -> Vec2[] {
     return out;
 }
 
-/// The same going down.
+/// Offsets for `count` widgets in a column, `gap` pixels apart, going down from `start`.
 fn column(start: Vec2, gap: float, count: int) -> Vec2[] {
     let out: Vec2[] = [];
     for i in range(count) {
@@ -211,11 +259,18 @@ fn panel(theme: Theme, at: Anchor, size: Vec2) -> any[] {
 /// many digits a number shows after the point.
 @component
 struct Bind {
+    /// The resource field to show, made with resource_field<T>(path).
     source: ResourceField = ResourceField { .. },
+    /// The text, with {} where the value goes.
     format: string = "{}",
+    /// Digits a number shows after the point.
     decimals: int = 0,
+    /// Units per second a number counts toward a new value; 0 jumps to it.
     count_speed: float = 0.0,
+    /// The number on screen while it counts; Bind keeps it.
     shown: float = 0.0,
+    /// Whether the first value has shown; Bind keeps it, so the first value does not count up
+    /// from 0.
     started: bool = false,
 }
 
@@ -224,11 +279,14 @@ struct Bind {
 /// drift_no_such_field.
 fn bind_text<T>(path: string, format: string) -> Bind { return Bind { source: resource_field<T>(path), format: format, .. }; }
 
-/// The same, counting toward a new number at `units_per_second` or faster.
+/// A Bind like `bind_text` that counts toward each new number at `units_per_second` or faster
+/// instead of jumping to it.
 fn bind_counter<T>(path: string, format: string, units_per_second: float) -> Bind {
     return Bind { source: resource_field<T>(path), format: format, count_speed: units_per_second, .. };
 }
 
+/// Writes each Bind's resource field into its Text every frame, counting numbers when
+/// `count_speed` is above 0.
 @system
 fn ui_bind(bind: (Bind, Text), time: Time) {
     let (b, text) = bind;
@@ -260,8 +318,16 @@ fn ui_bind(bind: (Bind, Text), time: Time) {
 /// A Text that shows a resource field holding seconds as a clock, "m:ss", or "m:ss.d" with
 /// `tenths`: ClockBind { source: resource_field<Game>("time_left"), .. }.
 @component
-struct ClockBind { source: ResourceField = ResourceField { .. }, format: string = "{}", tenths: bool = false }
+struct ClockBind {
+    /// The resource field holding seconds.
+    source: ResourceField = ResourceField { .. },
+    /// The text, with {} where the clock goes.
+    format: string = "{}",
+    /// Whether the clock shows a digit of tenths of a second.
+    tenths: bool = false,
+}
 
+/// Writes each ClockBind's seconds into its Text as a clock every frame.
 @system
 fn ui_clock(clock_bind: (ClockBind, Text)) {
     let (c, text) = clock_bind;
@@ -280,8 +346,12 @@ fn ui_clock(clock_bind: (ClockBind, Text)) {
 
 /// A shape that belongs to a widget: it goes when the widget goes.
 @component
-struct PartOf { owner: Entity = Entity { .. } }
+struct PartOf {
+    /// The widget the part belongs to; when it is despawned, so is the part.
+    owner: Entity = Entity { .. },
+}
 
+/// Despawns every part whose owner is gone.
 @system
 fn ui_parts(part_of: (Entity, PartOf), cmd: Commands) {
     let (e, p) = part_of;
@@ -323,22 +393,40 @@ fn fade_of(r: Rectangle, alpha: float) -> float {
 /// second. Colors left unset come from the theme.
 @component
 struct Bar {
+    /// The current amount; the fill is value / max, clamped to 0..1.
     value: float = 1.0,
+    /// The full amount; 0 or less shows an empty bar.
     max: float = 1.0,
+    /// A resource field `value` is read from every frame, when set.
     value_from: ResourceField = ResourceField { .. },
+    /// A resource field `max` is read from every frame, when set.
     max_from: ResourceField = ResourceField { .. },
+    /// The fill color; a negative alpha, the default, takes the theme's bar_fill.
     fill_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
+    /// The trail color; a negative alpha, the default, takes the theme's bar_trail.
     trail_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
+    /// How fast the fill slides toward a new value, per second; 0 jumps.
     smooth: float = 6.0,
+    /// Seconds the trail waits after a drop before it shrinks.
     trail_delay: float = 0.4,
+    /// The share of the bar the trail shrinks per second.
     trail_speed: float = 1.5,
+    /// Pixels between the bar's edge and its fill.
     inset: float = 2.0,
+    /// The fill share on screen, 0 to 1; the bar keeps it, -1 until the first frame.
     shown: float = -1.0,
+    /// The trail share on screen, 0 to 1; the bar keeps it.
     trail: float = -1.0,
+    /// Seconds the trail still waits; the bar keeps it.
     hold: float = 0.0,
+    /// The fill share last frame, to notice drops; the bar keeps it.
     last: float = -1.0,
+    /// The background alpha the bar was made with; fading the background below it fades the
+    /// fill and trail too.
     alpha: float = 1.0,
+    /// The part entity that draws the fill; spawn_bar sets it.
     fill_part: Entity = Entity { .. },
+    /// The part entity that draws the trail; spawn_bar sets it.
     trail_part: Entity = Entity { .. },
 }
 
@@ -370,6 +458,7 @@ fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> E
     return e;
 }
 
+/// Moves every bar's fill and trail toward its value and redraws them.
 @system(after: [ui_anchor])
 fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands) {
     let (bar, back, t) = row;
@@ -441,21 +530,37 @@ fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands) {
 /// count from a resource field.
 @component
 struct IconRow {
+    /// How many icons are lit, from the left.
     count: int = 3,
+    /// How many icons the row has.
     max: int = 3,
+    /// A resource field `count` is read from every frame, when set.
     count_from: ResourceField = ResourceField { .. },
+    /// The icon image, scaled to `size` pixels wide; no image draws circles.
     image: Texture = Texture { .. },
+    /// The width of one icon in pixels.
     size: float = 24.0,
+    /// Pixels from one icon's left edge to the next.
     spacing: float = 30.0,
+    /// The tint of a lit icon.
     full: Color = Color { r: 1.0, g: 0.35, b: 0.4, a: 1.0 },
+    /// The tint of an unlit icon.
     empty: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.18 },
+    /// One part entity per icon; the row keeps them.
     parts: Entity[] = [],
 }
 
+/// The components of an IconRow at `at` with `count` of `max` icons lit, to spawn. The row
+/// starts at the anchor and goes right.
+///
+/// ```rust
+/// cmd.spawn(icon_row(anchor(TOP_LEFT, 16.0, 16.0), 3, 5));
+/// ```
 fn icon_row(at: Anchor, count: int, max: int) -> any[] {
     return [Transform { .. }, at, IconRow { count: count, max: max, .. }];
 }
 
+/// Keeps one part per icon of each IconRow and colors the first `count` of them as lit.
 @system(after: [ui_anchor])
 fn ui_icon_rows(icon_row: (Entity, IconRow, Transform), cmd: Commands) {
     let (e, row, t) = icon_row;
@@ -498,45 +603,100 @@ fn ui_icon_rows(icon_row: (Entity, IconRow, Transform), cmd: Commands) {
 /// Sent when a button is clicked, tapped, or activated with Return, Space or the gamepad's
 /// South button while focused.
 @message
-struct ButtonPressed { id: string = "", button: Entity = Entity { .. } }
+struct ButtonPressed {
+    /// The id the button was made with.
+    id: string = "",
+    /// The button's entity.
+    button: Entity = Entity { .. },
+}
 
 /// Sent when a toggle flips.
 @message
-struct ToggleChanged { id: string = "", on: bool = false, toggle: Entity = Entity { .. } }
+struct ToggleChanged {
+    /// The id the toggle was made with.
+    id: string = "",
+    /// Whether the toggle is now on.
+    on: bool = false,
+    /// The toggle's entity.
+    toggle: Entity = Entity { .. },
+}
 
 /// Sent while a slider moves.
 @message
-struct SliderChanged { id: string = "", value: float = 0.0, slider: Entity = Entity { .. } }
+struct SliderChanged {
+    /// The id the slider was made with.
+    id: string = "",
+    /// The slider's new value, between its min and max.
+    value: float = 0.0,
+    /// The slider's entity.
+    slider: Entity = Entity { .. },
+}
 
-enum WidgetKind { Button, Toggle, Slider }
+/// Which of the three clickable widgets a Widget is; button(), toggle() and slider() set it.
+enum WidgetKind {
+    /// Sends ButtonPressed when clicked or activated.
+    Button,
+    /// Flips `on` and sends ToggleChanged when clicked or activated.
+    Toggle,
+    /// Changes `value` while dragged, or with Left and Right while focused, and sends
+    /// SliderChanged; Return, Space and the South button do nothing on it.
+    Slider,
+}
 
 /// Which widget the keyboard or gamepad is on: the `order` of a Widget, or -1 before anyone
 /// navigates. Up/Down (W/S, the d-pad, the left stick) move it; Left/Right change a focused
 /// slider.
 @resource
-struct UiFocus { index: int = -1, held: float = 0.0, enabled: bool = true }
+struct UiFocus {
+    /// The `order` of the focused widget, or -1 while none is.
+    index: int = -1,
+    /// Seconds until a held stick moves the focus again; UiFocus keeps it.
+    held: float = 0.0,
+    /// Whether the keyboard and gamepad move and use the focus; false leaves only the mouse.
+    enabled: bool = true,
+}
 
 /// What a clickable widget is. Made by button(), toggle() and slider().
 @component
 struct Widget {
+    /// The id its messages carry.
     id: string = "",
+    /// Button, toggle or slider.
     kind: WidgetKind = WidgetKind::Button,
+    /// Its place in keyboard and gamepad navigation; lower comes first.
     order: int = 0,
+    /// Whether a toggle is on.
     on: bool = false,
+    /// A slider's value.
     value: float = 0.0,
+    /// A slider's lowest value.
     min: float = 0.0,
+    /// A slider's highest value.
     max: float = 1.0,
+    /// A twentieth of a slider's range; slider() sets it, and the module does not read it.
     step: float = 0.1,
+    /// Whether the mouse is over it this frame.
     hovered: bool = false,
+    /// Whether the left mouse button went down on it and is still held.
     pressed: bool = false,
+    /// Whether a slider's knob is being dragged.
     dragging: bool = false,
+    /// The fill at rest, from the theme's button_color.
     color: Color = Color { .. },
+    /// The fill while hovered or focused, from the theme's button_hover.
     hover: Color = Color { .. },
+    /// The fill while pressed, from the theme's button_pressed.
     down: Color = Color { .. },
+    /// The mark or knob color while focused, from the theme's button_focus.
     focus: Color = Color { .. },
+    /// The mark or knob color otherwise, from the theme's accent.
     accent: Color = Color { .. },
+    /// The background alpha it was made with; fading the background below it fades the parts
+    /// too.
     alpha: float = 1.0,
+    /// The part entity that draws its text.
     label_part: Entity = Entity { .. },
+    /// The part entity that draws a toggle's mark or a slider's knob.
     mark_part: Entity = Entity { .. },
 }
 
@@ -682,6 +842,8 @@ fn ui_focus_nav(focus: UiFocus, input: Input, time: Time, widgets: (Widget, Rect
     focus.index = orders[next];
 }
 
+/// Handles the mouse, the focus and activation of every button, toggle and slider, sends their
+/// messages and redraws them.
 @system(after: [ui_anchor, ui_focus_nav])
 fn ui_widgets(widget: (Entity, Widget, Rectangle, Transform), input: Input, focus: UiFocus,
               time: Time, cmd: Commands) {
@@ -785,14 +947,26 @@ fn ui_widgets(widget: (Entity, Widget, Rectangle, Transform), input: Input, focu
 /// stops drawing.
 @component
 struct Reveal {
+    /// Whether the widget is shown; change it to start the move.
     shown: bool = true,
+    /// Pixels the widget sits away from its anchor offset while hidden.
     slide: Vec2 = Vec2 { .. },
+    /// How long showing or hiding takes; 0 is at once.
     seconds: float = 0.25,
+    /// Progress from hidden (0) to shown (1); Reveal keeps it, -1 until the first frame.
     t: float = -1.0,
+    /// The anchor offset when shown, taken on the first frame; Reveal keeps it.
     home: Vec2 = Vec2 { .. },
+    /// The full alpha, taken from the widget on the first frame; Reveal keeps it.
     alpha: float = -1.0,
 }
 
+/// A Reveal that starts `shown` or hidden and sits `slide` pixels away while hidden.
+///
+/// ```rust
+/// cmd.spawn([Transform { .. }, theme.text("Paused", CENTER), anchor(CENTER, 0.0, 0.0),
+///            reveal(false, vec2(0.0, 40.0))]);
+/// ```
 fn reveal(shown: bool, slide: Vec2) -> Reveal { return Reveal { shown: shown, slide: slide, .. }; }
 
 /// Internal: a helper the module needs; games do not call it.
@@ -830,6 +1004,7 @@ fn reveal_step(rv: Reveal, a: Anchor, dt: float) -> float {
     return k;
 }
 
+/// Slides and fades every Rectangle that has a Reveal.
 @system(before: [ui_anchor])
 fn ui_reveal_rects(reveal: (Reveal, Anchor, Rectangle), time: Time) {
     let (rv, a, r) = reveal;
@@ -841,6 +1016,7 @@ fn ui_reveal_rects(reveal: (Reveal, Anchor, Rectangle), time: Time) {
     r.visible = k > 0.0;
 }
 
+/// Slides and fades every Text that has a Reveal.
 @system(before: [ui_anchor])
 fn ui_reveal_texts(reveal: (Reveal, Anchor, Text), time: Time) {
     let (rv, a, text) = reveal;
@@ -858,8 +1034,21 @@ fn ui_reveal_texts(reveal: (Reveal, Anchor, Text), time: Time) {
 /// A message that shows for a few seconds below the top of the window and goes; newer ones
 /// stack under older ones.
 @component
-struct Toast { seconds: float = 2.5, age: float = 0.0, slot: float = -1.0 }
+struct Toast {
+    /// How long it shows, fading in and out included.
+    seconds: float = 2.5,
+    /// Seconds it has shown; Toast keeps it.
+    age: float = 0.0,
+    /// Its place in the stack, sliding toward a whole number; Toast keeps it.
+    slot: float = -1.0,
+}
 
+/// Shows `message` as a toast for 2.5 seconds, in the theme's text, 72 pixels below the top of
+/// the window. It fades in over 0.2 seconds and out over the last 0.4.
+///
+/// ```rust
+/// toast(cmd, theme, "Checkpoint reached");
+/// ```
 fn toast(cmd: Commands, theme: Theme, message: string) {
     cmd.spawn([
         Transform { .. },
@@ -869,6 +1058,7 @@ fn toast(cmd: Commands, theme: Theme, message: string) {
     ]);
 }
 
+/// Ages, stacks and fades every toast, and despawns the ones whose time is up.
 @system(before: [ui_anchor])
 fn ui_toasts(toasts: (Entity, Toast, Anchor, Text)[], time: Time, theme: Theme, cmd: Commands) {
     let slot = 0.0;
@@ -895,15 +1085,30 @@ fn ui_toasts(toasts: (Entity, Toast, Anchor, Text)[], time: Time, theme: Theme, 
 /// Reveals a Text's `full` string a few characters at a time. `finished` turns true once all of
 /// it shows; finish() shows it at once.
 @component
-struct Typewriter { full: string = "", chars_per_second: float = 40.0, shown: float = 0.0, finished: bool = false }
+struct Typewriter {
+    /// The whole text to reveal.
+    full: string = "",
+    /// Characters revealed per second.
+    chars_per_second: float = 40.0,
+    /// How many characters show; Typewriter keeps it.
+    shown: float = 0.0,
+    /// Whether all of `full` shows.
+    finished: bool = false,
+}
 
 impl Typewriter {
+    /// Shows the whole text at once and marks it finished.
+    ///
+    /// ```rust
+    /// if input.key_pressed(Key::Space) { tw.finish(); }
+    /// ```
     fn finish(self) {
         self.shown = float(self.full.len());
         self.finished = true;
     }
 }
 
+/// Reveals more of every Typewriter's text each frame.
 @system
 fn ui_typewriter(typewriter: (Typewriter, Text), time: Time) {
     let (tw, text) = typewriter;
@@ -923,14 +1128,34 @@ fn ui_typewriter(typewriter: (Typewriter, Text), time: Time) {
 
 /// Sent when the player closes a dialog box.
 @message
-struct DialogClosed { id: string = "", dialog: Entity = Entity { .. } }
+struct DialogClosed {
+    /// The id the dialog box was made with.
+    id: string = "",
+    /// The dialog box's entity, despawned as the message is sent.
+    dialog: Entity = Entity { .. },
+}
 
 /// A box along the bottom of the window that types out `pages` one after another. Return,
 /// Space, a click or the South button finishes the page, then turns it; after the last page the
 /// box closes and sends DialogClosed.
 @component
-struct DialogBox { id: string = "", pages: string[] = [], page: int = 0, text_part: Entity = Entity { .. } }
+struct DialogBox {
+    /// The id DialogClosed carries.
+    id: string = "",
+    /// The text of each page, in order.
+    pages: string[] = [],
+    /// The page showing, from 0.
+    page: int = 0,
+    /// The part entity that types the text; dialog_box sets it.
+    text_part: Entity = Entity { .. },
+}
 
+/// Spawns a dialog box 720 pixels wide, 16 pixels above the bottom of the window, that types
+/// out `pages` in the theme's text, and answers its entity.
+///
+/// ```rust
+/// dialog_box(cmd, theme, "intro", ["Welcome, traveller.", "The bridge is out. Find another way."]);
+/// ```
 fn dialog_box(cmd: Commands, theme: Theme, id: string, pages: string[]) -> Entity {
     let box = cmd.spawn(panel(theme, Anchor { to: BOTTOM, offset: Vec2 { x: 0.0, y: -16.0 } },
                               Vec2 { x: 720.0, y: theme.text_size * 4.0 + theme.padding.y * 2.0 }));
@@ -946,6 +1171,8 @@ fn dialog_box(cmd: Commands, theme: Theme, id: string, pages: string[]) -> Entit
     return box;
 }
 
+/// Finishes or turns the page of every dialog box when the player presses Return, Space, the
+/// left mouse button or the gamepad's South button, and closes it after the last page.
 @system(after: [ui_anchor])
 fn ui_dialogs(dialog_box: (Entity, DialogBox, Rectangle, Transform), input: Input,
               writers: Lookup<Typewriter>, cmd: Commands) {
@@ -978,12 +1205,24 @@ fn ui_dialogs(dialog_box: (Entity, DialogBox, Rectangle, Transform), input: Inpu
 /// shows the target. Floating names, prompts and health bars over heads. The widget hides while
 /// the target is gone.
 @component
-struct FollowWorld { target: Entity = Entity { .. }, offset: Vec2 = Vec2 { x: 0.0, y: -32.0 } }
+struct FollowWorld {
+    /// The entity to stay over; when it is gone the widget is despawned.
+    target: Entity = Entity { .. },
+    /// Pixels from the target's screen position; the default is 32 pixels above it.
+    offset: Vec2 = Vec2 { x: 0.0, y: -32.0 },
+}
 
+/// Where the camera shows the entity `e`, in window pixels.
+///
+/// ```rust
+/// let p = screen_point_of(boss, camera);
+/// ```
 fn screen_point_of(e: Entity, camera: Camera2D) -> Vec2 {
     return camera.world_to_screen(world_transform(e).position);
 }
 
+/// Points every FollowWorld widget's Anchor at its target's screen position, and despawns the
+/// widget once the target is gone.
 @system(before: [ui_anchor])
 fn ui_follow_world(follow_world: (Entity, FollowWorld, Anchor), camera: Camera2D, win: Window,
                    theme: Theme, cmd: Commands) {
@@ -1002,12 +1241,17 @@ fn ui_follow_world(follow_world: (Entity, FollowWorld, Anchor), camera: Camera2D
 /// the way to the exit, a lost teammate, a boss.
 @component
 struct OffscreenArrow {
+    /// The entity to point at; nothing draws while it is gone.
     target: Entity = Entity { .. },
+    /// The arrow's color.
     color: Color = Color { r: 1.0, g: 0.85, b: 0.3, a: 1.0 },
+    /// The arrow's length in pixels.
     size: float = 14.0,
+    /// Pixels between the arrow's tip and the window edge, inside the theme's safe margin.
     margin: float = 28.0,
 }
 
+/// Draws an arrow at the window edge for every OffscreenArrow whose target is off the screen.
 @system
 fn ui_offscreen_arrows(offscreen_arrow: (Entity, OffscreenArrow), camera: Camera2D, win: Window,
                        theme: Theme, draw: Draw) {
@@ -1051,17 +1295,28 @@ fn ui_offscreen_arrows(offscreen_arrow: (Entity, OffscreenArrow), camera: Camera
 /// of `center` show as dots.
 @component
 struct Radar {
+    /// The entity at the middle of the radar, usually the player; no blips show while it is gone.
     center: Entity = Entity { .. },
+    /// World units from the center to the radar's edge.
     range: float = 600.0,
+    /// The radar's radius on the screen, in pixels.
     radius: float = 64.0,
+    /// The radar's fill.
     color: Color = Color { r: 0.05, g: 0.08, b: 0.12, a: 0.75 },
+    /// The color of the radar's outline and its middle dot.
     ring: Color = Color { r: 0.35, g: 0.67, b: 1.0, a: 0.8 },
 }
 
 /// Shows the entity on every Radar.
 @component
-struct RadarBlip { color: Color = Color { r: 1.0, g: 0.35, b: 0.4, a: 1.0 }, size: float = 3.0 }
+struct RadarBlip {
+    /// The dot's color.
+    color: Color = Color { r: 1.0, g: 0.35, b: 0.4, a: 1.0 },
+    /// The dot's radius in pixels.
+    size: float = 3.0,
+}
 
+/// Draws every Radar and the RadarBlip entities within its range.
 @system(after: [ui_anchor])
 fn ui_radars(radar: (Radar, Transform), blips: (Entity, RadarBlip)[], draw: Draw) {
     let (r, t) = radar;
@@ -1088,20 +1343,34 @@ fn ui_radars(radar: (Radar, Transform), blips: (Entity, RadarBlip)[], draw: Draw
 /// the image's pixels; `frame` picks part of the image (zero for all of it).
 @component
 struct NineSlice {
+    /// The image to cut.
     image: Texture = Texture { .. },
+    /// The panel's size in pixels; the Anchor's `to` is its pivot.
     size: Vec2 = Vec2 { x: 200.0, y: 100.0 },
+    /// The left, top, right and bottom margins in the image, in image pixels.
     border: Edges = Edges { left: 8.0, top: 8.0, right: 8.0, bottom: 8.0 },
+    /// The part of the image to use, in image pixels; zero size uses all of it.
     frame: Rect = Rect { .. },
+    /// A tint; white, the default, leaves the image as it is.
     color: Color = Color { .. },
+    /// Draw order on the HUD layer; higher draws on top.
     z: float = 0.0,
+    /// Whether it draws.
     visible: bool = true,
 }
 
+/// The components of a NineSlice panel `size` pixels at `at`, with the same `border` in image
+/// pixels on all four sides, to spawn.
+///
+/// ```rust
+/// cmd.spawn(nine_slice_panel(art.frame, 8.0, anchor(CENTER, 0.0, 0.0), vec2(320.0, 180.0)));
+/// ```
 fn nine_slice_panel(image: Texture, border: float, at: Anchor, size: Vec2) -> any[] {
     return [Transform { .. }, at,
             NineSlice { image: image, size: size, border: edges(border), .. }];
 }
 
+/// Draws every visible NineSlice at its anchor.
 @system(after: [ui_anchor])
 fn ui_nine_slices(nine_slice: (NineSlice, Anchor, Transform), draw: Draw) {
     let (n, a, t) = nine_slice;
@@ -1123,8 +1392,18 @@ fn icon_label(cmd: Commands, theme: Theme, icon: Texture, text: string, at: Anch
 
 /// Draws `icon` left of the entity's Text, `size` pixels tall.
 @component
-struct IconOf { icon: Texture = Texture { .. }, size: float = 0.0, gap: float = 8.0, part: Entity = Entity { .. } }
+struct IconOf {
+    /// The image to draw.
+    icon: Texture = Texture { .. },
+    /// The icon's height in pixels; 0 makes it 1.1 times the text size.
+    size: float = 0.0,
+    /// Pixels between the icon and the text.
+    gap: float = 8.0,
+    /// The part entity that draws the icon, made on the first frame; IconOf keeps it.
+    part: Entity = Entity { .. },
+}
 
+/// Places and draws the icon of every IconOf beside its Text.
 @system(after: [ui_anchor])
 fn ui_icons(icon_of: (Entity, IconOf, Text, Transform), cmd: Commands) {
     let (e, i, text, t) = icon_of;

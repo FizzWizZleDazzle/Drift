@@ -13,6 +13,11 @@ impl Font {
         let m = drift::text_measure(s, Text { size: size, font: self, .. });
         return Vec2 { x: m[0], y: m[1] };
     }
+    /// The distance from one line's top to the next line's top for this font at `size` pixels.
+    ///
+    /// ```rust
+    /// let y = top + float(row) * font.line_height(20.0);
+    /// ```
     fn line_height(self, size: float) -> float { return drift::font_line_height(self.id, size); }
     /// Characters this font lacks come from `other`; every font falls back to the built-in one
     /// until this changes it.
@@ -139,7 +144,7 @@ fn grouped(n: int) -> string {
 /// Seconds as "m:ss", or "h:mm:ss" from an hour up: "1:05".
 fn format_clock(seconds: float) -> string { return clock_text(seconds, false); }
 
-/// The same with a digit of tenths after a point: "1:05.3".
+/// `seconds` as a clock like `format_clock`, with a digit of tenths after a point: "1:05.3".
 fn format_clock_tenths(seconds: float) -> string { return clock_text(seconds, true); }
 
 /// Internal: a helper the module needs; games do not call it.
@@ -160,13 +165,32 @@ fn clock_text(seconds: float, tenths: bool) -> string {
 
 // ---- Localization ----
 
-// The game's text in the player's language: one file per language, key ->
-// text, in JSON or TOML. drift.toml [locale] says where:
-/// [locale] folder = "assets/lang"   # files named <language>.json or .toml language = "auto"
-/// # the browser's (or system's) language, or "fr" fallback = "en"          # where keys
-/// missing from a language come from
-struct Strings { language: string = "", table: {string: string} = {}, fallback: {string: string} = {} }
+/// The game's text in the player's language: one file per language, mapping keys to text, in
+/// JSON or TOML. `localization()` makes one; the `[locale]` section of `drift.toml` says where
+/// the files are:
+///
+/// ```toml
+/// [locale]
+/// folder = "assets/lang"   # files named <language>.json or .toml
+/// language = "auto"        # the browser's (or system's) language, or "fr"
+/// fallback = "en"          # where keys missing from a language come from
+/// ```
+///
+/// ```rust
+/// let strings = localization();
+/// title.value = strings.get("menu.start");
+/// ```
+struct Strings {
+    /// The language the text comes from, such as "fr"; the fallback language when no file
+    /// matched.
+    language: string = "",
+    /// Key to text in `language`.
+    table: {string: string} = {},
+    /// Key to text in the fallback language, for keys `table` lacks.
+    fallback: {string: string} = {},
+}
 
+/// The `[locale]` setting `key` from `drift.toml`, or `fallback` when the file leaves it out.
 fn locale_setting(key: string, fallback: string) -> string {
     let j = drift::setting_text("locale." + key);
     if j == "" {
@@ -174,6 +198,8 @@ fn locale_setting(key: string, fallback: string) -> string {
     }
     return parse_json<string>(j);
 }
+/// The key-to-text table in `folder` for `language`, read from `<language>.json` or, failing
+/// that, `<language>.toml`; `None` when neither file exists.
 fn locale_table(folder: string, language: string) -> Option<{string: string}> {
     for ext in [".json", ".toml"] {
         let j = drift::data_read(folder + "/" + language + ext, "?");

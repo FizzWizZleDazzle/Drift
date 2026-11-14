@@ -18,6 +18,10 @@ struct Systems {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused handle; the methods talk to the host directly. |
+
 ```rust
 @system(on_enter: Phase::Paused)
 fn freeze(systems: Systems) {
@@ -76,6 +80,11 @@ struct ResourceField {
     field: string = "",
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `resource` | `string` | `""` | The resource type's full name, as Candela writes it; empty names no field. |
+| `field` | `string` | `""` | The field's path inside the resource, with `.` between nested fields. |
 
 ```rust
 @resource
@@ -145,6 +154,8 @@ spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
 ```
 
 ## Time
+
+The frame's timing: how long the last frame took and how fast game time runs.
 
 `dt` is the frame time times `scale`; `real_dt` ignores the scale, for menus and tools that
 keep running while the game is slowed or frozen.
@@ -248,10 +259,19 @@ Screen pixels per window unit: 2 on most phones, 1 on most monitors.
 fn op(self, name: string, nums: float[], text: string) -> float[]
 ```
 
+The host call most Window methods go through: the operation `name` with its numbers and
+text, answering numbers. Call the named methods instead.
+
 ### Window.set_title
 
 ```rust
 fn set_title(self, title: string)
+```
+
+Sets the window's title.
+
+```rust
+window.set_title("Level " + string(level));
 ```
 
 ### Window.set_clear_color
@@ -260,10 +280,22 @@ fn set_title(self, title: string)
 fn set_clear_color(self, c: Color)
 ```
 
+The color the screen is cleared to each frame, behind everything drawn.
+
+```rust
+window.set_clear_color(hex("#1d2b53"));
+```
+
 ### Window.set_scale_mode
 
 ```rust
 fn set_scale_mode(self, m: ScaleMode)
+```
+
+Changes how the logical size fits the window; see `ScaleMode`.
+
+```rust
+window.set_scale_mode(ScaleMode::Expand);
 ```
 
 ### Window.set_logical_size
@@ -288,11 +320,15 @@ The window's own size in pixels; in the browser, the canvas.
 fn set_size(self, w: int, h: int)
 ```
 
+Resizes the window, in pixels.
+
 ### Window.fullscreen
 
 ```rust
 fn fullscreen(self) -> bool
 ```
+
+Whether the game is fullscreen; in the browser, whether the page is.
 
 ### Window.set_fullscreen
 
@@ -309,10 +345,22 @@ time, it waits for the next one.
 fn show_cursor(self, visible: bool)
 ```
 
+Shows or hides the mouse pointer over the window.
+
+```rust
+window.show_cursor(false);   // the game draws its own crosshair
+```
+
 ### Window.set_cursor
 
 ```rust
 fn set_cursor(self, c: Cursor)
+```
+
+Changes the mouse pointer's shape; see `Cursor`.
+
+```rust
+window.set_cursor(Cursor::Pointer);
 ```
 
 ### Window.draw_calls
@@ -327,6 +375,12 @@ Draw calls and sprites in the last frame.
 
 ```rust
 fn sprite_count(self) -> int
+```
+
+Sprites drawn in the last frame.
+
+```rust
+stats.value = string(window.draw_calls()) + " calls, " + string(window.sprite_count()) + " sprites";
 ```
 
 ### Window.backend
@@ -378,6 +432,10 @@ struct Input {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the methods talk to the host directly. |
 
 ```rust
 @system
@@ -909,6 +967,10 @@ struct Assets {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the methods talk to the host directly. |
+
 ```rust
 @system(schedule: Schedule::Startup)
 fn load(cmd: Commands, assets: Assets) {
@@ -1054,6 +1116,8 @@ A TrueType, OpenType or BMFont font. `size` is the size a Text with size 0 uses.
 fn shader(self, path: string) -> Shader
 ```
 
+Loads a shader from `path`.
+
 `path` without an extension finds path.wgsl and path.frag.glsl.
 
 ### Assets.create_shader
@@ -1069,6 +1133,13 @@ shader, or both. Empty for the one you do not have.
 
 ```rust
 fn create_material(self, s: Shader) -> Material
+```
+
+A new material running `s`, with every parameter zero and no extra textures.
+
+```rust
+let m = assets.create_material(assets.shader("shaders/glow"));
+m.set_color(0, rgb(255, 200, 80));
 ```
 
 ### Assets.aseprite
@@ -1098,6 +1169,10 @@ struct Effects {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the methods talk to the host directly. |
 
 ```rust
 @system
@@ -1185,8 +1260,8 @@ let grade = effects.add(ColorGrading { saturation: 0.6, brightness: 0.9, .. });
 fn add_at(self, settings: any, order: int) -> Effect
 ```
 
-The same, at a place of your choosing in the chain; effects run from the lowest order
-up.
+Adds a post effect from its settings at `order` in the chain; effects run from the
+lowest order up.
 
 ```rust
 effects.add_at(Vignette { intensity: 0.8, .. }, 100);
@@ -1338,6 +1413,10 @@ struct Save {
     name: string = "",
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `name` | `string` | `""` | The slot: "" is the game's main save, any other name a slot of its own from `slot()`. |
 
 ```rust
 @system(on_enter: Phase::Over)
@@ -1523,17 +1602,53 @@ A value of any type stored as JSON under `key`, or `fallback`.
 fn set_value(self, key: string, value: any)
 ```
 
+Stores a value of any type as JSON under `key`; read it back with `get_value`.
+
+```rust
+save.set_value("inventory", player.items);
+```
+
 ## ScaleMode
+
+How the game's logical size fits the window or the browser canvas; `[window] scale_mode` in
+`drift.toml` picks the starting one, `Window.set_scale_mode` changes it.
+
+```rust
+window.set_scale_mode(ScaleMode::Integer);   // crisp pixel art
+```
 
 ```rust
 enum ScaleMode { Letterbox, Stretch, Integer, Expand }
 ```
 
+| Variant | Meaning |
+|---------|---------|
+| `Letterbox` | Keeps the aspect ratio; bars fill the rest. The default. |
+| `Stretch` | Fills the window, distorting the aspect ratio. |
+| `Integer` | Pixel perfect: scales by whole numbers only. |
+| `Expand` | Keeps pixels square and grows the logical size, so wider screens see more. |
+
 ## Cursor
+
+The mouse pointer's shape over the window, from the system's set; see `Window.set_cursor`.
+
+```rust
+window.set_cursor(if hovered { Cursor::Pointer } else { Cursor::Default });
+```
 
 ```rust
 enum Cursor { Default, Pointer, Text, Crosshair, Move, Wait, NotAllowed }
 ```
+
+| Variant | Meaning |
+|---------|---------|
+| `Default` | The ordinary arrow. |
+| `Pointer` | A pointing hand, for things to click. |
+| `Text` | The text cursor, an I-beam. |
+| `Crosshair` | A crosshair, for aiming. |
+| `Move` | Arrows in four directions, for dragging. |
+| `Wait` | The busy cursor. |
+| `NotAllowed` | A crossed-out circle, for something that cannot be used. |
 
 ## Random
 
@@ -1544,6 +1659,10 @@ struct Random {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the methods talk to the host directly. |
 
 ```rust
 @system(schedule: Schedule::Startup)
@@ -1571,6 +1690,8 @@ hud.value = "Seed " + string(random.seed());
 fn stream(self, name: string) -> Rng
 ```
 
+A generator of its own for `name`, drawn from the game's seed.
+
 The same name gives the same generator for the same seed.
 
 ```rust
@@ -1588,6 +1709,10 @@ struct Camera2D {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the resource is a handle to the engine's cameras |
+
 ```rust
 @system
 fn hover(input: Input, cams: Camera2D, draw: Draw) {
@@ -1602,7 +1727,7 @@ fn hover(input: Input, cams: Camera2D, draw: Draw) {
 fn screen_to_world(self, p: Vec2) -> Vec2
 ```
 
-Through the main camera.
+A logical screen point to a world point, through the main camera.
 
 ```rust
 let world = cams.screen_to_world(vec2(0.0, 0.0));   // the world point at the top-left
@@ -1639,7 +1764,7 @@ if !view.contains(t.position) { cmd.despawn(e); }
 fn screen_to_world_in(self, camera: Entity, p: Vec2) -> Vec2
 ```
 
-The same through a camera entity of your own.
+A screen point to a world point through a camera entity of your own.
 
 ```rust
 let p = cams.screen_to_world_in(right_camera, input.mouse_screen());
@@ -1670,6 +1795,8 @@ let shown = cams.visible_in(minimap_camera);
 ```
 
 ## Draw
+
+Draws shapes, lines, text and images for one frame, without entities.
 
 For debugging, previews and anything with no entity of its own. See [UI and
 Score](../guides/ui-and-score.md#drawing-without-entities).
@@ -1988,10 +2115,10 @@ struct Bloom {
 |-------|------|---------|---------|
 | `threshold` | `float` | `0.7` | brightness where it starts, 0 to 1 |
 | `soft_knee` | `float` | `0.5` | 0 cuts off hard, 1 eases in |
-| `intensity` | `float` | `1.0` |  |
-| `radius` | `float` | `1.0` |  |
+| `intensity` | `float` | `1.0` | How strong the glow is; 0 shows none |
+| `radius` | `float` | `1.0` | How far each blur step spreads, as a multiplier |
 | `levels` | `int` | `5` | 1 to 8; more spreads wider |
-| `tint` | `Color` | `Color { .. }` |  |
+| `tint` | `Color` | `Color { .. }` | The glow's color; white keeps the colors of the bright parts |
 
 ```rust
 effects.add(Bloom { threshold: 0.5, intensity: 1.4, levels: 6, tint: rgb(255, 230, 200), .. });
@@ -2013,11 +2140,22 @@ struct ColorGrading {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `brightness` | `float` | `1.0` | Multiplies every color; 1 leaves it |
+| `contrast` | `float` | `1.0` | Spreads colors away from mid gray; 1 leaves them |
+| `saturation` | `float` | `1.0` | 0 is gray, 1 leaves the colors, above 1 is more vivid |
+| `tint` | `Color` | `Color { .. }` | Multiplies every color; white leaves them |
+| `lut` | `Texture` | `Texture { .. }` | The lookup table texture; no texture uses none |
+| `lut_strength` | `float` | `1.0` | How much of the lookup table applies, 0 to 1 |
+
 ```rust
 effects.add(ColorGrading { saturation: 0.6, contrast: 1.1, .. });
 ```
 
 ## Blur
+
+A gaussian blur over the whole picture.
 
 ```rust
 struct Blur {
@@ -2037,6 +2175,8 @@ effects.add(Blur { radius: 2.0, iterations: 3 });
 
 ## Pixelate
 
+Draws the picture in large square blocks.
+
 ```rust
 struct Pixelate {
     size: float = 6.0,
@@ -2052,6 +2192,8 @@ effects.add(Pixelate { size: 6.0 });
 ```
 
 ## Grayscale
+
+Drains the color out of the picture.
 
 ```rust
 struct Grayscale {
@@ -2069,6 +2211,8 @@ effects.add(Grayscale { amount: 1.0 });
 
 ## Sepia
 
+Tints the picture in old-photo browns.
+
 ```rust
 struct Sepia {
     amount: float = 1.0,
@@ -2085,6 +2229,8 @@ effects.add(Sepia { amount: 0.7 });
 
 ## Vignette
 
+Darkens the picture toward its edges.
+
 ```rust
 struct Vignette {
     intensity: float = 0.6,
@@ -2096,16 +2242,18 @@ struct Vignette {
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `intensity` | `float` | `0.6` |  |
+| `intensity` | `float` | `0.6` | How dark the edges get, 0 to 1 |
 | `radius` | `float` | `0.75` | distance from the center where it is full |
 | `softness` | `float` | `0.45` | it starts this far inside `radius` |
-| `color` | `Color` | `Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }` |  |
+| `color` | `Color` | `Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }` | The color the edges fade to |
 
 ```rust
 effects.add(Vignette { intensity: 0.8, color: rgb(40, 0, 0), .. });
 ```
 
 ## Crt
+
+An old monitor: a curved screen, scanlines and color fringes.
 
 ```rust
 struct Crt {
@@ -2116,6 +2264,14 @@ struct Crt {
     vignette: float = 0.3,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `curvature` | `float` | `0.15` | How much the screen bulges; 0 is flat |
+| `scanlines` | `float` | `0.35` | How dark the scanlines are, 0 to 1 |
+| `scanline_spacing` | `float` | `3.0` | Pixels from one scanline to the next |
+| `chromatic_aberration` | `float` | `1.5` | How far the red and blue channels shift apart at the edges, in pixels |
+| `vignette` | `float` | `0.3` | How dark the edges get, 0 to 1 |
 
 ```rust
 effects.add(Crt { curvature: 0.2, scanlines: 0.5, chromatic_aberration: 2.0, .. });
@@ -2130,6 +2286,10 @@ struct Effect {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's handle for the effect; 0 is no effect |
 
 ```rust
 @resource
@@ -2275,6 +2435,10 @@ struct Physics {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the resource is a handle to the engine's physics world |
+
 ```rust
 @system
 fn line_of_sight(guard: (Guard, Transform), physics: Physics,
@@ -2334,7 +2498,7 @@ let on_ground = ray.hit;
 fn raycast_mask(self, origin: Vec2, direction: Vec2, distance: float, mask: int) -> RayHit
 ```
 
-The same, seeing only colliders whose category is in `mask`.
+The first collider along the ray whose category is in `mask`. Sensors count.
 
 ```rust
 let ray = physics.raycast_mask(eye, dir, 400.0, WALLS);   // WALLS: a category bit of your own
@@ -2410,6 +2574,9 @@ physics.apply_impulse(player, vec2(0.0, -350.0));   // a jump
 ```rust
 fn apply_force(self, e: Entity, force: Vec2)
 ```
+
+Pushes on a dynamic body over this physics step, in mass times pixels per second
+squared; call it every frame for a steady push such as thrust or wind.
 
 ```rust
 physics.apply_force(ship, from_angle(t.rotation) * 400.0);   // thrust while held
@@ -2509,6 +2676,10 @@ struct Audio {
     id: int = 0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Unused; the methods talk to the host directly. |
 
 ```rust
 @resource

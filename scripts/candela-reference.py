@@ -29,7 +29,9 @@ above them, the same text the editor shows on hover:
     //! Introduction...         are the page's introduction
 
 A doc comment that starts with `Internal:` keeps a helper the module needs
-off the pages.
+off the pages. Every other type, function, constant, attribute and method
+needs a doc comment; one without is an error, so new API is documented in
+the change that adds it.
 
 The pages go to bindings/candela/docs/src/reference/, plus index.md, an
 alphabetical list of every name, and api-index.json, which maps every name
@@ -597,7 +599,9 @@ def generate():
             continue
         if d.kind != "method" and by_name.get(d.name) is not d:
             continue
-        if d.internal:
+        if not d.doc:
+            errors.append(f"{where(d)}: {d.name} has no /// doc comment")
+        elif d.internal:
             continue
         if d.kind == "method":
             continue

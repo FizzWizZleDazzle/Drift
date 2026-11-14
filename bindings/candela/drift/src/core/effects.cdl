@@ -32,10 +32,13 @@ struct Bloom {
     threshold: float = 0.7,
     /// 0 cuts off hard, 1 eases in
     soft_knee: float = 0.5,
+    /// How strong the glow is; 0 shows none
     intensity: float = 1.0,
+    /// How far each blur step spreads, as a multiplier
     radius: float = 1.0,
     /// 1 to 8; more spreads wider
     levels: int = 5,
+    /// The glow's color; white keeps the colors of the bright parts
     tint: Color = Color { .. },
 }
 
@@ -46,14 +49,22 @@ struct Bloom {
 /// effects.add(ColorGrading { saturation: 0.6, contrast: 1.1, .. });
 /// ```
 struct ColorGrading {
+    /// Multiplies every color; 1 leaves it
     brightness: float = 1.0,
+    /// Spreads colors away from mid gray; 1 leaves them
     contrast: float = 1.0,
+    /// 0 is gray, 1 leaves the colors, above 1 is more vivid
     saturation: float = 1.0,
+    /// Multiplies every color; white leaves them
     tint: Color = Color { .. },
+    /// The lookup table texture; no texture uses none
     lut: Texture = Texture { .. },
+    /// How much of the lookup table applies, 0 to 1
     lut_strength: float = 1.0,
 }
 
+/// A gaussian blur over the whole picture.
+///
 /// ```rust
 /// effects.add(Blur { radius: 2.0, iterations: 3 });
 /// ```
@@ -64,6 +75,8 @@ struct Blur {
     iterations: int = 2,
 }
 
+/// Draws the picture in large square blocks.
+///
 /// ```rust
 /// effects.add(Pixelate { size: 6.0 });
 /// ```
@@ -72,6 +85,8 @@ struct Pixelate {
     size: float = 6.0,
 }
 
+/// Drains the color out of the picture.
+///
 /// ```rust
 /// effects.add(Grayscale { amount: 1.0 });
 /// ```
@@ -80,6 +95,8 @@ struct Grayscale {
     amount: float = 1.0,
 }
 
+/// Tints the picture in old-photo browns.
+///
 /// ```rust
 /// effects.add(Sepia { amount: 0.7 });
 /// ```
@@ -88,26 +105,37 @@ struct Sepia {
     amount: float = 1.0,
 }
 
+/// Darkens the picture toward its edges.
+///
 /// ```rust
 /// effects.add(Vignette { intensity: 0.8, color: rgb(40, 0, 0), .. });
 /// ```
 struct Vignette {
+    /// How dark the edges get, 0 to 1
     intensity: float = 0.6,
     /// distance from the center where it is full
     radius: float = 0.75,
     /// it starts this far inside `radius`
     softness: float = 0.45,
+    /// The color the edges fade to
     color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
 }
 
+/// An old monitor: a curved screen, scanlines and color fringes.
+///
 /// ```rust
 /// effects.add(Crt { curvature: 0.2, scanlines: 0.5, chromatic_aberration: 2.0, .. });
 /// ```
 struct Crt {
+    /// How much the screen bulges; 0 is flat
     curvature: float = 0.15,
+    /// How dark the scanlines are, 0 to 1
     scanlines: float = 0.35,
+    /// Pixels from one scanline to the next
     scanline_spacing: float = 3.0,
+    /// How far the red and blue channels shift apart at the edges, in pixels
     chromatic_aberration: float = 1.5,
+    /// How dark the edges get, 0 to 1
     vignette: float = 0.3,
 }
 
@@ -124,7 +152,10 @@ struct Crt {
 ///     }
 /// }
 /// ```
-struct Effect { id: int = 0 }
+struct Effect {
+    /// The engine's handle for the effect; 0 is no effect
+    id: int = 0,
+}
 impl Effect {
     /// New settings of the same kind as the effect was added with.
     ///
@@ -166,8 +197,8 @@ impl Effects {
     /// let grade = effects.add(ColorGrading { saturation: 0.6, brightness: 0.9, .. });
     /// ```
     fn add(self, settings: any) -> Effect { return Effect { id: drift::effect_add(settings, -2147483647) }; }
-    /// The same, at a place of your choosing in the chain; effects run from the lowest order
-    /// up.
+    /// Adds a post effect from its settings at `order` in the chain; effects run from the
+    /// lowest order up.
     ///
     /// ```rust
     /// effects.add_at(Vignette { intensity: 0.8, .. }, 100);

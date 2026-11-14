@@ -98,7 +98,16 @@ struct OverlapEnd<A, B> {
 ///     }
 /// }
 /// ```
-struct Lookup<T> { key: int = 0, ids: int[] = [], rows: T[] = [], slots: {int: int} = {} }
+struct Lookup<T> {
+    /// The host's id for this lookup in this system call.
+    key: int = 0,
+    /// The ids of the entities fetched so far, in fetch order.
+    ids: int[] = [],
+    /// The components fetched so far, one per id; the host writes their changes back.
+    rows: T[] = [],
+    /// Entity id to its index in `rows`, so a second `get` answers without the host.
+    slots: {int: int} = {},
+}
 impl Lookup<T> {
     /// `Some(component)` when the entity has a `T`, `None` otherwise.
     ///
@@ -156,7 +165,10 @@ fn drift_type_name<T>() -> string {
 ///     cmd.insert(player, Velocity { linear: vec2(50.0, 0.0), .. });
 /// }
 /// ```
-struct Commands { id: int = 0 }
+struct Commands {
+    /// Unused; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Commands {
     /// Makes an entity with the components in the list, at most one of each type, and returns
     /// its id. The id is valid at once: use it in later commands of the same system.
@@ -291,7 +303,10 @@ impl State<S> {
 ///     systems.disable("spawn_enemies");
 /// }
 /// ```
-struct Systems { id: int = 0 }
+struct Systems {
+    /// Unused handle; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Systems {
     /// Turns a system on by its function name. A name that is not one of the game's systems
     /// raises `drift_unknown_system`, which lists them.
@@ -347,7 +362,12 @@ fn check_system(name: string) {
 /// let hp = resource_field<Game>("player.hp");    // a field of a struct field
 /// log(score.label() + " is " + score.text());   // "Game.score is 120"
 /// ```
-struct ResourceField { resource: string = "", field: string = "" }
+struct ResourceField {
+    /// The resource type's full name, as Candela writes it; empty names no field.
+    resource: string = "",
+    /// The field's path inside the resource, with `.` between nested fields.
+    field: string = "",
+}
 
 /// The field `path` of the resource `T`. `T` must be a struct marked `@resource` or
 /// `@settings`, or this raises `drift_not_a_resource`; the path must name a field of it, or

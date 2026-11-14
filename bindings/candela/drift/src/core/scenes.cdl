@@ -9,19 +9,32 @@ import "drift/core/resources" { * };
 //! page: assets
 
 /// A loaded scene or prefab file.
-struct Scene { id: int = 0 }
+struct Scene {
+    /// The engine's id of the loaded file.
+    id: int = 0,
+}
 
 /// How one copy of a scene spawns: `offset` moves its root entities, `parent` makes them
 /// children of an entity, and `overrides` maps an entity's Name to a JSON patch of its
 /// components.
 struct SceneOptions {
+    /// Added to the position of each root entity, in pixels.
     offset: Vec2 = Vec2 { .. },
+    /// The entity the roots become children of; no entity leaves them without a parent.
     parent: Entity = Entity { .. },
+    /// An entity's Name to a JSON patch of its components, applied to that copy only.
     overrides: {string: string} = {},
 }
 
 /// The entities one spawn made, in file order.
-struct SceneInstance { entities: Entity[] = [], roots: Entity[] = [], names: string[] = [] }
+struct SceneInstance {
+    /// Every entity the spawn made, in file order.
+    entities: Entity[] = [],
+    /// The entities without a parent in the file.
+    roots: Entity[] = [],
+    /// Each entity's Name, at the same index as `entities`; "" for one without a Name.
+    names: string[] = [],
+}
 impl SceneInstance {
     /// The first entity with this Name.
     fn find(self, name: string) -> Option<Entity> {

@@ -18,7 +18,10 @@ import "drift/core/assets" { * };
 ///     engine.hum = sfx.engine.play_with(PlayOptions { looping: true, volume: 0.4, .. });
 /// }
 /// ```
-struct Voice { id: int = 0 }
+struct Voice {
+    /// The engine's id of the playing sound; 0 is none.
+    id: int = 0,
+}
 impl Voice {
     /// Stops it, fading out over `fade` seconds.
     ///
@@ -119,7 +122,10 @@ fn music(path: string) -> Sound {
 /// let voices = audio.bus("voice", Bus { .. });
 /// voices.set_volume(options.voice_volume, 0.0);
 /// ```
-struct Bus { id: int = 0 }
+struct Bus {
+    /// The engine's id of the bus.
+    id: int = 0,
+}
 impl Bus {
     /// Volume 0 to 1, reached over `fade` seconds.
     ///
@@ -187,7 +193,10 @@ fn bool_float(b: bool) -> float {
 ///     audio.play_music(tracks.theme, 0.0, true);
 /// }
 /// ```
-struct Audio { id: int = 0 }
+struct Audio {
+    /// Unused; the methods talk to the host directly.
+    id: int = 0,
+}
 impl Audio {
     /// One music track at a time on the music bus; another crossfades over `crossfade_seconds`.
     ///

@@ -23,22 +23,46 @@ import "drift" { * };
 
 // ---- Health and damage ----
 
-/// Hit points. A hit takes `amount` off unless the entity is still invulnerable from the last
-/// one (`invulnerable_for` seconds). At 0 the entity dies: Died is sent, and it is despawned
-/// unless `despawn_on_death` is off.
+/// Hit points that DealDamage messages and Hitboxes take away.
+///
+/// A hit takes its amount off unless the entity is still invulnerable from the last one
+/// (`invulnerable_for` seconds). At 0 the entity dies: Died is sent, and it is despawned unless
+/// `despawn_on_death` is off. A dead entity ignores every later hit and heal. Each hit that
+/// lands sends Damaged.
+///
+/// ```rust
+/// cmd.spawn([at(100.0, 200.0), health(30.0), Hurtbox { team: 1 }, BoxCollider { .. }]);
+/// ```
 @component
 struct Health {
+    /// Hit points left, from 0 to `max`.
     hp: float = 100.0,
+    /// The most hit points a heal restores to.
     max: float = 100.0,
+    /// Seconds of game time after a hit during which further hits do nothing; 0 lets every
+    /// hit land.
     invulnerable_for: float = 0.0,
+    /// Despawns the entity when it dies; off keeps it, for a death animation or a respawn.
     despawn_on_death: bool = true,
+    /// Seconds of invulnerability left; the module counts it down.
     invulnerable: float = 0.0,
+    /// Set when `hp` reaches 0; a dead entity takes no more damage or healing.
     dead: bool = false,
 }
 
+/// A full Health with `hp` hit points.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), health(50.0), Hurtbox { .. }]);
+/// ```
 fn health(hp: float) -> Health { return Health { hp: hp, max: hp, .. }; }
 
 impl Health {
+    /// Hit points as a share of `max`, from 0.0 to 1.0; 0.0 when `max` is 0 or less.
+    ///
+    /// ```rust
+    /// let low = h.fraction() < 0.25;
+    /// ```
     fn fraction(self) -> float {
         if self.max <= 0.0 {
             return 0.0;
@@ -48,36 +72,107 @@ impl Health {
 }
 
 /// Deals `damage` to the Hurtbox entities it touches on another `team`, through a sensor
-/// overlap or a contact. `pierce` off despawns it after its first hit, as a bullet. `knockback`
-/// pushes a dynamic body away.
+/// overlap or a contact.
+///
+/// Both entities need a collider for the touch to be seen. `pierce` off despawns it after its
+/// first hit, as a bullet. `knockback` pushes the target away from it with an impulse, which
+/// moves only a dynamic body.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), Hitbox { damage: 5.0, team: 0, pierce: false, .. },
+///            CircleCollider { radius: 3.0, sensor: true, .. }, Velocity { linear: vec2(400.0, 0.0), .. }]);
+/// ```
 @component
-struct Hitbox { damage: float = 10.0, team: int = 0, pierce: bool = true, knockback: float = 0.0 }
+struct Hitbox {
+    /// Hit points each hit takes away.
+    damage: float = 10.0,
+    /// Its side; it hurts only Hurtboxes whose team differs.
+    team: int = 0,
+    /// Keeps it after a hit; off despawns it after its first hit.
+    pierce: bool = true,
+    /// Strength of the impulse that pushes the target away from it; 0 pushes nothing.
+    knockback: float = 0.0,
+}
 
 /// Takes damage from Hitboxes of other teams.
+///
+/// The entity needs a collider for a hit to be seen, and Health for the hit to count.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), health(20.0), Hurtbox { team: 1 }, BoxCollider { .. }]);
+/// ```
 @component
-struct Hurtbox { team: int = 1 }
+struct Hurtbox {
+    /// Its side; Hitboxes of the same team pass through it.
+    team: int = 1,
+}
 
-/// Send to hurt an entity with Health; Hitboxes send it for you.
+/// A message that hurts an entity with Health, or heals it with a negative amount.
+///
+/// Hitboxes send it for you; damage() and heal() send it from your systems.
 @message
-struct DealDamage { target: Entity = Entity { .. }, amount: float = 0.0, source: Entity = Entity { .. } }
+struct DealDamage {
+    /// The entity to hurt.
+    target: Entity = Entity { .. },
+    /// Hit points to take away; below 0 it heals, up to `max`.
+    amount: float = 0.0,
+    /// Who dealt it, passed on in Damaged and Died; no entity when nobody did.
+    source: Entity = Entity { .. },
+}
 
-/// Sent after Health took a hit.
+/// Sent after Health took a hit that landed.
+///
+/// A hit during invulnerability, a heal and a hit on a dead entity send nothing.
+///
+/// ```rust
+/// @system
+/// fn ouch(hit: Damaged) {
+///     log(format("hit for {}, {} left", [hit.amount, hit.hp]));
+/// }
+/// ```
 @message
-struct Damaged { entity: Entity = Entity { .. }, amount: float = 0.0, hp: float = 0.0, source: Entity = Entity { .. } }
+struct Damaged {
+    /// The entity that was hit.
+    entity: Entity = Entity { .. },
+    /// The damage dealt.
+    amount: float = 0.0,
+    /// Hit points left after the hit.
+    hp: float = 0.0,
+    /// Who dealt it.
+    source: Entity = Entity { .. },
+}
 
-/// Sent when Health reaches 0.
+/// Sent once, when an entity's Health reaches 0.
 @message
-struct Died { entity: Entity = Entity { .. }, source: Entity = Entity { .. } }
+struct Died {
+    /// The entity that died; despawned in the same frame unless `despawn_on_death` is off.
+    entity: Entity = Entity { .. },
+    /// Who dealt the last hit.
+    source: Entity = Entity { .. },
+}
 
+/// Sends DealDamage: hurts `target` by `amount` hit points, dealt by `source`.
+///
+/// ```rust
+/// damage(cmd, enemy, 25.0, player);
+/// ```
 fn damage(cmd: Commands, target: Entity, amount: float, source: Entity) {
     cmd.send(DealDamage { target: target, amount: amount, source: source });
 }
 
-/// A negative amount heals, up to max.
+/// Heals `target` by `amount` hit points, up to its Health's `max`.
+///
+/// A heal ignores invulnerability; a dead entity is not healed.
+///
+/// ```rust
+/// heal(cmd, player, 10.0);
+/// ```
 fn heal(cmd: Commands, target: Entity, amount: float) {
     cmd.send(DealDamage { target: target, amount: -amount, source: Entity { .. } });
 }
 
+/// Applies one touch between a Hitbox and a Hurtbox: sends DealDamage unless both are on the
+/// same team, pushes the target by `knockback`, and despawns a Hitbox that does not pierce.
 fn gp_hit(hitter: Entity, target: Entity, hitboxes: Lookup<Hitbox>, hurtboxes: Lookup<Hurtbox>,
           places: Lookup<Transform>, physics: Physics, cmd: Commands) {
     let hb = Hitbox { .. };
@@ -104,18 +199,22 @@ fn gp_hit(hitter: Entity, target: Entity, hitboxes: Lookup<Hitbox>, hurtboxes: L
     }
 }
 
+/// Turns each sensor overlap between a Hitbox and a Hurtbox into a hit.
 @system
 fn gp_hit_overlaps(hit: Overlap<Hitbox, Hurtbox>, hitboxes: Lookup<Hitbox>, hurtboxes: Lookup<Hurtbox>,
                    places: Lookup<Transform>, physics: Physics, cmd: Commands) {
     gp_hit(hit.a, hit.b, hitboxes, hurtboxes, places, physics, cmd);
 }
 
+/// Turns each contact between a Hitbox and a Hurtbox into a hit.
 @system
 fn gp_hit_contacts(hit: Contact<Hitbox, Hurtbox>, hitboxes: Lookup<Hitbox>, hurtboxes: Lookup<Hurtbox>,
                    places: Lookup<Transform>, physics: Physics, cmd: Commands) {
     gp_hit(hit.a, hit.b, hitboxes, hurtboxes, places, physics, cmd);
 }
 
+/// Applies each DealDamage to its target's Health: heals, or takes hit points off and starts
+/// the invulnerability, and sends Damaged and Died.
 @system(after: [gp_hit_overlaps, gp_hit_contacts])
 fn gp_damage(d: DealDamage, healths: Lookup<Health>, cmd: Commands) {
     if healths.get(d.target) is Some(h) {
@@ -144,6 +243,7 @@ fn gp_damage(d: DealDamage, healths: Lookup<Health>, cmd: Commands) {
     }
 }
 
+/// Counts down each Health's invulnerability in game time.
 @system
 fn gp_invulnerability(health: (Entity, Health), time: Time) {
     let (_, h) = health;
@@ -153,15 +253,28 @@ fn gp_invulnerability(health: (Entity, Health), time: Time) {
 }
 
 /// A bar over the entity's head showing its Health, drawn in the world.
+///
+/// The entity needs Health and a Transform. The bar is drawn with Draw every frame and ignores
+/// the entity's rotation and scale.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), health(40.0), HealthBar { hide_when_full: true, .. }]);
+/// ```
 @component
 struct HealthBar {
+    /// Width and height of the bar in pixels.
     size: Vec2 = Vec2 { x: 32.0, y: 4.0 },
+    /// Where the bar's center sits from the entity's position, in pixels; negative y is above.
     offset: Vec2 = Vec2 { x: 0.0, y: -24.0 },
+    /// Color of the part that shows the hit points left.
     fill: Color = Color { r: 0.36, g: 0.85, b: 0.45, a: 1.0 },
+    /// Color behind it, one pixel larger on every side.
     back: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.6 },
+    /// Draws nothing while Health is full.
     hide_when_full: bool = false,
 }
 
+/// Draws every HealthBar.
 @system
 fn gp_health_bars(health: (Health, HealthBar, Transform), draw: Draw) {
     let (h, bar, t) = health;
@@ -178,15 +291,36 @@ fn gp_health_bars(health: (Health, HealthBar, Transform), draw: Draw) {
 
 /// Tints the entity's Sprite, Rectangle or Circle with `color` for `seconds` each time its
 /// Health takes a hit, or when flash_entity() starts it.
+///
+/// The color is replaced, not mixed, and put back when the flash ends. The flash counts real
+/// time, so it plays out during a hit stop.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), Sprite { image: art.enemy, .. }, health(10.0), HitFlash { .. }]);
+/// ```
 @component
-struct HitFlash { color: Color = Color { .. }, seconds: float = 0.12, left: float = 0.0, base: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 } }
+struct HitFlash {
+    /// The color shown during the flash.
+    color: Color = Color { .. },
+    /// How long one flash lasts, in seconds of real time.
+    seconds: float = 0.12,
+    /// Seconds of the current flash left; 0 when none is showing.
+    left: float = 0.0,
+    /// The color to put back, kept while a flash shows; alpha -1 when none is kept.
+    base: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 },
+}
 
 /// Gives the entity `f` and starts its flash now, without a hit.
+///
+/// ```rust
+/// flash_entity(cmd, player, HitFlash { color: rgb(255, 255, 255), .. });
+/// ```
 fn flash_entity(cmd: Commands, e: Entity, f: HitFlash) {
     f.left = f.seconds;
     cmd.insert(e, f);
 }
 
+/// Starts the HitFlash of every entity that took a hit, unless one is already showing.
 @system(after: [gp_damage])
 fn gp_flash_on_hit(d: Damaged, flashes: Lookup<HitFlash>) {
     if flashes.get(d.entity) is Some(f) {
@@ -196,6 +330,8 @@ fn gp_flash_on_hit(d: Damaged, flashes: Lookup<HitFlash>) {
     }
 }
 
+/// The color a flashing shape shows this frame: `f.color` while the flash lasts, then the
+/// color it had before. Counts the flash down by `dt` seconds.
 fn flash_color(f: HitFlash, current: Color, dt: float) -> Color {
     if f.left <= 0.0 {
         return current;
@@ -213,16 +349,19 @@ fn flash_color(f: HitFlash, current: Color, dt: float) -> Color {
     return f.color;
 }
 
+/// Shows HitFlash on Sprites.
 @system(after: [gp_flash_on_hit])
 fn gp_flash_sprites(hit_flash: (HitFlash, Sprite), time: Time) {
     let (f, s) = hit_flash;
     s.color = flash_color(f, s.color, time.real_dt);
 }
+/// Shows HitFlash on Rectangles.
 @system(after: [gp_flash_on_hit])
 fn gp_flash_rects(hit_flash: (HitFlash, Rectangle), time: Time) {
     let (f, r) = hit_flash;
     r.color = flash_color(f, r.color, time.real_dt);
 }
+/// Shows HitFlash on Circles.
 @system(after: [gp_flash_on_hit])
 fn gp_flash_circles(hit_flash: (HitFlash, Circle), time: Time) {
     let (f, c) = hit_flash;
@@ -230,22 +369,45 @@ fn gp_flash_circles(hit_flash: (HitFlash, Circle), time: Time) {
 }
 
 /// Send to freeze the game for `seconds` of real time: a hit stop.
+///
+/// It sets the time scale to 0, and back to 1 when the time is up, so it ends any slow motion
+/// the game set with `Time.set_scale`. Two stops at once last as long as the longer one.
+///
+/// ```rust
+/// cmd.send(HitStop { seconds: 0.08 });
+/// ```
 @message
-struct HitStop { seconds: float = 0.06 }
+struct HitStop {
+    /// How long the game stays frozen, in seconds of real time.
+    seconds: float = 0.06,
+}
 
 /// Send to shake every camera.
+///
+/// ```rust
+/// cmd.send(Shake { intensity: 6.0 });
+/// ```
 @message
-struct Shake { intensity: float = 0.4 }
+struct Shake {
+    /// How far the cameras move at first, in pixels; the shake dies away by itself.
+    intensity: float = 0.4,
+}
 
+/// The real time a HitStop has left; the module keeps it.
 @resource
-struct HitStopClock { left: float = 0.0 }
+struct HitStopClock {
+    /// Seconds of real time until the game runs again; 0 when no stop is running.
+    left: float = 0.0,
+}
 
+/// Starts a HitStop: freezes game time and sets the clock.
 @system
 fn gp_hit_stop(stop: HitStop, clock: HitStopClock, time: Time) {
     clock.left = max(clock.left, stop.seconds);
     time.set_scale(0.0);
 }
 
+/// Counts a running HitStop down in real time and sets the time scale back to 1 at its end.
 @system
 fn gp_hit_stop_clock(clock: HitStopClock, time: Time) {
     if clock.left <= 0.0 {
@@ -258,6 +420,7 @@ fn gp_hit_stop_clock(clock: HitStopClock, time: Time) {
     }
 }
 
+/// Shakes every Camera for each Shake message.
 @system
 fn gp_shake(s: Shake, cameras: (Entity, Camera)[], effects: Effects) {
     for (e, _) in cameras {
@@ -266,9 +429,24 @@ fn gp_shake(s: Shake, cameras: (Entity, Camera)[], effects: Effects) {
 }
 
 /// Fades the entity's Sprite, Text, Rectangle or Circle out over `seconds`, then despawns it.
+///
+/// The fade starts from the alpha the shape has when the fade begins, and counts game time.
+///
+/// ```rust
+/// cmd.insert(e, FadeOut { seconds: 1.0, .. });
+/// ```
 @component
-struct FadeOut { seconds: float = 0.6, left: float = -1.0, alpha: float = -1.0 }
+struct FadeOut {
+    /// How long the fade takes, in seconds of game time.
+    seconds: float = 0.6,
+    /// Seconds left; below 0 until the fade starts.
+    left: float = -1.0,
+    /// The alpha the fade started from; below 0 until it starts.
+    alpha: float = -1.0,
+}
 
+/// The alpha a fading shape shows this frame, from its starting alpha `a` down to 0. Counts
+/// `f` down by `dt` seconds and despawns `e` when it reaches 0.
 fn fade_step(f: FadeOut, a: float, dt: float, e: Entity, cmd: Commands) -> float {
     if f.left < 0.0 {
         f.left = f.seconds;
@@ -282,11 +460,13 @@ fn fade_step(f: FadeOut, a: float, dt: float, e: Entity, cmd: Commands) -> float
     return f.alpha * clamp(f.left / f.seconds, 0.0, 1.0);
 }
 
+/// Fades out Sprites that have FadeOut.
 @system
 fn gp_fade_sprites(fade_out: (Entity, FadeOut, Sprite), time: Time, cmd: Commands) {
     let (e, f, s) = fade_out;
     s.color.a = fade_step(f, s.color.a, time.dt, e, cmd);
 }
+/// Fades out Texts, with their shadow and outline that have FadeOut.
 @system
 fn gp_fade_texts(fade_out: (Entity, FadeOut, Text), time: Time, cmd: Commands) {
     let (e, f, t) = fade_out;
@@ -294,11 +474,13 @@ fn gp_fade_texts(fade_out: (Entity, FadeOut, Text), time: Time, cmd: Commands) {
     t.shadow_color.a = min(t.shadow_color.a, t.color.a);
     t.outline_color.a = min(t.outline_color.a, t.color.a);
 }
+/// Fades out Rectangles that have FadeOut.
 @system
 fn gp_fade_rects(fade_out: (Entity, FadeOut, Rectangle), time: Time, cmd: Commands) {
     let (e, f, r) = fade_out;
     r.color.a = fade_step(f, r.color.a, time.dt, e, cmd);
 }
+/// Fades out Circles that have FadeOut.
 @system
 fn gp_fade_circles(fade_out: (Entity, FadeOut, Circle), time: Time, cmd: Commands) {
     let (e, f, c) = fade_out;
@@ -307,6 +489,14 @@ fn gp_fade_circles(fade_out: (Entity, FadeOut, Circle), time: Time, cmd: Command
 
 /// A number or word that pops up at a world position, floats up and fades: damage numbers,
 /// "+100", "Combo!".
+///
+/// The text is 22 pixels, centered, in color `c` with an outline. It grows in over 0.15
+/// seconds, rises at 70 pixels per second and fades out over 0.8 seconds, then is despawned.
+/// Returns its entity.
+///
+/// ```rust
+/// popup(cmd, t.position, "+100", rgb(255, 220, 80));
+/// ```
 fn popup(cmd: Commands, pos: Vec2, text: string, c: Color) -> Entity {
     return cmd.spawn([
         Transform { position: pos, scale: Vec2 { x: 0.6, y: 0.6 }, .. },
@@ -320,7 +510,12 @@ fn popup(cmd: Commands, pos: Vec2, text: string, c: Color) -> Entity {
 
 // ---- Bounds ----
 
-/// The part of the world the main camera shows, or `area` when it is set.
+/// The part of the world the main camera shows, or `area` when its width and height are above
+/// 0.
+///
+/// ```rust
+/// let r = bounds_or_view(Rect { .. }, camera);   // the camera's view
+/// ```
 fn bounds_or_view(area: Rect, camera: Camera2D) -> Rect {
     if area.w > 0.0 && area.h > 0.0 {
         return area;
@@ -330,9 +525,22 @@ fn bounds_or_view(area: Rect, camera: Camera2D) -> Rect {
 
 /// Keeps the entity inside `area` (the camera's view when unset), `margin` pixels in, and stops
 /// its Velocity at the edge.
+///
+/// It clamps the entity's position, not its collider: set `margin` to half the entity's size
+/// to keep all of it inside.
+///
+/// ```rust
+/// cmd.spawn([at(320.0, 400.0), Sprite { image: art.ship, .. }, KeepInBounds { margin: 16.0, .. }]);
+/// ```
 @component
-struct KeepInBounds { area: Rect = Rect { .. }, margin: float = 0.0 }
+struct KeepInBounds {
+    /// The world rect to stay in; a zero width or height uses the main camera's view.
+    area: Rect = Rect { .. },
+    /// How far inside the edges the position stays, in pixels.
+    margin: float = 0.0,
+}
 
+/// Clamps the position of every entity with KeepInBounds.
 @system
 fn gp_keep_in_bounds(keep_in_bounds: (KeepInBounds, Transform), camera: Camera2D) {
     let (k, t) = keep_in_bounds;
@@ -344,6 +552,7 @@ fn gp_keep_in_bounds(keep_in_bounds: (KeepInBounds, Transform), camera: Camera2D
     }
 }
 
+/// Zeroes the Velocity of a KeepInBounds entity on each axis where it moves out past an edge.
 @system(after: [gp_keep_in_bounds])
 fn gp_keep_in_bounds_velocity(keep_in_bounds: (KeepInBounds, Transform, Velocity),
                               camera: Camera2D) {
@@ -363,9 +572,20 @@ fn gp_keep_in_bounds_velocity(keep_in_bounds: (KeepInBounds, Transform, Velocity
 
 /// Moves the entity to the other side when it leaves `area` (the camera's view when unset) by
 /// more than `margin` pixels: asteroids-style wrapping.
+///
+/// ```rust
+/// cmd.spawn([at(200.0, 200.0), Sprite { image: art.rock, .. }, WrapAround { .. }]);
+/// ```
 @component
-struct WrapAround { area: Rect = Rect { .. }, margin: float = 16.0 }
+struct WrapAround {
+    /// The world rect to wrap around; a zero width or height uses the main camera's view.
+    area: Rect = Rect { .. },
+    /// How far past an edge the position goes before it wraps, in pixels; about half the
+    /// entity's size lets it leave the view before it comes back.
+    margin: float = 16.0,
+}
 
+/// Wraps every entity with WrapAround.
 @system
 fn gp_wrap_around(wrap_around: (WrapAround, Transform), camera: Camera2D) {
     let (w, t) = wrap_around;
@@ -392,9 +612,22 @@ fn gp_wrap_around(wrap_around: (WrapAround, Transform), camera: Camera2D) {
 
 /// Despawns the entity once it is more than `margin` pixels outside `area` (the camera's view
 /// when unset): bullets, debris, scrolled-past enemies.
+///
+/// It checks every frame, so an entity spawned outside the area is despawned at once.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), Circle { radius: 3.0, .. }, Velocity { linear: vec2(0.0, -500.0), .. },
+///            DespawnOffscreen { .. }]);
+/// ```
 @component
-struct DespawnOffscreen { area: Rect = Rect { .. }, margin: float = 64.0 }
+struct DespawnOffscreen {
+    /// The world rect to stay near; a zero width or height uses the main camera's view.
+    area: Rect = Rect { .. },
+    /// How far outside the area the position may go before the entity is despawned, in pixels.
+    margin: float = 64.0,
+}
 
+/// Despawns every DespawnOffscreen entity that is past its margin.
 @system
 fn gp_despawn_offscreen(despawn_offscreen: (Entity, DespawnOffscreen, Transform),
                         camera: Camera2D, cmd: Commands) {
@@ -409,27 +642,71 @@ fn gp_despawn_offscreen(despawn_offscreen: (Entity, DespawnOffscreen, Transform)
 // ---- Spawners ----
 
 /// Sent each time a Spawner fires: spawn what you want at `position`.
+///
+/// ```rust
+/// @system
+/// fn spawn_bats(tick: SpawnTick, cmd: Commands) {
+///     if tick.id == "bat" {
+///         cmd.spawn([at(tick.position.x, tick.position.y), Bat {}]);
+///     }
+/// }
+/// ```
 @message
-struct SpawnTick { spawner: Entity = Entity { .. }, id: string = "", position: Vec2 = Vec2 { .. }, index: int = 0 }
+struct SpawnTick {
+    /// The entity whose Spawner fired.
+    spawner: Entity = Entity { .. },
+    /// The Spawner's `id`, to tell spawners apart.
+    id: string = "",
+    /// Where to spawn, in the world: the spawner's position plus its random offset.
+    position: Vec2 = Vec2 { .. },
+    /// How many times this Spawner fired before, counting from 0.
+    index: int = 0,
+}
 
 /// Fires SpawnTick every `every` seconds at the entity's position plus a random offset up to
 /// `spread`, `count` times in all (-1 forever).
+///
+/// The entity needs a Transform. It counts game time, so a time scale of 0 pauses it, and a
+/// long frame fires every tick it covered.
+///
+/// ```rust
+/// cmd.spawn([at(600.0, 100.0), spawner("bat", 2.0)]);
+/// ```
 @component
 struct Spawner {
+    /// A name passed on in each SpawnTick.
     id: string = "",
+    /// Seconds between ticks; anything under 0.01 counts as 0.01.
     every: float = 1.0,
+    /// How many ticks in all; -1 keeps firing forever.
     count: int = -1,
+    /// The largest random offset from the entity's position, in pixels, picked inside a circle;
+    /// 0 is none.
     spread: float = 0.0,
+    /// Seconds until the next tick; 0 fires on the first frame.
     left: float = 0.0,
+    /// Ticks fired so far.
     fired: int = 0,
+    /// Stops the ticks while on, keeping the count and the time left.
     paused: bool = false,
 }
 
+/// A Spawner named `id` that fires every `every` seconds forever, the first tick one interval
+/// after it is added.
+///
+/// ```rust
+/// cmd.spawn([at(0.0, 300.0), spawner("coin", 1.5)]);
+/// ```
 fn spawner(id: string, every: float) -> Spawner { return Spawner { id: id, every: every, left: every, .. }; }
 
+/// The random numbers Spawners pick their offsets with, seeded so every run repeats them.
 @resource
-struct SpawnRng { rng: Rng = rng(9127) }
+struct SpawnRng {
+    /// The generator, seeded with 9127.
+    rng: Rng = rng(9127),
+}
 
+/// Fires every Spawner that is due.
 @system
 fn gp_spawners(spawner: (Entity, Spawner, Transform), time: Time, r: SpawnRng, cmd: Commands) {
     let (e, s, t) = spawner;
@@ -448,36 +725,92 @@ fn gp_spawners(spawner: (Entity, Spawner, Transform), time: Time, r: SpawnRng, c
     }
 }
 
-/// One wave: `count` spawns of `id`, `every` seconds apart, starting `delay` seconds after the
-/// wave before it ends.
-struct Wave { id: string = "", count: int = 5, every: float = 1.0, delay: float = 2.0 }
+/// One wave of a WaveSpawner: `count` spawns of `id`, `every` seconds apart, starting `delay`
+/// seconds after the wave before it ends.
+///
+/// The first wave starts `delay` seconds after the WaveSpawner is added.
+///
+/// ```rust
+/// let w = Wave { id: "slime", count: 8, every: 0.5, .. };
+/// ```
+struct Wave {
+    /// A name passed on in each WaveSpawn.
+    id: string = "",
+    /// How many spawns the wave has.
+    count: int = 5,
+    /// Seconds between its spawns; anything under 0.01 counts as 0.01.
+    every: float = 1.0,
+    /// Seconds of waiting before its first spawn.
+    delay: float = 2.0,
+}
 
+/// A Wave of `count` spawns of `id`, `every` seconds apart, `delay` seconds after the wave
+/// before it.
+///
+/// ```rust
+/// cmd.spawn([WaveSpawner { waves: [wave("bat", 5, 1.0, 2.0), wave("ogre", 2, 3.0, 4.0)], .. }]);
+/// ```
 fn wave(id: string, count: int, every: float, delay: float) -> Wave {
     return Wave { id: id, count: count, every: every, delay: delay };
 }
 
-/// Sent for each spawn of a wave.
+/// Sent for each spawn of a wave: spawn what you want for it.
+///
+/// ```rust
+/// @system
+/// fn spawn_wave(s: WaveSpawn, cmd: Commands) {
+///     cmd.spawn([at(640.0, 100.0 + 40.0 * float(s.index)), Enemy {}]);
+/// }
+/// ```
 @message
-struct WaveSpawn { wave: int = 0, id: string = "", index: int = 0 }
+struct WaveSpawn {
+    /// Which wave, counting from 0.
+    wave: int = 0,
+    /// The wave's `id`.
+    id: string = "",
+    /// Which spawn of the wave, counting from 0.
+    index: int = 0,
+}
 
-/// Sent when a wave starts and when the last wave has spawned everything.
+/// Sent when a wave starts, just before its first WaveSpawn.
 @message
-struct WaveStarted { wave: int = 0 }
+struct WaveStarted {
+    /// Which wave, counting from 0.
+    wave: int = 0,
+}
+
+/// Sent when the last wave has spawned everything; a looping WaveSpawner never sends it.
 @message
-struct WavesDone { waves: int = 0 }
+struct WavesDone {
+    /// How many waves there were.
+    waves: int = 0,
+}
 
 /// Runs a list of waves: put it on an entity with the waves in order. It sends WaveSpawn for
-/// every spawn; `loop` starts over after the last.
+/// every spawn; `looping` starts over after the last.
+///
+/// It counts game time and needs no Transform.
+///
+/// ```rust
+/// cmd.spawn([WaveSpawner { waves: [wave("bat", 5, 1.0, 2.0), wave("ogre", 2, 3.0, 4.0)], .. }]);
+/// ```
 @component
 struct WaveSpawner {
+    /// The waves, in the order they run.
     waves: Wave[] = [],
+    /// Starts over at the first wave after the last.
     looping: bool = false,
+    /// The wave running now, counting from 0.
     wave: int = 0,
+    /// Spawns of the current wave sent so far.
     spawned: int = 0,
+    /// Seconds until the next spawn; below 0 until the first wave's delay starts.
     left: float = -1.0,
+    /// Set after the last wave of a WaveSpawner that does not loop.
     done: bool = false,
 }
 
+/// Runs every WaveSpawner.
 @system
 fn gp_wave_spawners(wave_spawner: (Entity, WaveSpawner), time: Time, cmd: Commands) {
     let (_, w) = wave_spawner;
@@ -521,21 +854,58 @@ fn gp_wave_spawners(wave_spawner: (Entity, WaveSpawner), time: Time, cmd: Comman
 
 /// The score and the best one, kept in the save under `key`. The best is read when the game
 /// starts and written whenever it is beaten.
+///
+/// The best goes to the default save slot and is flushed in the frame it rises.
+///
+/// ```rust
+/// @system
+/// fn collect(hit: Overlap<Player, Coin>, score: Score, cmd: Commands) {
+///     score.add(10);
+///     cmd.despawn(hit.b);
+/// }
+/// ```
 @resource
-struct Score { value: int = 0, best: int = 0, key: string = "best", loaded: bool = false, saved: int = 0 }
+struct Score {
+    /// The score of this run.
+    value: int = 0,
+    /// The best score: the saved one, or this run's once it is higher.
+    best: int = 0,
+    /// The save key the best is kept under.
+    key: string = "best",
+    /// Set once the saved best has been read.
+    loaded: bool = false,
+    /// The best last written to the save.
+    saved: int = 0,
+}
 
 impl Score {
+    /// Adds `points` to the score, and raises the best when the score passes it.
+    ///
+    /// ```rust
+    /// score.add(100);
+    /// ```
     fn add(self, points: int) {
         self.value += points;
         if self.value > self.best {
             self.best = self.value;
         }
     }
+    /// Sets the score back to 0 for a new run; the best stays.
+    ///
+    /// ```rust
+    /// score.reset();
+    /// ```
     fn reset(self) { self.value = 0; }
-    /// Whether this run beat the best that was saved when it started.
+    /// Whether this run's score is above 0 and the best so far, counting a tie with the saved
+    /// best.
+    ///
+    /// ```rust
+    /// let line = if score.is_record() { "New best!" } else { format("Best {}", [score.best]) };
+    /// ```
     fn is_record(self) -> bool { return self.value > 0 && self.value >= self.best; }
 }
 
+/// Reads the saved best once, keeps `best` up to date, and saves it whenever it rises.
 @system
 fn gp_score(score: Score, save: Save, time: Time) {
     if !score.loaded {

@@ -18,6 +18,8 @@ struct Texture {
     id: int = 0,
 }
 
+/// Loads the image file at `path` as a texture.
+///
 /// Works anywhere, field defaults included, and hands back the same texture for the same path.
 /// A file that does not load stops the game with the path and the error. Images load from PNG,
 /// JPG, BMP, TGA and GIF files.
@@ -70,6 +72,8 @@ struct Sound {
     id: int = 0,
 }
 
+/// Loads the sound file at `path`.
+///
 /// Works anywhere, field defaults included. The whole file is decoded when it loads.
 ///
 /// ```rust

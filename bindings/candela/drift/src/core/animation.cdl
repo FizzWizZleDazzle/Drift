@@ -76,6 +76,8 @@ impl Vec2 {
 /// ```
 fn sin(x: float) -> float { return math::sin(x); }
 
+/// The cosine of `x` radians, without importing std/math.
+///
 /// ```rust
 /// let x = cos(angle) * radius;
 /// ```
@@ -143,6 +145,8 @@ fn rotate_towards(current: float, target: float, max_step: float) -> float {
 /// The rotation that points +x from `from` toward `to`.
 fn look_at(from: Vec2, to: Vec2) -> float { return (to - from).angle(); }
 
+/// The number `t` of the way from `a` to `b`: 0 gives a, 1 gives b. `t` outside 0 to 1 goes
+/// past either end.
 fn lerp(a: float, b: float, t: float) -> float { return a + (b - a) * t; }
 
 /// `current` moved toward `target` by at most `max_step`.
@@ -161,6 +165,12 @@ fn move_towards(current: float, target: float, max_step: float) -> float {
 fn damp(current: float, target: float, rate: float, dt: float) -> float {
     return lerp(current, target, 1.0 - math::exp(-rate * dt));
 }
+/// `damp` for a position: from `current` toward `target`, the same share of the distance each
+/// second whatever the frame rate.
+///
+/// ```rust
+/// cam.position = damp2(cam.position, player_pos, 6.0, time.dt);
+/// ```
 fn damp2(current: Vec2, target: Vec2, rate: float, dt: float) -> Vec2 {
     return current.lerp(target, 1.0 - math::exp(-rate * dt));
 }
@@ -179,10 +189,14 @@ fn smoothstep(lo: float, hi: float, x: float) -> float {
 fn sine_wave(t: float, frequency: float, amplitude: float, phase: float) -> float {
     return amplitude * math::sin(TAU * frequency * t + phase);
 }
+/// `sine_wave` a quarter cycle ahead: at `t` 0 with no phase it starts at `amplitude`. Pair it
+/// with `sine_wave` for motion around a circle or an ellipse.
 fn cosine_wave(t: float, frequency: float, amplitude: float, phase: float) -> float {
     return amplitude * math::cos(TAU * frequency * t + phase);
 }
 
+/// A repeatable random number from -1 to 1 for whole step `i` of a wobble with `seed`;
+/// `wobble` blends between neighbouring steps.
 fn wobble_hash(i: int, seed: int) -> float {
     let x = math::sin(float(i) * 127.1 + float(seed) * 311.7) * 43758.5453;
     return (x - x.floor()) * 2.0 - 1.0;
@@ -197,6 +211,8 @@ fn wobble(t: float, frequency: float, amplitude: float, seed: int) -> float {
     let s = f * f * (3.0 - 2.0 * f);
     return amplitude * lerp(wobble_hash(i, seed), wobble_hash(i + 1, seed), s);
 }
+/// `wobble` in two directions: x and y wobble independently with the same frequency and
+/// amplitude, for drifting hovers and shakes.
 fn wobble2(t: float, frequency: float, amplitude: float, seed: int) -> Vec2 {
     return Vec2 { x: wobble(t, frequency, amplitude, seed), y: wobble(t, frequency, amplitude, seed + 7919) };
 }
@@ -224,15 +240,33 @@ fn stretch(velocity: Vec2, per_speed: float, max_stretch: float) -> Vec2 {
 /// `damping` slows (2 * sqrt(stiffness) settles fastest without overshooting; less wobbles and
 /// overshoots). `smooth` instead eases in about `seconds` with no overshoot. Keep the spring in
 /// a component so it carries its velocity from frame to frame.
-struct Spring { value: float = 0.0, velocity: float = 0.0 }
+///
+/// ```rust
+/// @component
+/// struct Bob { y: Spring = spring(0.0) }
+///
+/// let y = bob.y.update(target_y, 200.0, 20.0, time.dt);
+/// ```
+struct Spring {
+    /// Where it is now.
+    value: float = 0.0,
+    /// How fast it moves, in units per second.
+    velocity: float = 0.0,
+}
+
+/// A spring at rest at `value`.
 fn spring(value: float) -> Spring { return Spring { value: value, velocity: 0.0 }; }
 impl Spring {
+    /// One step of `dt` seconds toward `target` with `stiffness` and `damping`; returns the new
+    /// value.
     fn update(self, target: float, stiffness: float, damping: float, dt: float) -> float {
         let r = drift::anim_spring(0, self.value, self.velocity, target, stiffness, damping, dt);
         self.value = r[0];
         self.velocity = r[1];
         return self.value;
     }
+    /// One step of `dt` seconds toward `target`, easing in over about `seconds` without
+    /// overshooting; returns the new value.
     fn smooth(self, target: float, seconds: float, dt: float) -> float {
         let r = drift::anim_spring(2, self.value, self.velocity, target, seconds, 0.0, dt);
         self.value = r[0];
@@ -241,10 +275,23 @@ impl Spring {
     }
 }
 
-/// The same for a position.
-struct Spring2 { value: Vec2 = Vec2 { .. }, velocity: Vec2 = Vec2 { .. } }
+/// A `Spring` for a position: the value chases a target point, x and y each on their own spring.
+///
+/// ```rust
+/// t.position = follower.at.update(leader_pos, 150.0, 18.0, time.dt);
+/// ```
+struct Spring2 {
+    /// Where it is now.
+    value: Vec2 = Vec2 { .. },
+    /// How fast it moves, in units per second.
+    velocity: Vec2 = Vec2 { .. },
+}
+
+/// A position spring at rest at `value`.
 fn spring2(value: Vec2) -> Spring2 { return Spring2 { value: value, velocity: Vec2 { .. } }; }
 impl Spring2 {
+    /// One step of kind 0, a spring with stiffness `a` and damping `b`, or kind 2, a smooth ease
+    /// over `a` seconds; returns the new value. `update` and `smooth` call it.
     fn run(self, kind: int, target: Vec2, a: float, b: float, dt: float) -> Vec2 {
         let r = drift::anim_spring2(kind, self.value.x, self.value.y, self.velocity.x, self.velocity.y,
                                     target.x, target.y, a, b, dt);
@@ -252,16 +299,33 @@ impl Spring2 {
         self.velocity = Vec2 { x: r[2], y: r[3] };
         return self.value;
     }
+    /// One step of `dt` seconds toward `target` with `stiffness` and `damping`; returns the new
+    /// value.
     fn update(self, target: Vec2, stiffness: float, damping: float, dt: float) -> Vec2 {
         return self.run(0, target, stiffness, damping, dt);
     }
+    /// One step of `dt` seconds toward `target`, easing in over about `seconds` without
+    /// overshooting; returns the new value.
     fn smooth(self, target: Vec2, seconds: float, dt: float) -> Vec2 { return self.run(2, target, seconds, 0.0, dt); }
 }
 
-/// The same for a rotation, turning the short way round.
-struct AngleSpring { value: float = 0.0, velocity: float = 0.0 }
+/// A `Spring` for a rotation in radians, turning the short way round.
+///
+/// ```rust
+/// t.rotation = head.turn.update(look_at(t.position, target), 120.0, 15.0, time.dt);
+/// ```
+struct AngleSpring {
+    /// The angle now, in radians. It is not wrapped, so it can pass PI.
+    value: float = 0.0,
+    /// How fast it turns, in radians per second.
+    velocity: float = 0.0,
+}
+
+/// An angle spring at rest at `value` radians.
 fn angle_spring(value: float) -> AngleSpring { return AngleSpring { value: value, velocity: 0.0 }; }
 impl AngleSpring {
+    /// One step of `dt` seconds toward `target` radians the short way round, with `stiffness`
+    /// and `damping`; returns the new angle.
     fn update(self, target: float, stiffness: float, damping: float, dt: float) -> float {
         let r = drift::anim_spring(1, self.value, self.velocity, target, stiffness, damping, dt);
         self.value = r[0];
@@ -274,7 +338,18 @@ impl AngleSpring {
 
 /// The pose of a two-bone limb: where the elbow or knee goes, where the hand or foot ends up,
 /// and the world rotation of each bone.
-struct TwoBone { joint: Vec2 = Vec2 { .. }, end: Vec2 = Vec2 { .. }, upper: float = 0.0, lower: float = 0.0, reached: bool = false }
+struct TwoBone {
+    /// Where the middle joint (elbow or knee) goes.
+    joint: Vec2 = Vec2 { .. },
+    /// Where the end (hand or foot) ends up: the target when reached.
+    end: Vec2 = Vec2 { .. },
+    /// The world rotation of the upper bone, from the root to the joint, in radians.
+    upper: float = 0.0,
+    /// The world rotation of the lower bone, from the joint to the end, in radians.
+    lower: float = 0.0,
+    /// Whether the end got to the target.
+    reached: bool = false,
+}
 
 /// Bones of `upper_len` and `lower_len` from `root` reaching for `target`. `bend` 1.0 puts the
 /// joint clockwise of the root-to-target line on screen, -1.0 counter-clockwise: pick the side
@@ -292,13 +367,26 @@ fn two_bone_ik(root: Vec2, target: Vec2, upper_len: float, lower_len: float, ben
 /// tentacles, necks, spines, long arms. `joints` has one more entry than `lengths`. Limits,
 /// when set, keep each segment within `min_angles[i]`..`max_angles[i]` of the one before it
 /// (the first one of `base_angle`).
+///
+/// ```rust
+/// let arm = ik_chain(shoulder, 6, 12.0, 0.0);
+/// arm.limit_all(0.6);
+/// arm.solve(shoulder, input.mouse_world());
+/// ```
 struct IkChain {
+    /// The joint positions; segment i runs from joint i to joint i + 1.
     joints: Vec2[] = [],
+    /// The length of each segment, in pixels.
     lengths: float[] = [],
+    /// The least each segment may turn from the one before it, in radians; empty for no limit.
     min_angles: float[] = [],
+    /// The most each segment may turn from the one before it, in radians; empty for no limit.
     max_angles: float[] = [],
+    /// The rotation the first segment's limits are measured from, in radians.
     base_angle: float = 0.0,
+    /// The most solver passes per `solve`.
     iterations: int = 10,
+    /// How close the end must get to the target, in pixels, to stop early.
     tolerance: float = 0.5,
 }
 
@@ -343,9 +431,11 @@ impl IkChain {
         }
         return r[0] > 0.5;
     }
+    /// Where the last joint is: the tip of the chain.
     fn end(self) -> Vec2 { return self.joints[self.joints.len() - 1]; }
     /// The world rotation of segment i, for the sprite drawn along it.
     fn angle(self, i: int) -> float { return (self.joints[i + 1] - self.joints[i]).angle(); }
+    /// How many segments it has: one less than its joints.
     fn len(self) -> int { return self.lengths.len(); }
 }
 
@@ -354,16 +444,33 @@ impl IkChain {
 /// Points joined by fixed-length links that swing under gravity, the first one held at an
 /// anchor: tails, tentacles, hair, scarves, ropes, cloth strips. `stiffness` 0 hangs like a
 /// rope; toward 1 it resists bending, like a tail. Points stay above `ground`.
+///
+/// ```rust
+/// tail.rope.update(t.position, time.dt);
+/// for i in range(tail.rope.len() - 1) {
+///     draw.line(tail.rope.points[i], tail.rope.points[i + 1], 3.0, rgb(200, 120, 60));
+/// }
+/// ```
 struct Rope {
+    /// The point positions in the world; the first follows the anchor.
     points: Vec2[] = [],
+    /// Where each point was the step before; the difference is its velocity.
     previous: Vec2[] = [],
+    /// The length of each link, in pixels.
     segment: float = 10.0,
+    /// Pulls every point, in pixels per second squared; +y is down.
     gravity: Vec2 = Vec2 { x: 0.0, y: 400.0 },
+    /// The share of velocity kept per 1/60 second, 0 to 1: lower settles sooner.
     damping: float = 0.98,
+    /// Link passes per step; more holds the lengths tighter.
     iterations: int = 8,
+    /// Resistance to bending, 0 to 1: 0 hangs like a rope, toward 1 holds a tail's shape.
     stiffness: float = 0.0,
+    /// The largest y a point may have: points stay above this line.
     ground: float = 1000000.0,
+    /// Whether the last point is held at `end_target`; `pin` and `release` set it.
     pin_end: bool = false,
+    /// Where the last point is held while `pin_end` is on.
     end_target: Vec2 = Vec2 { .. },
 }
 
@@ -404,6 +511,7 @@ impl Rope {
         self.pin_end = true;
         self.end_target = target;
     }
+    /// Lets the last point go after `pin`.
     fn release(self) { self.pin_end = false; }
     /// Pushes every point by `v` this step, as a gust of wind or a hit.
     fn push(self, v: Vec2) {
@@ -411,6 +519,7 @@ impl Rope {
             self.previous[i] = self.previous[i] - v;
         }
     }
+    /// How many points it has: one more than its links.
     fn len(self) -> int { return self.points.len(); }
     /// The rotation of link i, from point i to point i + 1.
     fn angle(self, i: int) -> float { return (self.points[i + 1] - self.points[i]).angle(); }
@@ -422,18 +531,39 @@ impl Rope {
 /// `height` along `up` and lands there over `duration` seconds, `lead` times `distance` further
 /// on in the direction it moved.
 struct Gait {
+    /// How far, in pixels, the foot may stray from where it should stand before it steps.
     distance: float = 30.0,
+    /// Seconds a step takes.
     duration: float = 0.15,
+    /// How high the foot lifts mid-step, in pixels.
     height: float = 12.0,
+    /// How far past the rest point the foot lands, as a share of `distance`.
     lead: float = 0.3,
+    /// The direction the foot lifts; up the screen by default.
     up: Vec2 = Vec2 { x: 0.0, y: -1.0 },
 }
 
 /// A foot that stays planted where it landed while the body moves on, and steps when it strays.
 /// Draw it at `position`.
-struct Foot { position: Vec2 = Vec2 { .. }, from: Vec2 = Vec2 { .. }, to: Vec2 = Vec2 { .. }, progress: float = 1.0 }
+///
+/// ```rust
+/// let left_lands = legs.left.update(t.position + vec2(-10.0, 20.0), Gait { .. }, legs.right.planted(), time.dt);
+/// ```
+struct Foot {
+    /// Where the foot is now; draw it here.
+    position: Vec2 = Vec2 { .. },
+    /// Where the current step started.
+    from: Vec2 = Vec2 { .. },
+    /// Where the current step lands.
+    to: Vec2 = Vec2 { .. },
+    /// How far through the step it is, 0 to 1; 1 is planted.
+    progress: float = 1.0,
+}
+
+/// A foot planted at `at`.
 fn foot(at: Vec2) -> Foot { return Foot { position: at, from: at, to: at, progress: 1.0 }; }
 impl Foot {
+    /// Whether the foot is on the ground and not mid-step.
     fn planted(self) -> bool { return self.progress >= 1.0; }
     /// Advances the foot toward `rest`, where it would stand under the body now. A planted foot
     /// only starts a step when `can_step`: pass whether the opposite foot is planted to make

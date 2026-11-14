@@ -205,12 +205,30 @@ struct Tilemap {
 
 //! page: assets
 
-enum ObjectShape { Rect, Point, Ellipse, Polygon, Polyline, Tile, Text }
+/// The shape of a map object, as the map editor drew it. LDtk entities are always `Rect`.
+enum ObjectShape {
+    /// A rectangle; `bounds` is the whole shape
+    Rect,
+    /// A single point; `bounds` has zero size
+    Point,
+    /// An ellipse inside `bounds`
+    Ellipse,
+    /// A closed polygon through `points`
+    Polygon,
+    /// An open line through `points`
+    Polyline,
+    /// A tile placed as an object; `tile` names it
+    Tile,
+    /// A Tiled text object
+    Text,
+}
 
 /// An object from a Tiled object layer or an LDtk entity, in world coordinates where its map's
 /// Tilemap entity puts it.
 struct MapObject {
+    /// The map it comes from
     map: Map = Map { .. },
+    /// The index of its layer in the map
     layer: int = 0,
     /// place in its layer
     index: int = 0,
@@ -220,7 +238,9 @@ struct MapObject {
     name: string = "",
     /// Tiled class; LDtk identifier
     kind: string = "",
+    /// What kind of shape it is
     shape: ObjectShape = ObjectShape::Rect,
+    /// Its bounding box: top-left and size, in pixels; zero size for a point
     bounds: Rect = Rect { .. },
     /// the pivot: LDtk's pivot, a Tiled tile object's bottom-left
     anchor: Vec2 = Vec2 { .. },
@@ -232,6 +252,7 @@ struct MapObject {
     points: Vec2[] = [],
 }
 
+/// Internal: the ObjectShape for the host's shape code.
 fn object_shape(code: int) -> ObjectShape {
     return match code {
         1 => ObjectShape::Point, 2 => ObjectShape::Ellipse, 3 => ObjectShape::Polygon,
@@ -239,17 +260,28 @@ fn object_shape(code: int) -> ObjectShape {
     };
 }
 
-enum AutotileMode { Neighbours4, Neighbours8 }
+/// Which neighbours `Map.autotile` looks at to pick a tile.
+enum AutotileMode {
+    /// The four edge neighbours: 16 tiles, one per mask of N, E, S and W
+    Neighbours4,
+    /// All eight neighbours, corners included: 256 tile entries, for blob tilesets
+    Neighbours8,
+}
 
 /// How autotile picks tiles. A source cell is terrain when its value is in `terrain` (empty:
 /// any non-zero value). `tiles` holds a tile id per neighbour mask: 16 for Neighbours4 (bits
 /// N=1 E=2 S=4 W=8), 256 for Neighbours8 (NW=1 N=2 NE=4 W=8 E=16 SW=32 S=64 SE=128; a corner
 /// counts only with both edges beside it). 0 entries use `fallback`.
 struct AutotileRules {
+    /// Which neighbours count
     mode: AutotileMode = AutotileMode::Neighbours4,
+    /// The source values that are terrain; empty means any non-zero value
     terrain: int[] = [],
+    /// A tile id per neighbour mask: 16 entries for Neighbours4, 256 for Neighbours8
     tiles: int[] = [],
+    /// The tile for a mask whose `tiles` entry is 0
     fallback: int = 0,
+    /// Cells outside the layer count as terrain, so terrain runs off the map's edge
     edges_are_terrain: bool = false,
 }
 

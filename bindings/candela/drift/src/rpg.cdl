@@ -22,15 +22,39 @@ import "drift" { * };
 
 // ---- Inventory ----
 
-struct ItemStack { item: string = "", count: int = 0 }
+/// One slot of an `Inventory`: an item id and how many of it the slot holds.
+struct ItemStack {
+    /// The item's id, a name of your own such as "potion".
+    item: string = "",
+    /// How many the slot holds, from 1 to the inventory's `stack_size`.
+    count: int = 0,
+}
 
 /// Items by id, in slots of up to `stack_size` each.
-struct Inventory { slots: ItemStack[] = [], capacity: int = 20, stack_size: int = 99 }
+///
+/// Keep it in a component or resource, and store it with `save.set_value` to keep it between
+/// runs.
+///
+/// ```rust
+/// let bag = inventory(12, 10);
+/// let left = bag.add("arrow", 25);   // 0: three slots of 10, 10 and 5
+/// ```
+struct Inventory {
+    /// The slots in use, in the order they were filled. A slot that empties is removed.
+    slots: ItemStack[] = [],
+    /// The most slots it holds.
+    capacity: int = 20,
+    /// The most of one item a slot holds.
+    stack_size: int = 99,
+}
+
+/// An empty inventory of `capacity` slots holding up to `stack_size` each.
 fn inventory(capacity: int, stack_size: int) -> Inventory {
     return Inventory { capacity: capacity, stack_size: stack_size, .. };
 }
 impl Inventory {
-    /// Adds what fits; returns how many did not.
+    /// Adds what fits; returns how many did not. It tops up slots that already hold the item,
+    /// then fills new slots while there is room.
     fn add(self, item: string, count: int) -> int {
         let left = count;
         for i in range(self.slots.len()) {
@@ -47,7 +71,8 @@ impl Inventory {
         }
         return left;
     }
-    /// Takes `count` of the item, or nothing when there are fewer.
+    /// Takes `count` of the item, or nothing when there are fewer; returns whether it took them.
+    /// It takes from the last slots first.
     fn remove(self, item: string, count: int) -> bool {
         if self.count(item) < count {
             return false;
@@ -67,6 +92,7 @@ impl Inventory {
         }
         return true;
     }
+    /// How many of the item it holds, over every slot.
     fn count(self, item: string) -> int {
         let n = 0;
         for s in self.slots {
@@ -76,7 +102,10 @@ impl Inventory {
         }
         return n;
     }
+    /// Whether it holds at least `count` of the item.
     fn has(self, item: string, count: int) -> bool { return self.count(item) >= count; }
+    /// Whether every slot is in use. A full inventory can still take more of an item whose
+    /// slots have room.
     fn is_full(self) -> bool { return self.slots.len() >= self.capacity; }
     /// Each item id once, in slot order.
     fn items(self) -> string[] {
@@ -92,32 +121,80 @@ impl Inventory {
 
 // ---- Stats and modifiers ----
 
-/// Add: plus amount. Percent: plus amount times the base (0.1 is +10%), summed. Multiply: times
-/// amount, after the others.
-enum ModKind { Add, Percent, Multiply }
+/// How a `Modifier` changes a stat. A stat reads (base + every Add + base * every Percent),
+/// times every Multiply.
+///
+/// ```rust
+/// stats.add(modifier("speed", ModKind::Percent, 0.2, "boots"));   // +20% of base speed
+/// ```
+enum ModKind {
+    /// Adds `amount` to the stat.
+    Add,
+    /// Adds `amount` times the base value: 0.1 is +10% of the base. Percents on one stat sum.
+    Percent,
+    /// Multiplies the stat by `amount`, after the adds and percents.
+    Multiply,
+}
 
 /// A change to one stat. `source` names what gave it (an item, a buff) so it can be taken off
 /// again; `seconds` above zero makes it wear off.
-struct Modifier { stat: string = "", kind: ModKind = ModKind::Add, amount: float = 0.0, source: string = "", seconds: float = -1.0 }
+struct Modifier {
+    /// The name of the stat it changes.
+    stat: string = "",
+    /// How it changes the stat.
+    kind: ModKind = ModKind::Add,
+    /// How much: a number to add, a fraction of the base, or a factor, by `kind`.
+    amount: float = 0.0,
+    /// What gave it, such as an item or buff name; `Stats.remove_source` takes it off by this.
+    source: string = "",
+    /// Seconds until it wears off, counted down by `Stats.tick`; zero or below lasts until
+    /// removed.
+    seconds: float = -1.0,
+}
+
+/// A modifier that lasts until removed. Set `seconds` on the result to make it wear off.
+///
+/// ```rust
+/// let haste = modifier("speed", ModKind::Multiply, 1.5, "potion");
+/// haste.seconds = 10.0;
+/// stats.add(haste);
+/// ```
 fn modifier(stat: string, kind: ModKind, amount: float, source: string) -> Modifier {
     return Modifier { stat: stat, kind: kind, amount: amount, source: source, seconds: -1.0 };
 }
 
 /// Base values by name, and the modifiers on them.
-struct Stats { base: {string: float} = {}, mods: Modifier[] = [] }
+///
+/// ```rust
+/// let s = stats();
+/// s.set_base("attack", 10.0);
+/// s.add(modifier("attack", ModKind::Add, 5.0, "sword"));
+/// let attack = s.get("attack");   // 15.0
+/// ```
+struct Stats {
+    /// The base value of each stat, by name.
+    base: {string: float} = {},
+    /// Every modifier on it, in the order they were added.
+    mods: Modifier[] = [],
+}
+
+/// Stats with no base values and no modifiers.
 fn stats() -> Stats {
     let base: {string: float} = {};
     let mods: Modifier[] = [];
     return Stats { base: base, mods: mods };
 }
 impl Stats {
+    /// Sets a stat's base value.
     fn set_base(self, stat: string, value: float) { self.base[stat] = value; }
+    /// A stat's base value without modifiers; 0.0 for a stat with none set.
     fn base_of(self, stat: string) -> float {
         if self.base.contains(stat) {
             return self.base[stat];
         }
         return 0.0;
     }
+    /// Puts a modifier on.
     fn add(self, m: Modifier) { self.mods.push(m); }
     /// Takes off every modifier from `source`.
     fn remove_source(self, source: string) {
@@ -129,7 +206,7 @@ impl Stats {
         }
         self.mods = kept;
     }
-    /// The stat with every modifier applied.
+    /// The stat with every modifier applied: (base + adds + base * percents) * multiplies.
     fn get(self, stat: string) -> float {
         let b = self.base_of(stat);
         let add = 0.0;
@@ -146,7 +223,8 @@ impl Stats {
         }
         return (b + add + b * percent) * mult;
     }
-    /// Wears timed modifiers down; drops the ones that ran out.
+    /// Wears timed modifiers down by `dt` seconds; drops the ones that ran out. Call it once a
+    /// frame with `time.dt`.
     fn tick(self, dt: float) {
         let kept: Modifier[] = [];
         for m in self.mods {
@@ -166,19 +244,34 @@ impl Stats {
 
 /// Named whole numbers for story state: switches (0 or 1), counters, choices. Missing names
 /// read 0. Store it with save.set_value to keep it.
-struct Flags { values: {string: int} = {} }
+///
+/// ```rust
+/// let story = flags();
+/// story.set("met_ana", 1);
+/// story.add("wolves", 1);
+/// if story.check("wolves >= 3") { log("enough wolves"); }
+/// ```
+struct Flags {
+    /// The value of each name that was set.
+    values: {string: int} = {},
+}
+
+/// Flags with no names set.
 fn flags() -> Flags {
     let values: {string: int} = {};
     return Flags { values: values };
 }
 impl Flags {
+    /// A flag's value; 0 for a name never set.
     fn get(self, name: string) -> int {
         if self.values.contains(name) {
             return self.values[name];
         }
         return 0;
     }
+    /// Sets a flag's value.
     fn set(self, name: string, value: int) { self.values[name] = value; }
+    /// Whether a flag is anything but 0.
     fn on(self, name: string) -> bool { return self.get(name) != 0; }
     /// Adds to a counter; returns the new value.
     fn add(self, name: string, by: int) -> int {
@@ -187,7 +280,7 @@ impl Flags {
         return v;
     }
     /// Whether a condition holds: "key", "!key", or "key OP number" with OP one of == != < <= > >=.
-    /// An empty condition holds.
+    /// An empty condition holds. A number that does not parse reads as 0.
     fn check(self, condition: string) -> bool {
         let c = condition.trim();
         if c == "" {
@@ -221,7 +314,8 @@ impl Flags {
         }
         return self.on(c);
     }
-    /// Applies an effect: "key" (sets 1), "key = 3", "key += 2", "key -= 1".
+    /// Applies an effect: "key" (sets 1), "key = 3", "key += 2", "key -= 1". An empty effect
+    /// does nothing.
     fn apply(self, effect: string) {
         let e = effect.trim();
         if e == "" {
@@ -246,32 +340,64 @@ impl Flags {
     }
 }
 
-enum QuestState { Inactive, Active, Done, Failed }
+/// Where a quest stands. A quest goes from Inactive to Active with `Quests.start`, then to Done
+/// or Failed; only an Active quest counts progress.
+enum QuestState {
+    /// Not started; every quest id starts here.
+    Inactive,
+    /// Started and not finished; its objectives count progress.
+    Active,
+    /// Completed.
+    Done,
+    /// Failed.
+    Failed,
+}
 
 /// Quests by id: their state and objective counters. Store it with save.set_value to keep it.
-struct Quests { states: {string: QuestState} = {}, counters: {string: int} = {} }
+///
+/// ```rust
+/// journal.start("hunt");
+/// if journal.progress("hunt", "wolves", 1) >= 3 {
+///     journal.complete("hunt");
+/// }
+/// ```
+struct Quests {
+    /// The state of each quest that left Inactive, by quest id.
+    states: {string: QuestState} = {},
+    /// Objective counts, keyed "quest/objective".
+    counters: {string: int} = {},
+}
+
+/// Quests with every quest Inactive.
 fn quests() -> Quests {
     let states: {string: QuestState} = {};
     let counters: {string: int} = {};
     return Quests { states: states, counters: counters };
 }
 impl Quests {
+    /// A quest's state; Inactive for one never started.
     fn state(self, quest: string) -> QuestState {
         if self.states.contains(quest) {
             return self.states[quest];
         }
         return QuestState::Inactive;
     }
+    /// Makes an Inactive quest Active. A quest that is Active, Done or Failed stays as it is.
     fn start(self, quest: string) {
         if self.state(quest) == QuestState::Inactive {
             self.states[quest] = QuestState::Active;
         }
     }
+    /// Marks a quest Done, whatever its state.
     fn complete(self, quest: string) { self.states[quest] = QuestState::Done; }
+    /// Marks a quest Failed, whatever its state.
     fn fail(self, quest: string) { self.states[quest] = QuestState::Failed; }
+    /// Whether a quest is Active.
     fn is_active(self, quest: string) -> bool { return self.state(quest) == QuestState::Active; }
+    /// Whether a quest is Done.
     fn is_done(self, quest: string) -> bool { return self.state(quest) == QuestState::Done; }
-    /// Counts toward an objective of an active quest ("wolves" of "hunt"); returns the count.
+    /// Counts toward an objective of an active quest ("wolves" of "hunt"); returns the count. A
+    /// quest that is not Active keeps its count.
     fn progress(self, quest: string, objective: string, by: int) -> int {
         let key = quest + "/" + objective;
         if !self.is_active(quest) {
@@ -281,6 +407,7 @@ impl Quests {
         self.counters[key] = v;
         return v;
     }
+    /// An objective's count; 0 before any progress.
     fn count(self, quest: string, objective: string) -> int {
         let key = quest + "/" + objective;
         if self.counters.contains(key) {
@@ -288,7 +415,8 @@ impl Quests {
         }
         return 0;
     }
-    /// The ids of every quest in a state.
+    /// The ids of every quest in a state. A quest never started has no entry, so it is not
+    /// listed as Inactive.
     fn with_state(self, s: QuestState) -> string[] {
         let out: string[] = [];
         for k in self.states.keys() {
@@ -302,23 +430,74 @@ impl Quests {
 
 // ---- Dialogue ----
 
-struct DialogueLine { who: string = "", text: string = "" }
+/// One line of dialogue: who says it and what they say.
+struct DialogueLine {
+    /// The speaker's name; may be empty.
+    who: string = "",
+    /// The text, with {name} parts that `Dialogue.text` fills in.
+    text: string = "",
+}
 
+/// One choice the player can pick at a dialogue node.
+///
 /// `when` is a Flags condition that must hold for the choice to show; `set` are Flags effects
 /// applied when it is picked; `next` is the node it leads to ("" ends the dialogue).
-struct DialogueChoice { text: string = "", next: string = "", when: string = "", set: string[] = [] }
+struct DialogueChoice {
+    /// What the choice says; {name} parts are filled in.
+    text: string = "",
+    /// The node it leads to; "" ends the dialogue.
+    next: string = "",
+    /// A Flags condition that must hold for the choice to show; "" always shows.
+    when: string = "",
+    /// Flags effects applied when it is picked.
+    set: string[] = [],
+}
 
 /// Lines said in order, then the choices, or straight on to `next`. `set` effects apply on
 /// entering the node.
-struct DialogueNode { lines: DialogueLine[] = [], choices: DialogueChoice[] = [], next: string = "", set: string[] = [] }
+struct DialogueNode {
+    /// The lines, said in order.
+    lines: DialogueLine[] = [],
+    /// The choices offered on the last line.
+    choices: DialogueChoice[] = [],
+    /// The node after the last line when there are no choices; "" ends the dialogue.
+    next: string = "",
+    /// Flags effects applied on entering the node.
+    set: string[] = [],
+}
 
 /// A whole conversation, usually from a data file:
 /// load_data<DialogueScript>("assets/talk/ana.json").
-struct DialogueScript { start: string = "", nodes: {string: DialogueNode} = {} }
+struct DialogueScript {
+    /// The node `Dialogue.start("")` begins at.
+    start: string = "",
+    /// Every node, by name.
+    nodes: {string: DialogueNode} = {},
+}
 
 /// A conversation being played. Variables live in `vars`; {name} in a line shows vars or
 /// `names` (for text such as the player's name).
-struct Dialogue { script: DialogueScript, node: string = "", line: int = 0, vars: Flags, names: {string: string} = {} }
+///
+/// ```rust
+/// let talk = dialogue(load_data<DialogueScript>("assets/talk/ana.json"), story);
+/// talk.names["player"] = "Sam";
+/// talk.start("");
+/// log(talk.speaker() + ": " + talk.text());
+/// ```
+struct Dialogue {
+    /// The conversation it plays.
+    script: DialogueScript,
+    /// The node it is on; "" when the dialogue is over or not started.
+    node: string = "",
+    /// The index of the current line in the node.
+    line: int = 0,
+    /// The flags its conditions read and its effects change.
+    vars: Flags,
+    /// Text for {name} parts that are not flags, such as the player's name.
+    names: {string: string} = {},
+}
+
+/// A dialogue over `script` that reads and changes `vars`; it starts with `start`.
 fn dialogue(script: DialogueScript, vars: Flags) -> Dialogue {
     let names: {string: string} = {};
     return Dialogue { script: script, node: "", line: 0, vars: vars, names: names };
@@ -332,6 +511,8 @@ impl Dialogue {
         }
         self.enter(n);
     }
+    /// Goes to a node: applies its `set` effects, and goes straight on to its `next` when it has
+    /// no lines and no choices. "" or a name the script does not have ends the dialogue.
     fn enter(self, node: string) {
         self.line = 0;
         if node == "" || !self.script.nodes.contains(node) {
@@ -348,7 +529,9 @@ impl Dialogue {
             self.enter(n.next);
         }
     }
+    /// Whether the dialogue is playing.
     fn active(self) -> bool { return self.node != ""; }
+    /// The current line as written; an empty line when the dialogue is over.
     fn current(self) -> DialogueLine {
         if !self.active() {
             return DialogueLine { .. };
@@ -359,9 +542,11 @@ impl Dialogue {
         }
         return lines[self.line];
     }
+    /// Who says the current line.
     fn speaker(self) -> string { return self.current().who; }
     /// The line with its {name} parts filled in.
     fn text(self) -> string { return self.substitute(self.current().text); }
+    /// `text` with each {name} replaced from `names`, then from the flags in `vars`.
     fn substitute(self, text: string) -> string {
         let out = text;
         for k in self.names.keys() {

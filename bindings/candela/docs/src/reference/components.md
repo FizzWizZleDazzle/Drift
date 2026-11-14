@@ -50,7 +50,7 @@ cmd.spawn([at(480.0, 270.0), Circle { radius: 10.0, .. }]);
 ## Sprite
 
 Draws a texture at the entity's position. Load the texture with
-[`texture`](assets.md#texture).
+[`texture`](assets.md#texture-1).
 
 ```rust
 struct Sprite {
@@ -242,7 +242,7 @@ struct RigidBody {
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `kind` | `BodyKind` | `BodyKind::Dynamic` | `Dynamic` falls and is pushed, `Kinematic` moves only by its Velocity, `Static` never moves |
+| `kind` | `BodyKind` | `BodyKind::Dynamic` | How the body moves: `Static` never moves, `Dynamic` is moved by forces, gravity and collisions and needs a Velocity, `Kinematic` moves only by its Velocity. See `BodyKind`. |
 | `fixed_rotation` | `bool` | `false` | Keeps it upright, for characters |
 | `gravity_scale` | `float` | `1.0` | Multiplies world gravity for this body |
 | `linear_damping` | `float` | `0.0` | Slows its motion over time |
@@ -389,6 +389,12 @@ struct Oscillate {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `amplitude` | `Vec2` | `Vec2 { x: 0.0, y: 8.0 }` | How far it swings each way, in pixels, per axis |
+| `frequency` | `float` | `1.0` | Swings per second |
+| `phase` | `float` | `0.0` | Where in the swing it starts, in radians; give entities different phases to stagger them |
+
 ## Follow
 
 Moves the entity toward `target` plus `offset` at `speed` pixels per second, stopping
@@ -402,6 +408,13 @@ struct Follow {
     offset: Vec2 = Vec2 { .. },
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `target` | `Entity` | `Entity { .. }` | The entity to move toward |
+| `speed` | `float` | `100.0` | Pixels per second |
+| `distance` | `float` | `0.0` | How far short of the target point it stops, in pixels |
+| `offset` | `Vec2` | `Vec2 { .. }` | Added to the target's position to give the point it moves toward, in pixels |
 
 ## Orbit
 
@@ -419,7 +432,17 @@ struct Orbit {
 }
 ```
 
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `center` | `Entity` | `Entity { .. }` | The entity to circle; while unset or gone, it circles `point` |
+| `point` | `Vec2` | `Vec2 { .. }` | The world point to circle when there is no `center` |
+| `radius` | `float` | `64.0` | Distance from the center, in pixels |
+| `speed` | `float` | `1.0` | Radians per second; negative turns the other way |
+| `angle` | `float` | `0.0` | The current angle in radians, from +x; set it to choose where it starts |
+
 ## Burst
+
+A group of particles a `ParticleEmitter` emits at once.
 
 `count` particles at once, `time` seconds into the emitter's run, repeated `cycles` times (0
 forever) `interval` seconds apart.
@@ -432,6 +455,13 @@ struct Burst {
     interval: float = 0.0,
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `time` | `float` | `0.0` | Seconds into the emitter's run of the first burst |
+| `count` | `int` | `10` | Particles in each burst |
+| `cycles` | `int` | `1` | How many bursts; 0 repeats forever |
+| `interval` | `float` | `0.0` | Seconds between bursts |
 
 ```rust
 ParticleEmitter { rate: 0.0, bursts: [Burst { count: 30, cycles: 0, interval: 1.0, .. }], .. }   // 30 every second
@@ -512,10 +542,10 @@ struct ParticleEmitter {
 | `frame` | `Rect` | `Rect { .. }` | Part of `texture` to draw |
 | `size_start_max` | `float` | `0.0` | With it above `size_start`, birth sizes vary between the two |
 | `size_end_max` | `float` | `0.0` | The same for the size at death |
-| `rotation_min` | `float` | `0.0` | radians at birth |
-| `rotation_max` | `float` | `0.0` |  |
-| `spin_min` | `float` | `0.0` | radians per second |
-| `spin_max` | `float` | `0.0` |  |
+| `rotation_min` | `float` | `0.0` | Smallest rotation at birth, in radians |
+| `rotation_max` | `float` | `0.0` | Largest rotation at birth, in radians |
+| `spin_min` | `float` | `0.0` | Slowest spin, in radians per second |
+| `spin_max` | `float` | `0.0` | Fastest spin, in radians per second |
 | `inherit_velocity` | `float` | `0.0` | share of the emitter's own motion particles keep |
 | `local` | `bool` | `false` | particles move with the emitter |
 | `prewarm` | `float` | `0.0` | seconds simulated before the first frame |
@@ -622,7 +652,7 @@ tween().rotate_by(TAU, 1.0, Ease::Linear).repeat(-1)   // spins forever
 fn fade_to(self, alpha: float, seconds: float, e: Ease) -> Tween
 ```
 
-Sprite alpha, 0.0 to 1.0.
+Fades the sprite's alpha to `alpha`, 0.0 to 1.0, over `seconds`.
 
 ```rust
 tween().delay(1.0).fade_to(0.0, 0.5, Ease::InQuad)
@@ -634,7 +664,7 @@ tween().delay(1.0).fade_to(0.0, 0.5, Ease::InQuad)
 fn zoom_to(self, zoom: float, seconds: float, e: Ease) -> Tween
 ```
 
-Camera zoom.
+Zooms the camera to `zoom` over `seconds`.
 
 ```rust
 cmd.insert(camera, tween().zoom_to(2.0, 0.8, Ease::InOutCubic));
@@ -795,6 +825,8 @@ cmd.spawn([at(0.0, 0.0), Tilemap { map: map, .. }]);
 ```
 
 ## Camera
+
+Makes the entity a camera: the view centers on its position.
 
 Without a camera, world position (0, 0) is the top-left of the screen and one world unit is
 one logical pixel. A camera centers its view on its entity's position. See
@@ -1226,17 +1258,17 @@ struct Joint {
 | `target_anchor` | `Vec2` | `Vec2 { .. }` | Where it attaches on the target, or a world point without a target |
 | `length` | `float` | `0.0` | Distance: 0 keeps the distance the bodies start at |
 | `min_length` | `float` | `0.0` | Distance: with max_length above min_length, a rope's slack |
-| `max_length` | `float` | `0.0` |  |
+| `max_length` | `float` | `0.0` | Distance: the longest it stretches, in pixels, when above `min_length` |
 | `stiffness` | `float` | `0.0` | Distance and Weld: spring frequency in Hz; 0 is rigid |
 | `damping` | `float` | `0.0` | spring damping, 0 to 1 |
 | `limit` | `bool` | `false` | Revolute: angle range; Prismatic: travel range |
-| `lower` | `float` | `0.0` |  |
-| `upper` | `float` | `0.0` |  |
-| `motor` | `bool` | `false` |  |
+| `lower` | `float` | `0.0` | With `limit`: the lowest angle in radians (Revolute) or position in pixels (Prismatic) |
+| `upper` | `float` | `0.0` | With `limit`: the highest angle or position |
+| `motor` | `bool` | `false` | Revolute and Prismatic: drives the joint at `motor_speed` |
 | `motor_speed` | `float` | `0.0` | radians or pixels per second |
 | `max_motor_force` | `float` | `0.0` | torque for Revolute |
 | `axis` | `Vec2` | `Vec2 { x: 1.0, y: 0.0 }` | Prismatic: the slide direction |
-| `collide_connected` | `bool` | `false` |  |
+| `collide_connected` | `bool` | `false` | Whether the two joined bodies still collide with each other |
 
 ```rust
 // A pendulum: a ball hanging from a point in the world.
