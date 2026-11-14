@@ -806,11 +806,19 @@ impl Host {
     }
 
     /// Keeps the components a system changed in one row of entity `e`.
-    fn write_row(&mut self, fields: &[(String, Option<String>)], old: Option<&Value>, new: Option<&mut Value>, e: u64) {
+    /// Notes the components a system changed in one row of entity `e`:
+    /// a game component against its store, an engine component against
+    /// the copy `old` holds (see `kept`).
+    fn diff_row(fields: &[(String, Option<String>)], old: Option<&Value>, new: Option<&mut Value>, e: u64, writes: &mut Vec<(u64, Value)>) {
         let (Some(Value::Struct { fields: of, .. }), Some(Value::Struct { fields: nf, .. })) = (old, new) else { return };
         for (k, (_, c)) in fields.iter().enumerate() {
-            if c.is_some() && of[k].1 != nf[k].1 {
-                self.set_component(e, std::mem::replace(&mut nf[k].1, Value::Null));
+            let Some(c) = c else { continue };
+            let changed = match script_unchanged(c, e, &nf[k].1) {
+                Some(same) => !same,
+                None => of[k].1 != nf[k].1,
+            };
+            if changed {
+                writes.push((e, std::mem::replace(&mut nf[k].1, Value::Null)));
             }
         }
     }
@@ -1076,38 +1084,50 @@ impl Host {
     /// `before` holds what the call was given for the parameters this can
     /// write back (see `kept`), `after` what the call left; values are
     /// taken out of `after`.
+    /// Every change is found first, against the stores and resources as
+    /// they were during the call, then kept in parameter order, so a
+    /// component two parameters hold is written only by those that changed
+    /// it.
     fn write_back(&mut self, sys: &System, before: &[Value], after: &mut [Value], entities: &[Vec<u64>]) {
+        let mut writes: Vec<(u64, Value)> = Vec::new();
+        let mut resources: Vec<(String, Value)> = Vec::new();
         for (i, p) in sys.params.iter().enumerate() {
             let (old, new) = (&before[i], &mut after[i]);
-            if old == new {
-                continue;
-            }
             match p {
                 Param::Rows { fields, .. } => {
                     let (Value::Array(o), Value::Array(n)) = (old, new) else { continue };
                     for (r, e) in entities[i].iter().enumerate() {
-                        self.write_row(fields, o.get(r), n.get_mut(r), *e);
+                        Self::diff_row(fields, o.get(r), n.get_mut(r), *e, &mut writes);
                     }
                 }
                 Param::Row { fields, .. } => {
                     if let Some(e) = entities[i].first() {
-                        self.write_row(fields, Some(old), Some(new), *e);
+                        Self::diff_row(fields, Some(old), Some(new), *e, &mut writes);
                     }
                 }
                 Param::Lookup { key, .. } => {
-                    let (Some(Value::Array(ids)), Some(Value::Array(rows))) = (field(new, "ids"), field(new, "rows")) else { continue };
-                    for (id, row) in ids.iter().zip(rows) {
-                        let Value::Int(id) = id else { continue };
-                        let e = *id as u64;
-                        let changed = LOOKUP_SEEN.with(|seen| seen.borrow().get(&(*key, e)).is_some_and(|was| was != row));
+                    let Some(name) = lookup_name(*key) else { continue };
+                    let Value::Struct { fields, .. } = new else { continue };
+                    let (Some(ids), Some(rows)) = (fields.iter().position(|(f, _)| f == "ids"), fields.iter().position(|(f, _)| f == "rows")) else { continue };
+                    let ids: Vec<u64> = match &fields[ids].1 {
+                        Value::Array(ids) => ids.iter().filter_map(|id| id.as_i64()).map(|id| id as u64).collect(),
+                        _ => continue,
+                    };
+                    let Value::Array(rows) = &mut fields[rows].1 else { continue };
+                    for (e, row) in ids.into_iter().zip(rows.iter_mut()) {
+                        let changed = match script_unchanged(&name, e, row) {
+                            Some(same) => !same,
+                            None => LOOKUP_SEEN.with(|seen| seen.borrow().get(&(*key, e)).is_some_and(|was| was != row)),
+                        };
                         if changed {
-                            self.set_component(e, row.clone());
+                            writes.push((e, std::mem::replace(row, Value::Null)));
                         }
                     }
                 }
                 Param::Resource(name) => {
-                    publish_resource(name, Some(new));
-                    self.resources.insert(name.clone(), std::mem::replace(new, Value::Null));
+                    if self.resources.get(name) != Some(new) {
+                        resources.push((name.clone(), std::mem::replace(new, Value::Null)));
+                    }
                 }
                 Param::State { of, .. } => {
                     if let (Some(Value::Bool(true)), Some(Value::Enum { variant, .. })) = (field(new, "changing"), field(new, "next")) {
@@ -1118,6 +1138,13 @@ impl Host {
                 }
                 _ => {}
             }
+        }
+        for (e, v) in writes {
+            self.set_component(e, v);
+        }
+        for (name, v) in resources {
+            publish_resource(&name, Some(&v));
+            self.resources.insert(name, v);
         }
     }
 
@@ -1485,18 +1512,47 @@ impl Host {
     }
 }
 
-/// Copies of the arguments write_back compares against: rows, resources
-/// and states. Other parameters are not written back (a lookup notes what
-/// it handed out itself), so they are not copied.
+/// Copies of the arguments write_back compares against: the engine
+/// components of rows. Game components and resources are compared against
+/// their stores, which a call does not change; a lookup notes what it
+/// handed out itself.
 fn kept(sys: &System, args: &[Value]) -> Vec<Value> {
+    let engine_part = |fields: &[(String, Option<String>)], row: &Value| -> Value {
+        let Value::Struct { name, fields: values } = row else { return Value::Null };
+        Value::Struct {
+            name: name.clone(),
+            fields: fields
+                .iter()
+                .zip(values)
+                .map(|((_, c), (f, v))| {
+                    let copy = match c {
+                        Some(c) if !is_script_component(c) => v.clone(),
+                        _ => Value::Null,
+                    };
+                    (f.clone(), copy)
+                })
+                .collect(),
+        }
+    };
     sys.params
         .iter()
         .zip(args)
-        .map(|(p, a)| match p {
-            Param::Rows { .. } | Param::Row { .. } | Param::Resource(_) | Param::State { .. } => a.clone(),
+        .map(|(p, a)| match (p, a) {
+            (Param::Rows { fields, .. }, Value::Array(rows)) => Value::Array(rows.iter().map(|r| engine_part(fields, r)).collect()),
+            (Param::Row { fields, .. }, row) => engine_part(fields, row),
             _ => Value::Null,
         })
         .collect()
+}
+
+fn is_script_component(name: &str) -> bool {
+    STORES.with(|s| s.borrow().contains_key(name))
+}
+
+/// For a game component: whether `v` is what entity `e` has stored (an
+/// entity without one counts as changed). None for an engine component.
+fn script_unchanged(name: &str, e: u64, v: &Value) -> Option<bool> {
+    STORES.with(|s| s.borrow().get(name).map(|store| store.get(&e) == Some(v)))
 }
 
 /// A game component as a scene file holds it: like to_json, with each
@@ -1617,7 +1673,10 @@ fn engine(module_dir: &str) -> Engine {
         let e = id as u64;
         Ok(Value::Array(match read_component(e, &name) {
             Some(row) => {
-                LOOKUP_SEEN.with(|seen| seen.borrow_mut().insert((key, e), row.clone()));
+                // Game components are compared against their store instead.
+                if !is_script_component(&name) {
+                    LOOKUP_SEEN.with(|seen| seen.borrow_mut().insert((key, e), row.clone()));
+                }
                 vec![row]
             }
             None => Vec::new(),
