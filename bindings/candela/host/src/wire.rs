@@ -248,6 +248,178 @@ pub fn read_json(bytes: &[u8]) -> Option<Json> {
     (r.at == bytes.len()).then_some(v)
 }
 
+/// One MessagePack value inside a byte slice, read without building a
+/// document: the reader the host turns engine answers into candela values
+/// with, by the type it expects (see `Types::from_wire`).
+#[derive(Clone, Copy)]
+pub struct Item<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+/// What a MessagePack value is.
+pub enum Kind<'a> {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(&'a str),
+    /// An array of this many elements.
+    Array(usize),
+    /// A map of this many entries.
+    Map(usize),
+    /// Something the engine never sends (binary, extensions).
+    Other,
+}
+
+fn float<'a>(f: f64) -> Kind<'a> {
+    if f.is_finite() {
+        Kind::Float(f)
+    } else {
+        Kind::Null
+    }
+}
+
+impl<'a> Item<'a> {
+    /// The value at the start of `bytes`.
+    pub fn new(bytes: &'a [u8]) -> Self {
+        Item { bytes, at: 0 }
+    }
+
+    fn byte(&self, i: usize) -> Option<u8> {
+        self.bytes.get(i).copied()
+    }
+
+    fn be(&self, from: usize, n: usize) -> Option<u64> {
+        let s = self.bytes.get(from..from.checked_add(n)?)?;
+        Some(s.iter().fold(0u64, |v, b| v << 8 | u64::from(*b)))
+    }
+
+    /// What this value is, and where its contents start (the elements of an
+    /// array or map, the bytes of a string).
+    fn head(&self) -> Option<(Kind<'a>, usize)> {
+        let at = self.at;
+        let b = self.byte(at)?;
+        let text = |from: usize, n: usize| -> Option<(Kind<'a>, usize)> {
+            let s = self.bytes.get(from..from.checked_add(n)?)?;
+            Some((Kind::Str(std::str::from_utf8(s).unwrap_or("")), from + n))
+        };
+        Some(match b {
+            0x00..=0x7f => (Kind::Int(i64::from(b)), at + 1),
+            0x80..=0x8f => (Kind::Map(usize::from(b & 0x0f)), at + 1),
+            0x90..=0x9f => (Kind::Array(usize::from(b & 0x0f)), at + 1),
+            0xa0..=0xbf => return text(at + 1, usize::from(b & 0x1f)),
+            0xc0 => (Kind::Null, at + 1),
+            0xc2 => (Kind::Bool(false), at + 1),
+            0xc3 => (Kind::Bool(true), at + 1),
+            // JSON has no NaN or infinity, and reading them as JSON made them
+            // null: they read as null here too.
+            0xca => (float(f64::from(f32::from_bits(self.be(at + 1, 4)? as u32))), at + 5),
+            0xcb => (float(f64::from_bits(self.be(at + 1, 8)?)), at + 9),
+            0xcc..=0xcf => {
+                let n = 1usize << (b - 0xcc);
+                let u = self.be(at + 1, n)?;
+                (i64::try_from(u).map_or(Kind::Float(u as f64), Kind::Int), at + 1 + n)
+            }
+            0xd0 => (Kind::Int(i64::from(self.byte(at + 1)? as i8)), at + 2),
+            0xd1 => (Kind::Int(i64::from(self.be(at + 1, 2)? as u16 as i16)), at + 3),
+            0xd2 => (Kind::Int(i64::from(self.be(at + 1, 4)? as u32 as i32)), at + 5),
+            0xd3 => (Kind::Int(self.be(at + 1, 8)? as i64), at + 9),
+            0xd9..=0xdb => {
+                let n = 1usize << (b - 0xd9);
+                return text(at + 1 + n, self.be(at + 1, n)? as usize);
+            }
+            0xdc => (Kind::Array(self.be(at + 1, 2)? as usize), at + 3),
+            0xdd => (Kind::Array(self.be(at + 1, 4)? as usize), at + 5),
+            0xde => (Kind::Map(self.be(at + 1, 2)? as usize), at + 3),
+            0xdf => (Kind::Map(self.be(at + 1, 4)? as usize), at + 5),
+            0xe0..=0xff => (Kind::Int(i64::from(b as i8)), at + 1),
+            0xc4..=0xc6 => {
+                let n = 1usize << (b - 0xc4);
+                let len = self.be(at + 1, n)? as usize;
+                (Kind::Other, at + 1 + n + len)
+            }
+            _ => return None,
+        })
+    }
+
+    /// What this value is.
+    pub fn kind(&self) -> Kind<'a> {
+        self.head().map_or(Kind::Other, |(k, _)| k)
+    }
+
+    /// The value after this one, or None when the bytes are cut short.
+    pub fn next(&self) -> Option<Item<'a>> {
+        let (kind, mut at) = self.head()?;
+        let inner = match kind {
+            Kind::Array(n) => n,
+            Kind::Map(n) => n.checked_mul(2)?,
+            _ => 0,
+        };
+        for _ in 0..inner {
+            at = Item { bytes: self.bytes, at }.next()?.at;
+        }
+        (at <= self.bytes.len()).then_some(Item { bytes: self.bytes, at })
+    }
+
+    /// The elements of an array.
+    pub fn elements(&self) -> Elements<'a> {
+        match self.head() {
+            Some((Kind::Array(n), at)) => Elements { item: Some(Item { bytes: self.bytes, at }), left: n },
+            _ => Elements { item: None, left: 0 },
+        }
+    }
+
+    /// The entries of a map, as (key, value).
+    pub fn entries(&self) -> Entries<'a> {
+        match self.head() {
+            Some((Kind::Map(n), at)) => Entries { item: Some(Item { bytes: self.bytes, at }), left: n },
+            _ => Entries { item: None, left: 0 },
+        }
+    }
+}
+
+pub struct Elements<'a> {
+    item: Option<Item<'a>>,
+    left: usize,
+}
+
+impl<'a> Iterator for Elements<'a> {
+    type Item = Item<'a>;
+    fn next(&mut self) -> Option<Item<'a>> {
+        if self.left == 0 {
+            return None;
+        }
+        let item = self.item?;
+        self.left -= 1;
+        self.item = item.next();
+        Some(item)
+    }
+}
+
+pub struct Entries<'a> {
+    item: Option<Item<'a>>,
+    left: usize,
+}
+
+impl<'a> Iterator for Entries<'a> {
+    type Item = (&'a str, Item<'a>);
+    fn next(&mut self) -> Option<(&'a str, Item<'a>)> {
+        if self.left == 0 {
+            return None;
+        }
+        let key = self.item?;
+        let value = key.next()?;
+        self.left -= 1;
+        self.item = value.next();
+        let name = match key.kind() {
+            Kind::Str(s) => s,
+            _ => "",
+        };
+        Some((name, value))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,6 +454,30 @@ mod tests {
             read_json(&out),
             Some(json!({"position": {"x": 1.0, "y": -2.5}, "kind": "Dynamic", "tags": [3, "a"]}))
         );
+    }
+
+    #[test]
+    fn items_walk_what_json_reads() {
+        let j = json!({"a": [1, -2, 300, 1.5], "b": {"c": "text", "d": null}, "e": true});
+        let mut out = Vec::new();
+        write_json(&mut out, &j);
+        let root = Item::new(&out);
+        let names: Vec<&str> = root.entries().map(|(k, _)| k).collect();
+        assert_eq!(names, ["a", "b", "e"]);
+        let (_, a) = root.entries().next().unwrap();
+        let nums: Vec<f64> = a
+            .elements()
+            .map(|x| match x.kind() {
+                Kind::Int(i) => i as f64,
+                Kind::Float(f) => f,
+                _ => f64::NAN,
+            })
+            .collect();
+        assert_eq!(nums, [1.0, -2.0, 300.0, 1.5]);
+        let (_, b) = root.entries().nth(1).unwrap();
+        assert!(matches!(b.entries().next().unwrap().1.kind(), Kind::Str("text")));
+        assert!(matches!(root.entries().nth(2).unwrap().1.kind(), Kind::Bool(true)));
+        assert_eq!(root.next().map(|i| i.at), Some(out.len()));
     }
 
     #[test]

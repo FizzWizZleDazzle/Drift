@@ -58,6 +58,7 @@
 #include <drift/resources/RendererResource.hpp>
 #include <drift/resources/Time.hpp>
 
+#include "msgpack.hpp"
 #include "services.hpp"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -111,7 +112,7 @@ EffectId g_fade;
 // candela value they came from.
 struct RunningTween {
     TweenId id = InvalidTweenId;
-    nlohmann::json value;
+    std::string value;   // the value's MessagePack bytes
 };
 std::unordered_map<EntityId, RunningTween> g_tweens;
 
@@ -146,33 +147,60 @@ json unpack(const uint8_t* data, size_t len) {
 }
 
 // ---- Value shapes of the drift module ----
+//
+// Engine components go to the host written straight into MessagePack (Pack)
+// and come back as a view of its bytes (Msg); engine functions still take
+// and answer nlohmann values. The readers below take either.
 
+using candela::Msg;
+using candela::Pack;
+
+// A field of a value, or null when it has none.
+const json& field(const json& j, const char* key) {
+    static const json none;
+    if (!j.is_object()) return none;
+    auto it = j.find(key);
+    return it != j.end() ? *it : none;
+}
+Msg field(const Msg& j, const char* key) { return j[key]; }
+
+// Iterates the elements of a list.
+template <typename F> void forEach(const json& j, F&& fn) {
+    if (j.is_array()) for (const auto& x : j) fn(x);
+}
+template <typename F> void forEach(const Msg& j, F&& fn) { j.each(fn); }
+
+void vec(Pack& p, Vec2 v) { p.object([&] { p.kv("x", v.x); p.kv("y", v.y); }); }
 json vec(Vec2 v) { return {{"x", v.x}, {"y", v.y}}; }
-Vec2 vec(const json& j, Vec2 fallback = {}) {
+template <typename J> Vec2 vec(const J& j, Vec2 fallback = {}) {
     if (!j.is_object()) return fallback;
     return {j.value("x", fallback.x), j.value("y", fallback.y)};
 }
+void color(Pack& p, Color c) {
+    p.object([&] { p.kv("r", c.r / 255.0); p.kv("g", c.g / 255.0); p.kv("b", c.b / 255.0); p.kv("a", c.a / 255.0); });
+}
 json color(Color c) { return {{"r", c.r / 255.0}, {"g", c.g / 255.0}, {"b", c.b / 255.0}, {"a", c.a / 255.0}}; }
 uint8_t channel(double v) { return uint8_t(std::clamp(v, 0.0, 1.0) * 255.0 + 0.5); }
-Color color(const json& j, Color fallback = Color::white()) {
+template <typename J> Color color(const J& j, Color fallback = Color::white()) {
     if (!j.is_object()) return fallback;
     return {channel(j.value("r", 1.0)), channel(j.value("g", 1.0)), channel(j.value("b", 1.0)), channel(j.value("a", 1.0))};
 }
+void rectJ(Pack& p, Rect r) { p.object([&] { p.kv("x", r.x); p.kv("y", r.y); p.kv("w", r.w); p.kv("h", r.h); }); }
 json rectJ(Rect r) { return {{"x", r.x}, {"y", r.y}, {"w", r.w}, {"h", r.h}}; }
-Rect rectJ(const json& j) {
+template <typename J> Rect rectJ(const J& j) {
     if (!j.is_object()) return {};
     return {j.value("x", 0.f), j.value("y", 0.f), j.value("w", 0.f), j.value("h", 0.f)};
 }
-uint8_t layer(const json& j) { return uint8_t(std::clamp(j.value("layer", 0), 0, 31)); }
+template <typename J> uint8_t layer(const J& j) { return uint8_t(std::clamp(j.value("layer", 0), 0, 31)); }
 
 const char* blendNames[] = {"Alpha", "Additive", "Multiply", "Premultiplied", "Screen", "Opaque"};
-BlendMode blend(const json& j) {
-    std::string s = j.is_string() ? j.get<std::string>() : "Alpha";
+template <typename J> BlendMode blend(const J& j) {
+    std::string s = j.is_string() ? j.template get<std::string>() : "Alpha";
     for (int i = 0; i < 6; ++i) if (s == blendNames[i]) return static_cast<BlendMode>(i);
     return BlendMode::Alpha;
 }
-template <typename E> E pick(const json& j, std::initializer_list<const char*> names) {
-    std::string s = j.is_string() ? j.get<std::string>() : "";
+template <typename E, typename J> E pick(const J& j, std::initializer_list<const char*> names) {
+    std::string s = j.is_string() ? j.template get<std::string>() : "";
     int i = 0;
     for (const char* n : names) {
         if (s == n) return static_cast<E>(i);
@@ -210,19 +238,25 @@ void teleport(EntityId e, Vec2 position, float rotation) {
 // procedural animation solvers (include/drift/math/ProcAnim.hpp) the drift
 // module's animation helpers call.
 
-json transformJ(Vec2 position, float rotation, Vec2 scale) {
-    return json{{"position", vec(position)}, {"rotation", rotation}, {"scale", vec(scale)}};
-}
-json idsJ(const std::vector<EntityId>& ids) {
-    json out = json::array();
-    for (EntityId e : ids) out.push_back(e);
-    return out;
+void transformJ(Pack& p, Vec2 position, float rotation, Vec2 scale) {
+    p.object([&] {
+        p.key("position");
+        vec(p, position);
+        p.kv("rotation", rotation);
+        p.key("scale");
+        vec(p, scale);
+    });
 }
 
 bool hasParent(EntityId e) { return get<Parent>(e) != nullptr; }
-json readParent(EntityId e) { return json{{"entity", {{"id", get<Parent>(e)->entity}}}, {"keep_world", false}}; }
-void writeParent(EntityId e, const json& j) {
-    json pe = j.value("entity", json::object());
+void readParent(EntityId e, Pack& p) {
+    p.object([&] {
+        p.id("entity", get<Parent>(e)->entity);
+        p.kv("keep_world", false);
+    });
+}
+void writeParent(EntityId e, const Msg& j) {
+    Msg pe = j["entity"];
     EntityId p = pe.is_object() ? pe.value("id", EntityId(0)) : InvalidEntityId;
     if (!setParent(world(), e, p, j.value("keep_world", false))) {
         DRIFT_LOG_WARN("Candela: cannot parent entity %llu to %llu (dead, a loop, or %d children already)",
@@ -231,140 +265,167 @@ void writeParent(EntityId e, const json& j) {
 }
 void removeParentKeepingPlace(EntityId e) { removeParent(world(), e, true); }
 
-json readGlobal(EntityId e) {
+void readGlobal(EntityId e, Pack& p) {
     GlobalTransform2D g = worldTransformOf(world(), e);
-    return transformJ(g.position, g.rotation, g.scale);
+    transformJ(p, g.position, g.rotation, g.scale);
 }
 // Assigning a GlobalTransform moves the entity there in world space.
-void writeGlobal(EntityId e, const json& j) {
-    GlobalTransform2D g{vec(j.value("position", json())), j.value("rotation", 0.f), vec(j.value("scale", json()), {1, 1})};
+void writeGlobal(EntityId e, const Msg& j) {
+    GlobalTransform2D g{vec(j["position"]), j.value("rotation", 0.f), vec(j["scale"], {1, 1})};
     put(e, localTransformFor(world(), parentOf(world(), e), g));
 }
 
-bool hierarchyService(const std::string& f, const json& a, json& out) {
-    if (f == "hier_parent") {
-        out = parentOf(world(), a[0].get<EntityId>());
-        return true;
-    }
-    if (f == "hier_children") {
-        out = idsJ(childrenOf(world(), a[0].get<EntityId>()));
-        return true;
-    }
-    if (f == "hier_descendants") {
-        out = idsJ(descendantsOf(world(), a[0].get<EntityId>()));
-        return true;
-    }
-    if (f == "hier_world") {
-        GlobalTransform2D g = worldTransformOf(world(), a[0].get<EntityId>());
-        out = json::array({g.position.x, g.position.y, g.rotation, g.scale.x, g.scale.y});
-        return true;
-    }
-    if (f == "hier_to_world" || f == "hier_to_local") {
-        EntityId e = a[0].get<EntityId>();
-        Vec2 p{a[1].get<float>(), a[2].get<float>()};
-        Vec2 r = f == "hier_to_world" ? localToWorld(world(), e, p) : worldToLocal(world(), e, p);
-        out = json::array({r.x, r.y});
-        return true;
-    }
-    return false;
-}
+// ---- Engine functions read straight from MessagePack ----
+//
+// The functions a game may call for every entity every frame (hierarchy
+// queries and the procedural animation solvers) read their arguments from
+// the host's bytes and write their answer the same way, without building
+// nlohmann values; drift_bridge_call looks them up before the others.
 
-std::vector<Vec2> pointsOf(const json& flat) {
-    std::vector<Vec2> pts(flat.size() / 2);
-    for (size_t i = 0; i < pts.size(); ++i) pts[i] = {flat[i * 2].get<float>(), flat[i * 2 + 1].get<float>()};
+// The arguments of a call: a list, each element found once.
+struct Args {
+    std::vector<Msg> items;
+    explicit Args(const Msg& list) {
+        items.reserve(list.size());
+        list.each([&](const Msg& m) { items.push_back(m); });
+    }
+    Msg operator[](size_t i) const { return i < items.size() ? items[i] : Msg{}; }
+    float f(size_t i) const { return (*this)[i].get<float>(); }
+    int n(size_t i) const { return (*this)[i].get<int>(); }
+    EntityId e(size_t i) const { return (*this)[i].get<EntityId>(); }
+};
+
+std::vector<Vec2> pointsOf(const Msg& flat) {
+    std::vector<Vec2> pts;
+    pts.reserve(flat.size() / 2);
+    float x = 0.f;
+    size_t i = 0;
+    flat.each([&](const Msg& m) {
+        if (i++ % 2 == 0) x = m.get<float>();
+        else pts.push_back({x, m.get<float>()});
+    });
     return pts;
 }
-std::vector<float> floatsOf(const json& j) {
+std::vector<float> floatsOf(const Msg& j) {
     std::vector<float> v;
-    for (const auto& x : j) v.push_back(x.get<float>());
+    v.reserve(j.size());
+    j.each([&](const Msg& m) { v.push_back(m.get<float>()); });
     return v;
 }
-void pushPoints(json& out, const std::vector<Vec2>& pts) {
+void pushPoints(Pack& out, const std::vector<Vec2>& pts) {
     for (Vec2 p : pts) {
-        out.push_back(p.x);
-        out.push_back(p.y);
+        out.val(p.x);
+        out.val(p.y);
     }
 }
+void floats(Pack& out, std::initializer_list<float> v) {
+    out.array(v.size());
+    for (float x : v) out.val(x);
+}
 
-// The solvers of drift/gameplay/ProceduralAnimation.hpp; state crosses as
-// flat float lists and comes back the same way.
-bool animService(const std::string& f, const json& a, json& out) {
-    auto F = [&](size_t i) { return a[i].get<float>(); };
-    if (f == "anim_spring") {
-        // kind (0 float, 1 angle, 2 critically damped), value, velocity, target, stiffness or smooth time, damping, dt
-        float v = F(1), vel = F(2);
-        int kind = a[0].get<int>();
-        if (kind == 0) springStep(v, vel, F(3), F(4), F(5), F(6));
-        else if (kind == 1) angleSpringStep(v, vel, F(3), F(4), F(5), F(6));
-        else v = smoothDamp(v, F(3), vel, F(4), F(6));
-        out = json::array({v, vel});
-        return true;
-    }
-    if (f == "anim_spring2") {
-        // kind (0 spring, 2 critically damped), value, velocity, target (x, y each), stiffness or smooth time, damping, dt
-        Vec2 v{F(1), F(2)}, vel{F(3), F(4)}, t{F(5), F(6)};
-        if (a[0].get<int>() == 0) springStep(v, vel, t, F(7), F(8), F(9));
-        else v = smoothDamp(v, t, vel, F(7), F(9));
-        out = json::array({v.x, v.y, vel.x, vel.y});
-        return true;
-    }
-    if (f == "anim_two_bone") {
-        TwoBonePose p = twoBoneIk({F(0), F(1)}, {F(2), F(3)}, F(4), F(5), F(6));
-        out = json::array({p.joint.x, p.joint.y, p.end.x, p.end.y, p.upperAngle, p.lowerAngle, p.reached ? 1.f : 0.f});
-        return true;
-    }
-    if (f == "anim_fabrik") {
-        // joints, lengths, target x, y, iterations, tolerance, base angle, min angles, max angles
-        std::vector<Vec2> joints = pointsOf(a[0]);
-        std::vector<float> lengths = floatsOf(a[1]), lo = floatsOf(a[7]), hi = floatsOf(a[8]);
-        FabrikOptions o;
-        o.iterations = a[4].get<int>();
-        o.tolerance = F(5);
-        o.baseAngle = F(6);
-        o.minAngle = lo;
-        o.maxAngle = hi;
-        bool reached = solveFabrik(joints, lengths, {F(2), F(3)}, o);
-        out = json::array({reached ? 1.f : 0.f});
-        pushPoints(out, joints);
-        return true;
-    }
-    if (f == "anim_verlet") {
-        // points, previous, anchor x, y, segment, dt, gravity x, y, damping, iterations, stiffness, ground, pin end, end x, y
-        std::vector<Vec2> pts = pointsOf(a[0]), prev = pointsOf(a[1]);
-        prev.resize(pts.size());
-        VerletOptions o;
-        o.gravity = {F(6), F(7)};
-        o.damping = F(8);
-        o.iterations = a[9].get<int>();
-        o.stiffness = F(10);
-        o.ground = F(11);
-        o.pinEnd = a[12].get<bool>();
-        o.endTarget = {F(13), F(14)};
-        stepVerlet(pts, prev, {F(2), F(3)}, F(4), F(5), o);
-        out = json::array();
-        pushPoints(out, pts);
-        pushPoints(out, prev);
-        return true;
-    }
-    if (f == "anim_foot") {
-        // position, from, to, progress, rest, distance, duration, height, lead, up, dt, can step
-        Foot ft;
-        ft.position = {F(0), F(1)};
-        ft.from = {F(2), F(3)};
-        ft.to = {F(4), F(5)};
-        ft.progress = F(6);
-        StepOptions o;
-        o.distance = F(9);
-        o.duration = F(10);
-        o.height = F(11);
-        o.lead = F(12);
-        o.up = {F(13), F(14)};
-        bool landed = ft.update({F(7), F(8)}, o, F(15), a[16].get<bool>());
-        out = json::array({ft.position.x, ft.position.y, ft.from.x, ft.from.y, ft.to.x, ft.to.y, ft.progress,
-                           landed ? 1.f : 0.f});
-        return true;
-    }
-    return false;
+using FastService = void (*)(const Args&, Pack&);
+
+const std::unordered_map<std::string_view, FastService>& fastServices() {
+    static const std::unordered_map<std::string_view, FastService> table = {
+        // Hierarchy queries.
+        {"hier_parent", [](const Args& a, Pack& out) { out.val(parentOf(world(), a.e(0))); }},
+        {"hier_children", [](const Args& a, Pack& out) { out.list(childrenOf(world(), a.e(0))); }},
+        {"hier_descendants", [](const Args& a, Pack& out) { out.list(descendantsOf(world(), a.e(0))); }},
+        {"hier_world",
+         [](const Args& a, Pack& out) {
+             GlobalTransform2D g = worldTransformOf(world(), a.e(0));
+             floats(out, {g.position.x, g.position.y, g.rotation, g.scale.x, g.scale.y});
+         }},
+        {"hier_to_world",
+         [](const Args& a, Pack& out) {
+             Vec2 r = localToWorld(world(), a.e(0), {a.f(1), a.f(2)});
+             floats(out, {r.x, r.y});
+         }},
+        {"hier_to_local",
+         [](const Args& a, Pack& out) {
+             Vec2 r = worldToLocal(world(), a.e(0), {a.f(1), a.f(2)});
+             floats(out, {r.x, r.y});
+         }},
+        // The solvers of drift/gameplay/ProceduralAnimation.hpp; state
+        // crosses as flat float lists and comes back the same way.
+        {"anim_spring",
+         [](const Args& a, Pack& out) {
+             // kind (0 float, 1 angle, 2 critically damped), value, velocity, target, stiffness or smooth time, damping, dt
+             float v = a.f(1), vel = a.f(2);
+             int kind = a.n(0);
+             if (kind == 0) springStep(v, vel, a.f(3), a.f(4), a.f(5), a.f(6));
+             else if (kind == 1) angleSpringStep(v, vel, a.f(3), a.f(4), a.f(5), a.f(6));
+             else v = smoothDamp(v, a.f(3), vel, a.f(4), a.f(6));
+             floats(out, {v, vel});
+         }},
+        {"anim_spring2",
+         [](const Args& a, Pack& out) {
+             // kind (0 spring, 2 critically damped), value, velocity, target (x, y each), stiffness or smooth time, damping, dt
+             Vec2 v{a.f(1), a.f(2)}, vel{a.f(3), a.f(4)}, t{a.f(5), a.f(6)};
+             if (a.n(0) == 0) springStep(v, vel, t, a.f(7), a.f(8), a.f(9));
+             else v = smoothDamp(v, t, vel, a.f(7), a.f(9));
+             floats(out, {v.x, v.y, vel.x, vel.y});
+         }},
+        {"anim_two_bone",
+         [](const Args& a, Pack& out) {
+             TwoBonePose p = twoBoneIk({a.f(0), a.f(1)}, {a.f(2), a.f(3)}, a.f(4), a.f(5), a.f(6));
+             floats(out, {p.joint.x, p.joint.y, p.end.x, p.end.y, p.upperAngle, p.lowerAngle, p.reached ? 1.f : 0.f});
+         }},
+        {"anim_fabrik",
+         [](const Args& a, Pack& out) {
+             // joints, lengths, target x, y, iterations, tolerance, base angle, min angles, max angles
+             std::vector<Vec2> joints = pointsOf(a[0]);
+             // The options only view the limits: they live here.
+             std::vector<float> lengths = floatsOf(a[1]), lo = floatsOf(a[7]), hi = floatsOf(a[8]);
+             FabrikOptions o;
+             o.iterations = a.n(4);
+             o.tolerance = a.f(5);
+             o.baseAngle = a.f(6);
+             o.minAngle = lo;
+             o.maxAngle = hi;
+             bool reached = solveFabrik(joints, lengths, {a.f(2), a.f(3)}, o);
+             out.array(1 + joints.size() * 2);
+             out.val(reached ? 1.f : 0.f);
+             pushPoints(out, joints);
+         }},
+        {"anim_verlet",
+         [](const Args& a, Pack& out) {
+             // points, previous, anchor x, y, segment, dt, gravity x, y, damping, iterations, stiffness, ground, pin end, end x, y
+             std::vector<Vec2> pts = pointsOf(a[0]), prev = pointsOf(a[1]);
+             prev.resize(pts.size());
+             VerletOptions o;
+             o.gravity = {a.f(6), a.f(7)};
+             o.damping = a.f(8);
+             o.iterations = a.n(9);
+             o.stiffness = a.f(10);
+             o.ground = a.f(11);
+             o.pinEnd = a[12].get<bool>();
+             o.endTarget = {a.f(13), a.f(14)};
+             stepVerlet(pts, prev, {a.f(2), a.f(3)}, a.f(4), a.f(5), o);
+             out.array(pts.size() * 2 + prev.size() * 2);
+             pushPoints(out, pts);
+             pushPoints(out, prev);
+         }},
+        {"anim_foot",
+         [](const Args& a, Pack& out) {
+             // position, from, to, progress, rest, distance, duration, height, lead, up, dt, can step
+             Foot ft;
+             ft.position = {a.f(0), a.f(1)};
+             ft.from = {a.f(2), a.f(3)};
+             ft.to = {a.f(4), a.f(5)};
+             ft.progress = a.f(6);
+             StepOptions o;
+             o.distance = a.f(9);
+             o.duration = a.f(10);
+             o.height = a.f(11);
+             o.lead = a.f(12);
+             o.up = {a.f(13), a.f(14)};
+             bool landed = ft.update({a.f(7), a.f(8)}, o, a.f(15), a[16].get<bool>());
+             floats(out, {ft.position.x, ft.position.y, ft.from.x, ft.from.y, ft.to.x, ft.to.y, ft.progress,
+                          landed ? 1.f : 0.f});
+         }},
+    };
+    return table;
 }
 
 // ---- Engine components ----
@@ -372,8 +433,8 @@ bool animService(const std::string& f, const json& a, json& out) {
 struct Codec {
     const char* name;
     bool (*has)(EntityId);
-    json (*read)(EntityId);
-    void (*write)(EntityId, const json&);
+    void (*read)(EntityId, Pack&);
+    void (*write)(EntityId, const Msg&);
     void (*remove)(EntityId);
     ComponentId (*id)();
 };
@@ -383,44 +444,54 @@ bool isShape(EntityId e, ShapeKind k) {
     return s && s->kind == k;
 }
 
-json readShape(EntityId e) {
+void readShape(EntityId e, Pack& p) {
     const Shape2D& s = *get<Shape2D>(e);
-    json j = {{"color", color(s.color)}, {"outline", s.outline}, {"z", s.zOrder},
-              {"layer", s.layer}, {"visible", s.visible}};
-    if (s.kind == ShapeKind::Rectangle) {
-        j["size"] = vec(s.size);
-        j["corner_radius"] = s.cornerRadius;
-        j["pivot"] = vec(s.anchor);
-    } else {
-        j["radius"] = s.radius;
-    }
-    return j;
+    p.object([&] {
+        p.key("color");
+        color(p, s.color);
+        p.kv("outline", s.outline);
+        p.kv("z", s.zOrder);
+        p.kv("layer", s.layer);
+        p.kv("visible", s.visible);
+        if (s.kind == ShapeKind::Rectangle) {
+            p.key("size");
+            vec(p, s.size);
+            p.kv("corner_radius", s.cornerRadius);
+            p.key("pivot");
+            vec(p, s.anchor);
+        } else {
+            p.kv("radius", s.radius);
+        }
+    });
 }
 
-void writeShape(EntityId e, const json& j, ShapeKind kind) {
+void writeShape(EntityId e, const Msg& j, ShapeKind kind) {
     Shape2D s;
     s.kind = kind;
-    s.size = vec(j.value("size", json()), {32, 32});
+    s.size = vec(j["size"], {32, 32});
     s.radius = j.value("radius", 16.f);
-    s.color = color(j.value("color", json()));
+    s.color = color(j["color"]);
     s.outline = j.value("outline", 0.f);
     s.cornerRadius = j.value("corner_radius", 0.f);
-    s.anchor = vec(j.value("pivot", json()), {0.5f, 0.5f});
+    s.anchor = vec(j["pivot"], {0.5f, 0.5f});
     s.zOrder = j.value("z", 0.f);
     s.layer = layer(j);
     s.visible = j.value("visible", true);
     put(e, s);
 }
 
-ColorF colorF(const json& j, ColorF fallback) {
+template <typename J> ColorF colorF(const J& j, ColorF fallback) {
     if (!j.is_object()) return fallback;
     return {j.value("r", 1.f), j.value("g", 1.f), j.value("b", 1.f), j.value("a", 1.f)};
 }
-json colorF(ColorF c) { return {{"r", c.r}, {"g", c.g}, {"b", c.b}, {"a", c.a}}; }
+void colorF(Pack& p, ColorF c) { p.object([&] { p.kv("r", c.r); p.kv("g", c.g); p.kv("b", c.b); p.kv("a", c.a); }); }
 
 const char* shapeNames[] = {"Point", "Circle", "Ring", "Box", "Line"};
 
-EmitterConfig emitterConfig(const json& j) {
+uint32_t idOf(const json& j) { return j.is_object() ? j.value("id", 0u) : 0u; }
+uint32_t idOf(const Msg& j) { return j.value("id", 0u); }
+
+template <typename J> EmitterConfig emitterConfig(const J& j) {
     EmitterConfig c;
     c.spawnRate = j.value("rate", 20.f);
     c.lifetime = {j.value("lifetime_min", 0.5f), j.value("lifetime_max", 1.5f)};
@@ -429,19 +500,19 @@ EmitterConfig emitterConfig(const json& j) {
     float s0 = j.value("size_start", 6.f), s1 = j.value("size_end", 1.f);
     c.sizeStart = {s0, s0};
     c.sizeEnd = {s1, s1};
-    c.colorStart = colorF(j.value("color_start", json()), {1, 1, 1, 1});
-    c.colorEnd = colorF(j.value("color_end", json()), {1, 1, 1, 0});
-    c.gravity = vec(j.value("gravity", json()));
+    c.colorStart = colorF(field(j, "color_start"), {1, 1, 1, 1});
+    c.colorEnd = colorF(field(j, "color_end"), {1, 1, 1, 0});
+    c.gravity = vec(field(j, "gravity"));
     c.drag = j.value("drag", 0.f);
     c.maxParticles = std::max(1, j.value("max_particles", 256));
-    c.blendMode = blend(j.value("blend", json()));
-    c.texture = TextureHandle{j.value("texture", json::object()).value("id", 0u)};
+    c.blendMode = blend(field(j, "blend"));
+    c.texture = TextureHandle{idOf(field(j, "texture"))};
     if (!c.texture.valid()) {
         if (auto* r = res<RendererResource>()) c.texture = r->whiteTexture();
     }
-    c.shape = pick<EmissionShape>(j.value("shape", json()), {"Point", "Circle", "Ring", "Box", "Line"});
+    c.shape = pick<EmissionShape>(field(j, "shape"), {"Point", "Circle", "Ring", "Box", "Line"});
     c.shapeRadius = j.value("shape_radius", 0.f);
-    c.shapeExtents = vec(j.value("shape_extents", json()));
+    c.shapeExtents = vec(field(j, "shape_extents"));
     c.duration = j.value("duration", -1.f);
     c.looping = j.value("looping", true);
     c.zOrder = j.value("z", 10.f);
@@ -449,52 +520,83 @@ EmitterConfig emitterConfig(const json& j) {
     float s0max = j.value("size_start_max", 0.f), s1max = j.value("size_end_max", 0.f);
     if (s0max > 0.f) c.sizeStart.max = s0max;
     if (s1max > 0.f) c.sizeEnd.max = s1max;
-    c.srcRect = rectJ(j.value("frame", json()));
+    c.srcRect = rectJ(field(j, "frame"));
     c.initialRotation = {j.value("rotation_min", 0.f), j.value("rotation_max", 0.f)};
     c.angularVelocity = {j.value("spin_min", 0.f), j.value("spin_max", 0.f)};
     c.velocityInheritance = j.value("inherit_velocity", 0.f);
     c.space = j.value("local", false) ? ParticleSpace::Local : ParticleSpace::World;
     c.preWarmTime = j.value("prewarm", 0.f);
-    Rect bounds = rectJ(j.value("bounds", json()));
+    Rect bounds = rectJ(field(j, "bounds"));
     if (bounds.w > 0.f && bounds.h > 0.f) {
         c.boundsMin = {bounds.x, bounds.y};
         c.boundsMax = {bounds.x + bounds.w, bounds.y + bounds.h};
     }
     c.seed = static_cast<uint32_t>(j.value("seed", int64_t(0)));
-    for (const auto& b : j.value("bursts", json::array())) {
+    forEach(field(j, "bursts"), [&](const auto& b) {
         c.bursts.push_back(BurstEntry{b.value("time", 0.f), b.value("count", 10), b.value("cycles", 1), b.value("interval", 0.f)});
-    }
+    });
     return c;
 }
 
-json emitterJson(const ParticleEmitter& pe) {
+void emitterJson(Pack& p, const ParticleEmitter& pe) {
     const EmitterConfig& c = pe.config;
     auto* r = res<RendererResource>();
     uint32_t tex = r && c.texture.id == r->whiteTexture().id ? 0u : c.texture.id;
-    json bursts = json::array();
-    for (const BurstEntry& b : c.bursts) {
-        bursts.push_back({{"time", b.time}, {"count", b.count}, {"cycles", b.cycles}, {"interval", b.interval}});
-    }
-    return json{{"rate", c.spawnRate}, {"lifetime_min", c.lifetime.min}, {"lifetime_max", c.lifetime.max},
-            {"speed_min", c.speed.min}, {"speed_max", c.speed.max}, {"angle_min", c.angle.min},
-            {"angle_max", c.angle.max}, {"size_start", c.sizeStart.min}, {"size_end", c.sizeEnd.min},
-            {"color_start", colorF(c.colorStart)}, {"color_end", colorF(c.colorEnd)},
-            {"gravity", vec(c.gravity)}, {"drag", c.drag}, {"max_particles", c.maxParticles},
-            {"blend", blendNames[int(c.blendMode)]}, {"texture", {{"id", tex}}},
-            {"shape", shapeNames[int(c.shape)]}, {"shape_radius", c.shapeRadius},
-            {"shape_extents", vec(c.shapeExtents)}, {"duration", c.duration}, {"looping", c.looping},
-            {"z", c.zOrder}, {"playing", pe.playing},
-            {"frame", rectJ(c.srcRect)},
-            {"size_start_max", c.sizeStart.max == c.sizeStart.min ? 0.f : c.sizeStart.max},
-            {"size_end_max", c.sizeEnd.max == c.sizeEnd.min ? 0.f : c.sizeEnd.max},
-            {"rotation_min", c.initialRotation.min}, {"rotation_max", c.initialRotation.max},
-            {"spin_min", c.angularVelocity.min}, {"spin_max", c.angularVelocity.max},
-            {"inherit_velocity", c.velocityInheritance}, {"local", c.space == ParticleSpace::Local},
-            {"prewarm", c.preWarmTime},
-            {"bounds", c.boundsMin.x == c.boundsMax.x && c.boundsMin.y == c.boundsMax.y ? rectJ(Rect{})
-                                                  : rectJ(Rect{c.boundsMin.x, c.boundsMin.y, c.boundsMax.x - c.boundsMin.x,
-                                                                c.boundsMax.y - c.boundsMin.y})},
-            {"seed", c.seed}, {"bursts", bursts}};
+    p.object([&] {
+        p.kv("rate", c.spawnRate);
+        p.kv("lifetime_min", c.lifetime.min);
+        p.kv("lifetime_max", c.lifetime.max);
+        p.kv("speed_min", c.speed.min);
+        p.kv("speed_max", c.speed.max);
+        p.kv("angle_min", c.angle.min);
+        p.kv("angle_max", c.angle.max);
+        p.kv("size_start", c.sizeStart.min);
+        p.kv("size_end", c.sizeEnd.min);
+        p.key("color_start");
+        colorF(p, c.colorStart);
+        p.key("color_end");
+        colorF(p, c.colorEnd);
+        p.key("gravity");
+        vec(p, c.gravity);
+        p.kv("drag", c.drag);
+        p.kv("max_particles", c.maxParticles);
+        p.kv("blend", blendNames[int(c.blendMode)]);
+        p.id("texture", tex);
+        p.kv("shape", shapeNames[int(c.shape)]);
+        p.kv("shape_radius", c.shapeRadius);
+        p.key("shape_extents");
+        vec(p, c.shapeExtents);
+        p.kv("duration", c.duration);
+        p.kv("looping", c.looping);
+        p.kv("z", c.zOrder);
+        p.kv("playing", pe.playing);
+        p.key("frame");
+        rectJ(p, c.srcRect);
+        p.kv("size_start_max", c.sizeStart.max == c.sizeStart.min ? 0.f : c.sizeStart.max);
+        p.kv("size_end_max", c.sizeEnd.max == c.sizeEnd.min ? 0.f : c.sizeEnd.max);
+        p.kv("rotation_min", c.initialRotation.min);
+        p.kv("rotation_max", c.initialRotation.max);
+        p.kv("spin_min", c.angularVelocity.min);
+        p.kv("spin_max", c.angularVelocity.max);
+        p.kv("inherit_velocity", c.velocityInheritance);
+        p.kv("local", c.space == ParticleSpace::Local);
+        p.kv("prewarm", c.preWarmTime);
+        p.key("bounds");
+        rectJ(p, c.boundsMin.x == c.boundsMax.x && c.boundsMin.y == c.boundsMax.y
+                     ? Rect{}
+                     : Rect{c.boundsMin.x, c.boundsMin.y, c.boundsMax.x - c.boundsMin.x, c.boundsMax.y - c.boundsMin.y});
+        p.kv("seed", c.seed);
+        p.key("bursts");
+        p.array(c.bursts.size());
+        for (const BurstEntry& b : c.bursts) {
+            p.object([&] {
+                p.kv("time", b.time);
+                p.kv("count", b.count);
+                p.kv("cycles", b.cycles);
+                p.kv("interval", b.interval);
+            });
+        }
+    });
 }
 
 const char* easeNames[] = {
@@ -504,7 +606,7 @@ const char* easeNames[] = {
     "InCirc", "OutCirc", "InOutCirc", "InBack", "OutBack", "InOutBack",
     "InElastic", "OutElastic", "InOutElastic", "InBounce", "OutBounce", "InOutBounce", "Spring"};
 
-Ease easeOf(const json& j) {
+Ease easeOf(const Msg& j) {
     std::string n = j.is_string() ? j.get<std::string>() : "Linear";
     for (int i = 0; i < int(Ease::Count_); ++i) {
         if (n == easeNames[i]) return static_cast<Ease>(i);
@@ -520,18 +622,19 @@ void stopTween(EntityId e) {
 }
 
 // Starts the tween a candela Tween value describes.
-void startTween(EntityId e, const json& j) {
+void startTween(EntityId e, const Msg& j) {
     // The same value written back while it runs leaves it running; once it
     // has finished, inserting it again plays it again.
     auto* tw = res<Tweens>();
     auto it = g_tweens.find(e);
-    if (it != g_tweens.end() && it->second.value == j && tw && tw->isActive(it->second.id)) return;
+    std::string_view bytes = j.bytes();
+    if (it != g_tweens.end() && it->second.value == bytes && tw && tw->isActive(it->second.id)) return;
     stopTween(e);
     if (!tw) return;
     TweenBuilder b = tw->on(e);
-    for (const auto& st : j.value("steps", json::array())) {
+    j["steps"].each([&](const Msg& st) {
         float a = st.value("a", 0.f), bb = st.value("b", 0.f), secs = st.value("seconds", 0.f);
-        Ease ez = easeOf(st.value("ease", json()));
+        Ease ez = easeOf(st["ease"]);
         switch (st.value("kind", 0)) {
             case 0: b.moveTo({a, bb}, secs, ez); break;
             case 1: b.moveBy({a, bb}, secs, ez); break;
@@ -543,19 +646,35 @@ void startTween(EntityId e, const json& j) {
             case 7: b.tintTo(Color{channel(a), channel(bb), channel(st.value("c", 0.0)), channel(st.value("d", 1.0))}, secs, ez); break;
             case 8: b.delay(secs); break;
         }
-    }
+    });
     int loops = j.value("loops", 0);
     if (loops != 0) b.loop(loops, j.value("mirror", false) ? TweenLoop::Yoyo : TweenLoop::Restart);
-    g_tweens[e] = {b.start(), j};
+    g_tweens[e] = {b.start(), std::string(bytes)};
 }
 
 // A collider's category and mask bits; out of range values keep the defaults.
-CollisionFilter filterOf(const json& j) {
+CollisionFilter filterOf(const Msg& j) {
     CollisionFilter f;
     int64_t cat = j.value("category", int64_t(1)), mask = j.value("mask", int64_t(0xFFFF));
     f.category = cat >= 0 && cat <= 0xFFFFFFFFll ? uint32_t(cat) : 1u;
     f.mask = mask >= 0 && mask <= 0xFFFFFFFFll ? uint32_t(mask) : 0xFFFFu;
     return f;
+}
+// The settings every collider has.
+template <typename C> void colliderJ(Pack& p, const C& c) {
+    p.kv("sensor", c.isSensor);
+    p.kv("density", c.density);
+    p.kv("friction", c.friction);
+    p.kv("restitution", c.restitution);
+    p.kv("category", c.filter.category);
+    p.kv("mask", c.filter.mask);
+}
+template <typename C> void colliderOf(const Msg& j, C& c) {
+    c.isSensor = j.value("sensor", false);
+    c.density = j.value("density", 1.f);
+    c.friction = j.value("friction", 0.3f);
+    c.restitution = j.value("restitution", 0.f);
+    c.filter = filterOf(j);
 }
 
 const char* jointKinds[] = {"Distance", "Revolute", "Prismatic", "Weld"};
@@ -567,220 +686,246 @@ std::vector<Codec> presentationCodecs();
 std::vector<Codec> effectCodecs();
 std::vector<Codec> animationCodecs();
 
+template <typename T> void removeIt(EntityId e) { world().removeComponent(e, cid<T>()); }
+template <typename T> ComponentId idOfC() { return cid<T>(); }
+template <typename T> bool hasIt(EntityId e) { return get<T>(e) != nullptr; }
+
 const std::vector<Codec>& codecs() {
     static const std::vector<Codec> list = [] {
     std::vector<Codec> l = {
-        {"Transform",
-         [](EntityId e) { return get<Transform2D>(e) != nullptr; },
-         [](EntityId e) {
+        {"Transform", hasIt<Transform2D>,
+         [](EntityId e, Pack& p) {
              const Transform2D& t = *get<Transform2D>(e);
-             return json{{"position", vec(t.position)}, {"rotation", t.rotation}, {"scale", vec(t.scale)}};
+             transformJ(p, t.position, t.rotation, t.scale);
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Transform2D t;
-             t.position = vec(j.value("position", json()));
+             t.position = vec(j["position"]);
              t.rotation = j.value("rotation", 0.f);
-             t.scale = vec(j.value("scale", json()), {1, 1});
+             t.scale = vec(j["scale"], {1, 1});
              put(e, t);
              teleport(e, t.position, t.rotation);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Transform2D>()); },
-         [] { return cid<Transform2D>(); }},
-        {"Sprite",
-         [](EntityId e) { return get<Sprite>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<Transform2D>, idOfC<Transform2D>},
+        {"Sprite", hasIt<Sprite>,
+         [](EntityId e, Pack& p) {
              const Sprite& s = *get<Sprite>(e);
              Vec2 size = s.srcRect.w > 0 ? Vec2{s.srcRect.w, s.srcRect.h} : textureSize(s.texture);
-             return json{{"image", {{"id", s.texture.id}}},
-                         {"frame", rectJ(s.srcRect)},
-                         {"pivot", vec(Vec2{size.x > 0 ? s.origin.x / size.x : 0.5f, size.y > 0 ? s.origin.y / size.y : 0.5f})},
-                         {"color", color(s.tint)},
-                         {"flip_x", (int(s.flip) & int(Flip::H)) != 0},
-                         {"flip_y", (int(s.flip) & int(Flip::V)) != 0},
-                         {"z", s.zOrder},
-                         {"layer", s.layer},
-                         {"visible", s.visible},
-                         {"blend", blendNames[int(s.blend)]},
-                         {"material", {{"id", s.material.id}}}};
+             p.object([&] {
+                 p.id("image", s.texture.id);
+                 p.key("frame");
+                 rectJ(p, s.srcRect);
+                 p.key("pivot");
+                 vec(p, Vec2{size.x > 0 ? s.origin.x / size.x : 0.5f, size.y > 0 ? s.origin.y / size.y : 0.5f});
+                 p.key("color");
+                 color(p, s.tint);
+                 p.kv("flip_x", (int(s.flip) & int(Flip::H)) != 0);
+                 p.kv("flip_y", (int(s.flip) & int(Flip::V)) != 0);
+                 p.kv("z", s.zOrder);
+                 p.kv("layer", s.layer);
+                 p.kv("visible", s.visible);
+                 p.kv("blend", blendNames[int(s.blend)]);
+                 p.id("material", s.material.id);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Sprite s;
-             s.material = MaterialHandle{j.value("material", json::object()).value("id", 0u)};
-             s.texture = TextureHandle{j.value("image", json::object()).value("id", 0u)};
-             s.srcRect = rectJ(j.value("frame", json()));
+             s.material = MaterialHandle{idOf(j["material"])};
+             s.texture = TextureHandle{idOf(j["image"])};
+             s.srcRect = rectJ(j["frame"]);
              Vec2 size = s.srcRect.w > 0 ? Vec2{s.srcRect.w, s.srcRect.h} : textureSize(s.texture);
-             Vec2 pivot = vec(j.value("pivot", json()), {0.5f, 0.5f});
+             Vec2 pivot = vec(j["pivot"], {0.5f, 0.5f});
              s.origin = {pivot.x * size.x, pivot.y * size.y};
-             s.tint = color(j.value("color", json()));
+             s.tint = color(j["color"]);
              int flip = (j.value("flip_x", false) ? int(Flip::H) : 0) | (j.value("flip_y", false) ? int(Flip::V) : 0);
              s.flip = static_cast<Flip>(flip);
              s.zOrder = j.value("z", 0.f);
              s.layer = layer(j);
              s.visible = j.value("visible", true);
-             s.blend = blend(j.value("blend", json()));
+             s.blend = blend(j["blend"]);
              put(e, s);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Sprite>()); },
-         [] { return cid<Sprite>(); }},
+         removeIt<Sprite>, idOfC<Sprite>},
         {"Rectangle",
          [](EntityId e) { return isShape(e, ShapeKind::Rectangle); },
          readShape,
-         [](EntityId e, const json& j) { writeShape(e, j, ShapeKind::Rectangle); },
-         [](EntityId e) { world().removeComponent(e, cid<Shape2D>()); },
-         [] { return cid<Shape2D>(); }},
+         [](EntityId e, const Msg& j) { writeShape(e, j, ShapeKind::Rectangle); },
+         removeIt<Shape2D>, idOfC<Shape2D>},
         {"Circle",
          [](EntityId e) { return isShape(e, ShapeKind::Circle); },
          readShape,
-         [](EntityId e, const json& j) { writeShape(e, j, ShapeKind::Circle); },
-         [](EntityId e) { world().removeComponent(e, cid<Shape2D>()); },
-         [] { return cid<Shape2D>(); }},
-        {"Text",
-         [](EntityId e) { return get<Text>(e) != nullptr; },
-         [](EntityId e) {
+         [](EntityId e, const Msg& j) { writeShape(e, j, ShapeKind::Circle); },
+         removeIt<Shape2D>, idOfC<Shape2D>},
+        {"Text", hasIt<Text>,
+         [](EntityId e, Pack& p) {
              const Text& t = *get<Text>(e);
-             return json{{"value", std::string(t.str())}, {"size", t.size}, {"color", color(t.color)},
-                         {"align", textAligns[int(t.align)]}, {"valign", textVAligns[int(t.valign)]},
-                         {"wrap_width", t.wrapWidth}, {"line_spacing", t.lineSpacing},
-                         {"outline", t.outlineWidth}, {"outline_color", color(t.outlineColor)},
-                         {"shadow_offset", vec(t.shadowOffset)}, {"shadow_color", color(t.shadowColor)},
-                         {"rich_text", t.richText}, {"font", {{"id", t.font.id}}},
-                         {"z", t.zOrder}, {"layer", t.layer}, {"visible", t.visible}};
+             p.object([&] {
+                 p.kv("value", std::string_view(t.str()));
+                 p.kv("size", t.size);
+                 p.key("color");
+                 color(p, t.color);
+                 p.kv("align", textAligns[int(t.align)]);
+                 p.kv("valign", textVAligns[int(t.valign)]);
+                 p.kv("wrap_width", t.wrapWidth);
+                 p.kv("line_spacing", t.lineSpacing);
+                 p.kv("outline", t.outlineWidth);
+                 p.key("outline_color");
+                 color(p, t.outlineColor);
+                 p.key("shadow_offset");
+                 vec(p, t.shadowOffset);
+                 p.key("shadow_color");
+                 color(p, t.shadowColor);
+                 p.kv("rich_text", t.richText);
+                 p.id("font", t.font.id);
+                 p.kv("z", t.zOrder);
+                 p.kv("layer", t.layer);
+                 p.kv("visible", t.visible);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Text t;
              t.set(j.value("value", ""));
              t.size = j.value("size", 24.f);
-             t.color = color(j.value("color", json()));
-             t.align = pick<TextAlign>(j.value("align", json()), {"Left", "Center", "Right"});
-             t.valign = pick<TextVAlign>(j.value("valign", json()), {"Top", "Middle", "Bottom"});
+             t.color = color(j["color"]);
+             t.align = pick<TextAlign>(j["align"], {"Left", "Center", "Right"});
+             t.valign = pick<TextVAlign>(j["valign"], {"Top", "Middle", "Bottom"});
              t.wrapWidth = j.value("wrap_width", 0.f);
              t.lineSpacing = j.value("line_spacing", 1.f);
              t.outlineWidth = j.value("outline", 0.f);
-             t.outlineColor = color(j.value("outline_color", json()), Color::black());
-             t.shadowOffset = vec(j.value("shadow_offset", json()));
-             t.shadowColor = color(j.value("shadow_color", json()), Color{0, 0, 0, 160});
+             t.outlineColor = color(j["outline_color"], Color::black());
+             t.shadowOffset = vec(j["shadow_offset"]);
+             t.shadowColor = color(j["shadow_color"], Color{0, 0, 0, 160});
              t.richText = j.value("rich_text", false);
-             t.font = FontHandle{j.value("font", json::object()).value("id", 0u)};
+             t.font = FontHandle{idOf(j["font"])};
              t.zOrder = j.value("z", 0.f);
              t.layer = layer(j);
              t.visible = j.value("visible", true);
              put(e, t);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Text>()); },
-         [] { return cid<Text>(); }},
-        {"Velocity",
-         [](EntityId e) { return get<Velocity2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<Text>, idOfC<Text>},
+        {"Velocity", hasIt<Velocity2D>,
+         [](EntityId e, Pack& p) {
              const Velocity2D& v = *get<Velocity2D>(e);
-             return json{{"linear", vec(v.linear)}, {"angular", v.angular}};
+             p.object([&] {
+                 p.key("linear");
+                 vec(p, v.linear);
+                 p.kv("angular", v.angular);
+             });
          },
-         [](EntityId e, const json& j) { put(e, Velocity2D{vec(j.value("linear", json())), j.value("angular", 0.f)}); },
-         [](EntityId e) { world().removeComponent(e, cid<Velocity2D>()); },
-         [] { return cid<Velocity2D>(); }},
-        {"RigidBody",
-         [](EntityId e) { return get<RigidBody2D>(e) != nullptr; },
-         [](EntityId e) {
+         [](EntityId e, const Msg& j) { put(e, Velocity2D{vec(j["linear"]), j.value("angular", 0.f)}); },
+         removeIt<Velocity2D>, idOfC<Velocity2D>},
+        {"RigidBody", hasIt<RigidBody2D>,
+         [](EntityId e, Pack& p) {
              const RigidBody2D& b = *get<RigidBody2D>(e);
-             return json{{"kind", name(b.type, {"Static", "Dynamic", "Kinematic"})},
-                         {"fixed_rotation", b.fixedRotation}, {"gravity_scale", b.gravityScale},
-                         {"linear_damping", b.linearDamping}, {"angular_damping", b.angularDamping}};
+             p.object([&] {
+                 p.kv("kind", name(b.type, {"Static", "Dynamic", "Kinematic"}));
+                 p.kv("fixed_rotation", b.fixedRotation);
+                 p.kv("gravity_scale", b.gravityScale);
+                 p.kv("linear_damping", b.linearDamping);
+                 p.kv("angular_damping", b.angularDamping);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              RigidBody2D b;
-             b.type = pick<BodyType>(j.value("kind", json()), {"Static", "Dynamic", "Kinematic"});
+             b.type = pick<BodyType>(j["kind"], {"Static", "Dynamic", "Kinematic"});
              b.fixedRotation = j.value("fixed_rotation", false);
              b.gravityScale = j.value("gravity_scale", 1.f);
              b.linearDamping = j.value("linear_damping", 0.f);
              b.angularDamping = j.value("angular_damping", 0.f);
              put(e, b);
          },
-         [](EntityId e) { world().removeComponent(e, cid<RigidBody2D>()); },
-         [] { return cid<RigidBody2D>(); }},
-        {"BoxCollider",
-         [](EntityId e) { return get<BoxCollider2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<RigidBody2D>, idOfC<RigidBody2D>},
+        {"BoxCollider", hasIt<BoxCollider2D>,
+         [](EntityId e, Pack& p) {
              const BoxCollider2D& c = *get<BoxCollider2D>(e);
-             return json{{"half_size", vec(c.halfSize)}, {"offset", vec(c.offset)}, {"sensor", c.isSensor},
-                         {"density", c.density}, {"friction", c.friction}, {"restitution", c.restitution},
-                         {"category", c.filter.category}, {"mask", c.filter.mask}};
+             p.object([&] {
+                 p.key("half_size");
+                 vec(p, c.halfSize);
+                 p.key("offset");
+                 vec(p, c.offset);
+                 colliderJ(p, c);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              BoxCollider2D c;
-             c.halfSize = vec(j.value("half_size", json()), {16, 16});
-             c.offset = vec(j.value("offset", json()));
-             c.isSensor = j.value("sensor", false);
-             c.density = j.value("density", 1.f);
-             c.friction = j.value("friction", 0.3f);
-             c.restitution = j.value("restitution", 0.f);
-             c.filter = filterOf(j);
+             c.halfSize = vec(j["half_size"], {16, 16});
+             c.offset = vec(j["offset"]);
+             colliderOf(j, c);
              put(e, c);
          },
-         [](EntityId e) { world().removeComponent(e, cid<BoxCollider2D>()); },
-         [] { return cid<BoxCollider2D>(); }},
-        {"CircleCollider",
-         [](EntityId e) { return get<CircleCollider2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<BoxCollider2D>, idOfC<BoxCollider2D>},
+        {"CircleCollider", hasIt<CircleCollider2D>,
+         [](EntityId e, Pack& p) {
              const CircleCollider2D& c = *get<CircleCollider2D>(e);
-             return json{{"radius", c.radius}, {"offset", vec(c.offset)}, {"sensor", c.isSensor},
-                         {"density", c.density}, {"friction", c.friction}, {"restitution", c.restitution},
-                         {"category", c.filter.category}, {"mask", c.filter.mask}};
+             p.object([&] {
+                 p.kv("radius", c.radius);
+                 p.key("offset");
+                 vec(p, c.offset);
+                 colliderJ(p, c);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              CircleCollider2D c;
              c.radius = j.value("radius", 16.f);
-             c.offset = vec(j.value("offset", json()));
-             c.isSensor = j.value("sensor", false);
-             c.density = j.value("density", 1.f);
-             c.friction = j.value("friction", 0.3f);
-             c.restitution = j.value("restitution", 0.f);
-             c.filter = filterOf(j);
+             c.offset = vec(j["offset"]);
+             colliderOf(j, c);
              put(e, c);
          },
-         [](EntityId e) { world().removeComponent(e, cid<CircleCollider2D>()); },
-         [] { return cid<CircleCollider2D>(); }},
-        {"TextureCollider",
-         [](EntityId e) { return get<TextureCollider2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<CircleCollider2D>, idOfC<CircleCollider2D>},
+        {"TextureCollider", hasIt<TextureCollider2D>,
+         [](EntityId e, Pack& p) {
              const TextureCollider2D& c = *get<TextureCollider2D>(e);
-             return json{{"threshold", c.threshold}, {"tolerance", c.tolerance}, {"min_area", c.minArea},
-                         {"follow_sprite", c.followSprite}, {"sensor", c.isSensor}, {"density", c.density},
-                         {"friction", c.friction}, {"restitution", c.restitution},
-                         {"category", c.filter.category}, {"mask", c.filter.mask}};
+             p.object([&] {
+                 p.kv("threshold", c.threshold);
+                 p.kv("tolerance", c.tolerance);
+                 p.kv("min_area", c.minArea);
+                 p.kv("follow_sprite", c.followSprite);
+                 colliderJ(p, c);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              TextureCollider2D c;
              c.threshold = j.value("threshold", 0.5f);
              c.tolerance = j.value("tolerance", 1.f);
              c.minArea = j.value("min_area", 4.f);
              c.followSprite = j.value("follow_sprite", false);
-             c.isSensor = j.value("sensor", false);
-             c.density = j.value("density", 1.f);
-             c.friction = j.value("friction", 0.3f);
-             c.restitution = j.value("restitution", 0.f);
-             c.filter = filterOf(j);
+             colliderOf(j, c);
              put(e, c);
          },
-         [](EntityId e) { world().removeComponent(e, cid<TextureCollider2D>()); },
-         [] { return cid<TextureCollider2D>(); }},
-        {"Joint",
-         [](EntityId e) { return get<Joint2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<TextureCollider2D>, idOfC<TextureCollider2D>},
+        {"Joint", hasIt<Joint2D>,
+         [](EntityId e, Pack& p) {
              const Joint2D& j = *get<Joint2D>(e);
-             return json{{"kind", jointKinds[int(j.type)]}, {"target", {{"id", j.target}}},
-                         {"anchor", vec(j.anchor)}, {"target_anchor", vec(j.targetAnchor)},
-                         {"length", j.length}, {"min_length", j.minLength}, {"max_length", j.maxLength},
-                         {"stiffness", j.stiffness}, {"damping", j.damping}, {"limit", j.limit},
-                         {"lower", j.lower}, {"upper", j.upper}, {"motor", j.motor},
-                         {"motor_speed", j.motorSpeed}, {"max_motor_force", j.maxMotorForce},
-                         {"axis", vec(j.axis)}, {"collide_connected", j.collideConnected}};
+             p.object([&] {
+                 p.kv("kind", jointKinds[int(j.type)]);
+                 p.id("target", j.target);
+                 p.key("anchor");
+                 vec(p, j.anchor);
+                 p.key("target_anchor");
+                 vec(p, j.targetAnchor);
+                 p.kv("length", j.length);
+                 p.kv("min_length", j.minLength);
+                 p.kv("max_length", j.maxLength);
+                 p.kv("stiffness", j.stiffness);
+                 p.kv("damping", j.damping);
+                 p.kv("limit", j.limit);
+                 p.kv("lower", j.lower);
+                 p.kv("upper", j.upper);
+                 p.kv("motor", j.motor);
+                 p.kv("motor_speed", j.motorSpeed);
+                 p.kv("max_motor_force", j.maxMotorForce);
+                 p.key("axis");
+                 vec(p, j.axis);
+                 p.kv("collide_connected", j.collideConnected);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Joint2D d;
-             d.type = pick<JointType>(j.value("kind", json()), {"Distance", "Revolute", "Prismatic", "Weld"});
-             d.target = j.value("target", json::object()).value("id", EntityId(0));
+             d.type = pick<JointType>(j["kind"], {"Distance", "Revolute", "Prismatic", "Weld"});
+             d.target = j["target"].value("id", EntityId(0));
              if (d.target == 0) d.target = InvalidEntityId;
-             d.anchor = vec(j.value("anchor", json()));
-             d.targetAnchor = vec(j.value("target_anchor", json()));
+             d.anchor = vec(j["anchor"]);
+             d.targetAnchor = vec(j["target_anchor"]);
              d.length = j.value("length", 0.f);
              d.minLength = j.value("min_length", 0.f);
              d.maxLength = j.value("max_length", 0.f);
@@ -792,28 +937,35 @@ const std::vector<Codec>& codecs() {
              d.motor = j.value("motor", false);
              d.motorSpeed = j.value("motor_speed", 0.f);
              d.maxMotorForce = j.value("max_motor_force", 0.f);
-             d.axis = vec(j.value("axis", json()), {1, 0});
+             d.axis = vec(j["axis"], {1, 0});
              d.collideConnected = j.value("collide_connected", false);
              put(e, d);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Joint2D>()); },
-         [] { return cid<Joint2D>(); }},
-        {"AudioSource",
-         [](EntityId e) { return get<AudioSource>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<Joint2D>, idOfC<Joint2D>},
+        {"AudioSource", hasIt<AudioSource>,
+         [](EntityId e, Pack& p) {
              const AudioSource& a = *get<AudioSource>(e);
-             return json{{"sound", {{"id", a.sound.id}}}, {"bus", {{"id", a.bus.id}}}, {"volume", a.volume},
-                         {"pitch", a.pitch}, {"looping", a.loop}, {"autoplay", a.autoplay},
-                         {"spatial", a.spatial}, {"min_distance", a.minDistance},
-                         {"max_distance", a.maxDistance}, {"rolloff", a.rolloff == Rolloff::Inverse ? "Inverse" : "Linear"},
-                         {"priority", a.priority}, {"play", a.playRequested}};
+             p.object([&] {
+                 p.id("sound", a.sound.id);
+                 p.id("bus", a.bus.id);
+                 p.kv("volume", a.volume);
+                 p.kv("pitch", a.pitch);
+                 p.kv("looping", a.loop);
+                 p.kv("autoplay", a.autoplay);
+                 p.kv("spatial", a.spatial);
+                 p.kv("min_distance", a.minDistance);
+                 p.kv("max_distance", a.maxDistance);
+                 p.kv("rolloff", a.rolloff == Rolloff::Inverse ? "Inverse" : "Linear");
+                 p.kv("priority", a.priority);
+                 p.kv("play", a.playRequested);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              AudioSource a;
              const AudioSource* cur = get<AudioSource>(e);
              if (cur) a = *cur;   // keeps the playback the engine started
-             a.sound = SoundHandle{j.value("sound", json::object()).value("id", 0u)};
-             a.bus = BusHandle{j.value("bus", json::object()).value("id", 0u)};
+             a.sound = SoundHandle{idOf(j["sound"])};
+             a.bus = BusHandle{idOf(j["bus"])};
              a.volume = j.value("volume", 1.f);
              a.pitch = j.value("pitch", 1.f);
              a.loop = j.value("looping", false);
@@ -821,141 +973,143 @@ const std::vector<Codec>& codecs() {
              a.spatial = j.value("spatial", false);
              a.minDistance = j.value("min_distance", 64.f);
              a.maxDistance = j.value("max_distance", 1024.f);
-             a.rolloff = pick<Rolloff>(j.value("rolloff", json()), {"Linear", "Inverse"});
+             a.rolloff = pick<Rolloff>(j["rolloff"], {"Linear", "Inverse"});
              a.priority = j.value("priority", 0);
              a.playRequested = j.value("play", false) || (cur && cur->sound != a.sound);
              put(e, a);
          },
-         [](EntityId e) { world().removeComponent(e, cid<AudioSource>()); },
-         [] { return cid<AudioSource>(); }},
-        {"SpatialBounds",
-         [](EntityId e) { return get<SpatialBounds>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<AudioSource>, idOfC<AudioSource>},
+        {"SpatialBounds", hasIt<SpatialBounds>,
+         [](EntityId e, Pack& p) {
              const SpatialBounds& b = *get<SpatialBounds>(e);
-             return json{{"half_size", vec(b.halfSize)}, {"offset", vec(b.offset)}};
+             p.object([&] {
+                 p.key("half_size");
+                 vec(p, b.halfSize);
+                 p.key("offset");
+                 vec(p, b.offset);
+             });
          },
-         [](EntityId e, const json& j) { put(e, SpatialBounds{vec(j.value("half_size", json())), vec(j.value("offset", json()))}); },
-         [](EntityId e) { world().removeComponent(e, cid<SpatialBounds>()); },
-         [] { return cid<SpatialBounds>(); }},
-        {"AudioListener",
-         [](EntityId e) { return get<AudioListener>(e) != nullptr; },
-         [](EntityId e) { return json{{"active", get<AudioListener>(e)->active}}; },
-         [](EntityId e, const json& j) { put(e, AudioListener{j.value("active", true)}); },
-         [](EntityId e) { world().removeComponent(e, cid<AudioListener>()); },
-         [] { return cid<AudioListener>(); }},
-        {"Lifetime",
-         [](EntityId e) { return get<Lifetime>(e) != nullptr; },
-         [](EntityId e) { return json{{"seconds", get<Lifetime>(e)->seconds}}; },
-         [](EntityId e, const json& j) { put(e, Lifetime{j.value("seconds", 1.f)}); },
-         [](EntityId e) { world().removeComponent(e, cid<Lifetime>()); },
-         [] { return cid<Lifetime>(); }},
-        {"Oscillate",
-         [](EntityId e) { return get<Oscillate>(e) != nullptr; },
-         [](EntityId e) {
+         [](EntityId e, const Msg& j) { put(e, SpatialBounds{vec(j["half_size"]), vec(j["offset"])}); },
+         removeIt<SpatialBounds>, idOfC<SpatialBounds>},
+        {"AudioListener", hasIt<AudioListener>,
+         [](EntityId e, Pack& p) { p.object([&] { p.kv("active", get<AudioListener>(e)->active); }); },
+         [](EntityId e, const Msg& j) { put(e, AudioListener{j.value("active", true)}); },
+         removeIt<AudioListener>, idOfC<AudioListener>},
+        {"Lifetime", hasIt<Lifetime>,
+         [](EntityId e, Pack& p) { p.object([&] { p.kv("seconds", get<Lifetime>(e)->seconds); }); },
+         [](EntityId e, const Msg& j) { put(e, Lifetime{j.value("seconds", 1.f)}); },
+         removeIt<Lifetime>, idOfC<Lifetime>},
+        {"Oscillate", hasIt<Oscillate>,
+         [](EntityId e, Pack& p) {
              const Oscillate& o = *get<Oscillate>(e);
-             return json{{"amplitude", vec(o.amplitude)}, {"frequency", o.frequency}, {"phase", o.phase}};
+             p.object([&] {
+                 p.key("amplitude");
+                 vec(p, o.amplitude);
+                 p.kv("frequency", o.frequency);
+                 p.kv("phase", o.phase);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Oscillate o;
              if (const Oscillate* cur = get<Oscillate>(e)) o = *cur;
-             o.amplitude = vec(j.value("amplitude", json()), {0, 8});
+             o.amplitude = vec(j["amplitude"], {0, 8});
              o.frequency = j.value("frequency", 1.f);
              o.phase = j.value("phase", 0.f);
              put(e, o);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Oscillate>()); },
-         [] { return cid<Oscillate>(); }},
-        {"Follow",
-         [](EntityId e) { return get<Follow>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<Oscillate>, idOfC<Oscillate>},
+        {"Follow", hasIt<Follow>,
+         [](EntityId e, Pack& p) {
              const Follow& f = *get<Follow>(e);
-             return json{{"target", {{"id", f.target == InvalidEntityId ? 0 : f.target}}}, {"speed", f.speed},
-                         {"distance", f.distance}, {"offset", vec(f.offset)}};
+             p.object([&] {
+                 p.id("target", f.target == InvalidEntityId ? 0 : f.target);
+                 p.kv("speed", f.speed);
+                 p.kv("distance", f.distance);
+                 p.key("offset");
+                 vec(p, f.offset);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Follow f;
-             EntityId t = j.value("target", json::object()).value("id", EntityId(0));
+             EntityId t = j["target"].value("id", EntityId(0));
              f.target = t == 0 ? InvalidEntityId : t;
              f.speed = j.value("speed", 100.f);
              f.distance = j.value("distance", 0.f);
-             f.offset = vec(j.value("offset", json()));
+             f.offset = vec(j["offset"]);
              put(e, f);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Follow>()); },
-         [] { return cid<Follow>(); }},
-        {"Orbit",
-         [](EntityId e) { return get<Orbit>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<Follow>, idOfC<Follow>},
+        {"Orbit", hasIt<Orbit>,
+         [](EntityId e, Pack& p) {
              const Orbit& o = *get<Orbit>(e);
-             return json{{"center", {{"id", o.center == InvalidEntityId ? 0 : o.center}}}, {"point", vec(o.point)},
-                         {"radius", o.radius}, {"speed", o.speed}, {"angle", o.angle}};
+             p.object([&] {
+                 p.id("center", o.center == InvalidEntityId ? 0 : o.center);
+                 p.key("point");
+                 vec(p, o.point);
+                 p.kv("radius", o.radius);
+                 p.kv("speed", o.speed);
+                 p.kv("angle", o.angle);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Orbit o;
-             EntityId c = j.value("center", json::object()).value("id", EntityId(0));
+             EntityId c = j["center"].value("id", EntityId(0));
              o.center = c == 0 ? InvalidEntityId : c;
-             o.point = vec(j.value("point", json()));
+             o.point = vec(j["point"]);
              o.radius = j.value("radius", 64.f);
              o.speed = j.value("speed", 1.f);
              o.angle = j.value("angle", 0.f);
              put(e, o);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Orbit>()); },
-         [] { return cid<Orbit>(); }},
-        {"ParticleEmitter",
-         [](EntityId e) { return get<ParticleEmitter>(e) != nullptr; },
-         [](EntityId e) { return emitterJson(*get<ParticleEmitter>(e)); },
-         [](EntityId e, const json& j) {
+         removeIt<Orbit>, idOfC<Orbit>},
+        {"ParticleEmitter", hasIt<ParticleEmitter>,
+         [](EntityId e, Pack& p) { emitterJson(p, *get<ParticleEmitter>(e)); },
+         [](EntityId e, const Msg& j) {
              ParticleEmitter pe;
              pe.config = emitterConfig(j);
              pe.playing = j.value("playing", true);
              put(e, pe);
          },
-         [](EntityId e) { world().removeComponent(e, cid<ParticleEmitter>()); },
-         [] { return cid<ParticleEmitter>(); }},
+         removeIt<ParticleEmitter>, idOfC<ParticleEmitter>},
         {"Tween",
          [](EntityId e) { return g_tweens.count(e) > 0; },
-         [](EntityId e) { return g_tweens.at(e).value; },
-         [](EntityId e, const json& j) { startTween(e, j); },
+         [](EntityId e, Pack& p) { p.raw(g_tweens.at(e).value); },
+         [](EntityId e, const Msg& j) { startTween(e, j); },
          [](EntityId e) { stopTween(e); },
-         [] { return cid<Transform2D>(); }},
-        {"Name",
-         [](EntityId e) { return get<Name>(e) != nullptr; },
-         [](EntityId e) { return json{{"value", std::string(get<Name>(e)->value)}}; },
-         [](EntityId e, const json& j) {
+         idOfC<Transform2D>},
+        {"Name", hasIt<Name>,
+         [](EntityId e, Pack& p) { p.object([&] { p.kv("value", std::string_view(get<Name>(e)->value)); }); },
+         [](EntityId e, const Msg& j) {
              Name n;
              std::string v = j.value("value", "");
              std::snprintf(n.value, sizeof(n.value), "%s", v.c_str());
              put(e, n);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Name>()); },
-         [] { return cid<Name>(); }},
-        {"Tilemap",
-         [](EntityId e) { return get<Tilemap>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<Name>, idOfC<Name>},
+        {"Tilemap", hasIt<Tilemap>,
+         [](EntityId e, Pack& p) {
              const Tilemap& t = *get<Tilemap>(e);
-             return json{{"map", {{"id", t.map.id}}}, {"z", t.zOrder}, {"layer", t.renderLayer},
-                         {"colliders", t.colliders}, {"visible", t.visible}};
+             p.object([&] {
+                 p.id("map", t.map.id);
+                 p.kv("z", t.zOrder);
+                 p.kv("layer", t.renderLayer);
+                 p.kv("colliders", t.colliders);
+                 p.kv("visible", t.visible);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              Tilemap t;
              if (const Tilemap* cur = get<Tilemap>(e)) t = *cur;
-             t.map = TilemapHandle{j.value("map", json::object()).value("id", 0u)};
+             t.map = TilemapHandle{idOf(j["map"])};
              t.zOrder = j.value("z", 0.f);
              t.renderLayer = layer(j);
              t.colliders = j.value("colliders", true);
              t.visible = j.value("visible", true);
              put(e, t);
          },
-         [](EntityId e) { world().removeComponent(e, cid<Tilemap>()); },
-         [] { return cid<Tilemap>(); }},
-        {"Parent", hasParent, readParent, writeParent, removeParentKeepingPlace, [] { return cid<Parent>(); }},
-        {"GlobalTransform",
-         [](EntityId e) { return get<Transform2D>(e) != nullptr; },
-         readGlobal,
-         writeGlobal,
-         [](EntityId) {},
-         [] { return cid<Transform2D>(); }},
+         removeIt<Tilemap>, idOfC<Tilemap>},
+        {"Parent", hasParent, readParent, writeParent, removeParentKeepingPlace, idOfC<Parent>},
+        {"GlobalTransform", hasIt<Transform2D>, readGlobal, writeGlobal, [](EntityId) {}, idOfC<Transform2D>},
     };
     for (Codec& c : presentationCodecs()) l.push_back(c);
     for (Codec& c : effectCodecs()) l.push_back(c);
@@ -1329,23 +1483,22 @@ bool procgen(const std::string& f, const json& a, json& out) {
 
 json entityJ(EntityId e) { return {{"id", e}}; }
 EntityId entityOf(const json& j) { return j.is_object() ? j.value("id", EntityId(0)) : EntityId(0); }
-uint32_t idOf(const json& j) { return j.is_object() ? j.value("id", 0u) : 0u; }
 uint32_t maskOf(const json& j) { return static_cast<uint32_t>(j.value("layer_mask", int64_t(AllWorldLayers))); }
 float num(const json& a, size_t i, float fallback = 0.f) {
     return i < a.size() && a[i].is_number() ? a[i].get<float>() : fallback;
 }
 
-Camera cameraOf(const json& j) {
+Camera cameraOf(const Msg& j) {
     Camera c;
     c.zoom = j.value("zoom", 1.f);
     c.rotation = j.value("rotation", 0.f);
     c.active = j.value("active", true);
     c.viewport = j.contains("viewport") ? rectJ(j["viewport"]) : Rect{0.f, 0.f, 1.f, 1.f};
     c.order = j.value("order", 0);
-    c.layerMask = maskOf(j);
-    c.target = TextureHandle{idOf(j.value("target", json()))};
+    c.layerMask = static_cast<uint32_t>(j.value("layer_mask", int64_t(AllWorldLayers)));
+    c.target = TextureHandle{idOf(j["target"])};
     c.clear = j.value("clear", false);
-    c.clearColor = colorF(j.value("clear_color", json()), {0.f, 0.f, 0.f, 1.f});
+    c.clearColor = colorF(j["clear_color"], {0.f, 0.f, 0.f, 1.f});
     return c;
 }
 
@@ -1370,40 +1523,55 @@ CameraHandle viewOf(EntityId e) {
 
 std::vector<Codec> presentationCodecs() {
     return {
-        {"Camera",
-         [](EntityId e) { return get<Camera>(e) != nullptr; },
-         [](EntityId e) {
+        {"Camera", hasIt<Camera>,
+         [](EntityId e, Pack& p) {
              const Camera& c = *get<Camera>(e);
-             return json{{"zoom", c.zoom}, {"rotation", c.rotation}, {"active", c.active},
-                         {"viewport", rectJ(c.viewport)}, {"order", c.order}, {"layer_mask", c.layerMask},
-                         {"target", {{"id", c.target.id}}}, {"clear", c.clear}, {"clear_color", colorF(c.clearColor)}};
+             p.object([&] {
+                 p.kv("zoom", c.zoom);
+                 p.kv("rotation", c.rotation);
+                 p.kv("active", c.active);
+                 p.key("viewport");
+                 rectJ(p, c.viewport);
+                 p.kv("order", c.order);
+                 p.kv("layer_mask", c.layerMask);
+                 p.id("target", c.target.id);
+                 p.kv("clear", c.clear);
+                 p.key("clear_color");
+                 colorF(p, c.clearColor);
+             });
          },
-         [](EntityId e, const json& j) { put(e, cameraOf(j)); },
-         [](EntityId e) { world().removeComponent(e, cid<Camera>()); },
-         [] { return cid<Camera>(); }},
-        {"CameraFollow",
-         [](EntityId e) { return get<CameraFollow>(e) != nullptr; },
-         [](EntityId e) {
+         [](EntityId e, const Msg& j) { put(e, cameraOf(j)); },
+         removeIt<Camera>, idOfC<Camera>},
+        {"CameraFollow", hasIt<CameraFollow>,
+         [](EntityId e, Pack& p) {
              const CameraFollow& f = *get<CameraFollow>(e);
-             return json{{"target", entityJ(f.target)}, {"smoothing", f.smoothing}, {"offset", vec(f.offset)},
-                         {"dead_zone", vec(f.deadZone)}};
+             p.object([&] {
+                 p.id("target", f.target);
+                 p.kv("smoothing", f.smoothing);
+                 p.key("offset");
+                 vec(p, f.offset);
+                 p.key("dead_zone");
+                 vec(p, f.deadZone);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              CameraFollow f;
-             f.target = entityOf(j.value("target", json()));
+             f.target = j["target"].value("id", EntityId(0));
              f.smoothing = j.value("smoothing", 5.f);
-             f.offset = vec(j.value("offset", json()));
-             f.deadZone = vec(j.value("dead_zone", json()));
+             f.offset = vec(j["offset"]);
+             f.deadZone = vec(j["dead_zone"]);
              put(e, f);
          },
-         [](EntityId e) { world().removeComponent(e, cid<CameraFollow>()); },
-         [] { return cid<CameraFollow>(); }},
-        {"CameraBounds",
-         [](EntityId e) { return get<CameraBounds>(e) != nullptr; },
-         [](EntityId e) { return json{{"area", rectJ(get<CameraBounds>(e)->area)}}; },
-         [](EntityId e, const json& j) { put(e, CameraBounds{rectJ(j.value("area", json()))}); },
-         [](EntityId e) { world().removeComponent(e, cid<CameraBounds>()); },
-         [] { return cid<CameraBounds>(); }},
+         removeIt<CameraFollow>, idOfC<CameraFollow>},
+        {"CameraBounds", hasIt<CameraBounds>,
+         [](EntityId e, Pack& p) {
+             p.object([&] {
+                 p.key("area");
+                 rectJ(p, get<CameraBounds>(e)->area);
+             });
+         },
+         [](EntityId e, const Msg& j) { put(e, CameraBounds{rectJ(j["area"])}); },
+         removeIt<CameraBounds>, idOfC<CameraBounds>},
     };
 }
 
@@ -1925,43 +2093,54 @@ bool effectSettings(const json& j, PostEffectParams& out) {
     return true;
 }
 
-json lightJ(ColorF color, float intensity, float radius, float falloff, bool shadows, uint32_t mask) {
-    return {{"color", colorF(color)}, {"intensity", intensity}, {"radius", radius}, {"falloff", falloff},
-            {"shadows", shadows}, {"layer_mask", mask}};
+void lightJ(Pack& p, ColorF color, float intensity, float radius, float falloff, bool shadows, uint32_t mask) {
+    p.key("color");
+    colorF(p, color);
+    p.kv("intensity", intensity);
+    p.kv("radius", radius);
+    p.kv("falloff", falloff);
+    p.kv("shadows", shadows);
+    p.kv("layer_mask", mask);
 }
+uint32_t maskOf(const Msg& j) { return static_cast<uint32_t>(j.value("layer_mask", int64_t(AllWorldLayers))); }
 
 std::vector<Codec> effectCodecs() {
     return {
-        {"Trail",
-         [](EntityId e) { return get<TrailRenderer>(e) != nullptr; },
-         [](EntityId e) {
+        {"Trail", hasIt<TrailRenderer>,
+         [](EntityId e, Pack& p) {
              const TrailRenderer& t = *get<TrailRenderer>(e);
-             return json{{"width", t.width}, {"lifetime", t.lifetime}, {"color_start", colorF(t.colorStart)},
-                         {"color_end", colorF(t.colorEnd)}, {"min_distance", t.minDistance},
-                         {"max_points", t.maxPoints}, {"z", t.zOrder}};
+             p.object([&] {
+                 p.kv("width", t.width);
+                 p.kv("lifetime", t.lifetime);
+                 p.key("color_start");
+                 colorF(p, t.colorStart);
+                 p.key("color_end");
+                 colorF(p, t.colorEnd);
+                 p.kv("min_distance", t.minDistance);
+                 p.kv("max_points", t.maxPoints);
+                 p.kv("z", t.zOrder);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              TrailRenderer t;
              t.width = j.value("width", 4.f);
              t.lifetime = j.value("lifetime", 0.5f);
-             t.colorStart = colorF(j.value("color_start", json()), {1, 1, 1, 1});
-             t.colorEnd = colorF(j.value("color_end", json()), {1, 1, 1, 0});
+             t.colorStart = colorF(j["color_start"], {1, 1, 1, 1});
+             t.colorEnd = colorF(j["color_end"], {1, 1, 1, 0});
              t.minDistance = j.value("min_distance", 2.f);
              t.maxPoints = std::max(2, j.value("max_points", 64));
              t.zOrder = j.value("z", -1.f);
              put(e, t);
          },
-         [](EntityId e) { world().removeComponent(e, cid<TrailRenderer>()); },
-         [] { return cid<TrailRenderer>(); }},
-        {"PointLight",
-         [](EntityId e) { return get<PointLight2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<TrailRenderer>, idOfC<TrailRenderer>},
+        {"PointLight", hasIt<PointLight2D>,
+         [](EntityId e, Pack& p) {
              const PointLight2D& l = *get<PointLight2D>(e);
-             return lightJ(l.color, l.intensity, l.radius, l.falloff, l.castShadows, l.layerMask);
+             p.object([&] { lightJ(p, l.color, l.intensity, l.radius, l.falloff, l.castShadows, l.layerMask); });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              PointLight2D l;
-             l.color = colorF(j.value("color", json()), {1, 1, 1, 1});
+             l.color = colorF(j["color"], {1, 1, 1, 1});
              l.intensity = j.value("intensity", 1.f);
              l.radius = j.value("radius", 200.f);
              l.falloff = j.value("falloff", 2.f);
@@ -1969,21 +2148,20 @@ std::vector<Codec> effectCodecs() {
              l.layerMask = maskOf(j);
              put(e, l);
          },
-         [](EntityId e) { world().removeComponent(e, cid<PointLight2D>()); },
-         [] { return cid<PointLight2D>(); }},
-        {"SpotLight",
-         [](EntityId e) { return get<SpotLight2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<PointLight2D>, idOfC<PointLight2D>},
+        {"SpotLight", hasIt<SpotLight2D>,
+         [](EntityId e, Pack& p) {
              const SpotLight2D& l = *get<SpotLight2D>(e);
-             json j = lightJ(l.color, l.intensity, l.radius, l.falloff, l.castShadows, l.layerMask);
-             j["direction"] = l.direction;
-             j["angle"] = l.angle;
-             j["softness"] = l.softness;
-             return j;
+             p.object([&] {
+                 lightJ(p, l.color, l.intensity, l.radius, l.falloff, l.castShadows, l.layerMask);
+                 p.kv("direction", l.direction);
+                 p.kv("angle", l.angle);
+                 p.kv("softness", l.softness);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              SpotLight2D l;
-             l.color = colorF(j.value("color", json()), {1, 1, 1, 1});
+             l.color = colorF(j["color"], {1, 1, 1, 1});
              l.intensity = j.value("intensity", 1.f);
              l.radius = j.value("radius", 300.f);
              l.falloff = j.value("falloff", 2.f);
@@ -1994,34 +2172,38 @@ std::vector<Codec> effectCodecs() {
              l.layerMask = maskOf(j);
              put(e, l);
          },
-         [](EntityId e) { world().removeComponent(e, cid<SpotLight2D>()); },
-         [] { return cid<SpotLight2D>(); }},
-        {"LightOccluder",
-         [](EntityId e) { return get<LightOccluder2D>(e) != nullptr; },
-         [](EntityId e) {
+         removeIt<SpotLight2D>, idOfC<SpotLight2D>},
+        {"LightOccluder", hasIt<LightOccluder2D>,
+         [](EntityId e, Pack& p) {
              const LightOccluder2D& o = *get<LightOccluder2D>(e);
-             json points = json::array();
-             for (int i = 0; i < o.pointCount; ++i) points.push_back(vec(o.points[i]));
-             return json{{"shape", name(o.shape, {"Box", "Circle", "Polygon", "FromCollider"})},
-                         {"half_size", vec(o.halfSize)}, {"radius", o.radius}, {"points", points},
-                         {"offset", vec(o.offset)}, {"shadow_self", o.shadowSelf}, {"layer_mask", o.layerMask}};
+             p.object([&] {
+                 p.kv("shape", name(o.shape, {"Box", "Circle", "Polygon", "FromCollider"}));
+                 p.key("half_size");
+                 vec(p, o.halfSize);
+                 p.kv("radius", o.radius);
+                 p.key("points");
+                 p.array(static_cast<size_t>(o.pointCount));
+                 for (int i = 0; i < o.pointCount; ++i) vec(p, o.points[i]);
+                 p.key("offset");
+                 vec(p, o.offset);
+                 p.kv("shadow_self", o.shadowSelf);
+                 p.kv("layer_mask", o.layerMask);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              LightOccluder2D o;
-             o.shape = pick<OccluderShape>(j.value("shape", json()), {"Box", "Circle", "Polygon", "FromCollider"});
-             o.halfSize = vec(j.value("half_size", json()), {16.f, 16.f});
+             o.shape = pick<OccluderShape>(j["shape"], {"Box", "Circle", "Polygon", "FromCollider"});
+             o.halfSize = vec(j["half_size"], {16.f, 16.f});
              o.radius = j.value("radius", 16.f);
-             for (const auto& p : j.value("points", json::array())) {
-                 if (o.pointCount >= LightOccluder2D::kMaxPoints) break;
-                 o.points[o.pointCount++] = vec(p);
-             }
-             o.offset = vec(j.value("offset", json()));
+             j["points"].each([&](const Msg& pt) {
+                 if (o.pointCount < LightOccluder2D::kMaxPoints) o.points[o.pointCount++] = vec(pt);
+             });
+             o.offset = vec(j["offset"]);
              o.shadowSelf = j.value("shadow_self", false);
              o.layerMask = maskOf(j);
              put(e, o);
          },
-         [](EntityId e) { world().removeComponent(e, cid<LightOccluder2D>()); },
-         [] { return cid<LightOccluder2D>(); }},
+         removeIt<LightOccluder2D>, idOfC<LightOccluder2D>},
     };
 }
 
@@ -2268,23 +2450,45 @@ void showStartError(const char* text) {
 
 // The script's Spritesheet value for each sheet made here, by sheet id, so a
 // clip read back carries the same sheet the script made it from.
-std::unordered_map<uint32_t, json>& sheetValues() {
-    static std::unordered_map<uint32_t, json> sheets;
+struct SheetValue {
+    uint32_t texture = 0;
+    float frameW = 0.f, frameH = 0.f;
+    int columns = 0, rows = 0;
+};
+std::unordered_map<uint32_t, SheetValue>& sheetValues() {
+    static std::unordered_map<uint32_t, SheetValue> sheets;
     return sheets;
 }
-json sheetJ(SpritesheetHandle sheet) {
+void sheetJ(Pack& p, SpritesheetHandle sheet) {
     auto it = sheetValues().find(sheet.id);
-    return it != sheetValues().end() ? it->second : json{{"id", sheet.id}};
+    p.object([&] {
+        p.kv("id", sheet.id);
+        if (it == sheetValues().end()) return;
+        const SheetValue& v = it->second;
+        p.id("texture", v.texture);
+        p.kv("frame_w", v.frameW);
+        p.kv("frame_h", v.frameH);
+        p.kv("columns", v.columns);
+        p.kv("rows", v.rows);
+    });
 }
 
-json clipJ(const AnimationClip& c) {
-    return {{"sheet", sheetJ(c.sheet)}, {"frames", c.frames}, {"seconds", c.seconds}, {"looping", c.looping}};
+void clipJ(Pack& p, const AnimationClip& c) {
+    p.object([&] {
+        p.key("sheet");
+        sheetJ(p, c.sheet);
+        p.key("frames");
+        p.list(c.frames);
+        p.key("seconds");
+        p.list(c.seconds);
+        p.kv("looping", c.looping);
+    });
 }
-AnimationClip clipOf(const json& j) {
+AnimationClip clipOf(const Msg& j) {
     AnimationClip c;
-    c.sheet = SpritesheetHandle{idOf(j.value("sheet", json()))};
-    for (const auto& f : j.value("frames", json::array())) c.frames.push_back(f.get<int32_t>());
-    for (const auto& s : j.value("seconds", json::array())) c.seconds.push_back(s.get<float>());
+    c.sheet = SpritesheetHandle{idOf(j["sheet"])};
+    j["frames"].each([&](const Msg& f) { c.frames.push_back(f.get<int32_t>()); });
+    j["seconds"].each([&](const Msg& x) { c.seconds.push_back(x.get<float>()); });
     c.looping = j.value("looping", true);
     return c;
 }
@@ -2301,23 +2505,33 @@ void reportUnknownClip(EntityId e, const SpriteAnimator& a, const std::string& n
 
 std::vector<Codec> animationCodecs() {
     return {
-        {"Animator",
-         [](EntityId e) { return get<SpriteAnimator>(e) != nullptr; },
-         [](EntityId e) {
+        {"Animator", hasIt<SpriteAnimator>,
+         [](EntityId e, Pack& p) {
              const SpriteAnimator& a = *get<SpriteAnimator>(e);
-             json clips = json::object();
-             for (const auto& c : a.clips) clips[c.name] = clipJ(c.clip);
-             return json{{"clips", clips}, {"play", a.current}, {"then", a.then}, {"once", a.once},
-                         {"speed", a.speed}, {"playing", a.playing}, {"frame", a.frame}, {"time", a.time()},
-                         {"ended", a.ended}};
+             p.object([&] {
+                 p.key("clips");
+                 p.object([&] {
+                     for (const auto& c : a.clips) {
+                         p.key(c.name);
+                         clipJ(p, c.clip);
+                     }
+                 });
+                 p.kv("play", a.current);
+                 p.kv("then", a.then);
+                 p.kv("once", a.once);
+                 p.kv("speed", a.speed);
+                 p.kv("playing", a.playing);
+                 p.kv("frame", a.frame);
+                 p.kv("time", a.time());
+                 p.kv("ended", a.ended);
+             });
          },
-         [](EntityId e, const json& j) {
+         [](EntityId e, const Msg& j) {
              // The engine keeps the clip's place unless the script switched
              // clips (then it starts from the first frame), moved `frame`, or
              // moved `time`.
              SpriteAnimator a;
-             json clips = j.value("clips", json::object());
-             for (const auto& [name, c] : clips.items()) a.clips.push_back({name, clipOf(c)});
+             j["clips"].items([&](std::string_view name, const Msg& c) { a.clips.push_back({std::string(name), clipOf(c)}); });
              a.current = j.value("play", std::string());
              a.then = j.value("then", std::string());
              a.once = j.value("once", false);
@@ -2356,8 +2570,7 @@ std::vector<Codec> animationCodecs() {
              }
              put(e, a);
          },
-         [](EntityId e) { world().removeComponent(e, cid<SpriteAnimator>()); },
-         [] { return cid<SpriteAnimator>(); }},
+         removeIt<SpriteAnimator>, idOfC<SpriteAnimator>},
     };
 }
 
@@ -2391,8 +2604,7 @@ bool animation(const std::string& f, const json& a, json& out) {
         Rect last = sprites->frameAt(sheet, count - 1);
         int columns = static_cast<int>(std::lround(last.x / w)) + 1;
         int rows = static_cast<int>(std::lround(last.y / h)) + 1;
-        sheetValues()[sheet.id] = {{"id", sheet.id}, {"texture", {{"id", tex}}}, {"frame_w", w}, {"frame_h", h},
-                                   {"columns", columns}, {"rows", rows}};
+        sheetValues()[sheet.id] = {tex, w, h, columns, rows};
         out = {sheet.id, columns, rows};
         return true;
     }
@@ -2410,8 +2622,7 @@ bool animation(const std::string& f, const json& a, json& out) {
         Rect first = sprites->frameAt(sheet, 0);
         int32_t count = sprites->frameCount(sheet);
         uint32_t tex = sprites->getTexture(sheet).id;
-        sheetValues()[sheet.id] = {{"id", sheet.id}, {"texture", {{"id", tex}}}, {"frame_w", first.w},
-                                   {"frame_h", first.h}, {"columns", count}, {"rows", 1}};
+        sheetValues()[sheet.id] = {tex, first.w, first.h, count, 1};
         out = {sheet.id, tex, first.w, first.h, count};
         return true;
     }
@@ -3040,19 +3251,29 @@ bool gameplay(const std::string& f, const json& a, json& out) {
            gameplaySteering(f, a, out);
 }
 
+bool dataAndNet(const std::string& f, const json& a, json& out) {
+    return candela::dataService(*g_app, f, a, out) || candela::netService(f, a, out);
+}
+
 json service(const std::string& f, const json& a) {
+    // The group of functions that answers each name, found the first time
+    // it is called, so later calls skip the others' name checks.
+    using Group = bool (*)(const std::string&, const json&, json&);
+    static const Group groups[] = {procgen, presentation, images, gameplay, effects,
+                                   windowAndAssets, platform, animation, dataAndNet};
+    static std::unordered_map<std::string, int> route;
     json answer;
-    if (procgen(f, a, answer)) return answer;
-    if (presentation(f, a, answer)) return answer;
-    if (images(f, a, answer)) return answer;
-    if (hierarchyService(f, a, answer)) return answer;
-    if (gameplay(f, a, answer)) return answer;
-    if (effects(f, a, answer)) return answer;
-    if (animService(f, a, answer)) return answer;
-    if (windowAndAssets(f, a, answer)) return answer;
-    if (platform(f, a, answer)) return answer;
-    if (animation(f, a, answer)) return answer;
-    if (candela::dataService(*g_app, f, a, answer) || candela::netService(f, a, answer)) return answer;
+    auto known = route.find(f);
+    if (known != route.end() && known->second >= 0 && groups[known->second](f, a, answer)) return answer;
+    if (known == route.end() || known->second >= 0) {
+        for (int i = 0; i < int(std::size(groups)); ++i) {
+            if (groups[i](f, a, answer)) {
+                route[f] = i;
+                return answer;
+            }
+        }
+        route[f] = -1;
+    }
     if (f == "take_messages") {
         candela::netPoll();
         json sent(std::move(candela::outbox()));
@@ -3277,15 +3498,22 @@ int32_t drift_bridge_has(uint64_t e, const char* component) {
 const uint8_t* drift_bridge_get(uint64_t e, const char* component, size_t* len) {
     const Codec* c = codec(component);
     if (!c || !world().isAlive(e) || !c->has(e)) return nullptr;
-    return keep(c->read(e), len);
+    g_answer.clear();
+    Pack p(g_answer);
+    c->read(e, p);
+    *len = g_answer.size();
+    return g_answer.data();
 }
 
 int32_t drift_bridge_set(uint64_t e, const char* component, const uint8_t* data, size_t len) {
     const Codec* c = codec(component);
     if (!c || !world().isAlive(e)) return 0;
-    json j = unpack(data, len);
-    if (j.is_discarded()) return 0;
-    if (j.is_null()) j = json::object();
+    // A null value (or none) sets the component from its defaults, as an
+    // empty map does.
+    static const uint8_t empty[] = {0x80};
+    Msg j(data, data + len);
+    if (!data || len == 0 || j.is_null()) j = Msg(empty, empty + 1);
+    else if (!j.skip()) return 0;
     c->write(e, j);
     return 1;
 }
@@ -3297,15 +3525,17 @@ void drift_bridge_remove(uint64_t e, const char* component) {
 
 const uint8_t* drift_bridge_list(const char* component, size_t* len) {
     const Codec* c = codec(component);
-    json out = json::array();
+    std::vector<EntityId> ids;
     if (c) {
-        std::vector<EntityId> ids = world().entitiesWith(c->id());
+        ids = world().entitiesWith(c->id());
         std::sort(ids.begin(), ids.end());
-        for (EntityId e : ids) {
-            if (c->has(e)) out.push_back(e);
-        }
+        ids.erase(std::remove_if(ids.begin(), ids.end(), [&](EntityId e) { return !c->has(e); }), ids.end());
     }
-    return keep(out, len);
+    g_answer.clear();
+    Pack p(g_answer);
+    p.list(ids);
+    *len = g_answer.size();
+    return g_answer.data();
 }
 
 // Engine components that need another to work: everything drawn or
@@ -3318,6 +3548,16 @@ const char* drift_bridge_requires(const char* component) {
 }
 
 const uint8_t* drift_bridge_call(const char* function, const uint8_t* args, size_t argsLen, size_t* len) {
+    const auto& fast = fastServices();
+    auto it = function ? fast.find(function) : fast.end();
+    if (it != fast.end()) {
+        g_answer.clear();
+        Pack out(g_answer);
+        Msg list(args, args + argsLen);
+        it->second(Args(list), out);
+        *len = g_answer.size();
+        return g_answer.data();
+    }
     json a = unpack(args, argsLen);
     if (a.is_discarded() || a.is_null()) a = json::array();
     return keep(service(function ? function : "", a), len);

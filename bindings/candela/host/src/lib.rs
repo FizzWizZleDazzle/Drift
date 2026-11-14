@@ -77,17 +77,27 @@ fn answer(p: *const u8, len: usize) -> Option<Json> {
     wire::read_json(unsafe { std::slice::from_raw_parts(p, len) })
 }
 
-fn engine_get(e: u64, component: &str) -> Option<Json> {
+/// Engine component `component` of entity `e` as a candela value of the
+/// struct `id`, read straight from the engine's bytes.
+fn engine_get(e: u64, component: &str, types: &Types, id: u16) -> Option<Value> {
     let c = cstr(component);
     let mut len = 0;
     let p = unsafe { drift_bridge_get(e, c.as_ptr(), &mut len) };
-    answer(p, len)
+    if p.is_null() {
+        return None;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(p, len) };
+    Some(types.from_wire(wire::Item::new(bytes), &DataType::Struct(id)))
 }
 
 fn engine_set(e: u64, component: &str, value: &Value) {
-    let c = cstr(component);
     let mut bytes = Vec::new();
     wire::write_value(&mut bytes, value);
+    engine_set_bytes(e, component, &bytes);
+}
+
+fn engine_set_bytes(e: u64, component: &str, bytes: &[u8]) {
+    let c = cstr(component);
     unsafe { drift_bridge_set(e, c.as_ptr(), bytes.as_ptr(), bytes.len()) };
 }
 
@@ -102,23 +112,23 @@ fn engine_list(component: &str) -> Vec<u64> {
     let c = cstr(component);
     let mut len = 0;
     let p = unsafe { drift_bridge_list(c.as_ptr(), &mut len) };
-    match answer(p, len) {
-        Some(Json::Array(ids)) => ids.iter().filter_map(Json::as_u64).collect(),
-        _ => Vec::new(),
+    if p.is_null() {
+        return Vec::new();
     }
+    let bytes = unsafe { std::slice::from_raw_parts(p, len) };
+    wire::Item::new(bytes)
+        .elements()
+        .filter_map(|x| match x.kind() {
+            wire::Kind::Int(i) => u64::try_from(i).ok(),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Calls an engine function with its arguments and reads its answer.
 fn call(function: &str, args: Json) -> Json {
     let mut bytes = Vec::new();
     wire::write_json(&mut bytes, &args);
-    call_bytes(function, &bytes)
-}
-
-/// call, with the arguments candela values, as a list.
-fn call_values(function: &str, args: &[Value]) -> Json {
-    let mut bytes = Vec::new();
-    wire::write_values(&mut bytes, args);
     call_bytes(function, &bytes)
 }
 
@@ -255,6 +265,112 @@ impl Types {
                     Value::Map(o.iter().map(|(k, v)| (k.clone(), self.from_json(v, &DataType::Unknown))).collect())
                 }
                 Json::Null => Value::Null,
+            },
+        }
+    }
+
+    /// A value of type `ty` read straight from the engine's MessagePack, as
+    /// `from_json` reads the same value as JSON: what the bytes leave out
+    /// takes the zero value of its type.
+    fn from_wire(&self, item: wire::Item<'_>, ty: &DataType) -> Value {
+        use wire::Kind;
+        let kind = item.kind();
+        match ty {
+            DataType::Int => Value::Int(match kind {
+                Kind::Int(i) => i,
+                Kind::Float(f) => f as i64,
+                Kind::Str(t) => t.trim().parse::<i64>().ok().or_else(|| t.trim().parse::<f64>().ok().map(|f| f as i64)).unwrap_or(0),
+                _ => 0,
+            }),
+            DataType::Float => Value::Float(match kind {
+                Kind::Int(i) => i as f64,
+                Kind::Float(f) => f,
+                Kind::Str(t) => t.trim().parse().unwrap_or(0.0),
+                _ => 0.0,
+            }),
+            DataType::Bool => Value::Bool(match kind {
+                Kind::Bool(b) => b,
+                Kind::Str(t) => t.trim() == "true" || t.trim() == "1",
+                _ => false,
+            }),
+            DataType::String => Value::String(match kind {
+                Kind::Str(s) => s.to_owned(),
+                Kind::Int(i) => i.to_string(),
+                Kind::Float(f) => Json::from(f).to_string(),
+                Kind::Bool(b) => b.to_string(),
+                _ => String::new(),
+            }),
+            DataType::Array(elem) => {
+                let elem = elem.as_deref().unwrap_or(&DataType::Unknown);
+                Value::Array(item.elements().map(|e| self.from_wire(e, elem)).collect())
+            }
+            DataType::Map(kv) => {
+                let elem = kv.1.as_ref().unwrap_or(&DataType::Unknown);
+                Value::Map(item.entries().map(|(k, v)| (k.to_owned(), self.from_wire(v, elem))).collect())
+            }
+            DataType::Struct(id) => {
+                let info = &self.table.structs[*id as usize];
+                // The engine writes a struct's fields in its own order: note
+                // where each one is, then take them in declaration order.
+                let mut found: [(&str, Option<wire::Item<'_>>); 48] = [("", None); 48];
+                let mut n = 0;
+                let mut more: Vec<(&str, wire::Item<'_>)> = Vec::new();
+                for (k, v) in item.entries() {
+                    if n < found.len() {
+                        found[n] = (k, Some(v));
+                        n += 1;
+                    } else {
+                        more.push((k, v));
+                    }
+                }
+                let lookup = |name: &str| {
+                    found[..n]
+                        .iter()
+                        .find(|(k, _)| *k == name)
+                        .and_then(|(_, v)| *v)
+                        .or_else(|| more.iter().find(|(k, _)| *k == name).map(|(_, v)| *v))
+                };
+                Value::Struct {
+                    name: info.name.clone(),
+                    fields: info
+                        .fields
+                        .iter()
+                        .map(|(f, t)| {
+                            let v = match lookup(f) {
+                                Some(v) => self.from_wire(v, t),
+                                None => self.from_json(&Json::Null, t),
+                            };
+                            (f.clone(), v)
+                        })
+                        .collect(),
+                }
+            }
+            DataType::Enum(id) => {
+                let info = &self.table.enums[*id as usize];
+                let named = match kind {
+                    Kind::Str(s) => Some(s),
+                    Kind::Map(_) => item.entries().find(|(k, _)| *k == "variant").and_then(|(_, v)| match v.kind() {
+                        Kind::Str(s) => Some(s),
+                        _ => None,
+                    }),
+                    _ => None,
+                };
+                let name = named
+                    .filter(|n| info.variants.iter().any(|v| v == n))
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| info.variants.first().cloned().unwrap_or_default());
+                Value::Enum { variant: name, payload: Vec::new() }
+            }
+            _ => match kind {
+                Kind::Bool(b) => Value::Bool(b),
+                Kind::Int(i) => Value::Int(i),
+                Kind::Float(f) => Value::Float(f),
+                Kind::Str(s) => Value::String(s.to_owned()),
+                Kind::Array(_) => Value::Array(item.elements().map(|e| self.from_wire(e, &DataType::Unknown)).collect()),
+                Kind::Map(_) => {
+                    Value::Map(item.entries().map(|(k, v)| (k.to_owned(), self.from_wire(v, &DataType::Unknown))).collect())
+                }
+                Kind::Null | Kind::Other => Value::Null,
             },
         }
     }
@@ -506,12 +622,11 @@ fn read_component(e: u64, name: &str) -> Option<Value> {
     if let Some(found) = STORES.with(|s| s.borrow().get(name).map(|store| store.get(&e).cloned())) {
         return found;
     }
-    let j = engine_get(e, name)?;
     TYPES.with(|t| {
         let t = t.borrow();
         let types = t.as_ref()?;
         let id = types.struct_id(name)?;
-        Some(types.from_json(&j, &DataType::Struct(id)))
+        engine_get(e, name, types, id)
     })
 }
 
@@ -885,20 +1000,24 @@ impl Host {
         Some(Value::Struct { name: self.types.struct_name(row).to_owned(), fields: values })
     }
 
-    /// Keeps the components a system changed in one row of entity `e`.
-    /// Notes the components a system changed in one row of entity `e`:
-    /// a game component against its store, an engine component against
-    /// the copy `old` holds (see `kept`).
-    fn diff_row(fields: &[(String, Option<String>)], old: Option<&Value>, new: Option<&mut Value>, e: u64, writes: &mut Vec<(u64, Value)>) {
-        let (Some(Value::Struct { fields: of, .. }), Some(Value::Struct { fields: nf, .. })) = (old, new) else { return };
+    /// Notes the components a system changed in one row of entity `e`: a
+    /// game component against its store, an engine component against the
+    /// bytes it was read as (see `kept`). An engine component that changed
+    /// goes with its new bytes, so it is not written out twice.
+    fn diff_row(fields: &[(String, Option<String>)], old: Option<&KeptRow>, new: Option<&mut Value>, e: u64, writes: &mut Vec<Write>) {
+        let (Some(old), Some(Value::Struct { fields: nf, .. })) = (old, new) else { return };
         for (k, (_, c)) in fields.iter().enumerate() {
             let Some(c) = c else { continue };
-            let changed = match script_unchanged(c, e, &nf[k].1) {
-                Some(same) => !same,
-                None => of[k].1 != nf[k].1,
-            };
-            if changed {
-                writes.push((e, std::mem::replace(&mut nf[k].1, Value::Null)));
+            match script_unchanged(c, e, &nf[k].1) {
+                Some(true) => {}
+                Some(false) => writes.push((e, std::mem::replace(&mut nf[k].1, Value::Null), None)),
+                None => {
+                    let mut bytes = Vec::with_capacity(old.get(k).and_then(Option::as_ref).map_or(64, Vec::len));
+                    wire::write_value(&mut bytes, &nf[k].1);
+                    if old.get(k).and_then(Option::as_ref) != Some(&bytes) {
+                        writes.push((e, std::mem::replace(&mut nf[k].1, Value::Null), Some(bytes)));
+                    }
+                }
             }
         }
     }
@@ -1168,21 +1287,21 @@ impl Host {
     /// they were during the call, then kept in parameter order, so a
     /// component two parameters hold is written only by those that changed
     /// it.
-    fn write_back(&mut self, sys: &System, before: &[Value], after: &mut [Value], entities: &[Vec<u64>]) {
-        let mut writes: Vec<(u64, Value)> = Vec::new();
+    fn write_back(&mut self, sys: &System, before: &[Vec<KeptRow>], after: &mut [Value], entities: &[Vec<u64>]) {
+        let mut writes: Vec<Write> = Vec::new();
         let mut resources: Vec<(String, Value)> = Vec::new();
         for (i, p) in sys.params.iter().enumerate() {
             let (old, new) = (&before[i], &mut after[i]);
             match p {
                 Param::Rows { fields, .. } => {
-                    let (Value::Array(o), Value::Array(n)) = (old, new) else { continue };
+                    let Value::Array(n) = new else { continue };
                     for (r, e) in entities[i].iter().enumerate() {
-                        Self::diff_row(fields, o.get(r), n.get_mut(r), *e, &mut writes);
+                        Self::diff_row(fields, old.get(r), n.get_mut(r), *e, &mut writes);
                     }
                 }
                 Param::Row { fields, .. } => {
                     if let Some(e) = entities[i].first() {
-                        Self::diff_row(fields, Some(old), Some(new), *e, &mut writes);
+                        Self::diff_row(fields, old.first(), Some(new), *e, &mut writes);
                     }
                 }
                 Param::Lookup { key, .. } => {
@@ -1200,7 +1319,7 @@ impl Host {
                             None => LOOKUP_SEEN.with(|seen| seen.borrow().get(&(*key, e)).is_some_and(|was| was != row)),
                         };
                         if changed {
-                            writes.push((e, std::mem::replace(row, Value::Null)));
+                            writes.push((e, std::mem::replace(row, Value::Null), None));
                         }
                     }
                 }
@@ -1219,8 +1338,17 @@ impl Host {
                 _ => {}
             }
         }
-        for (e, v) in writes {
-            self.set_component(e, v);
+        // These are components the entity already has, so what they
+        // require is already there.
+        for (e, v, bytes) in writes {
+            let Value::Struct { name, .. } = &v else { continue };
+            match bytes {
+                Some(bytes) => engine_set_bytes(e, name, &bytes),
+                None => {
+                    let name = name.clone();
+                    self.insert_component(e, &name, v);
+                }
+            }
         }
         for (name, v) in resources {
             publish_resource(&name, Some(&v));
@@ -1608,35 +1736,44 @@ impl Host {
     }
 }
 
-/// Copies of the arguments write_back compares against: the engine
-/// components of rows. Game components and resources are compared against
-/// their stores, which a call does not change; a lookup notes what it
-/// handed out itself.
-fn kept(sys: &System, args: &[Value]) -> Vec<Value> {
-    let engine_part = |fields: &[(String, Option<String>)], row: &Value| -> Value {
-        let Value::Struct { name, fields: values } = row else { return Value::Null };
-        Value::Struct {
-            name: name.clone(),
-            fields: fields
-                .iter()
-                .zip(values)
-                .map(|((_, c), (f, v))| {
-                    let copy = match c {
-                        Some(c) if !is_script_component(c) => v.clone(),
-                        _ => Value::Null,
-                    };
-                    (f.clone(), copy)
-                })
-                .collect(),
-        }
+/// What write_back compares an engine component of a row against: the
+/// component as it was handed to the system, written as MessagePack, which
+/// is cheaper to keep and compare than a copy of the value. One entry per
+/// place of the row; None for game components (compared against their
+/// store, which a call does not change) and entities.
+type KeptRow = Vec<Option<Vec<u8>>>;
+
+/// A component a system changed: the entity, the new value, and for an
+/// engine component the value's bytes.
+type Write = (u64, Value, Option<Vec<u8>>);
+
+/// What write_back compares the arguments of a call against: for each
+/// parameter, the kept rows (one for a row parameter, one per entity for a
+/// list of rows, none for the rest). A lookup notes what it handed out
+/// itself; resources are compared against the host's copy.
+fn kept(sys: &System, args: &[Value]) -> Vec<Vec<KeptRow>> {
+    let engine_part = |fields: &[(String, Option<String>)], row: &Value| -> KeptRow {
+        let Value::Struct { fields: values, .. } = row else { return Vec::new() };
+        fields
+            .iter()
+            .zip(values)
+            .map(|((_, c), (_, v))| match c {
+                Some(c) if !is_script_component(c) => {
+                    let mut bytes = Vec::with_capacity(64);
+                    wire::write_value(&mut bytes, v);
+                    Some(bytes)
+                }
+                _ => None,
+            })
+            .collect()
     };
     sys.params
         .iter()
         .zip(args)
         .map(|(p, a)| match (p, a) {
-            (Param::Rows { fields, .. }, Value::Array(rows)) => Value::Array(rows.iter().map(|r| engine_part(fields, r)).collect()),
-            (Param::Row { fields, .. }, row) => engine_part(fields, row),
-            _ => Value::Null,
+            (Param::Rows { fields, .. }, Value::Array(rows)) => rows.iter().map(|r| engine_part(fields, r)).collect(),
+            (Param::Row { fields, .. }, row) => vec![engine_part(fields, row)],
+            _ => Vec::new(),
         })
         .collect()
 }
@@ -2174,10 +2311,37 @@ fn forward_values(e: &mut Engine, name: &'static str, ret: HostType) {
 
 fn forward(e: &mut Engine, name: &'static str, args: Vec<HostType>, ret: HostType) {
     let shape = ret.clone();
+    let f = cstr(name);
     e.register_host_fn_typed("drift", name, args, ret, move |a| {
-        let answer = call_values(name, a);
-        Ok(host_value(&answer, &shape))
+        let mut bytes = Vec::new();
+        wire::write_values(&mut bytes, a);
+        let mut len = 0;
+        let p = unsafe { drift_bridge_call(f.as_ptr(), bytes.as_ptr(), bytes.len(), &mut len) };
+        if p.is_null() {
+            return Ok(host_value(&Json::Null, &shape));
+        }
+        let answer = unsafe { std::slice::from_raw_parts(p, len) };
+        Ok(host_value_wire(wire::Item::new(answer), &shape))
     });
+}
+
+/// host_value, read straight from the engine's bytes.
+fn host_value_wire(item: wire::Item<'_>, t: &HostType) -> Value {
+    use wire::Kind;
+    match (t, item.kind()) {
+        (HostType::Int, Kind::Int(i)) => Value::Int(i),
+        (HostType::Int, Kind::Float(f)) => Value::Int(f as i64),
+        (HostType::Int, _) => Value::Int(0),
+        (HostType::Float, Kind::Int(i)) => Value::Float(i as f64),
+        (HostType::Float, Kind::Float(f)) => Value::Float(f),
+        (HostType::Float, _) => Value::Float(0.0),
+        (HostType::Bool, Kind::Bool(b)) => Value::Bool(b),
+        (HostType::Bool, _) => Value::Bool(false),
+        (HostType::String, Kind::Str(s)) => Value::String(s.to_owned()),
+        (HostType::String, _) => Value::String(String::new()),
+        (HostType::Array(elem), _) => Value::Array(item.elements().map(|x| host_value_wire(x, elem)).collect()),
+        _ => Value::Null,
+    }
 }
 
 fn host_value(j: &Json, t: &HostType) -> Value {
@@ -2732,3 +2896,4 @@ pub extern "C" fn drift_host_unload() {
     HOST.with(|h| *h.borrow_mut() = None);
     RESOURCE_VIEW.with(|r| r.borrow_mut().clear());
 }
+
