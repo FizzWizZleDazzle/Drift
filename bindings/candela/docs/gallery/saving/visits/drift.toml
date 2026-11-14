@@ -1,0 +1,11 @@
+[project]
+name = "Visits"
+organization = "Drift Book"
+entry = "main.cdl"
+
+[window]
+width = 480
+height = 120
+
+[render]
+clear_color = [0.09, 0.08, 0.11]

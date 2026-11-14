@@ -34,6 +34,37 @@ slot.set_int("level", progress.level);
 slot.flush();
 ```
 
+## A complete example
+
+This program counts how many times it has started and keeps the best score. In the browser, reload the page: the visit count goes up and the best score stays. [Run it in the browser](../play/gallery/saving/visits/).
+
+```toml
+[project]
+name = "Visits"
+organization = "Drift Book"
+```
+
+```rust
+{{#include ../../gallery/saving/visits/main.cdl:load}}
+
+{{#include ../../gallery/saving/visits/main.cdl:best}}
+```
+
+<details>
+<summary>The whole program</summary>
+
+```rust
+{{#include ../../gallery/saving/visits/main.cdl:all}}
+```
+
+</details>
+
+Things to get right:
+
+- `[project]` names the save. Two games with the same `organization` and `name` read and write the same slot; renaming the game starts it with no save.
+- Read with a fallback that suits a first run: on the first start every key is missing, and `get_int("visits", 0)` returns 0.
+- Call `flush()` after the `set_*` calls you want kept. A value set but never flushed is gone on the next start.
+
 ## Whole values
 
 `set_value(key, value)` stores any value as JSON in one key, and `get_value<T>(key, fallback)` reads it back, or returns `fallback` when the key is missing. A struct holding the player's progress, or an `Inventory`, `Flags` or `Quests` from [drift/rpg](game-systems.md), saves in one call:

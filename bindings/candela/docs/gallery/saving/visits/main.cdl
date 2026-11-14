@@ -1,0 +1,46 @@
+// ANCHOR: all
+// Save data that lasts: the game counts how many times it has started and
+// keeps the best of a score, between runs. Reload the page and the count
+// goes up; press Space to score, and the best stays after a reload.
+
+import "drift" { * };
+
+@resource
+struct Game { visits: int = 0, score: int = 0, best: int = 0 }
+
+@component struct Label {}
+
+// ANCHOR: load
+@system(schedule: Schedule::Startup)
+fn load(cmd: Commands, save: Save, game: Game) {
+    game.visits = save.get_int("visits", 0) + 1;   // 0 the first time: no such key yet
+    game.best = save.get_int("best", 0);
+    save.set_int("visits", game.visits);
+    save.flush();                                   // nothing is kept until flush
+    print("visit " + string(game.visits) + ", best " + string(game.best));
+    cmd.spawn([at(16.0, 16.0), Label {}, Text { value: "", size: 18.0, .. }]);
+}
+// ANCHOR_END: load
+
+// ANCHOR: best
+@system
+fn score(input: Input, save: Save, game: Game) {
+    if !input.key_pressed(Key::Space) {
+        return;
+    }
+    game.score += 10;
+    if game.score > game.best {
+        game.best = game.score;
+        save.set_int("best", game.best);
+        save.flush();
+    }
+}
+// ANCHOR_END: best
+
+@system
+fn show(row: (Label, Text), game: Game) {
+    let (_, text) = row;
+    text.value = "Visit " + string(game.visits) + "\nScore " + string(game.score) + "   Best " + string(game.best)
+        + "\nSpace scores; reload the page";
+}
+// ANCHOR_END: all
