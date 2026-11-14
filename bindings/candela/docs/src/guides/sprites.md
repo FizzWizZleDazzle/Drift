@@ -71,7 +71,7 @@ An `Image` is pixels you change from code: fill it, draw shapes and other images
 
 ```rust
 let img = assets.create_image(128, 128, rgb(0, 0, 0));
-img.gradient(rgb(40, 0, 80), rgb(255, 120, 0), true);
+img.vertical_gradient(rgb(40, 0, 80), rgb(255, 120, 0));
 img.circle(vec2(64.0, 64.0), 24.0, rgba(255, 255, 255, 200));
 cmd.spawn([at(200.0, 200.0), Sprite { image: img.to_texture(), .. }]);
 ```
@@ -104,7 +104,7 @@ fn swing(joint: (Joint, Transform), time: Time) {
 Each part's position is where its joint sits on the parent, in the parent's own units: the forearm is at (64, 0) because the upper arm is 64 pixels long. Setting the root's `scale` to (-1, 1) mirrors the whole rig, children's rotations included, which turns a character around.
 
 - `GlobalTransform` is a part's place in the world after every parent. Query it like any component; assign to it to put a part at a world position, and the engine works out the local `Transform`.
-- `world_transform(e)`, `to_world(e, local)` and `to_local(e, world)` convert between the world and an entity's space at any time, from the engine's current transforms. A system's own changes land when it returns, so these see them from the next system on.
+- `world_transform(e)`, `local_to_world(e, local)` and `world_to_local(e, world)` convert between the world and an entity's space at any time, from the engine's current transforms. A system's own changes land when it returns, so these see them from the next system on.
 - `parent_of(e)`, `children_of(e)` and `descendants_of(e)` walk the tree.
 - `cmd.set_parent(child, parent)` and `cmd.set_parent_in_place(child, parent)` move an entity under another, the second keeping it where it is on screen; `cmd.detach(child)` makes it a root again where it is.
 - Despawning an entity despawns everything below it.

@@ -20,7 +20,7 @@ fn controls(input: Input, window: Window) {
 
 - `key_down` is true while a key is held; `key_pressed` and `key_released` are true only in the frame it changed. A tap that goes down and up between two frames reads as both pressed and released in the next frame, so quick taps are never lost. Mouse buttons, gamepad buttons and actions work the same way.
 - `mouse_wheel()` is the wheel movement this frame, positive when the wheel turns away from the player.
-- `mouse_position()` is in logical screen coordinates, letterbox bars accounted for. `mouse_world()` is the same point through the main camera.
+- `mouse_screen()` is in logical screen coordinates, letterbox bars accounted for. `mouse_world()` is the same point through the main camera.
 - Gamepads use slots 0 to 3 and the Xbox layout: `GamepadButton::South` is A. Sticks read -1 to 1 with Y down; triggers read 0 to 1.
 
 ## Actions

@@ -1103,12 +1103,12 @@ Whether the mouse button went up this frame.
 if input.mouse_released(MouseButton::Left) { drop_item(); }
 ```
 
-## Input.mouse_position
+## Input.mouse_screen
 
 The mouse in logical screen pixels, letterbox bars accounted for.
 
 ```rust
-let p = input.mouse_position();
+let p = input.mouse_screen();
 ```
 
 ## Input.mouse_world
@@ -1551,10 +1551,10 @@ effects.burst(t.position, ParticleEmitter {
 }, 40);
 ```
 
-## Effects.restart
+## Effects.restart_particles
 
 ```rust
-effects.restart(fountain);
+effects.restart_particles(fountain);
 ```
 
 
@@ -1884,7 +1884,7 @@ slot.flush();
 ```rust
 @system
 fn hover(input: Input, cams: Camera2D, draw: Draw) {
-    let p = cams.screen_to_world(input.mouse_position());
+    let p = cams.screen_to_world(input.mouse_screen());
     draw.circle_lines(p, 10.0, rgb(255, 255, 255), 1.0);
 }
 ```
@@ -1913,7 +1913,7 @@ if !view.contains(t.position) { cmd.despawn(e); }
 ## Camera2D.screen_to_world_in
 
 ```rust
-let p = cams.screen_to_world_in(right_camera, input.mouse_position());
+let p = cams.screen_to_world_in(right_camera, input.mouse_screen());
 ```
 
 ## Camera2D.world_to_screen_in
@@ -2022,7 +2022,7 @@ draw.circle_lines(t.position, 48.0, rgba(255, 255, 255, 80), 1.0);
 ## Draw.arc
 
 ```rust
-draw.arc(t.position, 20.0, -PI / 2.0, -PI / 2.0 + TAU * reload.fraction(), rgb(255, 255, 255), 3.0);
+draw.arc(t.position, 20.0, -PI / 2.0, -PI / 2.0 + TAU * reload.progress(), rgb(255, 255, 255), 3.0);
 ```
 
 ## Draw.line
@@ -2035,10 +2035,18 @@ draw.line(a, b, rgb(255, 80, 80), 2.0);
 
 ## Draw.polyline
 
-Lines through the points in order; `closed` joins the last to the first.
+Lines through the points in order. `polygon_lines` also joins the last point to the first.
 
 ```rust
-draw.polyline(path_points, rgb(80, 200, 255), 2.0, false);
+draw.polyline(path_points, rgb(80, 200, 255), 2.0);
+```
+
+## Draw.polygon_lines
+
+A polygon's outline: lines through the points, closed back to the first.
+
+```rust
+draw.polygon_lines(hull, rgb(255, 220, 80), 2.0);
 ```
 
 ## Draw.triangle
@@ -2083,7 +2091,7 @@ draw.sprite(Sprite { image: art.ghost, color: rgba(255, 255, 255, 100), .. }, at
 
 ```rust
 draw.hud();
-draw.nine_slice(art.panel, rect(20.0, 300.0, 400.0, 120.0), rect(0.0, 0.0, 0.0, 0.0), rect(8.0, 8.0, 8.0, 8.0), rgb(255, 255, 255));
+draw.nine_slice(art.panel, rect(20.0, 300.0, 400.0, 120.0), rect(0.0, 0.0, 0.0, 0.0), edges(8.0), rgb(255, 255, 255));
 ```
 
 ## Draw.push_clip
@@ -2730,7 +2738,7 @@ Text { value: "Hello", font: Font { .. }, .. }
 @system(schedule: Schedule::Startup)
 fn sky(cmd: Commands, assets: Assets) {
     let img = assets.create_image(320, 180, rgb(0, 0, 0));
-    img.gradient(rgb(20, 30, 80), rgb(200, 120, 90), true);
+    img.vertical_gradient(rgb(20, 30, 80), rgb(200, 120, 90));
     cmd.spawn([at(160.0, 90.0), Sprite { image: img.to_texture(), .. }]);
     img.free();
 }
@@ -2792,10 +2800,16 @@ Sets the pixels in a circle to one color, alpha included: a transparent color cu
 img.fill_circle(vec2(40.0, 40.0), 12.0, rgba(0, 0, 0, 0));
 ```
 
-## Image.gradient
+## Image.horizontal_gradient
 
 ```rust
-img.gradient(rgb(0, 0, 40), rgb(80, 160, 255), true);
+img.horizontal_gradient(rgb(255, 80, 60), rgb(60, 80, 255));
+```
+
+## Image.vertical_gradient
+
+```rust
+img.vertical_gradient(rgb(0, 0, 40), rgb(80, 160, 255));
 ```
 
 ## Image.noise
@@ -3118,26 +3132,26 @@ let under = level.map.tile_at(ground, t.position);
 The cell under a world position.
 
 ```rust
-let c = level.map.world_to_tile(input.mouse_world(), ground);
+let c = level.map.world_to_tile(ground, input.mouse_world());
 ```
 
 ## Map.tile_to_world
 
 ```rust
-let p = level.map.tile_to_world(cell(3, 4), ground);
+let p = level.map.tile_to_world(ground, cell(3, 4));
 ```
 
-## Map.fill
+## Map.write_grid
 
 ```rust
-level.map.fill(0, dungeon_grid, [1, 2, 3], cell(0, 0));   // FLOOR -> 1, WALL -> 2, DOOR -> 3
+level.map.write_grid(0, dungeon_grid, [1, 2, 3], cell(0, 0));   // FLOOR -> 1, WALL -> 2, DOOR -> 3
 ```
 
 ## Map.to_grid
 
 ```rust
 let walls = level.map.to_grid(level.map.layer("Walls"));
-let path = find_path(walls, from, to, [3], false);
+let path = find_path(walls, from, to, [3], Moves::FourWay);
 ```
 
 ## Map.property
@@ -3501,7 +3515,7 @@ if g.get(c) == FLOOR { place_coin(c); }
 The value generators write for solid cells, and what `Grid.get` answers outside the grid.
 
 ```rust
-let path = find_path(g, a, b, [WALL], false);
+let path = find_path(g, a, b, [WALL], Moves::FourWay);
 ```
 
 ## DOOR
@@ -3522,7 +3536,7 @@ let doors = d.grid.cells_of(DOOR);
 - keep_largest: Fills every cavern but the largest, so the whole cave is reachable
 
 ```rust
-let caves = cave(r, 60, 32, CaveOptions { fill: 0.48, steps: 4, .. });
+let caves = cave(r, 60, 32, CaveOptions { wall_chance: 0.48, steps: 4, .. });
 ```
 
 ## cave
@@ -3647,7 +3661,7 @@ if wfc(r, sample, 60, 32, WfcOptions { .. }) is Some(g) {
 ## find_path
 
 ```rust
-let path = find_path(level.grid, monster_cell, player_cell, [WALL], false);
+let path = find_path(level.grid, monster_cell, player_cell, [WALL], Moves::FourWay);
 if path.len() > 1 {
     pos.cell = path[1];   // one step closer
 }
@@ -3656,7 +3670,7 @@ if path.len() > 1 {
 ## FlowField
 
 ```rust
-level.field = flow_field(level.grid, [player_cell], [WALL], true);
+level.field = flow_field(level.grid, [player_cell], [WALL], Moves::EightWay);
 v.linear = level.field.direction(my_cell) * 60.0;
 ```
 
@@ -3670,7 +3684,7 @@ v.linear = level.field.direction(my_cell) * 60.0;
 A flow field over a grid toward the nearest of `goals`, through cells whose value is not in `blocked`. Build it again when a goal moves to another cell, not every frame.
 
 ```rust
-let field = flow_field(g, [goal], [WALL], true);
+let field = flow_field(g, [goal], [WALL], Moves::EightWay);
 ```
 
 ## FlowField.in_bounds
@@ -3990,7 +4004,7 @@ let r = rect(10.0, 10.0, 100.0, 40.0);
 Whether a point is inside.
 
 ```rust
-if button.contains(input.mouse_position()) { hovered = true; }
+if button.contains(input.mouse_screen()) { hovered = true; }
 ```
 
 ## Rect.overlaps
@@ -4216,12 +4230,12 @@ Whether a one-shot timer has run out. It stays finished until `reset()`.
 if shield.timer.finished() { shield.on = false; }
 ```
 
-## Timer.fraction
+## Timer.progress
 
 Progress through the current period, 0 to 1.
 
 ```rust
-bar.size = vec2(100.0 * reload.fraction(), 6.0);
+bar.size = vec2(100.0 * reload.progress(), 6.0);
 ```
 
 ## Timer.reset
@@ -4290,10 +4304,10 @@ icon.visible = dash.ready();
 if input.action_pressed("dash") && dash.try_use() { v.linear = v.linear * 3.0; }
 ```
 
-## Cooldown.fraction
+## Cooldown.remaining_fraction
 
 ```rust
-draw.arc(t.position, 12.0, 0.0, TAU * dash.fraction(), rgb(255, 255, 255), 2.0);
+draw.arc(t.position, 12.0, 0.0, TAU * dash.remaining_fraction(), rgb(255, 255, 255), 2.0);
 ```
 
 ## Cooldown.reset
@@ -4334,16 +4348,16 @@ let parts = descendants_of(robot);
 let tip = world_transform(sword_tip).position;
 ```
 
-## to_world
+## local_to_world
 
 ```rust
-let muzzle = to_world(gun, vec2(18.0, 0.0));
+let muzzle = local_to_world(gun, vec2(18.0, 0.0));
 ```
 
-## to_local
+## world_to_local
 
 ```rust
-let local = to_local(ship, input.mouse_world());
+let local = world_to_local(ship, input.mouse_world());
 ```
 
 # Procedural Animation {#animation}
@@ -4514,6 +4528,7 @@ Helpers the module needs; games do not call them.
 ## Draw.shape
 ## Image.op
 ## bool_float
+## Draw.lines_through
 ## clock_text
 ## check_system
 ## action_state

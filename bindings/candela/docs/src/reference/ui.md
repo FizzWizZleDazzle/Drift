@@ -570,7 +570,7 @@ Reveals a Text's `full` string a few characters at a time. `finished` turns true
 @component
 struct Typewriter {
     full: string = "",
-    speed: float = 40.0,
+    chars_per_second: float = 40.0,
     shown: float = 0.0,
     finished: bool = false,
 }
@@ -720,14 +720,14 @@ A system the module adds: it runs in every game that imports the module.
 
 ## NineSlice
 
-A panel drawn from an image cut in nine: the corners keep their size and the edges and middle stretch, so one small image frames any size. `border` is the left, top, right and bottom margins in the image, as x, y, w, h; `frame` picks part of the image (zero for all of it).
+A panel drawn from an image cut in nine: the corners keep their size and the edges and middle stretch, so one small image frames any size. `border` is the width of each edge in the image's pixels; `frame` picks part of the image (zero for all of it).
 
 ```rust
 @component
 struct NineSlice {
     image: Texture = Texture { .. },
     size: Vec2 = Vec2 { x: 200.0, y: 100.0 },
-    border: Rect = Rect { x: 8.0, y: 8.0, w: 8.0, h: 8.0 },
+    border: Edges = Edges { left: 8.0, top: 8.0, right: 8.0, bottom: 8.0 },
     frame: Rect = Rect { .. },
     color: Color = Color { .. },
     z: float = 0.0,

@@ -138,16 +138,16 @@ Whether the mouse button went up this frame.
 if input.mouse_released(MouseButton::Left) { drop_item(); }
 ```
 
-### Input.mouse_position
+### Input.mouse_screen
 
 ```rust
-fn mouse_position(self) -> Vec2
+fn mouse_screen(self) -> Vec2
 ```
 
 The mouse in logical screen pixels, letterbox bars accounted for.
 
 ```rust
-let p = input.mouse_position();
+let p = input.mouse_screen();
 ```
 
 ### Input.mouse_world
@@ -1022,16 +1022,16 @@ fn add_material(self, m: Material, order: int) -> Effect
 
 A post effect running a material's shader over the picture, which arrives as its texture0.
 
-### Effects.restart
+### Effects.restart_particles
 
 ```rust
-fn restart(self, emitter: Entity)
+fn restart_particles(self, emitter: Entity)
 ```
 
 Starts an emitter's run over: its bursts fire again and a finished one emits anew.
 
 ```rust
-effects.restart(fountain);
+effects.restart_particles(fountain);
 ```
 
 ### Effects.add
@@ -1631,7 +1631,7 @@ struct Camera2D {
 ```rust
 @system
 fn hover(input: Input, cams: Camera2D, draw: Draw) {
-    let p = cams.screen_to_world(input.mouse_position());
+    let p = cams.screen_to_world(input.mouse_screen());
     draw.circle_lines(p, 10.0, rgb(255, 255, 255), 1.0);
 }
 ```
@@ -1682,7 +1682,7 @@ fn screen_to_world_in(self, camera: Entity, p: Vec2) -> Vec2
 The same through a camera entity of your own.
 
 ```rust
-let p = cams.screen_to_world_in(right_camera, input.mouse_position());
+let p = cams.screen_to_world_in(right_camera, input.mouse_screen());
 ```
 
 ### Camera2D.world_to_screen_in
@@ -1854,7 +1854,7 @@ fn arc(self, center: Vec2, radius: float, start: float, end: float, c: Color, th
 From `start` to `end` radians, clockwise from +x.
 
 ```rust
-draw.arc(t.position, 20.0, -PI / 2.0, -PI / 2.0 + TAU * reload.fraction(), rgb(255, 255, 255), 3.0);
+draw.arc(t.position, 20.0, -PI / 2.0, -PI / 2.0 + TAU * reload.progress(), rgb(255, 255, 255), 3.0);
 ```
 
 ### Draw.line
@@ -1872,13 +1872,25 @@ draw.line(a, b, rgb(255, 80, 80), 2.0);
 ### Draw.polyline
 
 ```rust
-fn polyline(self, points: Vec2[], c: Color, thickness: float, closed: bool)
+fn polyline(self, points: Vec2[], c: Color, thickness: float)
 ```
 
-Lines through the points in order; `closed` joins the last to the first.
+Lines through the points in order. `polygon_lines` also joins the last point to the first.
 
 ```rust
-draw.polyline(path_points, rgb(80, 200, 255), 2.0, false);
+draw.polyline(path_points, rgb(80, 200, 255), 2.0);
+```
+
+### Draw.polygon_lines
+
+```rust
+fn polygon_lines(self, points: Vec2[], c: Color, thickness: float)
+```
+
+A polygon's outline: lines through the points, closed back to the first.
+
+```rust
+draw.polygon_lines(hull, rgb(255, 220, 80), 2.0);
 ```
 
 ### Draw.triangle
@@ -1956,14 +1968,14 @@ draw.sprite(Sprite { image: art.ghost, color: rgba(255, 255, 255, 100), .. }, at
 ### Draw.nine_slice
 
 ```rust
-fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Rect, c: Color)
+fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Edges, c: Color)
 ```
 
-An image cut in nine: the corners keep their size, the edges and middle stretch over `dest`. `border` holds the left, top, right and bottom margins of `frame` (zero size for the whole image) as x, y, w, h.
+An image cut in nine: the corners keep their size, the edges and middle stretch over `dest`. `border` is the width of each edge in the image's pixels, inside `frame` (zero size for the whole image).
 
 ```rust
 draw.hud();
-draw.nine_slice(art.panel, rect(20.0, 300.0, 400.0, 120.0), rect(0.0, 0.0, 0.0, 0.0), rect(8.0, 8.0, 8.0, 8.0), rgb(255, 255, 255));
+draw.nine_slice(art.panel, rect(20.0, 300.0, 400.0, 120.0), rect(0.0, 0.0, 0.0, 0.0), edges(8.0), rgb(255, 255, 255));
 ```
 
 ### Draw.push_clip
@@ -2311,10 +2323,10 @@ fn start_music(tracks: Tracks, audio: Audio) {
 ### Audio.play_music
 
 ```rust
-fn play_music(self, track: Sound, crossfade: float, looping: bool)
+fn play_music(self, track: Sound, crossfade_seconds: float, looping: bool)
 ```
 
-One music track at a time on the music bus; another crossfades over `crossfade` seconds.
+One music track at a time on the music bus; another crossfades over `crossfade_seconds`.
 
 ```rust
 audio.play_music(tracks.boss, 2.0, true);   // crossfade over two seconds
@@ -2323,10 +2335,10 @@ audio.play_music(tracks.boss, 2.0, true);   // crossfade over two seconds
 ### Audio.play_playlist
 
 ```rust
-fn play_playlist(self, tracks: Sound[], crossfade: float, looping: bool, shuffle: bool)
+fn play_playlist(self, tracks: Sound[], crossfade_seconds: float, looping: bool, shuffle: bool)
 ```
 
-Tracks one after another, `crossfade` seconds apart (0 is gapless).
+Tracks one after another, `crossfade_seconds` apart (0 is gapless).
 
 ```rust
 audio.play_playlist([tracks.a, tracks.b, tracks.c], 0.0, true, true);
@@ -2347,7 +2359,7 @@ audio.next_track();
 ### Audio.stop_music
 
 ```rust
-fn stop_music(self, fade: float)
+fn stop_music(self, fade_seconds: float)
 ```
 
 Stops the music, fading out over `fade` seconds.
@@ -2359,7 +2371,7 @@ audio.stop_music(1.0);
 ### Audio.pause_music
 
 ```rust
-fn pause_music(self, fade: float)
+fn pause_music(self, fade_seconds: float)
 ```
 
 Pauses the music, fading out over `fade` seconds.
@@ -2371,7 +2383,7 @@ audio.pause_music(0.3);
 ### Audio.resume_music
 
 ```rust
-fn resume_music(self, fade: float)
+fn resume_music(self, fade_seconds: float)
 ```
 
 Resumes paused music, fading in over `fade` seconds.

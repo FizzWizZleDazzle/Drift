@@ -164,11 +164,13 @@ fn gp_health_bars(health: (Health, HealthBar, Transform), draw: Draw) {
 // ---- Hit effects ----
 
 // Tints the entity's Sprite, Rectangle or Circle with `color` for
-// `seconds` each time its Health takes a hit, or when flash() starts it.
+// `seconds` each time its Health takes a hit, or when flash_entity() starts
+// it.
 @component
 struct HitFlash { color: Color = Color { .. }, seconds: float = 0.12, left: float = 0.0, base: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 } }
 
-fn flash(cmd: Commands, e: Entity, f: HitFlash) {
+// Gives the entity `f` and starts its flash now, without a hit.
+fn flash_entity(cmd: Commands, e: Entity, f: HitFlash) {
     f.left = f.seconds;
     cmd.insert(e, f);
 }

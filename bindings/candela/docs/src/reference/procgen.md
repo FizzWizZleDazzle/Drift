@@ -620,7 +620,7 @@ const WALL: int = 1
 The value generators write for solid cells, and what `Grid.get` answers outside the grid.
 
 ```rust
-let path = find_path(g, a, b, [WALL], false);
+let path = find_path(g, a, b, [WALL], Moves::FourWay);
 ```
 
 ## DOOR
@@ -641,7 +641,7 @@ Cellular-automata caves: random walls smoothed into caverns.
 
 ```rust
 struct CaveOptions {
-    fill: float = 0.45,
+    wall_chance: float = 0.45,
     steps: int = 5,
     birth: int = 5,
     survive: int = 4,
@@ -652,7 +652,7 @@ struct CaveOptions {
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `fill` | `float` | `0.45` | Chance a cell starts as wall; higher gives narrower caves |
+| `wall_chance` | `float` | `0.45` | chance a cell starts as wall, 0 to 1 |
 | `steps` | `int` | `5` | Smoothing passes |
 | `birth` | `int` | `5` | Wall neighbours, of 8, that turn a cell into wall |
 | `survive` | `int` | `4` | Wall neighbours that keep a wall |
@@ -660,7 +660,7 @@ struct CaveOptions {
 | `keep_largest` | `bool` | `true` | Fills every cavern but the largest, so the whole cave is reachable |
 
 ```rust
-let caves = cave(r, 60, 32, CaveOptions { fill: 0.48, steps: 4, .. });
+let caves = cave(r, 60, 32, CaveOptions { wall_chance: 0.48, steps: 4, .. });
 ```
 
 ## cave
@@ -885,13 +885,13 @@ if wfc(r, sample, 60, 32, WfcOptions { .. }) is Some(g) {
 ## find_path
 
 ```rust
-fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], diagonal: bool) -> Cell[]
+fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], moves: Moves) -> Cell[]
 ```
 
-The cells from start to goal, both included, avoiding cells whose value is in `blocked`; empty when there is no way. `diagonal` allows diagonal steps that do not cut corners.
+The cells from start to goal, both included, avoiding cells whose value is in `blocked`; empty when there is no way.
 
 ```rust
-let path = find_path(level.grid, monster_cell, player_cell, [WALL], false);
+let path = find_path(level.grid, monster_cell, player_cell, [WALL], Moves::FourWay);
 if path.len() > 1 {
     pos.cell = path[1];   // one step closer
 }
@@ -918,7 +918,7 @@ struct FlowField {
 | `costs` | `float[]` | `[]` | For each cell, steps to the nearest goal |
 
 ```rust
-level.field = flow_field(level.grid, [player_cell], [WALL], true);
+level.field = flow_field(level.grid, [player_cell], [WALL], Moves::EightWay);
 v.linear = level.field.direction(my_cell) * 60.0;
 ```
 
@@ -985,13 +985,21 @@ v.linear = field.direction_at(t.position, 16.0) * speed;
 ## flow_field
 
 ```rust
-fn flow_field(g: Grid, goals: Cell[], blocked: int[], diagonal: bool) -> FlowField
+fn flow_field(g: Grid, goals: Cell[], blocked: int[], moves: Moves) -> FlowField
 ```
 
 A flow field over a grid toward the nearest of `goals`, through cells whose value is not in `blocked`. Build it again when a goal moves to another cell, not every frame.
 
 ```rust
-let field = flow_field(g, [goal], [WALL], true);
+let field = flow_field(g, [goal], [WALL], Moves::EightWay);
+```
+
+## Moves
+
+Which neighbours a step on a grid can go to: the four beside a cell, or the diagonals too (never cutting a blocked corner).
+
+```rust
+enum Moves { FourWay, EightWay }
 ```
 
 ## field_of_view

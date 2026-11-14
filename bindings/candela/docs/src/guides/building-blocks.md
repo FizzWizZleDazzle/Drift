@@ -57,7 +57,7 @@ fn on_death(d: Died, score: Score) {
 
 ## Hit effects
 
-- `HitFlash { color, seconds }` tints the entity's `Sprite`, `Rectangle` or `Circle` each time its `Health` takes a hit. `flash(cmd, e, HitFlash { .. })` starts one from code.
+- `HitFlash { color, seconds }` tints the entity's `Sprite`, `Rectangle` or `Circle` each time its `Health` takes a hit. `flash_entity(cmd, e, HitFlash { .. })` starts one from code.
 - `cmd.send(HitStop { seconds: 0.06 })` freezes the game for that long: physics, tweens, particles and `dt` stop, then carry on. It uses `Time.set_scale`.
 - `cmd.send(Shake { intensity: 0.5 })` shakes every camera.
 - `popup(cmd, pos, "-12", rgb(255, 90, 90))` puts a number or word at a world position that pops in, floats up and fades: damage numbers and pickups.

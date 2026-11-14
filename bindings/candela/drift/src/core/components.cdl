@@ -282,11 +282,11 @@ fn world_transform(e: Entity) -> GlobalTransform {
 }
 // A point in the entity's space (where a child at `local` would be) to the
 // world, and a world point to the entity's space.
-fn to_world(e: Entity, local: Vec2) -> Vec2 {
+fn local_to_world(e: Entity, local: Vec2) -> Vec2 {
     let p = drift::hier_to_world(e.id, local.x, local.y);
     return Vec2 { x: p[0], y: p[1] };
 }
-fn to_local(e: Entity, world: Vec2) -> Vec2 {
+fn world_to_local(e: Entity, world: Vec2) -> Vec2 {
     let p = drift::hier_to_local(e.id, world.x, world.y);
     return Vec2 { x: p[0], y: p[1] };
 }

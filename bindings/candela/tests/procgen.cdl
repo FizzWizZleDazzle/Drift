@@ -76,12 +76,12 @@ fn check(window: Window, checks: Checks, assets: Assets, random: Random) {
     for y in range(4) {
         maze.set(cell(4, y), WALL);
     }
-    let path = find_path(maze, cell(0, 0), cell(7, 0), [WALL], false);
+    let path = find_path(maze, cell(0, 0), cell(7, 0), [WALL], Moves::FourWay);
     expect(checks, "find_path", path.len() == 16 && path[15].x == 7);
-    let field = flow_field(maze, [cell(7, 0)], [WALL], false);
+    let field = flow_field(maze, [cell(7, 0)], [WALL], Moves::FourWay);
     expect(checks, "flow_field", field.cost(cell(0, 0)) == 15.0 && field.cost(cell(4, 0)) == -1.0);
     expect(checks, "regions", maze.region_sizes(FLOOR).len() == 1);
-    let open = cave(rng(3), 30, 20, CaveOptions { fill: 0.55, keep_largest: false, .. });
+    let open = cave(rng(3), 30, 20, CaveOptions { wall_chance: 0.55, keep_largest: false, .. });
     let pockets = open.region_sizes(FLOOR).len();
     open.keep_largest_region(FLOOR, WALL);
     expect(checks, "keep_largest_region", pockets > 1 && open.region_sizes(FLOOR).len() == 1);
@@ -102,7 +102,7 @@ fn check(window: Window, checks: Checks, assets: Assets, random: Random) {
     let tiles = assets.create_texture(32, 16, white);
     let map = assets.create_tilemap(30, 20, 16, tiles, ["Ground", "Walls"]);
     let walls = cave(rng(12), 30, 20, CaveOptions { .. });
-    map.fill(1, walls, [0, 2], cell(0, 0));
+    map.write_grid(1, walls, [0, 2], cell(0, 0));
     expect(checks, "map size", map.size().x == 30 && map.size().y == 20 && map.tile_size().x == 16);
     expect(checks, "map layers", map.layer_count() == 2 && map.layer("Walls") == 1 && map.layer_name(0) == "Ground");
     expect(checks, "map tile", map.tile(1, cell(0, 0)) == 2);
@@ -116,7 +116,7 @@ fn check(window: Window, checks: Checks, assets: Assets, random: Random) {
     expect(checks, "map to_grid", same);
     map.set_tile(0, cell(3, 4), 1);
     expect(checks, "map set_tile", map.tile(0, cell(3, 4)) == 1);
-    let spot = map.world_to_tile(vec2(40.0, 70.0), 0);
+    let spot = map.world_to_tile(0, vec2(40.0, 70.0));
     expect(checks, "map world_to_tile", spot.x == 2 && spot.y == 4);
     map.destroy();
 

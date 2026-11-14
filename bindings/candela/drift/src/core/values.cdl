@@ -40,6 +40,11 @@ impl Rect {
     fn center(self) -> Vec2 { return Vec2 { x: self.x + self.w * 0.5, y: self.y + self.h * 0.5 }; }
 }
 
+// A width for each side of a box: nine-slice borders, padding.
+struct Edges { left: float = 0.0, top: float = 0.0, right: float = 0.0, bottom: float = 0.0 }
+// The same width on every side.
+fn edges(all: float) -> Edges { return Edges { left: all, top: all, right: all, bottom: all }; }
+
 struct Color { r: float = 1.0, g: float = 1.0, b: float = 1.0, a: float = 1.0 }
 fn rgb(r: int, g: int, b: int) -> Color {
     return Color { r: float(r) / 255.0, g: float(g) / 255.0, b: float(b) / 255.0, a: 1.0 };

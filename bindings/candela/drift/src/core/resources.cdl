@@ -101,8 +101,12 @@ impl Input {
     fn mouse_down(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 0); }
     fn mouse_pressed(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 1); }
     fn mouse_released(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 2); }
-    fn mouse_position(self) -> Vec2 { let v = drift::mouse_vec(0); return Vec2 { x: v[0], y: v[1] }; }
+    // The mouse in logical screen pixels, (0, 0) at the top-left, the
+    // coordinates the HUD and Draw.hud() use.
+    fn mouse_screen(self) -> Vec2 { let v = drift::mouse_vec(0); return Vec2 { x: v[0], y: v[1] }; }
+    // The same point in the world, through the main camera.
     fn mouse_world(self) -> Vec2 { let v = drift::mouse_vec(1); return Vec2 { x: v[0], y: v[1] }; }
+    // How far the mouse moved this frame, in screen pixels.
     fn mouse_delta(self) -> Vec2 { let v = drift::mouse_vec(2); return Vec2 { x: v[0], y: v[1] }; }
     fn gamepad_down(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 0); }
     fn gamepad_pressed(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 1); }

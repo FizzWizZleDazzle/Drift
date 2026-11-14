@@ -52,19 +52,20 @@ impl Map {
     fn int_grid(self, layer: int, c: Cell) -> int { return drift::map_tile(self.id, layer, c.x, c.y, 1); }
     fn set_int_grid(self, layer: int, c: Cell, value: int) { drift::map_set_tile(self.id, layer, c.x, c.y, value, 1); }
     fn tile_at(self, layer: int, p: Vec2) -> int { return drift::map_tile_at(self.id, layer, p.x, p.y); }
-    fn world_to_tile(self, p: Vec2, layer: int) -> Cell {
+    // The cell of a layer under a world position.
+    fn world_to_tile(self, layer: int, p: Vec2) -> Cell {
         let c = drift::map_world_to_tile(self.id, p.x, p.y, layer);
         return Cell { x: c[0], y: c[1] };
     }
-    // The cell's top-left in the world.
-    fn tile_to_world(self, c: Cell, layer: int) -> Vec2 {
+    // The world position of a cell's top-left corner.
+    fn tile_to_world(self, layer: int, c: Cell) -> Vec2 {
         let p = drift::map_tile_to_world(self.id, c.x, c.y, layer);
         return Vec2 { x: p[0], y: p[1] };
     }
     // Writes a grid into a tile layer from cell `at`: a cell holding value v
     // becomes tile tiles[v]; 0, and values past the end of `tiles`, leave
-    // the cell empty.
-    fn fill(self, layer: int, g: Grid, tiles: int[], at: Cell) {
+    // the cell empty. The counterpart of to_grid.
+    fn write_grid(self, layer: int, g: Grid, tiles: int[], at: Cell) {
         drift::map_fill(self.id, layer, g.width, g.height, g.cells, tiles, at.x, at.y);
     }
     // A tile layer's ids as a grid of the map's size.

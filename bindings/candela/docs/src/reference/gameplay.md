@@ -186,7 +186,7 @@ A system the module adds: it runs in every game that imports the module.
 
 ## HitFlash
 
-Tints the entity's Sprite, Rectangle or Circle with `color` for `seconds` each time its Health takes a hit, or when flash() starts it.
+Tints the entity's Sprite, Rectangle or Circle with `color` for `seconds` each time its Health takes a hit, or when flash_entity() starts it.
 
 ```rust
 @component
@@ -198,11 +198,13 @@ struct HitFlash {
 }
 ```
 
-## flash
+## flash_entity
 
 ```rust
-fn flash(cmd: Commands, e: Entity, f: HitFlash)
+fn flash_entity(cmd: Commands, e: Entity, f: HitFlash)
 ```
+
+Gives the entity `f` and starts its flash now, without a hit.
 
 ## gp_flash_on_hit
 

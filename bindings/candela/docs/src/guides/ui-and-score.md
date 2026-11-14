@@ -324,7 +324,7 @@ Widget animations use the frame time before the time scale, so they keep moving 
 dialog_box(cmd, theme, "intro", ["The bridge is out.", "Find another way across."]);
 ```
 
-`Typewriter` is the typing on its own: put it on any `Text` with the `full` string and a `speed` in characters per second; `finished` turns true when all of it shows.
+`Typewriter` is the typing on its own: put it on any `Text` with the `full` string and `chars_per_second`; `finished` turns true when all of it shows.
 
 ### Parts
 

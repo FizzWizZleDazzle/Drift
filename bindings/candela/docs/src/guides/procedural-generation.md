@@ -190,7 +190,7 @@ Each generator takes a generator, advances it, and returns a grid of `width` x `
 
 ```rust
 let r = rng(seed);
-let caves = cave(r, 60, 32, CaveOptions { fill: 0.48, .. });
+let caves = cave(r, 60, 32, CaveOptions { wall_chance: 0.48, .. });
 let d = dungeon(r, 60, 32, DungeonOptions { max_room: 9, .. });
 let tunnels = random_walk(r, 60, 32, WalkOptions { walkers: 4, brush: 2, .. });
 ```
@@ -367,8 +367,8 @@ Weights are relative: 60, 25, 12 and 3 add up to 100, so a common item comes up 
 
 ```rust
 level.map = assets.create_tilemap(60, 32, 16, art.tiles, ["Floor", "Walls"]);
-level.map.fill(0, floor, [0, 1, 2], cell(0, 0));   // value 1 -> tile 1, 2 -> tile 2
-level.map.fill(1, caves, [0, 3], cell(0, 0));      // FLOOR stays empty, WALL is tile 3
+level.map.write_grid(0, floor, [0, 1, 2], cell(0, 0));   // value 1 -> tile 1, 2 -> tile 2
+level.map.write_grid(1, caves, [0, 3], cell(0, 0));      // FLOOR stays empty, WALL is tile 3
 level.map.set_layer_solid(1, true, [3]);           // walls become colliders
 cmd.spawn([at(0.0, 0.0), Tilemap { map: level.map, .. }]);
 ```
@@ -415,7 +415,7 @@ A flow field answers "which way to the goal" for every cell at once, so one fiel
 In a game, each chaser reads the direction of the cell it stands on:
 
 ```rust
-level.field = flow_field(level.grid, [player_cell], [WALL], true);
+level.field = flow_field(level.grid, [player_cell], [WALL], Moves::EightWay);
 // later, for each chaser:
 velocity.linear = level.field.direction(cell_of(t.position)) * 55.0;
 ```

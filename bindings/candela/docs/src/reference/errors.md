@@ -78,3 +78,17 @@ Names that read as one thing and did another were renamed, and an old name is no
 | `resource_number(path)`, `resource_string(path)` | `resource_field<Game>("score").number()`, `.text()` |
 | `clock(seconds, false)`, `clock(seconds, true)` | `format_clock(seconds)`, `format_clock_tenths(seconds)` |
 | `fill(pattern, values)` | `format_named(pattern, values)` |
+| `to_world(e, p)`, `to_local(e, p)` | `local_to_world(e, p)`, `world_to_local(e, p)` |
+| `input.mouse_position()` | `input.mouse_screen()` |
+| `map.fill(layer, grid, tiles, at)` | `map.write_grid(layer, grid, tiles, at)` |
+| `map.world_to_tile(pos, layer)`, `map.tile_to_world(cell, layer)` | `map.world_to_tile(layer, pos)`, `map.tile_to_world(layer, cell)` |
+| `CaveOptions { fill }` | `CaveOptions { wall_chance }` |
+| `find_path(..., true)`, `flow_field(..., false)` | `find_path(..., Moves::EightWay)`, `flow_field(..., Moves::FourWay)` |
+| `draw.polyline(points, c, w, true)` | `draw.polygon_lines(points, c, w)`; `polyline` no longer takes the flag |
+| `img.gradient(a, b, false)`, `img.gradient(a, b, true)` | `img.horizontal_gradient(a, b)`, `img.vertical_gradient(a, b)` |
+| `draw.nine_slice(..., rect(8.0, 8.0, 8.0, 8.0), c)`, `NineSlice { border: Rect }` | `edges(8.0)`, or `Edges { left, top, right, bottom }` |
+| `effects.restart(emitter)` | `effects.restart_particles(emitter)` |
+| `timer.fraction()`, `cooldown.fraction()` | `timer.progress()`, `cooldown.remaining_fraction()` |
+| `flash(cmd, e, f)` (drift/gameplay) | `flash_entity(cmd, e, f)` |
+| `quests.in_state(s)` (drift/rpg) | `quests.with_state(s)` |
+| `Typewriter { speed }` (drift/ui) | `Typewriter { chars_per_second }` |

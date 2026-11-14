@@ -33,7 +33,7 @@ fn torch(cmd: Commands) {
 - `size_start_max`, `rotation_min`/`max` and `spin_min`/`max` vary each particle; `local: true` keeps particles moving with the emitter; `prewarm` starts an emitter as if it had already run that many seconds, so a torch is lit from the first frame.
 - `bursts` fire many particles at once at set times: `Burst { time: 0.0, count: 30, cycles: 3, interval: 0.5 }` fires 30 three times, half a second apart.
 
-Turn an emitter on and off by writing `playing`, and start one over, bursts and all, with `effects.restart(emitter)`:
+Turn an emitter on and off by writing `playing`, and start one over, bursts and all, with `effects.restart_particles(emitter)`:
 
 ```rust
 @system

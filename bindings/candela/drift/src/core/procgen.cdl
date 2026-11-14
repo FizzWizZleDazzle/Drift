@@ -90,7 +90,7 @@ fn grid_answer(rng: Rng, r: int[]) -> Grid {
 
 // Cellular-automata caves: random walls smoothed into caverns.
 struct CaveOptions {
-    fill: float = 0.45,          // chance a cell starts as wall
+    wall_chance: float = 0.45,   // chance a cell starts as wall, 0 to 1
     steps: int = 5,              // smoothing passes
     birth: int = 5,              // walls among 8 neighbours that make a wall
     survive: int = 4,            // walls among 8 neighbours that keep a wall
@@ -98,7 +98,7 @@ struct CaveOptions {
     keep_largest: bool = true,   // fill every cavern but the largest
 }
 fn cave(rng: Rng, width: int, height: int, o: CaveOptions) -> Grid {
-    return grid_answer(rng, drift::gen_cave(rng.hi, rng.lo, rng.inc, width, height, o.fill, o.steps, o.birth,
+    return grid_answer(rng, drift::gen_cave(rng.hi, rng.lo, rng.inc, width, height, o.wall_chance, o.steps, o.birth,
                                             o.survive, o.solid_edges, o.keep_largest));
 }
 
@@ -193,11 +193,14 @@ fn wfc(rng: Rng, sample: Grid, width: int, height: int, o: WfcOptions) -> Option
 
 // ---- Pathfinding ----
 
+// Which neighbours a step on a grid can go to: the four beside a cell, or
+// the diagonals too (never cutting a blocked corner).
+enum Moves { FourWay, EightWay }
+
 // The cells from start to goal, both included, avoiding cells whose value
-// is in `blocked`; empty when there is no way. `diagonal` allows diagonal
-// steps that do not cut corners.
-fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], diagonal: bool) -> Cell[] {
-    let r = drift::path_find(g.width, g.height, g.cells, blocked, start.x, start.y, goal.x, goal.y, diagonal);
+// is in `blocked`; empty when there is no way.
+fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], moves: Moves) -> Cell[] {
+    let r = drift::path_find(g.width, g.height, g.cells, blocked, start.x, start.y, goal.x, goal.y, moves == Moves::EightWay);
     let out: Cell[] = [];
     for i in range(r.len() / 2) {
         out.push(Cell { x: r[i * 2], y: r[i * 2 + 1] });
@@ -208,13 +211,13 @@ fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], diagonal: bool) -
 // For every cell, the next step toward the nearest goal: one field steers
 // any number of chasers.
 struct FlowField { width: int = 0, height: int = 0, next: int[] = [], costs: float[] = [] }
-fn flow_field(g: Grid, goals: Cell[], blocked: int[], diagonal: bool) -> FlowField {
+fn flow_field(g: Grid, goals: Cell[], blocked: int[], moves: Moves) -> FlowField {
     let flat: int[] = [];
     for c in goals {
         flat.push(c.x);
         flat.push(c.y);
     }
-    let r = drift::flow_field(g.width, g.height, g.cells, blocked, flat, diagonal);
+    let r = drift::flow_field(g.width, g.height, g.cells, blocked, flat, moves == Moves::EightWay);
     let n = g.width * g.height;
     let next: int[] = [];
     for i in range(n) {

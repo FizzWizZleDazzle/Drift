@@ -12,7 +12,7 @@ import "drift/core/rendering" { * };
 impl Effects {
     // Starts an emitter's run over: its bursts fire again and a finished one
     // emits anew.
-    fn restart(self, emitter: Entity) { drift::particles_restart(emitter.id); }
+    fn restart_particles(self, emitter: Entity) { drift::particles_restart(emitter.id); }
 }
 
 // ---- Post effects ----

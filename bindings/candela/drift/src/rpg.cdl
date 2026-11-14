@@ -277,8 +277,8 @@ impl Quests {
         }
         return 0;
     }
-    // Every quest in a state.
-    fn in_state(self, s: QuestState) -> string[] {
+    // The ids of every quest in a state.
+    fn with_state(self, s: QuestState) -> string[] {
         let out: string[] = [];
         for k in self.states.keys() {
             if self.states[k] == s {

@@ -8,11 +8,11 @@ import "drift/core/assets" { * };
 // sound ended; it then does nothing.
 struct Voice { id: int = 0 }
 impl Voice {
-    fn stop(self, fade: float) { drift::voice_op(self.id, 0, fade, 0.0); }
-    fn pause(self, fade: float) { drift::voice_op(self.id, 1, fade, 0.0); }
-    fn resume(self, fade: float) { drift::voice_op(self.id, 2, fade, 0.0); }
-    // Volume 0 to 1, reached over `fade` seconds.
-    fn set_volume(self, volume: float, fade: float) { drift::voice_op(self.id, 3, volume, fade); }
+    fn stop(self, fade_seconds: float) { drift::voice_op(self.id, 0, fade_seconds, 0.0); }
+    fn pause(self, fade_seconds: float) { drift::voice_op(self.id, 1, fade_seconds, 0.0); }
+    fn resume(self, fade_seconds: float) { drift::voice_op(self.id, 2, fade_seconds, 0.0); }
+    // Volume 0 to 1, reached over `fade_seconds`.
+    fn set_volume(self, volume: float, fade_seconds: float) { drift::voice_op(self.id, 3, volume, fade_seconds); }
     fn set_pan(self, pan: float) { drift::voice_op(self.id, 4, pan, 0.0); }
     fn set_pitch(self, pitch: float) { drift::voice_op(self.id, 5, pitch, 0.0); }
     fn set_looping(self, looping: bool) {
@@ -49,14 +49,14 @@ fn music(path: string) -> Sound {
 // apply to everything below.
 struct Bus { id: int = 0 }
 impl Bus {
-    fn set_volume(self, volume: float, fade: float) { drift::bus_op(self.id, 0, volume, fade); }
+    fn set_volume(self, volume: float, fade_seconds: float) { drift::bus_op(self.id, 0, volume, fade_seconds); }
     fn volume(self) -> float { return drift::bus_op(self.id, 1, 0.0, 0.0); }
     fn set_muted(self, muted: bool) { drift::bus_op(self.id, 2, bool_float(muted), 0.0); }
     fn muted(self) -> bool { return drift::bus_op(self.id, 3, 0.0, 0.0) > 0.5; }
     fn set_paused(self, paused: bool) { drift::bus_op(self.id, 4, bool_float(paused), 0.0); }
     fn paused(self) -> bool { return drift::bus_op(self.id, 5, 0.0, 0.0) > 0.5; }
     // Stops every sound on this bus and the buses below it.
-    fn stop(self, fade: float) { drift::bus_op(self.id, 6, fade, 0.0); }
+    fn stop(self, fade_seconds: float) { drift::bus_op(self.id, 6, fade_seconds, 0.0); }
 }
 
 fn bool_float(b: bool) -> float {
@@ -70,22 +70,22 @@ fn bool_float(b: bool) -> float {
 struct Audio { id: int = 0 }
 impl Audio {
     // One music track at a time on the music bus; another crossfades over
-    // `crossfade` seconds.
-    fn play_music(self, track: Sound, crossfade: float, looping: bool) {
-        drift::music_op(0, track.id, crossfade, looping);
+    // `crossfade_seconds`.
+    fn play_music(self, track: Sound, crossfade_seconds: float, looping: bool) {
+        drift::music_op(0, track.id, crossfade_seconds, looping);
     }
-    // Tracks one after another, `crossfade` seconds apart (0 is gapless).
-    fn play_playlist(self, tracks: Sound[], crossfade: float, looping: bool, shuffle: bool) {
+    // Tracks one after another, `crossfade_seconds` apart (0 is gapless).
+    fn play_playlist(self, tracks: Sound[], crossfade_seconds: float, looping: bool, shuffle: bool) {
         let ids: int[] = [];
         for t in tracks {
             ids.push(t.id);
         }
-        drift::music_playlist(ids, crossfade, looping, shuffle, 1.0);
+        drift::music_playlist(ids, crossfade_seconds, looping, shuffle, 1.0);
     }
     fn next_track(self) { drift::music_op(5, 0, 0.0, false); }
-    fn stop_music(self, fade: float) { drift::music_op(1, 0, fade, false); }
-    fn pause_music(self, fade: float) { drift::music_op(2, 0, fade, false); }
-    fn resume_music(self, fade: float) { drift::music_op(3, 0, fade, false); }
+    fn stop_music(self, fade_seconds: float) { drift::music_op(1, 0, fade_seconds, false); }
+    fn pause_music(self, fade_seconds: float) { drift::music_op(2, 0, fade_seconds, false); }
+    fn resume_music(self, fade_seconds: float) { drift::music_op(3, 0, fade_seconds, false); }
     fn music_playing(self) -> bool { return drift::music_op(4, 0, 0.0, false) > 0.5; }
     fn master_bus(self) -> Bus { return Bus { id: drift::audio_bus("master", 0) }; }
     fn music_bus(self) -> Bus { return Bus { id: drift::audio_bus("music", 0) }; }

@@ -67,7 +67,7 @@ Keyboard input reaches the game once the player clicks into it, as with every em
 
 ## Phones and tablets
 
-Touch works without any setup: a finger on the game is the left mouse button at that point, so `mouse_pressed`, `mouse_position` and actions bound to `mouse:Left` respond to taps. A tap shorter than a frame still counts as a press.
+Touch works without any setup: a finger on the game is the left mouse button at that point, so `mouse_pressed`, `mouse_screen` and actions bound to `mouse:Left` respond to taps. A tap shorter than a frame still counts as a press.
 
 For games played with keys, `[web]` adds on-screen controls that press keys for the game, so key reads and actions bound to those keys work unchanged:
 

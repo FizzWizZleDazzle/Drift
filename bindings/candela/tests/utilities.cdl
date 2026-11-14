@@ -126,7 +126,7 @@ fn data_and_values(checks: Checks, cmd: Commands) {
     q.progress("hunt", "wolves", 2);
     q.complete("hunt");
     expect(checks, "quests", q.is_done("hunt") && q.count("hunt", "wolves") == 2 && q.progress("hunt", "wolves", 1) == 2
-           && q.state("other") == QuestState::Inactive && q.in_state(QuestState::Done) == ["hunt"]);
+           && q.state("other") == QuestState::Inactive && q.with_state(QuestState::Done) == ["hunt"]);
 
     cmd.send_after(0.3, Ping { n: 1 });
 }

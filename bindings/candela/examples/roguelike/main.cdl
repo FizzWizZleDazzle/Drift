@@ -111,7 +111,7 @@ fn build(cmd: Commands, assets: Assets, level: Level, art: Art, things: (Entity,
     // The grid becomes a tile layer: FLOOR (0), WALL (1) and DOOR (2)
     // become tiles 1, 2 and 3.
     level.map = assets.create_tilemap(MAP_W, MAP_H, 16, art.tiles, ["Dungeon"]);
-    level.map.fill(0, level.grid, [TILE_FLOOR, TILE_WALL, TILE_DOOR], cell(0, 0));
+    level.map.write_grid(0, level.grid, [TILE_FLOOR, TILE_WALL, TILE_DOOR], cell(0, 0));
     let last = d.rooms[d.rooms.len() - 1].center();
     level.map.set_tile(0, last, TILE_STAIRS);
     level.map_entity = cmd.spawn([at(0.0, TOP), Tilemap { map: level.map, colliders: false, .. }]);
@@ -248,7 +248,7 @@ fn take_turn(input: Input, level: Level, cmd: Commands, phase: State<Phase>,
             if m.hp <= 0 {
                 continue;
             }
-            let path = find_path(level.grid, mpos.cell, pos.cell, [WALL], false);
+            let path = find_path(level.grid, mpos.cell, pos.cell, [WALL], Moves::FourWay);
             if path.len() == 0 || path.len() - 1 > SIGHT {
                 continue;
             }

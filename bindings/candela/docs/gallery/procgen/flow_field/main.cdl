@@ -8,10 +8,10 @@ const CELL: int = 18;
 
 // ANCHOR: flow
 fn flow_picture(assets: Assets) -> Image {
-    let g = cave(rng(3), 40, 24, CaveOptions { fill: 0.42, .. });
+    let g = cave(rng(3), 40, 24, CaveOptions { wall_chance: 0.42, .. });
     let open = g.cells_of(FLOOR);
     let goal = open[open.len() / 2];
-    let field = flow_field(g, [goal], [WALL], true);
+    let field = flow_field(g, [goal], [WALL], Moves::EightWay);
 
     let img = assets.create_image(40 * CELL, 24 * CELL, rgb(36, 30, 44));
     for c in g.cells_of(FLOOR) {

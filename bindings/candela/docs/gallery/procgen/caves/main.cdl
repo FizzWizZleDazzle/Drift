@@ -6,7 +6,7 @@ import "drift" { * };
 // ANCHOR: cave
 // A cave as an image, one pixel per cell.
 fn cave_image(assets: Assets, seed: int, fill: float) -> Image {
-    let g = cave(rng(seed), 56, 44, CaveOptions { fill: fill, .. });
+    let g = cave(rng(seed), 56, 44, CaveOptions { wall_chance: fill, .. });
     let img = assets.create_image(g.width, g.height, rgb(52, 44, 62));
     for c in g.cells_of(FLOOR) {
         img.set(c.x, c.y, rgb(222, 204, 166));

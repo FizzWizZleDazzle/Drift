@@ -469,7 +469,7 @@ Each pupil is a child of its eye; `to_local` turns the cursor into the eye's spa
 
 ```rust
 let eye = parent_of(e);
-t.position = to_local(eye, input.mouse_world()).clamp_length(2.2);
+t.position = world_to_local(eye, input.mouse_world()).clamp_length(2.2);
 ```
 
 ### 5. Legs that step
@@ -484,8 +484,8 @@ for (leg, _) in legs {
     }
 }
 for (leg, t) in legs {
-    let hip = to_world(rig.body, leg.hip);
-    leg.foot.update(to_world(rig.body, leg.rest), gait, standing[1 - leg.group], time.dt);
+    let hip = local_to_world(rig.body, leg.hip);
+    leg.foot.update(local_to_world(rig.body, leg.rest), gait, standing[1 - leg.group], time.dt);
     let pose = two_bone_ik(hip, leg.foot.position, leg.upper, leg.lower, leg.bend);
     t.rotation = angle_diff(body.rotation, pose.upper);
 }
@@ -504,15 +504,15 @@ rig.tail.damping = 0.85;
 rig.tail.stiffness = 0.6;
 ```
 
-Each frame `swing_tail` steps it from the body's rear, `to_world(rig.body, vec2(-26.0, 0.0))`, and `place_tail` puts one shrinking circle on each point.
+Each frame `swing_tail` steps it from the body's rear, `local_to_world(rig.body, vec2(-26.0, 0.0))`, and `place_tail` puts one shrinking circle on each point.
 
 ### 7. Antennae that lag
 
 The antenna tips are roots of their own, each with a `Spring2` chasing the point where it would be on a rigid head. The spring is soft, so the tips trail behind when the head turns and wobble when it stops; a line from the base on the head to the tip draws the stalk:
 
 ```rust
-let base = to_world(rig.head, a.base);
-t.position = a.tip.update(to_world(rig.head, a.offset), 160.0, 7.0, time.dt);
+let base = local_to_world(rig.head, a.base);
+t.position = a.tip.update(local_to_world(rig.head, a.offset), 160.0, 7.0, time.dt);
 draw.line(base, t.position, rgb(60, 110, 70), 2.0);
 ```
 

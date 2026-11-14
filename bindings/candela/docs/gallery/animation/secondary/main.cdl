@@ -30,7 +30,7 @@ fn glide(row: (Head, Transform), input: Input, rig: Rig, time: Time) {
 @system(after: [glide])
 fn antenna(row: (Tip, Transform), rig: Rig, time: Time) {
     let (tip, t) = row;
-    t.position = tip.at.update(to_world(rig.head, tip.offset), 90.0, 5.0, time.dt);
+    t.position = tip.at.update(local_to_world(rig.head, tip.offset), 90.0, 5.0, time.dt);
 }
 
 @system(after: [glide])
@@ -47,7 +47,7 @@ fn stalks(row: (Stalk, Transform, Rectangle), rig: Rig, tips: Lookup<Tip>) {
     let (stalk, t, r) = row;
     match tips.get(stalk.tip) {
         Some(tip) => {
-            let base = to_world(rig.head, stalk.base);
+            let base = local_to_world(rig.head, stalk.base);
             t.position = base;
             t.rotation = look_at(base, tip.at.value);
             r.size.x = (tip.at.value - base).length();

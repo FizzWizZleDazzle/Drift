@@ -47,12 +47,12 @@ The map draws at its entity's `Transform`, with `z` and `layer` from the `Tilema
 
 ```rust
 let map = assets.create_tilemap(60, 32, 16, art.tiles, ["Ground", "Walls"]);
-map.fill(1, level_grid, [0, 3], cell(0, 0));   // value 0 stays empty, value 1 becomes tile 3
+map.write_grid(1, level_grid, [0, 3], cell(0, 0));   // value 0 stays empty, value 1 becomes tile 3
 map.set_layer_solid(1, true, [3]);
 cmd.spawn([at(0.0, 0.0), Tilemap { map: map, .. }]);
 ```
 
-`fill(layer, grid, tiles, at)` writes the grid with its top-left at cell `at`; a cell holding value v becomes tile `tiles[v]`, and values past the end of `tiles` leave the cell empty. `to_grid(layer)` reads a layer back as a grid. When a level is replaced, despawn its `Tilemap` entity and call `map.destroy()` to free the old map.
+`write_grid(layer, grid, tiles, at)` writes the grid with its top-left at cell `at`; a cell holding value v becomes tile `tiles[v]`, and values past the end of `tiles` leave the cell empty. `to_grid(layer)` reads a layer back as a grid. When a level is replaced, despawn its `Tilemap` entity and call `map.destroy()` to free the old map.
 
 ## Layers
 
@@ -76,7 +76,7 @@ fn dig(input: Input, level: Level) {
         return;
     }
     let ground = level.map.layer("Ground");
-    let cell = level.map.world_to_tile(input.mouse_world(), ground);
+    let cell = level.map.world_to_tile(ground, input.mouse_world());
     if level.map.tile(ground, cell) != 0 {
         level.map.set_tile(ground, cell, 0);   // colliders follow next frame
     }
@@ -88,7 +88,7 @@ fn dig(input: Input, level: Level) {
 | `tile(layer, cell)`, `set_tile(layer, cell, id)` | Read and change tiles |
 | `int_grid(layer, cell)`, `set_int_grid(layer, cell, value)` | LDtk IntGrid values. Changing a value does not re-run LDtk's auto-layer rules |
 | `tile_at(layer, world_pos)` | The tile under a world position |
-| `world_to_tile(pos, layer)`, `tile_to_world(cell, layer)` | Convert between world positions and cells; `tile_to_world` gives the top-left |
+| `world_to_tile(layer, pos)`, `tile_to_world(layer, cell)` | Convert between world positions and cells; `tile_to_world` gives the top-left |
 | `size()`, `tile_size()`, `bounds()` | The map's size in cells, a cell's size in pixels, and its world rect |
 
 Map methods act on the map at once.

@@ -214,7 +214,7 @@ fn contains(self, p: Vec2) -> bool
 Whether a point is inside.
 
 ```rust
-if button.contains(input.mouse_position()) { hovered = true; }
+if button.contains(input.mouse_screen()) { hovered = true; }
 ```
 
 ### Rect.overlaps
@@ -648,16 +648,16 @@ Seconds left in the current period.
 label.value = string(int(round.left.remaining())) + " s";
 ```
 
-### Timer.fraction
+### Timer.progress
 
 ```rust
-fn fraction(self) -> float
+fn progress(self) -> float
 ```
 
 Progress through the current period, 0 to 1.
 
 ```rust
-bar.size = vec2(100.0 * reload.fraction(), 6.0);
+bar.size = vec2(100.0 * reload.progress(), 6.0);
 ```
 
 ### Timer.reset
@@ -762,16 +762,16 @@ If ready, starts the cooldown and returns true.
 if input.action_pressed("dash") && dash.try_use() { v.linear = v.linear * 3.0; }
 ```
 
-### Cooldown.fraction
+### Cooldown.remaining_fraction
 
 ```rust
-fn fraction(self) -> float
+fn remaining_fraction(self) -> float
 ```
 
-1.0 right after use, falling to 0.0 when ready.
+The share of the cooldown still to wait: 1.0 right after use, falling to 0.0 when ready.
 
 ```rust
-draw.arc(t.position, 12.0, 0.0, TAU * dash.fraction(), rgb(255, 255, 255), 2.0);
+draw.arc(t.position, 12.0, 0.0, TAU * dash.remaining_fraction(), rgb(255, 255, 255), 2.0);
 ```
 
 ### Cooldown.reset
@@ -858,27 +858,48 @@ The entity's transform after every parent, from the engine's current Transforms 
 let tip = world_transform(sword_tip).position;
 ```
 
-## to_world
+## local_to_world
 
 ```rust
-fn to_world(e: Entity, local: Vec2) -> Vec2
+fn local_to_world(e: Entity, local: Vec2) -> Vec2
 ```
 
 A point in the entity's space (where a child at `local` would be) to the world, and a world point to the entity's space.
 
 ```rust
-let muzzle = to_world(gun, vec2(18.0, 0.0));
+let muzzle = local_to_world(gun, vec2(18.0, 0.0));
 ```
 
-## to_local
-
-```rust
-fn to_local(e: Entity, world: Vec2) -> Vec2
-```
+## world_to_local
 
 ```rust
-let local = to_local(ship, input.mouse_world());
+fn world_to_local(e: Entity, world: Vec2) -> Vec2
 ```
+
+```rust
+let local = world_to_local(ship, input.mouse_world());
+```
+
+## Edges
+
+A width for each side of a box: nine-slice borders, padding.
+
+```rust
+struct Edges {
+    left: float = 0.0,
+    top: float = 0.0,
+    right: float = 0.0,
+    bottom: float = 0.0,
+}
+```
+
+## edges
+
+```rust
+fn edges(all: float) -> Edges
+```
+
+The same width on every side.
 
 ## inverse_lerp
 

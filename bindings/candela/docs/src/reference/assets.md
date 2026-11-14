@@ -243,7 +243,7 @@ fn start_engine(sfx: Sfx, engine: Engine) {
 ### Voice.stop
 
 ```rust
-fn stop(self, fade: float)
+fn stop(self, fade_seconds: float)
 ```
 
 Stops it, fading out over `fade` seconds.
@@ -255,7 +255,7 @@ engine.hum.stop(0.5);
 ### Voice.pause
 
 ```rust
-fn pause(self, fade: float)
+fn pause(self, fade_seconds: float)
 ```
 
 Pauses it, fading out over `fade` seconds.
@@ -267,7 +267,7 @@ engine.hum.pause(0.2);
 ### Voice.resume
 
 ```rust
-fn resume(self, fade: float)
+fn resume(self, fade_seconds: float)
 ```
 
 Resumes it, fading in over `fade` seconds.
@@ -279,10 +279,10 @@ engine.hum.resume(0.2);
 ### Voice.set_volume
 
 ```rust
-fn set_volume(self, volume: float, fade: float)
+fn set_volume(self, volume: float, fade_seconds: float)
 ```
 
-Volume 0 to 1, reached over `fade` seconds.
+Volume 0 to 1, reached over `fade_seconds`.
 
 ```rust
 engine.hum.set_volume(0.1, 1.0);
@@ -366,7 +366,7 @@ voices.set_volume(options.voice_volume, 0.0);
 ### Bus.set_volume
 
 ```rust
-fn set_volume(self, volume: float, fade: float)
+fn set_volume(self, volume: float, fade_seconds: float)
 ```
 
 Volume 0 to 1, reached over `fade` seconds.
@@ -438,7 +438,7 @@ if audio.sfx_bus().paused() { log("sounds paused"); }
 ### Bus.stop
 
 ```rust
-fn stop(self, fade: float)
+fn stop(self, fade_seconds: float)
 ```
 
 Stops every sound on this bus and the buses below it.
@@ -501,7 +501,7 @@ struct Image {
 @system(schedule: Schedule::Startup)
 fn sky(cmd: Commands, assets: Assets) {
     let img = assets.create_image(320, 180, rgb(0, 0, 0));
-    img.gradient(rgb(20, 30, 80), rgb(200, 120, 90), true);
+    img.vertical_gradient(rgb(20, 30, 80), rgb(200, 120, 90));
     cmd.spawn([at(160.0, 90.0), Sprite { image: img.to_texture(), .. }]);
     img.free();
 }
@@ -591,16 +591,28 @@ Sets the pixels in a circle to one color, alpha included: a transparent color cu
 img.fill_circle(vec2(40.0, 40.0), 12.0, rgba(0, 0, 0, 0));
 ```
 
-### Image.gradient
+### Image.horizontal_gradient
 
 ```rust
-fn gradient(self, a: Color, b: Color, vertical: bool)
+fn horizontal_gradient(self, left: Color, right: Color)
 ```
 
-From `a` on the left (on top, when vertical) to `b` on the other side.
+Every pixel from `left` at the left edge to `right` at the right.
 
 ```rust
-img.gradient(rgb(0, 0, 40), rgb(80, 160, 255), true);
+img.horizontal_gradient(rgb(255, 80, 60), rgb(60, 80, 255));
+```
+
+### Image.vertical_gradient
+
+```rust
+fn vertical_gradient(self, top: Color, bottom: Color)
+```
+
+Every pixel from `top` at the top edge to `bottom` at the bottom.
+
+```rust
+img.vertical_gradient(rgb(0, 0, 40), rgb(80, 160, 255));
 ```
 
 ### Image.noise
@@ -1124,37 +1136,37 @@ let under = level.map.tile_at(ground, t.position);
 ### Map.world_to_tile
 
 ```rust
-fn world_to_tile(self, p: Vec2, layer: int) -> Cell
+fn world_to_tile(self, layer: int, p: Vec2) -> Cell
 ```
 
 The cell under a world position.
 
 ```rust
-let c = level.map.world_to_tile(input.mouse_world(), ground);
+let c = level.map.world_to_tile(ground, input.mouse_world());
 ```
 
 ### Map.tile_to_world
 
 ```rust
-fn tile_to_world(self, c: Cell, layer: int) -> Vec2
+fn tile_to_world(self, layer: int, c: Cell) -> Vec2
 ```
 
-The cell's top-left in the world.
+The world position of a cell's top-left corner.
 
 ```rust
-let p = level.map.tile_to_world(cell(3, 4), ground);
+let p = level.map.tile_to_world(ground, cell(3, 4));
 ```
 
-### Map.fill
+### Map.write_grid
 
 ```rust
-fn fill(self, layer: int, g: Grid, tiles: int[], at: Cell)
+fn write_grid(self, layer: int, g: Grid, tiles: int[], at: Cell)
 ```
 
-Writes a grid into a tile layer from cell `at`: a cell holding value v becomes tile tiles[v]; 0, and values past the end of `tiles`, leave the cell empty.
+Writes a grid into a tile layer from cell `at`: a cell holding value v becomes tile tiles[v]; 0, and values past the end of `tiles`, leave the cell empty. The counterpart of to_grid.
 
 ```rust
-level.map.fill(0, dungeon_grid, [1, 2, 3], cell(0, 0));   // FLOOR -> 1, WALL -> 2, DOOR -> 3
+level.map.write_grid(0, dungeon_grid, [1, 2, 3], cell(0, 0));   // FLOOR -> 1, WALL -> 2, DOOR -> 3
 ```
 
 ### Map.to_grid
@@ -1167,7 +1179,7 @@ A tile layer's ids as a grid of the map's size.
 
 ```rust
 let walls = level.map.to_grid(level.map.layer("Walls"));
-let path = find_path(walls, from, to, [3], false);
+let path = find_path(walls, from, to, [3], Moves::FourWay);
 ```
 
 ### Map.property

@@ -113,8 +113,8 @@ fn build(cmd: Commands, assets: Assets, level: Level, art: Art,
             floor.cells[i] = 3;
         }
     }
-    level.map.fill(0, floor, [0, 1, 2, 4], cell(0, 0));
-    level.map.fill(1, level.grid, [0, 3, 0], cell(0, 0));
+    level.map.write_grid(0, floor, [0, 1, 2, 4], cell(0, 0));
+    level.map.write_grid(1, level.grid, [0, 3, 0], cell(0, 0));
     level.map.set_layer_solid(1, true, [3]);
     level.entity = cmd.spawn([at(0.0, TOP), Tilemap { map: level.map, .. }]);
     level.goal = cell(-1, -1);
@@ -167,7 +167,7 @@ fn chase(level: Level, effects: Effects, players: (Player, Transform, Velocity)[
         // another cell.
         let goal = cell_of(pt.position);
         if (goal.x != level.goal.x || goal.y != level.goal.y) && level.grid.get(goal) != WALL {
-            level.field = flow_field(level.grid, [goal], [WALL], true);
+            level.field = flow_field(level.grid, [goal], [WALL], Moves::EightWay);
             level.goal = goal;
         }
         let caught = false;

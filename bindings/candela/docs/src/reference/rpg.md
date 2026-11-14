@@ -293,13 +293,13 @@ Counts toward an objective of an active quest ("wolves" of "hunt"); returns the 
 fn count(self, quest: string, objective: string) -> int
 ```
 
-### Quests.in_state
+### Quests.with_state
 
 ```rust
-fn in_state(self, s: QuestState) -> string[]
+fn with_state(self, s: QuestState) -> string[]
 ```
 
-Every quest in a state.
+The ids of every quest in a state.
 
 ## quests
 

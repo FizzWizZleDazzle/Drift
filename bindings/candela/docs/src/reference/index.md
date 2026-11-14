@@ -154,8 +154,8 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`control_axis`](control.md#control_axis) function
 - [`Cooldown`](values.md#cooldown) type
 - [`cooldown`](values.md#cooldown-1) function
-- [`Cooldown.fraction`](values.md#cooldownfraction) method
 - [`Cooldown.ready`](values.md#cooldownready) method
+- [`Cooldown.remaining_fraction`](values.md#cooldownremaining_fraction) method
 - [`Cooldown.reset`](values.md#cooldownreset) method
 - [`Cooldown.tick`](values.md#cooldowntick) method
 - [`Cooldown.try_use`](values.md#cooldowntry_use) method
@@ -214,6 +214,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Draw.nine_slice`](resources.md#drawnine_slice) method
 - [`Draw.on_layer`](resources.md#drawon_layer) method
 - [`Draw.polygon`](resources.md#drawpolygon) method
+- [`Draw.polygon_lines`](resources.md#drawpolygon_lines) method
 - [`Draw.polyline`](resources.md#drawpolyline) method
 - [`Draw.pop_clip`](resources.md#drawpop_clip) method
 - [`Draw.push_clip`](resources.md#drawpush_clip) method
@@ -233,6 +234,8 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 ## E
 
 - [`Ease`](enums.md#ease) enum
+- [`Edges`](values.md#edges) type
+- [`edges`](values.md#edges-1) function
 - [`Effect`](resources.md#effect) type
 - [`Effect.enabled`](resources.md#effectenabled) method
 - [`Effect.remove`](resources.md#effectremove) method
@@ -251,7 +254,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Effects.flash`](resources.md#effectsflash) method
 - [`Effects.grayscale`](resources.md#effectsgrayscale) method
 - [`Effects.pixelate`](resources.md#effectspixelate) method
-- [`Effects.restart`](resources.md#effectsrestart) method
+- [`Effects.restart_particles`](resources.md#effectsrestart_particles) method
 - [`Effects.sepia`](resources.md#effectssepia) method
 - [`Effects.set_ambient`](resources.md#effectsset_ambient) method
 - [`Effects.set_lighting`](resources.md#effectsset_lighting) method
@@ -278,8 +281,8 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Flags.get`](rpg.md#flagsget) method
 - [`Flags.on`](rpg.md#flagson) method
 - [`Flags.set`](rpg.md#flagsset) method
-- [`flash`](gameplay.md#flash) function
 - [`flash_color`](gameplay.md#flash_color) function
+- [`flash_entity`](gameplay.md#flash_entity) function
 - [`flat`](values.md#flat) function
 - [`FLOOR`](procgen.md#floor) constant
 - [`flow_field`](procgen.md#flow_field) function
@@ -412,8 +415,8 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Image.flip_y`](assets.md#imageflip_y) method
 - [`Image.free`](assets.md#imagefree) method
 - [`Image.get`](assets.md#imageget) method
-- [`Image.gradient`](assets.md#imagegradient) method
 - [`Image.height`](assets.md#imageheight) method
+- [`Image.horizontal_gradient`](assets.md#imagehorizontal_gradient) method
 - [`Image.line`](assets.md#imageline) method
 - [`Image.noise`](assets.md#imagenoise) method
 - [`Image.paste`](assets.md#imagepaste) method
@@ -424,6 +427,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Image.set`](assets.md#imageset) method
 - [`Image.set_pixels`](assets.md#imageset_pixels) method
 - [`Image.to_texture`](assets.md#imageto_texture) method
+- [`Image.vertical_gradient`](assets.md#imagevertical_gradient) method
 - [`Image.width`](assets.md#imagewidth) method
 - [`Image.write_rect`](assets.md#imagewrite_rect) method
 - [`Input`](resources.md#input) type
@@ -454,9 +458,9 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Input.load_bindings_json`](resources.md#inputload_bindings_json) method
 - [`Input.mouse_delta`](resources.md#inputmouse_delta) method
 - [`Input.mouse_down`](resources.md#inputmouse_down) method
-- [`Input.mouse_position`](resources.md#inputmouse_position) method
 - [`Input.mouse_pressed`](resources.md#inputmouse_pressed) method
 - [`Input.mouse_released`](resources.md#inputmouse_released) method
+- [`Input.mouse_screen`](resources.md#inputmouse_screen) method
 - [`Input.mouse_wheel`](resources.md#inputmouse_wheel) method
 - [`Input.mouse_world`](resources.md#inputmouse_world) method
 - [`Input.rebind`](resources.md#inputrebind) method
@@ -504,6 +508,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`LightOccluder`](components.md#lightoccluder) type
 - [`line_of_sight`](procgen.md#line_of_sight) function
 - [`load_data`](data.md#load_data) function
+- [`local_to_world`](values.md#local_to_world) function
 - [`locale_setting`](data.md#locale_setting) function
 - [`locale_table`](data.md#locale_table) function
 - [`localization`](data.md#localization) function
@@ -522,7 +527,6 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Map.autotile`](assets.md#mapautotile) method
 - [`Map.bounds`](assets.md#mapbounds) method
 - [`Map.destroy`](assets.md#mapdestroy) method
-- [`Map.fill`](assets.md#mapfill) method
 - [`Map.int_grid`](assets.md#mapint_grid) method
 - [`Map.layer`](assets.md#maplayer) method
 - [`Map.layer_count`](assets.md#maplayer_count) method
@@ -542,6 +546,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Map.tile_to_world`](assets.md#maptile_to_world) method
 - [`Map.to_grid`](assets.md#mapto_grid) method
 - [`Map.world_to_tile`](assets.md#mapworld_to_tile) method
+- [`Map.write_grid`](assets.md#mapwrite_grid) method
 - [`MapObject`](assets.md#mapobject) type
 - [`Material`](assets.md#material) type
 - [`Material.set_color`](assets.md#materialset_color) method
@@ -555,6 +560,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`ModKind`](rpg.md#modkind) enum
 - [`MouseButton`](enums.md#mousebutton) enum
 - [`move_towards`](animation.md#move_towards) function
+- [`Moves`](procgen.md#moves) enum
 - [`music`](assets.md#music) function
 
 ## N
@@ -645,12 +651,12 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Quests.complete`](rpg.md#questscomplete) method
 - [`Quests.count`](rpg.md#questscount) method
 - [`Quests.fail`](rpg.md#questsfail) method
-- [`Quests.in_state`](rpg.md#questsin_state) method
 - [`Quests.is_active`](rpg.md#questsis_active) method
 - [`Quests.is_done`](rpg.md#questsis_done) method
 - [`Quests.progress`](rpg.md#questsprogress) method
 - [`Quests.start`](rpg.md#questsstart) method
 - [`Quests.state`](rpg.md#questsstate) method
+- [`Quests.with_state`](rpg.md#questswith_state) method
 - [`QuestState`](rpg.md#queststate) enum
 
 ## R
@@ -890,14 +896,12 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Timer`](values.md#timer) type
 - [`timer`](values.md#timer-1) function
 - [`Timer.finished`](values.md#timerfinished) method
-- [`Timer.fraction`](values.md#timerfraction) method
+- [`Timer.progress`](values.md#timerprogress) method
 - [`Timer.remaining`](values.md#timerremaining) method
 - [`Timer.reset`](values.md#timerreset) method
 - [`Timer.tick`](values.md#timertick) method
 - [`title_screen`](screens.md#title_screen) function
 - [`to_json`](data.md#to_json) function
-- [`to_local`](values.md#to_local) function
-- [`to_world`](values.md#to_world) function
 - [`Toast`](ui.md#toast) type
 - [`toast`](ui.md#toast-1) function
 - [`toggle`](ui.md#toggle) function
@@ -1025,6 +1029,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`wobble`](animation.md#wobble) function
 - [`wobble2`](animation.md#wobble2) function
 - [`wobble_hash`](animation.md#wobble_hash) function
+- [`world_to_local`](values.md#world_to_local) function
 - [`world_transform`](values.md#world_transform) function
 - [`wrap`](values.md#wrap) function
 - [`wrap_angle`](animation.md#wrap_angle) function

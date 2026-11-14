@@ -108,11 +108,12 @@ impl Draw {
         self.shape("arc", [center.x, center.y, radius, start, end, thickness], c);
     }
     fn line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { self.shape("line", [a.x, a.y, b.x, b.y, thickness], c); }
-    fn polyline(self, points: Vec2[], c: Color, thickness: float, closed: bool) {
-        let nums: float[] = [thickness, 0.0];
-        if closed {
-            nums[1] = 1.0;
-        }
+    // Lines joining the points in order.
+    fn polyline(self, points: Vec2[], c: Color, thickness: float) { self.lines_through(points, c, thickness, 0.0); }
+    // The same, closed back to the first point: a polygon's outline.
+    fn polygon_lines(self, points: Vec2[], c: Color, thickness: float) { self.lines_through(points, c, thickness, 1.0); }
+    fn lines_through(self, points: Vec2[], c: Color, thickness: float, closed: float) {
+        let nums: float[] = [thickness, closed];
         for p in points {
             nums.push(p.x);
             nums.push(p.y);
@@ -143,11 +144,11 @@ impl Draw {
     // A sprite as an entity would draw it, without the entity.
     fn sprite(self, s: Sprite, t: Transform) { drift::draw_sprite(s, t, self.layer, self.z); }
     // An image cut in nine: the corners keep their size, the edges and middle
-    // stretch over `dest`. `border` holds the left, top, right and bottom
-    // margins of `frame` (zero size for the whole image) as x, y, w, h.
-    fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Rect, c: Color) {
+    // stretch over `dest`. `border` is the width of each edge in the image's
+    // pixels, inside `frame` (zero size for the whole image).
+    fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Edges, c: Color) {
         drift::draw_nine(t.id, [dest.x, dest.y, dest.w, dest.h, frame.x, frame.y, frame.w, frame.h,
-                                border.x, border.y, border.w, border.h], color_list(c), self.layer, self.z);
+                                border.left, border.top, border.right, border.bottom], color_list(c), self.layer, self.z);
     }
     // Draws after this only inside `r`, in screen pixels, until pop_clip().
     fn push_clip(self, r: Rect) { drift::draw_clip([r.x, r.y, r.w, r.h]); }
@@ -201,9 +202,13 @@ impl Image {
     // cuts a hole.
     fn fill_rect(self, r: Rect, c: Color) { self.op("fill_rect", rect_list(r), c); }
     fn fill_circle(self, center: Vec2, radius: float, c: Color) { self.op("fill_circle", [center.x, center.y, radius], c); }
-    // From `a` on the left (on top, when vertical) to `b` on the other side.
-    fn gradient(self, a: Color, b: Color, vertical: bool) {
-        drift::image_op(self.id, "gradient", [flag(vertical)], color_list(a), color_list(b));
+    // Every pixel from `left` at the left edge to `right` at the right.
+    fn horizontal_gradient(self, left: Color, right: Color) {
+        drift::image_op(self.id, "gradient", [0.0], color_list(left), color_list(right));
+    }
+    // Every pixel from `top` at the top edge to `bottom` at the bottom.
+    fn vertical_gradient(self, top: Color, bottom: Color) {
+        drift::image_op(self.id, "gradient", [1.0], color_list(top), color_list(bottom));
     }
     // The noise at each pixel, from `low` where it is -1 to `high` where it
     // is 1.

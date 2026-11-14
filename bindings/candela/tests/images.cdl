@@ -29,7 +29,7 @@ fn near(a: Color, b: Color) -> bool {
 fn setup(cmd: Commands, assets: Assets, art: Art) {
     // A gradient with shapes on it.
     let g = assets.create_image(64, 64, rgb(0, 0, 0));
-    g.gradient(rgb(255, 0, 0), rgb(0, 0, 255), false);
+    g.horizontal_gradient(rgb(255, 0, 0), rgb(0, 0, 255));
     g.line(vec2(0.0, 0.0), vec2(63.0, 63.0), rgb(255, 255, 255), 2.0);
     g.circle(vec2(32.0, 32.0), 10.0, rgba(0, 255, 0, 255));
     g.rect_lines(rect(2.0, 2.0, 60.0, 60.0), rgb(255, 255, 0), 2.0);

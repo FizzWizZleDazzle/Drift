@@ -108,7 +108,7 @@ fn move_body(creature: (Creature, Transform), time: Time) {
 @system(after: [move_body])
 fn swing_tail(creature: (Entity, Creature), time: Time) {
     let (e, c) = creature;
-    c.tail.update(to_world(e, vec2(-18.0, 0.0)), time.dt);
+    c.tail.update(local_to_world(e, vec2(-18.0, 0.0)), time.dt);
 }
 
 @system(after: [swing_tail])
@@ -133,7 +133,7 @@ fn look(head: (Head, Transform), time: Time, creatures: Lookup<Creature>) {
 @system(after: [look])
 fn antennae(antenna: (Antenna, Transform), time: Time) {
     let (a, t) = antenna;
-    t.position = a.tip.update(to_world(a.head, a.offset), 160.0, 7.0, time.dt);
+    t.position = a.tip.update(local_to_world(a.head, a.offset), 160.0, 7.0, time.dt);
 }
 
 @system(after: [move_body])
@@ -141,8 +141,8 @@ fn step_legs(leg_row: (Leg, Transform), time: Time) {
     let (leg, t) = leg_row;
     let gait = Gait { distance: 18.0, duration: 0.14, height: 4.0, lead: 0.4, .. };
     let body = world_transform(leg.body);
-    let hip = to_world(leg.body, leg.hip);
-    leg.foot.update(to_world(leg.body, leg.rest), gait, true, time.dt);
+    let hip = local_to_world(leg.body, leg.hip);
+    leg.foot.update(local_to_world(leg.body, leg.rest), gait, true, time.dt);
     let pose = two_bone_ik(hip, leg.foot.position, leg.upper, leg.lower, leg.bend);
     leg.thigh_angle = pose.upper;
     leg.shin_angle = pose.lower;
