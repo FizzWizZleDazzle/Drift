@@ -132,7 +132,7 @@ fn setup(cmd: Commands, assets: Assets) {
 
 ![Rings, blobs and Ls resting on uneven ground, with the debug drawing of their outlines](../images/collisions/texture-colliders.png)
 
-The debug drawing (`physics.set_debug_draw(true)`, or F3 with [the debug overlay](debugging.md#the-debug-overlay-in-every-build)) shows what the collider is made of. Static ground gets the outlines themselves, which are cheap even for a large picture with caves in it; they push bodies out from the empty side only, so a body that starts inside solid ground stays there. A dynamic or kinematic body, or a sensor, gets the solid area cut into convex pieces of at most 8 corners, since that is what Box2D can move.
+The debug drawing (`physics.set_debug_draw(true)`, or F4 with [the debug overlay](debugging.md#the-debug-overlay-in-every-build)) shows what the collider is made of. Static ground gets the outlines themselves, which are cheap even for a large picture with caves in it; they push bodies out from the empty side only, so a body that starts inside solid ground stays there. A dynamic or kinematic body, or a sensor, gets the solid area cut into convex pieces of at most 8 corners, since that is what Box2D can move.
 
 The outline is simplified: `tolerance` is how far, in image pixels, it may stray from the pixels, so a sprite becomes a few dozen points rather than one per pixel. Raise it for fewer points, lower it to follow the pixels closely. Solid specks and holes smaller than `min_area` square pixels are dropped, so a stray pixel does not become a collider.
 
@@ -219,7 +219,7 @@ fn line_of_sight(guard: (Guard, Transform), physics: Physics,
 }
 ```
 
-`set_debug_draw(true)` outlines every collider over the game.
+`set_debug_draw(true)` draws every collider over the game, sensors dashed; see [Debug views](debugging.md#debug-views).
 
 ### Without colliders
 

@@ -168,10 +168,13 @@ impl Physics {
     /// physics.apply_angular_impulse(crate_entity, 5.0);
     /// ```
     fn apply_angular_impulse(self, e: Entity, impulse: float) { drift::physics_push(3, e.id, impulse, 0.0); }
-    /// Draws every collider's outline over the game.
+    /// Draws every collider over the finished frame, at full brightness: green static, blue
+    /// kinematic and orange dynamic bodies, sleeping ones dimmed, sensors dashed, contacts as
+    /// they begin and each moving body's velocity as an arrow. The same as the `colliders`
+    /// view of `drift/debug`.
     ///
     /// ```rust
-    /// if input.key_pressed(Key::F3) { physics.set_debug_draw(true); }
+    /// if input.key_pressed(Key::F4) { physics.set_debug_draw(true); }
     /// ```
     fn set_debug_draw(self, on: bool) { drift::physics_debug(on); }
     /// Makes every TextureCollider showing the texture again next frame, from `pixels`: call it

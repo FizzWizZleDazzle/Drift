@@ -1,18 +1,23 @@
-//! drift/debug: an on-screen debug overlay and time controls that work in
-//! every build, the browser included.
+//! drift/debug: an on-screen debug overlay, debug views and time controls
+//! that work in every build, the browser included.
 //!
 //! `import "drift/debug" { * };` adds the overlay (F2): frames per second,
-//! entity count, the time scale, watched resource fields and recent
-//! messages. F3 draws the colliders, F4 toggles slow motion, F6 freezes
-//! time and F7 steps one frame while frozen. drift.toml [debug] sets
-//! `shown`, `keys` and `slow`.
+//! a frame time graph, time per engine phase, draw calls, entities, bodies,
+//! memory, recent warnings and errors, watched resource fields and printed
+//! lines. Its menu switches the debug views (colliders, entity bounds,
+//! cameras, lights, tile grids), drawn over lighting and post effects. F4
+//! draws the colliders, F8 freezes time, F9 steps one frame while frozen
+//! and Shift+F8 switches slow motion. drift.toml [debug] sets `shown`,
+//! `keys`, `slow`, `views` and `size`.
 
 //! page: debug
 //! # Debug Overlay: drift/debug
 //!
-//! An on-screen overlay and time controls that work in every build, the browser included:
-//! frames per second, the entity count, the time scale, watched resource fields and recent
-//! messages, with keys for collider outlines, slow motion, freezing and stepping.
+//! An on-screen overlay, debug views and time controls that work in every build, the browser
+//! included: frames per second, a frame time graph, time per engine phase, counters, recent
+//! warnings and errors, watched resource fields and printed lines, with a menu and keys for the
+//! views, slow motion, freezing and stepping. Debug views draw after lighting and post effects,
+//! so they stay readable in a dark, lit game.
 //!
 //! ```rust
 //! import "drift" { * };
@@ -24,16 +29,17 @@
 import "drift" { * };
 
 /// The overlay's settings and state, read from drift.toml [debug]: take it in a system to
-/// watch fields or print lines.
+/// watch fields, print lines or switch views.
 ///
 /// The overlay sits in the bottom-right corner of the screen layer. With `keys` on, F2 shows or
-/// hides it, F3 draws collider outlines, F4 switches slow motion, F6 freezes time and F7 runs one
-/// frame while frozen.
+/// hides it, F4 switches the colliders view, F8 freezes time, F9 runs one frame while frozen and
+/// Shift+F8 switches slow motion. Its menu rows switch each view with a click.
 ///
 /// ```toml
 /// [debug]
 /// shown = false
 /// slow = 0.1
+/// views = ["colliders", "camera"]
 /// ```
 ///
 /// ```rust
@@ -46,10 +52,15 @@ import "drift" { * };
 struct Debug {
     /// The overlay shows.
     shown: bool = true,
-    /// The F-keys work. Turn them off for a release.
+    /// The keys work. Turn them off for a release.
     keys: bool = true,
     /// The time scale of slow motion.
     slow: float = 0.25,
+    /// The debug views that are on, by name: `colliders`, `bounds`, `camera`, `lights`
+    /// (with `[lighting]`) and `tiles`. drift.toml sets the ones on at the start.
+    views: string[] = [],
+    /// Text size in pixels; 0 picks one from the screen height (about 20 at 1080).
+    size: float = 0.0,
     /// Resource fields the overlay shows; add them with watch<Game>("score").
     watches: ResourceField[] = [],
     /// The lines `print` added that are still on the overlay, oldest first; at most eight.
@@ -58,13 +69,13 @@ struct Debug {
     ages: float[] = [],
     /// Frames per second, smoothed over recent frames of real time.
     fps: float = 0.0,
-    /// Whether collider outlines are drawn; F3 switches it.
-    colliders: bool = false,
-    /// Whether time is frozen; F6 switches it.
+    /// The last 120 frame times in milliseconds of real time, oldest first.
+    frames: float[] = [],
+    /// Whether time is frozen; F8 switches it.
     frozen: bool = false,
-    /// Frames left to run before freezing again after F7; 0 when not stepping.
+    /// Frames left to run before freezing again after F9; 0 when not stepping.
     stepping: int = 0,
-    /// Whether slow motion is on; F4 switches it.
+    /// Whether slow motion is on; Shift+F8 switches it.
     slowed: bool = false,
 }
 
@@ -96,6 +107,38 @@ impl Debug {
             self.ages.remove(0);
         }
     }
+    /// Switches a debug view by name: `colliders`, `bounds`, `camera`, `lights` or `tiles`. A
+    /// name no view has is logged and changes nothing.
+    ///
+    /// ```rust
+    /// debug.view("bounds", true);
+    /// ```
+    fn view(self, name: string, on: bool) {
+        if !drift::debug_view(name, on) {
+            warn("drift/debug: no view named " + name + "; the views are " + drift::debug_views().join(", "));
+            return;
+        }
+        let i = 0;
+        while i < self.views.len() {
+            if self.views[i] == name {
+                self.views.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+        if on {
+            self.views.push(name);
+        }
+    }
+    /// Whether the view `name` is on.
+    fn showing(self, name: string) -> bool {
+        for v in self.views {
+            if v == name {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 /// The time scale the overlay's controls ask for: 0 while frozen, `slow` in slow motion, 1
@@ -110,10 +153,33 @@ fn dbg_scale(d: Debug) -> float {
     return 1.0;
 }
 
-/// Reads F2, F3, F4, F6 and F7 while `keys` is on, and freezes time again after a stepped
-/// frame.
+/// Internal: freezes or unfreezes game time.
+fn dbg_freeze(d: Debug, time: Time) {
+    d.frozen = !d.frozen;
+    d.stepping = 0;
+    time.set_scale(dbg_scale(d));
+}
+
+/// Internal: slow motion on or off.
+fn dbg_slow(d: Debug, time: Time) {
+    d.slowed = !d.slowed;
+    time.set_scale(dbg_scale(d));
+}
+
+/// Switches on the views drift.toml [debug] `views` names.
+@system(schedule: Schedule::Startup)
+fn dbg_start(d: Debug) {
+    let wanted = d.views;
+    d.views = [];
+    for name in wanted {
+        d.view(name, true);
+    }
+}
+
+/// Reads F2, F4, F8, Shift+F8 and F9 while `keys` is on, and freezes time again after a
+/// stepped frame.
 @system
-fn dbg_keys(d: Debug, input: Input, time: Time, physics: Physics) {
+fn dbg_keys(d: Debug, input: Input, time: Time) {
     if d.stepping > 0 {
         // The stepped frame has run; freeze again.
         d.stepping -= 1;
@@ -127,29 +193,51 @@ fn dbg_keys(d: Debug, input: Input, time: Time, physics: Physics) {
     if input.key_pressed(Key::F2) {
         d.shown = !d.shown;
     }
-    if input.key_pressed(Key::F3) {
-        d.colliders = !d.colliders;
-        physics.set_debug_draw(d.colliders);
-    }
     if input.key_pressed(Key::F4) {
-        d.slowed = !d.slowed;
-        time.set_scale(dbg_scale(d));
+        d.view("colliders", !d.showing("colliders"));
     }
-    if input.key_pressed(Key::F6) {
-        d.frozen = !d.frozen;
-        time.set_scale(dbg_scale(d));
+    let shift = input.key_down(Key::LShift) || input.key_down(Key::RShift);
+    if input.key_pressed(Key::F8) {
+        if shift {
+            dbg_slow(d, time);
+        } else {
+            dbg_freeze(d, time);
+        }
     }
-    if input.key_pressed(Key::F7) && d.frozen {
+    if input.key_pressed(Key::F9) && d.frozen {
         time.set_scale(1.0);
         d.stepping = 1;
     }
 }
 
-/// Draws the overlay while `shown`: frames per second, the entity count, the time mode, every
-/// watched field and the printed lines, in 14 pixel text at z 90000 on the screen layer.
-/// Printed lines age even while it is hidden.
+/// Internal: one clickable row of the overlay's menu.
+struct DbgRow {
+    text: string = "",
+    color: Color = Color { r: 0.85, g: 1.0, b: 0.85, a: 1.0 },
+    /// "" for a plain line, otherwise what a click switches: a view's name, "slow" or "freeze"
+    toggle: string = "",
+    on: bool = false,
+}
+
+/// Internal: the key that switches a menu entry, as the menu shows it.
+fn dbg_key_hint(name: string) -> string {
+    if name == "colliders" {
+        return "  F4";
+    }
+    if name == "freeze" {
+        return "  F8";
+    }
+    if name == "slow" {
+        return "  Shift+F8";
+    }
+    return "";
+}
+
+/// Draws the overlay while `shown`: frames per second and a frame time graph, time per engine
+/// phase, counters, recent warnings and errors, the time mode, watched fields, printed lines,
+/// and the menu of views. Printed lines age even while it is hidden.
 @system(after: [dbg_keys])
-fn dbg_overlay(d: Debug, time: Time, draw: Draw, win: Window) {
+fn dbg_overlay(d: Debug, time: Time, draw: Draw, win: Window, input: Input) {
     if time.real_dt > 0.0 {
         let now = 1.0 / time.real_dt;
         if d.fps <= 0.0 {
@@ -170,37 +258,128 @@ fn dbg_overlay(d: Debug, time: Time, draw: Draw, win: Window) {
     if !d.shown {
         return;
     }
-    let rows: string[] = [];
-    rows.push(string(int(d.fps.round())) + " fps   " + string(drift::entity_count()) + " entities");
-    let mode = "";
-    if d.frozen {
-        mode = "frozen (F7 steps)";
-    } else if d.slowed {
-        mode = "slow x" + string(d.slow);
+    d.frames.push(time.real_dt * 1000.0);
+    while d.frames.len() > 120 {
+        d.frames.remove(0);
     }
-    if mode != "" {
-        rows.push("time " + mode);
+
+    let white = Color { r: 0.85, g: 1.0, b: 0.85, a: 1.0 };
+    let dim = Color { r: 0.6, g: 0.7, b: 0.65, a: 1.0 };
+    let rows: DbgRow[] = [];
+    let s = drift::debug_stats();
+    rows.push(DbgRow { text: string(int(d.fps.round())) + " fps   " + fixed(1000.0 / max(d.fps, 1.0), 1) + " ms   "
+        + string(drift::entity_count()) + " entities   " + string(int(s[2])) + " bodies", .. });
+    let graph_row = rows.len();
+    rows.push(DbgRow { .. });
+    rows.push(DbgRow { text: "update " + fixed(s[4] + s[5] + s[6], 1) + "  render " + fixed(s[7] + s[8] + s[9], 1)
+        + " ms   (pre " + fixed(s[4], 1) + "  sim " + fixed(s[5], 1) + "  post " + fixed(s[6], 1)
+        + "  extract " + fixed(s[7], 1) + "  draw " + fixed(s[8], 1) + "  flush " + fixed(s[9], 1) + ")", color: dim, .. });
+    let counters = string(int(s[0])) + " draw calls   " + string(int(s[1])) + " sprites";
+    if s[3] > 0.0 {
+        counters = counters + "   " + fixed(s[3], 0) + " MiB memory";
+    }
+    rows.push(DbgRow { text: counters, color: dim, .. });
+    if d.frozen {
+        rows.push(DbgRow { text: "time frozen (F9 steps one frame)", color: Color { r: 0.5, g: 0.8, b: 1.0, a: 1.0 }, .. });
+    } else if d.slowed {
+        rows.push(DbgRow { text: "slow motion x" + string(d.slow), color: Color { r: 0.5, g: 0.8, b: 1.0, a: 1.0 }, .. });
     }
     for w in d.watches {
-        rows.push(w.label() + " = " + w.text());
+        rows.push(DbgRow { text: w.label() + " = " + w.text(), .. });
     }
     for l in d.lines {
-        rows.push(l);
+        rows.push(DbgRow { text: l, .. });
     }
-    let size = 14.0;
-    let line = size + 4.0;
-    let width = 0.0;
+    for p in drift::log_recent(10.0, 4) {
+        let c = Color { r: 1.0, g: 0.8, b: 0.3, a: 1.0 };
+        if p.starts_with("error") {
+            c = Color { r: 1.0, g: 0.45, b: 0.4, a: 1.0 };
+        }
+        rows.push(DbgRow { text: p, color: c, .. });
+    }
+    for name in drift::debug_views() {
+        rows.push(DbgRow { text: name + dbg_key_hint(name), toggle: name, on: d.showing(name), .. });
+    }
+    rows.push(DbgRow { text: "slow motion" + dbg_key_hint("slow"), toggle: "slow", on: d.slowed, .. });
+    rows.push(DbgRow { text: "freeze" + dbg_key_hint("freeze"), toggle: "freeze", on: d.frozen, .. });
+    rows.push(DbgRow { text: "F1: inspector, click an entity to see its components", color: dim, .. });
+
+    let size = d.size;
+    if size <= 0.0 {
+        size = max(14.0, win.height / 54.0);
+    }
+    let line = size * 1.3;
+    let font = Font { .. };
+    let width = size * 22.0;
     for r in rows {
-        width = max(width, float(r.len()) * size * 0.56);
+        let box = 0.0;
+        if r.toggle != "" {
+            box = size * 1.3;
+        }
+        width = max(width, font.measure(r.text, size).x + box);
     }
-    let x = win.width - width - 16.0;
+    let pad = size * 0.5;
+    let height = float(rows.len()) * line;
+    let x = win.width - width - pad * 2.0;
+    let top = win.height - height - pad * 3.0;
     draw.hud();
     draw.at_z(90000.0);
-    draw.rect(Rect { x: x - 6.0, y: win.height - float(rows.len()) * line - 14.0, w: width + 14.0, h: float(rows.len()) * line + 8.0 },
-              Color { r: 0.0, g: 0.0, b: 0.0, a: 0.55 });
-    let y = win.height - float(rows.len()) * line - 10.0;
-    for r in rows {
-        draw.text(r, Vec2 { x: x, y: y }, size, Color { r: 0.85, g: 1.0, b: 0.85, a: 1.0 });
+    draw.rect(Rect { x: x - pad, y: top - pad, w: width + pad * 2.0, h: height + pad * 2.0 },
+              Color { r: 0.0, g: 0.0, b: 0.0, a: 0.72 });
+    draw.at_z(90001.0);
+    let mouse = input.mouse_screen();
+    let clicked = input.mouse_pressed(MouseButton::Left);
+    let y = top;
+    let k = 0;
+    while k < rows.len() {
+        let r = rows[k];
+        if k == graph_row {
+            dbg_graph(d, draw, Rect { x: x, y: y + line * 0.1, w: width, h: line * 0.8 });
+        } else if r.toggle != "" {
+            let b = size * 0.8;
+            let box = Rect { x: x, y: y + (line - b) * 0.5, w: b, h: b };
+            if r.on {
+                draw.rect(box, Color { r: 0.4, g: 1.0, b: 0.5, a: 1.0 });
+            }
+            draw.rect_lines(box, white, 1.5);
+            draw.text(r.text, Vec2 { x: x + size * 1.3, y: y }, size, white);
+            let hit = mouse.x >= x && mouse.x <= x + width && mouse.y >= y && mouse.y < y + line;
+            if clicked && hit {
+                if r.toggle == "slow" {
+                    dbg_slow(d, time);
+                } else if r.toggle == "freeze" {
+                    dbg_freeze(d, time);
+                } else {
+                    d.view(r.toggle, !r.on);
+                }
+            }
+        } else {
+            draw.text(r.text, Vec2 { x: x, y: y }, size, r.color);
+        }
         y += line;
+        k += 1;
+    }
+}
+
+/// Internal: the frame time graph, with lines at 16.7 ms (60 fps) and 33.3 ms (30 fps).
+fn dbg_graph(d: Debug, draw: Draw, area: Rect) {
+    let top_ms = 50.0;
+    for f in d.frames {
+        top_ms = max(top_ms, f);
+    }
+    for mark in [16.7, 33.3] {
+        let my = area.y + area.h - area.h * mark / top_ms;
+        draw.line(Vec2 { x: area.x, y: my }, Vec2 { x: area.x + area.w, y: my }, Color { r: 1.0, g: 1.0, b: 1.0, a: 0.25 }, 1.0);
+    }
+    let points: Vec2[] = [];
+    let n = d.frames.len();
+    let i = 0;
+    while i < n {
+        let px = area.x + area.w * float(i) / 119.0;
+        points.push(Vec2 { x: px, y: area.y + area.h - area.h * min(d.frames[i], top_ms) / top_ms });
+        i += 1;
+    }
+    if points.len() > 1 {
+        draw.polyline(points, Color { r: 0.4, g: 1.0, b: 0.5, a: 1.0 }, 1.5);
     }
 }

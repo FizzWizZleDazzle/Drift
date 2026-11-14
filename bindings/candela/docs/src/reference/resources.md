@@ -1858,6 +1858,21 @@ World coordinates on layer 0.
 draw.world();
 ```
 
+### Draw.overlay
+
+```rust
+fn overlay(self)
+```
+
+World coordinates over the finished frame: drawn through the cameras after lighting
+and post effects, so darkness, vignettes and tints leave it at full brightness. For
+debug drawing such as hitboxes and paths.
+
+```rust
+draw.overlay();
+draw.circle_lines(enemy.position, 120.0, rgb(255, 80, 80), 2.0);   // sight range, readable in the dark
+```
+
 ### Draw.on_layer
 
 ```rust
@@ -2621,10 +2636,13 @@ physics.apply_angular_impulse(crate_entity, 5.0);
 fn set_debug_draw(self, on: bool)
 ```
 
-Draws every collider's outline over the game.
+Draws every collider over the finished frame, at full brightness: green static, blue
+kinematic and orange dynamic bodies, sleeping ones dimmed, sensors dashed, contacts as
+they begin and each moving body's velocity as an arrow. The same as the `colliders`
+view of `drift/debug`.
 
 ```rust
-if input.key_pressed(Key::F3) { physics.set_debug_draw(true); }
+if input.key_pressed(Key::F4) { physics.set_debug_draw(true); }
 ```
 
 ### Physics.rebuild_shapes

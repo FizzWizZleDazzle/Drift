@@ -291,6 +291,14 @@ host "drift" {
     float[] anim_verlet(float[], float[], float, float, float, float, float, float, float, int, float, float, bool, float, float);
     float[] anim_foot(float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool);
 
+    // Debug views by name (false: no such view), the frame's numbers
+    // (draw calls, sprites, bodies, memory MiB, ms of PreUpdate, Update,
+    // PostUpdate, Extract, Render, RenderFlush) and recent log problems.
+    bool debug_view(string, bool);
+    string[] debug_views();
+    float[] debug_stats();
+    string[] log_recent(float, int);
+
     // ==== Gameplay ====
     // Input.
     bool pad_connected(int);

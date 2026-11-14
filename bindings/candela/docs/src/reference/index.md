@@ -176,9 +176,12 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`dbg_keys`](debug.md#dbg_keys) system
 - [`dbg_overlay`](debug.md#dbg_overlay) system
 - [`dbg_scale`](debug.md#dbg_scale) function
+- [`dbg_start`](debug.md#dbg_start) system
 - [`DealDamage`](gameplay.md#dealdamage) type
 - [`Debug`](debug.md#debug) type
 - [`Debug.print`](debug.md#debugprint) method
+- [`Debug.showing`](debug.md#debugshowing) method
+- [`Debug.view`](debug.md#debugview) method
 - [`Debug.watch`](debug.md#debugwatch) method
 - [`degrees`](values.md#degrees) function
 - [`descendants_of`](values.md#descendants_of) function
@@ -213,6 +216,7 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Draw.line`](resources.md#drawline) method
 - [`Draw.nine_slice`](resources.md#drawnine_slice) method
 - [`Draw.on_layer`](resources.md#drawon_layer) method
+- [`Draw.overlay`](resources.md#drawoverlay) method
 - [`Draw.polygon`](resources.md#drawpolygon) method
 - [`Draw.polygon_lines`](resources.md#drawpolygon_lines) method
 - [`Draw.polyline`](resources.md#drawpolyline) method
