@@ -1,4 +1,4 @@
-// Physics bodies, queries and joints, and the spatial index for things without colliders.
+//! Physics bodies, queries and joints, and the spatial index for things without colliders.
 
 import "drift/core/values" { * };
 import "drift/core/assets" { * };
@@ -7,18 +7,39 @@ import "drift/core/rendering" { * };
 
 // ---- Physics ----
 
-// What a ray hit; `hit` false when it hit nothing.
+//! page: resources
+
+/// What a ray hit; `hit` false when it hit nothing.
+///
+/// ```rust
+/// let ray = physics.raycast(origin, dir, 300.0);
+/// if ray.hit {
+///     draw.circle(ray.point, 3.0, rgb(255, 0, 0));
+/// }
+/// ```
 struct RayHit {
+    /// Whether the ray hit anything
     hit: bool = false,
+    /// The entity it hit
     entity: Entity = Entity { .. },
+    /// Where, in the world
     point: Vec2 = Vec2 { .. },
+    /// The surface direction at the hit
     normal: Vec2 = Vec2 { .. },
-    fraction: float = 0.0,     // how far along the ray, 0 to 1
+    /// How far along the ray, 0 to 1
+    fraction: float = 0.0,
 }
 
-// Every collider category, for queries that see everything.
+//! page: values
+
+/// Every collider category, for queries that see everything.
+///
+/// ```rust
+/// let ray = physics.raycast_mask(p, dir, 100.0, ALL_CATEGORIES);
+/// ```
 const ALL_CATEGORIES: int = 65535;
 
+/// Internal: a helper the module needs; games do not call it.
 fn entity_list(ids: int[]) -> Entity[] {
     let out: Entity[] = [];
     for id in ids {
@@ -27,19 +48,57 @@ fn entity_list(ids: int[]) -> Entity[] {
     return out;
 }
 
-// The physics world: gravity, queries and pushes.
+//! page: resources
+
+/// Gravity, queries about colliders, and pushes on bodies. See [Collisions and
+/// Physics](../guides/collisions.md).
+///
+/// ```rust
+/// @system
+/// fn line_of_sight(guard: (Guard, Transform), physics: Physics,
+///                  players: (Entity, Player, Transform)[]) {
+///     let (_, eye) = guard;
+///     for (player, _, t) in players {
+///         let to = t.position - eye.position;
+///         let ray = physics.raycast(eye.position, to.normalized(), to.length());
+///         if ray.hit && ray.entity == player {
+///             log("spotted");
+///         }
+///     }
+/// }
+/// ```
 struct Physics { id: int = 0 }
 impl Physics {
+    /// World gravity in pixels per second squared. `[physics] gravity` in `drift.toml` sets
+    /// where it starts.
+    ///
+    /// ```rust
+    /// let g = physics.gravity();
+    /// ```
     fn gravity(self) -> Vec2 {
         let g = drift::physics_gravity();
         return Vec2 { x: g[0], y: g[1] };
     }
+    /// Changes world gravity.
+    ///
+    /// ```rust
+    /// physics.set_gravity(vec2(0.0, -900.0));   // upside down
+    /// ```
     fn set_gravity(self, g: Vec2) { drift::physics_set_gravity(g.x, g.y); }
-    // The first collider along the ray. Sensors count.
+    /// The first collider along the ray. Sensors count.
+    ///
+    /// ```rust
+    /// let ray = physics.raycast(t.position, vec2(0.0, 1.0), 20.0);
+    /// let on_ground = ray.hit;
+    /// ```
     fn raycast(self, origin: Vec2, direction: Vec2, distance: float) -> RayHit {
         return self.raycast_mask(origin, direction, distance, ALL_CATEGORIES);
     }
-    // The same, seeing only colliders whose category is in `mask`.
+    /// The same, seeing only colliders whose category is in `mask`.
+    ///
+    /// ```rust
+    /// let ray = physics.raycast_mask(eye, dir, 400.0, WALLS);   // WALLS: a category bit of your own
+    /// ```
     fn raycast_mask(self, origin: Vec2, direction: Vec2, distance: float, mask: int) -> RayHit {
         let r = drift::physics_raycast(origin.x, origin.y, direction.x, direction.y, distance, mask);
         if r.len() < 7 {
@@ -48,34 +107,82 @@ impl Physics {
         return RayHit { hit: r[0] > 0.5, entity: Entity { id: int(r[1]) }, point: Vec2 { x: r[2], y: r[3] },
                         normal: Vec2 { x: r[4], y: r[5] }, fraction: r[6] };
     }
-    // Entities whose colliders contain the point.
+    /// Entities whose colliders contain the point.
+    ///
+    /// ```rust
+    /// for e in physics.overlap_point(input.mouse_world()) {
+    ///     cmd.insert(e, Selected {});
+    /// }
+    /// ```
     fn overlap_point(self, p: Vec2) -> Entity[] { return entity_list(drift::physics_overlap(0, p.x, p.y, 0.0, 0.0, ALL_CATEGORIES)); }
-    // Entities whose colliders' bounding boxes touch the rect.
+    /// Entities whose colliders' bounding boxes touch the rect.
+    ///
+    /// ```rust
+    /// let inside = physics.overlap_rect(rect(x, y, 64.0, 64.0));
+    /// ```
     fn overlap_rect(self, r: Rect) -> Entity[] { return entity_list(drift::physics_overlap(1, r.x, r.y, r.w, r.h, ALL_CATEGORIES)); }
-    // Entities whose colliders touch the circle.
+    /// Entities whose colliders touch the circle.
+    ///
+    /// ```rust
+    /// for e in physics.overlap_circle(blast, 80.0) {
+    ///     physics.apply_impulse(e, vec2(0.0, -300.0));
+    /// }
+    /// ```
     fn overlap_circle(self, center: Vec2, radius: float) -> Entity[] {
         return entity_list(drift::physics_overlap(2, center.x, center.y, radius, 0.0, ALL_CATEGORIES));
     }
+    /// Entities whose colliders, of a category in `mask`, touch the circle.
+    ///
+    /// ```rust
+    /// let enemies_near = physics.overlap_circle_mask(t.position, 120.0, ENEMIES);
+    /// ```
     fn overlap_circle_mask(self, center: Vec2, radius: float, mask: int) -> Entity[] {
         return entity_list(drift::physics_overlap(2, center.x, center.y, radius, 0.0, mask));
     }
-    // Pushes on a dynamic body: an impulse changes its velocity at once (a
-    // jump, a hit), a force acts over this step (thrust, wind).
+    /// Pushes on a dynamic body: an impulse changes its velocity at once (a jump, a hit), a
+    /// force acts over this step (thrust, wind).
+    ///
+    /// ```rust
+    /// physics.apply_impulse(player, vec2(0.0, -350.0));   // a jump
+    /// ```
     fn apply_impulse(self, e: Entity, impulse: Vec2) { drift::physics_push(0, e.id, impulse.x, impulse.y); }
+    /// ```rust
+    /// physics.apply_force(ship, from_angle(t.rotation) * 400.0);   // thrust while held
+    /// ```
     fn apply_force(self, e: Entity, force: Vec2) { drift::physics_push(1, e.id, force.x, force.y); }
+    /// Turns a dynamic body over this step.
+    ///
+    /// ```rust
+    /// physics.apply_torque(wheel, 50.0);
+    /// ```
     fn apply_torque(self, e: Entity, torque: float) { drift::physics_push(2, e.id, torque, 0.0); }
+    /// Changes a dynamic body's spin at once.
+    ///
+    /// ```rust
+    /// physics.apply_angular_impulse(crate_entity, 5.0);
+    /// ```
     fn apply_angular_impulse(self, e: Entity, impulse: float) { drift::physics_push(3, e.id, impulse, 0.0); }
-    // Draws every collider's outline over the game.
+    /// Draws every collider's outline over the game.
+    ///
+    /// ```rust
+    /// if input.key_pressed(Key::F3) { physics.set_debug_draw(true); }
+    /// ```
     fn set_debug_draw(self, on: bool) { drift::physics_debug(on); }
-    // Makes every TextureCollider showing the texture again next frame,
-    // from `pixels`: call it after changing the image and writing it into
-    // the texture, such as carving a hole in terrain with
-    // Image.fill_circle and Texture.update. It traces the whole image, so
-    // do it when the pixels change, not every frame. With Image {} the
-    // texture is read back from the GPU instead, which costs more.
+    /// Makes every TextureCollider showing the texture again next frame, from `pixels`: call it
+    /// after changing the image and writing it into the texture, such as carving a hole in
+    /// terrain with Image.fill_circle and Texture.update. It traces the whole image, so do it
+    /// when the pixels change, not every frame. With Image {} the texture is read back from the
+    /// GPU instead, which costs more.
+    ///
+    /// ```rust
+    /// ground_image.fill_circle(hit, 40.0, rgba(0, 0, 0, 0));   // a crater
+    /// ground.update(ground_image);
+    /// physics.rebuild_shapes(ground, ground_image);
+    /// ```
     fn rebuild_shapes(self, t: Texture, pixels: Image) { drift::physics_rebuild_shapes(t.id, pixels.id); }
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn outline_list(flat: float[]) -> Vec2[][] {
     // count, then that many x, y pairs, for each outline.
     let out: Vec2[][] = [];
@@ -92,64 +199,109 @@ fn outline_list(flat: float[]) -> Vec2[][] {
     return out;
 }
 
-// The outlines a TextureCollider with settings `c` traces in `frame` of
-// the texture (Rect {} for all of it), in pixels from the frame's
-// top-left corner, to draw or check. Solid outlines wind clockwise on
-// screen and holes the other way. Worked out once and kept, like the
-// collider's.
+/// The outlines a TextureCollider with settings `c` traces in `frame` of the texture (Rect {}
+/// for all of it), in pixels from the frame's top-left corner, to draw or check. Solid outlines
+/// wind clockwise on screen and holes the other way. Worked out once and kept, like the
+/// collider's.
+///
+/// ```rust
+/// for points in texture_outlines(rock, Rect { .. }, TextureCollider { .. }) {
+///     log(string(points.len()) + " points");
+/// }
+/// ```
 fn texture_outlines(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][] {
     return outline_list(drift::physics_texture_shapes(t.id, rect_list(frame), c.threshold, c.tolerance, c.min_area, false));
 }
 
-// The convex pieces, of at most 8 points, that cover those outlines: the
-// shapes a dynamic body gets.
+/// The convex pieces, of at most 8 points, that cover those outlines: the shapes a dynamic body
+/// gets.
+///
+/// ```rust
+/// let pieces = texture_pieces(rock, Rect { .. }, TextureCollider { .. });
+/// ```
 fn texture_pieces(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][] {
     return outline_list(drift::physics_texture_shapes(t.id, rect_list(frame), c.threshold, c.tolerance, c.min_area, true));
 }
 
-enum JointKind { Distance, Revolute, Prismatic, Weld }
+//! page: enums
 
-// Joins this entity's body to `target`'s, or pins it to the world when
-// `target` is no entity. Both need a RigidBody or a collider; the joint is
-// made once both bodies exist, and made again when a field changes.
-// Anchors are in each body's local space; without a target,
-// `target_anchor` is a point in the world.
+/// ```rust
+/// Joint { kind: JointKind::Revolute, target: wheel, .. }
+/// ```
+enum JointKind {
+    /// Keeps the anchors a distance apart, or within `min_length` and `max_length`, as a rod,
+    /// spring or rope
+    Distance,
+    /// A hinge: the bodies turn about the anchor
+    Revolute,
+    /// A slider along `axis`
+    Prismatic,
+    /// Glues the bodies together, or holds them with a spring
+    Weld,
+}
+
+//! page: components
+
+/// Joins this entity's body to `target`'s, or pins it to the world when `target` is no entity.
+/// Both need a RigidBody or a collider; the joint is made once both bodies exist, and made
+/// again when a field changes. Anchors are in each body's local space; without a target,
+/// `target_anchor` is a point in the world.
+///
+/// ```rust
+/// // A pendulum: a ball hanging from a point in the world.
+/// cmd.spawn([at(300.0, 200.0), Circle { radius: 12.0, .. }, RigidBody { .. }, CircleCollider { radius: 12.0, .. },
+///            Velocity { .. }, Joint { kind: JointKind::Distance, target_anchor: vec2(300.0, 80.0), .. }]);
+/// ```
 struct Joint {
+    /// The kind of joint
     kind: JointKind = JointKind::Revolute,
+    /// The other body; no entity pins this one to the world
     target: Entity = Entity { .. },
+    /// Where it attaches, in this body's local space
     anchor: Vec2 = Vec2 { .. },
+    /// Where it attaches on the target, or a world point without a target
     target_anchor: Vec2 = Vec2 { .. },
-    length: float = 0.0,          // Distance: 0 keeps the distance the bodies start at
-    min_length: float = 0.0,      // Distance: with max_length above min_length, a rope's slack
+    /// Distance: 0 keeps the distance the bodies start at
+    length: float = 0.0,
+    /// Distance: with max_length above min_length, a rope's slack
+    min_length: float = 0.0,
     max_length: float = 0.0,
-    stiffness: float = 0.0,       // Distance and Weld: spring frequency in Hz; 0 is rigid
-    damping: float = 0.0,         // spring damping, 0 to 1
-    limit: bool = false,          // Revolute: angle range; Prismatic: travel range
+    /// Distance and Weld: spring frequency in Hz; 0 is rigid
+    stiffness: float = 0.0,
+    /// spring damping, 0 to 1
+    damping: float = 0.0,
+    /// Revolute: angle range; Prismatic: travel range
+    limit: bool = false,
     lower: float = 0.0,
     upper: float = 0.0,
     motor: bool = false,
-    motor_speed: float = 0.0,     // radians or pixels per second
-    max_motor_force: float = 0.0, // torque for Revolute
-    axis: Vec2 = Vec2 { x: 1.0, y: 0.0 },   // Prismatic: the slide direction
+    /// radians or pixels per second
+    motor_speed: float = 0.0,
+    /// torque for Revolute
+    max_motor_force: float = 0.0,
+    /// Prismatic: the slide direction
+    axis: Vec2 = Vec2 { x: 1.0, y: 0.0 },
     collide_connected: bool = false,
 }
 
 // ---- Spatial index ----
 
-// Puts the entity in the spatial index: a box of `half_size` around its
-// position plus `offset`; a zero size indexes the point.
+//! page: procgen
+
+/// Puts the entity in the spatial index: a box of `half_size` around its position plus
+/// `offset`; a zero size indexes the point.
 struct SpatialBounds { half_size: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. } }
 
-// "What is near here" over the entities with SpatialBounds, without
-// colliders. The index holds where they were at the start of the frame.
+/// "What is near here" over the entities with SpatialBounds, without colliders. The index holds
+/// where they were at the start of the frame.
 struct Spatial { id: int = 0 }
 impl Spatial {
     fn in_rect(self, r: Rect) -> Entity[] { return entity_list(drift::spatial_query(0, r.x, r.y, r.w, r.h, 0)); }
     fn in_radius(self, center: Vec2, radius: float) -> Entity[] {
         return entity_list(drift::spatial_query(1, center.x, center.y, radius, 0.0, 0));
     }
-    // The closest within `max_distance`, skipping `ignore` (pass the
-    // asking entity); Entity {} when there is none.
+    /// The closest within `max_distance`, skipping `ignore` (pass the asking entity); Entity {}
+    /// when there is none.
     fn nearest(self, p: Vec2, max_distance: float, ignore: Entity) -> Entity {
         let r = drift::spatial_query(2, p.x, p.y, max_distance, 0.0, ignore.id);
         if r.len() == 0 {

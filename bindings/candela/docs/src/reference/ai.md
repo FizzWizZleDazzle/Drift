@@ -1,9 +1,10 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # State Machines and AI: drift/ai
 
-A state machine per entity over an enum of your own, and options picked by score. Both are plain values kept in your components and resources.
+A state machine per entity over an enum of your own, and options picked by score. Both are
+plain values kept in your components and resources.
 
 ```rust
 import "drift" { * };
@@ -14,7 +15,8 @@ See [State Machines and AI](../guides/ai.md).
 
 ## Fsm
 
-The state of one entity, over an enum of your own: keep it in a component, tick it every frame, and match on `now`.
+The state of one entity, over an enum of your own: keep it in a component, tick it every
+frame, and match on `now`.
 
 ```rust
 struct Fsm<S> {
@@ -64,7 +66,8 @@ fn fsm<S>(start: S) -> Fsm<S>
 
 ## Choice
 
-Options scored by how good each is right now; best() picks the highest. Build one each time an AI decides.
+Options scored by how good each is right now; best() picks the highest. Build one each time
+an AI decides.
 
 ```rust
 struct Choice<T> {
@@ -93,7 +96,8 @@ The option with the highest score; None when there are none.
 fn weighted(self, rng: Rng) -> Option<T>
 ```
 
-An option chosen at random in proportion to its score, so close scores take turns. Scores at or below zero are never picked.
+An option chosen at random in proportion to its score, so close scores take turns.
+Scores at or below zero are never picked.
 
 ## choice
 

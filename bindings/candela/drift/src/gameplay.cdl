@@ -1,18 +1,31 @@
-// drift/gameplay: components most action games write for themselves.
-//
-// `import "drift/gameplay" { * };` adds health and damage, hit effects,
-// screen bounds, spawners and a saved high score.
-// Each part only runs for entities that have its components, so the ones a
-// game does not use cost nothing.
+//! drift/gameplay: components most action games write for themselves.
+//!
+//! `import "drift/gameplay" { * };` adds health and damage, hit effects,
+//! screen bounds, spawners and a saved high score.
+//! Each part only runs for entities that have its components, so the ones a
+//! game does not use cost nothing.
+
+//! page: gameplay
+//! # Gameplay: drift/gameplay
+//!
+//! Health and damage, hit effects, screen bounds, spawners and a saved high score: components
+//! most action games write for themselves. Import the module beside `drift`:
+//!
+//! ```rust
+//! import "drift" { * };
+//! import "drift/gameplay" { * };
+//! ```
+//!
+//! Each part runs only for entities that have its components. See [Building
+//! Blocks](../guides/building-blocks.md).
 
 import "drift" { * };
 
 // ---- Health and damage ----
 
-// Hit points. A hit takes `amount` off unless the entity is still
-// invulnerable from the last one (`invulnerable_for` seconds). At 0 the
-// entity dies: Died is sent, and it is despawned unless `despawn_on_death`
-// is off.
+/// Hit points. A hit takes `amount` off unless the entity is still invulnerable from the last
+/// one (`invulnerable_for` seconds). At 0 the entity dies: Died is sent, and it is despawned
+/// unless `despawn_on_death` is off.
 @component
 struct Health {
     hp: float = 100.0,
@@ -34,25 +47,25 @@ impl Health {
     }
 }
 
-// Deals `damage` to the Hurtbox entities it touches on another `team`,
-// through a sensor overlap or a contact. `pierce` off despawns it after
-// its first hit, as a bullet. `knockback` pushes a dynamic body away.
+/// Deals `damage` to the Hurtbox entities it touches on another `team`, through a sensor
+/// overlap or a contact. `pierce` off despawns it after its first hit, as a bullet. `knockback`
+/// pushes a dynamic body away.
 @component
 struct Hitbox { damage: float = 10.0, team: int = 0, pierce: bool = true, knockback: float = 0.0 }
 
-// Takes damage from Hitboxes of other teams.
+/// Takes damage from Hitboxes of other teams.
 @component
 struct Hurtbox { team: int = 1 }
 
-// Send to hurt an entity with Health; Hitboxes send it for you.
+/// Send to hurt an entity with Health; Hitboxes send it for you.
 @message
 struct DealDamage { target: Entity = Entity { .. }, amount: float = 0.0, source: Entity = Entity { .. } }
 
-// Sent after Health took a hit.
+/// Sent after Health took a hit.
 @message
 struct Damaged { entity: Entity = Entity { .. }, amount: float = 0.0, hp: float = 0.0, source: Entity = Entity { .. } }
 
-// Sent when Health reaches 0.
+/// Sent when Health reaches 0.
 @message
 struct Died { entity: Entity = Entity { .. }, source: Entity = Entity { .. } }
 
@@ -60,7 +73,7 @@ fn damage(cmd: Commands, target: Entity, amount: float, source: Entity) {
     cmd.send(DealDamage { target: target, amount: amount, source: source });
 }
 
-// A negative amount heals, up to max.
+/// A negative amount heals, up to max.
 fn heal(cmd: Commands, target: Entity, amount: float) {
     cmd.send(DealDamage { target: target, amount: -amount, source: Entity { .. } });
 }
@@ -139,7 +152,7 @@ fn gp_invulnerability(health: (Entity, Health), time: Time) {
     }
 }
 
-// A bar over the entity's head showing its Health, drawn in the world.
+/// A bar over the entity's head showing its Health, drawn in the world.
 @component
 struct HealthBar {
     size: Vec2 = Vec2 { x: 32.0, y: 4.0 },
@@ -163,13 +176,12 @@ fn gp_health_bars(health: (Health, HealthBar, Transform), draw: Draw) {
 
 // ---- Hit effects ----
 
-// Tints the entity's Sprite, Rectangle or Circle with `color` for
-// `seconds` each time its Health takes a hit, or when flash_entity() starts
-// it.
+/// Tints the entity's Sprite, Rectangle or Circle with `color` for `seconds` each time its
+/// Health takes a hit, or when flash_entity() starts it.
 @component
 struct HitFlash { color: Color = Color { .. }, seconds: float = 0.12, left: float = 0.0, base: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: -1.0 } }
 
-// Gives the entity `f` and starts its flash now, without a hit.
+/// Gives the entity `f` and starts its flash now, without a hit.
 fn flash_entity(cmd: Commands, e: Entity, f: HitFlash) {
     f.left = f.seconds;
     cmd.insert(e, f);
@@ -217,11 +229,11 @@ fn gp_flash_circles(hit_flash: (HitFlash, Circle), time: Time) {
     c.color = flash_color(f, c.color, time.real_dt);
 }
 
-// Send to freeze the game for `seconds` of real time: a hit stop.
+/// Send to freeze the game for `seconds` of real time: a hit stop.
 @message
 struct HitStop { seconds: float = 0.06 }
 
-// Send to shake every camera.
+/// Send to shake every camera.
 @message
 struct Shake { intensity: float = 0.4 }
 
@@ -253,8 +265,7 @@ fn gp_shake(s: Shake, cameras: (Entity, Camera)[], effects: Effects) {
     }
 }
 
-// Fades the entity's Sprite, Text, Rectangle or Circle out over `seconds`,
-// then despawns it.
+/// Fades the entity's Sprite, Text, Rectangle or Circle out over `seconds`, then despawns it.
 @component
 struct FadeOut { seconds: float = 0.6, left: float = -1.0, alpha: float = -1.0 }
 
@@ -294,8 +305,8 @@ fn gp_fade_circles(fade_out: (Entity, FadeOut, Circle), time: Time, cmd: Command
     c.color.a = fade_step(f, c.color.a, time.dt, e, cmd);
 }
 
-// A number or word that pops up at a world position, floats up and fades:
-// damage numbers, "+100", "Combo!".
+/// A number or word that pops up at a world position, floats up and fades: damage numbers,
+/// "+100", "Combo!".
 fn popup(cmd: Commands, pos: Vec2, text: string, c: Color) -> Entity {
     return cmd.spawn([
         Transform { position: pos, scale: Vec2 { x: 0.6, y: 0.6 }, .. },
@@ -309,7 +320,7 @@ fn popup(cmd: Commands, pos: Vec2, text: string, c: Color) -> Entity {
 
 // ---- Bounds ----
 
-// The part of the world the main camera shows, or `area` when it is set.
+/// The part of the world the main camera shows, or `area` when it is set.
 fn bounds_or_view(area: Rect, camera: Camera2D) -> Rect {
     if area.w > 0.0 && area.h > 0.0 {
         return area;
@@ -317,8 +328,8 @@ fn bounds_or_view(area: Rect, camera: Camera2D) -> Rect {
     return camera.visible();
 }
 
-// Keeps the entity inside `area` (the camera's view when unset), `margin`
-// pixels in, and stops its Velocity at the edge.
+/// Keeps the entity inside `area` (the camera's view when unset), `margin` pixels in, and stops
+/// its Velocity at the edge.
 @component
 struct KeepInBounds { area: Rect = Rect { .. }, margin: float = 0.0 }
 
@@ -350,8 +361,8 @@ fn gp_keep_in_bounds_velocity(keep_in_bounds: (KeepInBounds, Transform, Velocity
     }
 }
 
-// Moves the entity to the other side when it leaves `area` (the camera's
-// view when unset) by more than `margin` pixels: asteroids-style wrapping.
+/// Moves the entity to the other side when it leaves `area` (the camera's view when unset) by
+/// more than `margin` pixels: asteroids-style wrapping.
 @component
 struct WrapAround { area: Rect = Rect { .. }, margin: float = 16.0 }
 
@@ -379,8 +390,8 @@ fn gp_wrap_around(wrap_around: (WrapAround, Transform), camera: Camera2D) {
     }
 }
 
-// Despawns the entity once it is more than `margin` pixels outside `area`
-// (the camera's view when unset): bullets, debris, scrolled-past enemies.
+/// Despawns the entity once it is more than `margin` pixels outside `area` (the camera's view
+/// when unset): bullets, debris, scrolled-past enemies.
 @component
 struct DespawnOffscreen { area: Rect = Rect { .. }, margin: float = 64.0 }
 
@@ -397,12 +408,12 @@ fn gp_despawn_offscreen(despawn_offscreen: (Entity, DespawnOffscreen, Transform)
 
 // ---- Spawners ----
 
-// Sent each time a Spawner fires: spawn what you want at `position`.
+/// Sent each time a Spawner fires: spawn what you want at `position`.
 @message
 struct SpawnTick { spawner: Entity = Entity { .. }, id: string = "", position: Vec2 = Vec2 { .. }, index: int = 0 }
 
-// Fires SpawnTick every `every` seconds at the entity's position plus a
-// random offset up to `spread`, `count` times in all (-1 forever).
+/// Fires SpawnTick every `every` seconds at the entity's position plus a random offset up to
+/// `spread`, `count` times in all (-1 forever).
 @component
 struct Spawner {
     id: string = "",
@@ -437,26 +448,26 @@ fn gp_spawners(spawner: (Entity, Spawner, Transform), time: Time, r: SpawnRng, c
     }
 }
 
-// One wave: `count` spawns of `id`, `every` seconds apart, starting
-// `delay` seconds after the wave before it ends.
+/// One wave: `count` spawns of `id`, `every` seconds apart, starting `delay` seconds after the
+/// wave before it ends.
 struct Wave { id: string = "", count: int = 5, every: float = 1.0, delay: float = 2.0 }
 
 fn wave(id: string, count: int, every: float, delay: float) -> Wave {
     return Wave { id: id, count: count, every: every, delay: delay };
 }
 
-// Sent for each spawn of a wave.
+/// Sent for each spawn of a wave.
 @message
 struct WaveSpawn { wave: int = 0, id: string = "", index: int = 0 }
 
-// Sent when a wave starts and when the last wave has spawned everything.
+/// Sent when a wave starts and when the last wave has spawned everything.
 @message
 struct WaveStarted { wave: int = 0 }
 @message
 struct WavesDone { waves: int = 0 }
 
-// Runs a list of waves: put it on an entity with the waves in order. It
-// sends WaveSpawn for every spawn; `loop` starts over after the last.
+/// Runs a list of waves: put it on an entity with the waves in order. It sends WaveSpawn for
+/// every spawn; `loop` starts over after the last.
 @component
 struct WaveSpawner {
     waves: Wave[] = [],
@@ -508,8 +519,8 @@ fn gp_wave_spawners(wave_spawner: (Entity, WaveSpawner), time: Time, cmd: Comman
 
 // ---- Score ----
 
-// The score and the best one, kept in the save under `key`. The best is
-// read when the game starts and written whenever it is beaten.
+/// The score and the best one, kept in the save under `key`. The best is read when the game
+/// starts and written whenever it is beaten.
 @resource
 struct Score { value: int = 0, best: int = 0, key: string = "best", loaded: bool = false, saved: int = 0 }
 
@@ -521,7 +532,7 @@ impl Score {
         }
     }
     fn reset(self) { self.value = 0; }
-    // Whether this run beat the best that was saved when it started.
+    /// Whether this run beat the best that was saved when it started.
     fn is_record(self) -> bool { return self.value > 0 && self.value >= self.best; }
 }
 

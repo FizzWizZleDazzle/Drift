@@ -63,6 +63,6 @@ See [Limitations](https://fizzwizzledazzle.github.io/Drift/candela-book/limitati
 
 ## Documentation
 
-The book is in [`docs/`](docs/), an mdBook, published at https://fizzwizzledazzle.github.io/Drift/candela-book/. Read it locally with `mdbook serve bindings/candela/docs`. Its reference pages are written from the `drift` module by `scripts/candela-reference.py`; edit the module's comments or `docs/api-notes.md`, then run the script.
+The book is in [`docs/`](docs/), an mdBook, published at https://fizzwizzledazzle.github.io/Drift/candela-book/. Read it locally with `mdbook serve bindings/candela/docs`. Its reference pages are written by `scripts/candela-reference.py` from the `///` doc comments in the `drift` module's source, the same text an editor shows on hover. Document a new name in its doc comment, then run the script; the script's header explains the `//! page:` lines that place names on pages.
 
 To build `drift` from source, see [Install](docs/src/getting-started/install.md#building-drift-from-source).

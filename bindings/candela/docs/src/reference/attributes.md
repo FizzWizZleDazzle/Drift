@@ -1,11 +1,16 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Attributes
 
-Attributes tell Drift what your structs, enums and functions are. Write one in front of a top-level declaration. They come with `import "drift" { * };`; a game that imports the module by name writes `@drift::component` instead. The compiler checks each attribute and its arguments, so a misspelt attribute, an unknown type in `requires:` or an unknown function in `after:` is an error with its line, before the game starts.
+Attributes tell Drift what your structs, enums and functions are. Write one in front of a
+top-level declaration. They come with `import "drift" { * };`; a game that imports the
+module by name writes `@drift::component` instead. The compiler checks each attribute and
+its arguments, so a misspelt attribute, an unknown type in `requires:` or an unknown
+function in `after:` is an error with its line, before the game starts.
 
-A struct or function with type parameters cannot carry an attribute, and neither can a method.
+A struct or function with type parameters cannot carry an attribute, and neither can a
+method.
 
 ## @component
 
@@ -15,7 +20,10 @@ A struct or function with type parameters cannot carry an attribute, and neither
 
 On a `struct`.
 
-The struct is a component: data attached to entities. Drift stores it with the entity, passes it to the systems that ask for it, and shows it in the inspector. `requires:` lists components added, with their defaults, to an entity that gets this one without them. See [Components](../concepts/components.md).
+The struct is a component: data attached to entities. Drift stores it with the entity,
+passes it to the systems that ask for it, and shows it in the inspector. `requires:`
+lists components added, with their defaults, to an entity that gets this one without
+them. See [Components](../concepts/components.md).
 
 ```rust
 @component(requires: [Velocity])
@@ -33,7 +41,10 @@ struct Enemy {}          // a tag: no data, it only marks entities
 
 On a `struct`.
 
-The struct is a resource: one value for the whole game. A resource whose fields all have defaults exists from the start; one with a required field exists once a system inserts it with `cmd.insert_resource`. A system that takes a resource that does not exist is skipped. See [Resources](../concepts/resources.md).
+The struct is a resource: one value for the whole game. A resource whose fields all have
+defaults exists from the start; one with a required field exists once a system inserts
+it with `cmd.insert_resource`. A system that takes a resource that does not exist is
+skipped. See [Resources](../concepts/resources.md).
 
 ```rust
 @resource
@@ -48,7 +59,9 @@ struct Score { value: int = 0, best: int = 0 }
 
 On a `struct`.
 
-A resource filled from one section of `drift.toml`. Field names are the keys, and every field needs a default for when the file leaves the key out. See [Settings](../concepts/settings.md).
+A resource filled from one section of `drift.toml`. Field names are the keys, and every
+field needs a default for when the file leaves the key out. See
+[Settings](../concepts/settings.md).
 
 ```rust
 @settings(section: "rules")
@@ -68,7 +81,8 @@ lives = 5
 
 On a `struct`.
 
-The struct is a message: something that happened this frame. Systems send it with `cmd.send(...)` and read it as a parameter. See [Events](../concepts/events.md).
+The struct is a message: something that happened this frame. Systems send it with
+`cmd.send(...)` and read it as a parameter. See [Events](../concepts/events.md).
 
 ```rust
 @message
@@ -83,7 +97,9 @@ struct Damage { target: Entity, amount: int }
 
 On a `enum`.
 
-The enum is a game state. Its first variant is the starting state. Systems read and change it through `State<Phase>` and run in some variants with `in_state:`, `on_enter:` and `on_exit:`. See [States](../concepts/states.md).
+The enum is a game state. Its first variant is the starting state. Systems read and
+change it through `State<Phase>` and run in some variants with `in_state:`, `on_enter:`
+and `on_exit:`. See [States](../concepts/states.md).
 
 ```rust
 @state
@@ -98,7 +114,10 @@ enum Phase { Title, Playing, GameOver }
 
 On a `struct`.
 
-The struct is one row of a query. Each field is a component, or `Entity` for the entity's id. A parameter of type `Mover[]` receives one row per entity that has every field's component, every type in `with:` and none in `without:`. See [Queries](../concepts/queries.md).
+The struct is one row of a query. Each field is a component, or `Entity` for the
+entity's id. A parameter of type `Mover[]` receives one row per entity that has every
+field's component, every type in `with:` and none in `without:`. See
+[Queries](../concepts/queries.md).
 
 ```rust
 @query(with: [Enemy], without: [Frozen])
@@ -120,7 +139,9 @@ fn slow_down(movers: Mover[]) {
 
 On a `fn`.
 
-The function is a system. Drift calls it every frame (once, for `Schedule::Startup`) and fills its parameters with the data their types name. See [Systems](../concepts/systems.md) and [System Parameters](system-parameters.md).
+The function is a system. Drift calls it every frame (once, for `Schedule::Startup`) and
+fills its parameters with the data their types name. See
+[Systems](../concepts/systems.md) and [System Parameters](system-parameters.md).
 
 | Argument | Meaning |
 |----------|---------|

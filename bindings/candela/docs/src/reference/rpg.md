@@ -1,9 +1,10 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Inventory, Stats, Quests and Dialogue: drift/rpg
 
-Inventories, stats with modifiers, story flags, quests, and dialogue played from a script, as plain values the game keeps and saves.
+Inventories, stats with modifiers, story flags, quests, and dialogue played from a script,
+as plain values the game keeps and saves.
 
 ```rust
 import "drift" { * };
@@ -83,7 +84,8 @@ fn inventory(capacity: int, stack_size: int) -> Inventory
 
 ## ModKind
 
-Add: plus amount. Percent: plus amount times the base (0.1 is +10%), summed. Multiply: times amount, after the others.
+Add: plus amount. Percent: plus amount times the base (0.1 is +10%), summed. Multiply: times
+amount, after the others.
 
 ```rust
 enum ModKind { Add, Percent, Multiply }
@@ -91,7 +93,8 @@ enum ModKind { Add, Percent, Multiply }
 
 ## Modifier
 
-A change to one stat. `source` names what gave it (an item, a buff) so it can be taken off again; `seconds` above zero makes it wear off.
+A change to one stat. `source` names what gave it (an item, a buff) so it can be taken off
+again; `seconds` above zero makes it wear off.
 
 ```rust
 struct Modifier {
@@ -170,7 +173,8 @@ fn stats() -> Stats
 
 ## Flags
 
-Named whole numbers for story state: switches (0 or 1), counters, choices. Missing names read 0. Store it with save.set_value to keep it.
+Named whole numbers for story state: switches (0 or 1), counters, choices. Missing names
+read 0. Store it with save.set_value to keep it.
 
 ```rust
 struct Flags {
@@ -210,7 +214,8 @@ Adds to a counter; returns the new value.
 fn check(self, condition: string) -> bool
 ```
 
-Whether a condition holds: "key", "!key", or "key OP number" with OP one of == != &lt; &lt;= > >=. An empty condition holds.
+Whether a condition holds: "key", "!key", or "key OP number" with OP one of == != &lt; &lt;= > >=.
+An empty condition holds.
 
 ### Flags.apply
 
@@ -318,7 +323,8 @@ struct DialogueLine {
 
 ## DialogueChoice
 
-`when` is a Flags condition that must hold for the choice to show; `set` are Flags effects applied when it is picked; `next` is the node it leads to ("" ends the dialogue).
+`when` is a Flags condition that must hold for the choice to show; `set` are Flags effects
+applied when it is picked; `next` is the node it leads to ("" ends the dialogue).
 
 ```rust
 struct DialogueChoice {
@@ -331,7 +337,8 @@ struct DialogueChoice {
 
 ## DialogueNode
 
-Lines said in order, then the choices, or straight on to `next`. `set` effects apply on entering the node.
+Lines said in order, then the choices, or straight on to `next`. `set` effects apply on
+entering the node.
 
 ```rust
 struct DialogueNode {
@@ -344,7 +351,8 @@ struct DialogueNode {
 
 ## DialogueScript
 
-A whole conversation, usually from a data file: load_data&lt;DialogueScript>("assets/talk/ana.json").
+A whole conversation, usually from a data file:
+load_data&lt;DialogueScript>("assets/talk/ana.json").
 
 ```rust
 struct DialogueScript {
@@ -355,7 +363,8 @@ struct DialogueScript {
 
 ## Dialogue
 
-A conversation being played. Variables live in `vars`; {name} in a line shows vars or `names` (for text such as the player's name).
+A conversation being played. Variables live in `vars`; {name} in a line shows vars or
+`names` (for text such as the player's name).
 
 ```rust
 struct Dialogue {
@@ -419,7 +428,8 @@ fn substitute(self, text: string) -> string
 fn choices(self) -> DialogueChoice[]
 ```
 
-The choices to show now: on the node's last line, those whose `when` holds. Empty while lines remain or when the node has none.
+The choices to show now: on the node's last line, those whose `when` holds. Empty while
+lines remain or when the node has none.
 
 ### Dialogue.advance
 
@@ -427,7 +437,8 @@ The choices to show now: on the node's last line, those whose `when` holds. Empt
 fn advance(self)
 ```
 
-On to the next line, or the next node when the lines are done and there is nothing to choose.
+On to the next line, or the next node when the lines are done and there is nothing to
+choose.
 
 ### Dialogue.choose
 

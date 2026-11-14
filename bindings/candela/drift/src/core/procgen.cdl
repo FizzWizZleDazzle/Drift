@@ -1,4 +1,4 @@
-// Grids, level generators, pathfinding, sight lines and steering.
+//! Grids, level generators, pathfinding, sight lines and steering.
 
 import "drift/core/values" { * };
 import "drift/core/components" { * };
@@ -7,17 +7,67 @@ import "drift/core/text" { * };
 
 // ---- Grids ----
 
-// The generators write FLOOR for open cells and WALL for solid ones;
-// dungeons add DOOR. Your own values can be anything.
+//! page: procgen
+
+/// The value generators write for open cells.
+///
+/// ```rust
+/// if g.get(c) == FLOOR { place_coin(c); }
+/// ```
 const FLOOR: int = 0;
+
+/// The value generators write for solid cells, and what `Grid.get` answers outside the grid.
+///
+/// ```rust
+/// let path = find_path(g, a, b, [WALL], Moves::FourWay);
+/// ```
 const WALL: int = 1;
+
+/// The value `dungeon` writes where a corridor enters a room.
+///
+/// ```rust
+/// let doors = d.grid.cells_of(DOOR);
+/// ```
 const DOOR: int = 2;
 
-struct Cell { x: int = 0, y: int = 0 }
+/// A cell of a grid or tilemap: a column `x` and a row `y`.
+///
+/// ```rust
+/// let c = Cell { x: 3, y: 4 };
+/// ```
+struct Cell {
+    /// Column, from 0 at the left
+    x: int = 0,
+    /// Row, from 0 at the top
+    y: int = 0,
+}
+
+/// ```rust
+/// let start = cell(1, 1);
+/// ```
 fn cell(x: int, y: int) -> Cell { return Cell { x: x, y: y }; }
 
-// A rectangle of integer cells, row by row from the top-left.
-struct Grid { width: int = 0, height: int = 0, cells: int[] = [] }
+/// The generators write `FLOOR` for open cells and `WALL` for solid ones, and dungeons add
+/// `DOOR`; your own values can be anything.
+///
+/// ```rust
+/// let g = grid(20, 10, FLOOR);
+/// g.set(cell(5, 5), WALL);
+/// ```
+struct Grid {
+    /// Columns
+    width: int = 0,
+    /// Rows
+    height: int = 0,
+    /// `width * height` values, row by row from the top-left
+    cells: int[] = [],
+}
+
+/// A grid of `width` by `height` cells, all holding `value`.
+///
+/// ```rust
+/// let g = grid(40, 25, WALL);
+/// ```
 fn grid(width: int, height: int, value: int) -> Grid {
     let cells: int[] = [];
     for i in range(width * height) {
@@ -26,19 +76,38 @@ fn grid(width: int, height: int, value: int) -> Grid {
     return Grid { width: width, height: height, cells: cells };
 }
 impl Grid {
+    /// Whether a cell is inside the grid.
+    ///
+    /// ```rust
+    /// if g.in_bounds(c) { g.set(c, FLOOR); }
+    /// ```
     fn in_bounds(self, c: Cell) -> bool { return c.x >= 0 && c.y >= 0 && c.x < self.width && c.y < self.height; }
-    // The value at a cell; WALL outside the grid.
+    /// The value at a cell; WALL outside the grid.
+    ///
+    /// ```rust
+    /// if level.grid.get(next) != WALL { pos.cell = next; }
+    /// ```
     fn get(self, c: Cell) -> int {
         if !self.in_bounds(c) {
             return WALL;
         }
         return self.cells[c.y * self.width + c.x];
     }
+    /// Sets a cell's value; cells outside the grid are ignored.
+    ///
+    /// ```rust
+    /// g.set(cell(0, 0), DOOR);
+    /// ```
     fn set(self, c: Cell, value: int) {
         if self.in_bounds(c) {
             self.cells[c.y * self.width + c.x] = value;
         }
     }
+    /// How many cells hold `value`.
+    ///
+    /// ```rust
+    /// let open = g.count(FLOOR);
+    /// ```
     fn count(self, value: int) -> int {
         let n = 0;
         for v in self.cells {
@@ -48,7 +117,11 @@ impl Grid {
         }
         return n;
     }
-    // Every cell holding `value`, row by row.
+    /// Every cell holding `value`, row by row.
+    ///
+    /// ```rust
+    /// let floors = g.cells_of(FLOOR);
+    /// ```
     fn cells_of(self, value: int) -> Cell[] {
         let out: Cell[] = [];
         for i in range(self.cells.len()) {
@@ -58,20 +131,41 @@ impl Grid {
         }
         return out;
     }
+    /// Internal: a helper the module needs; games do not call it.
     fn op(self, name: string, a: int, b: int, c: int) {
         self.cells = drift::grid_op(self.width, self.height, self.cells, name, a, b, c);
     }
-    // Keeps the largest connected region of `value`; the others become `fill`.
+    /// Keeps the largest connected region of `value`; the others become `fill`.
+    ///
+    /// ```rust
+    /// caves.keep_largest_region(FLOOR, WALL);
+    /// ```
     fn keep_largest_region(self, value: int, fill: int) { self.op("keep_largest", value, fill, 0); }
-    // Regions of `value` under `min_size` cells become `fill`.
+    /// Regions of `value` under `min_size` cells become `fill`.
+    ///
+    /// ```rust
+    /// g.remove_small_regions(FLOOR, 12, WALL);
+    /// ```
     fn remove_small_regions(self, value: int, min_size: int, fill: int) { self.op("remove_small", value, min_size, fill); }
-    // Carves tunnels of `value` so every region of it is connected.
+    /// Carves tunnels of `value` so every region of it is connected.
+    ///
+    /// ```rust
+    /// g.connect_regions(FLOOR, 2);
+    /// ```
     fn connect_regions(self, value: int, width: int) { self.op("connect", value, width, 0); }
-    // The sizes of the connected regions of `value`, in cells.
+    /// The sizes of the connected regions of `value`, in cells.
+    ///
+    /// ```rust
+    /// let sizes = g.region_sizes(FLOOR);
+    /// ```
     fn region_sizes(self, value: int) -> int[] {
         return drift::grid_op(self.width, self.height, self.cells, "regions", value, 0, 0);
     }
-    // 1 where `from` can reach through cells of its own value, 0 elsewhere.
+    /// 1 where `from` can reach through cells of its own value, 0 elsewhere.
+    ///
+    /// ```rust
+    /// let reach = g.flood_fill(start);
+    /// ```
     fn flood_fill(self, from: Cell) -> Grid {
         return Grid { width: self.width, height: self.height,
                       cells: drift::grid_op(self.width, self.height, self.cells, "flood", from.x, from.y, 0) };
@@ -80,6 +174,7 @@ impl Grid {
 
 // ---- Generators ----
 
+/// Internal: a helper the module needs; games do not call it.
 fn grid_answer(rng: Rng, r: int[]) -> Grid {
     rng.hi = r[0];
     rng.lo = r[1];
@@ -88,39 +183,103 @@ fn grid_answer(rng: Rng, r: int[]) -> Grid {
     return Grid { width: w, height: h, cells: r[4..4 + w * h] };
 }
 
-// Cellular-automata caves: random walls smoothed into caverns.
+/// Cellular-automata caves: random walls smoothed into caverns.
+///
+/// ```rust
+/// let caves = cave(r, 60, 32, CaveOptions { wall_chance: 0.48, steps: 4, .. });
+/// ```
 struct CaveOptions {
-    wall_chance: float = 0.45,   // chance a cell starts as wall, 0 to 1
-    steps: int = 5,              // smoothing passes
-    birth: int = 5,              // walls among 8 neighbours that make a wall
-    survive: int = 4,            // walls among 8 neighbours that keep a wall
+    /// chance a cell starts as wall, 0 to 1
+    wall_chance: float = 0.45,
+    /// Smoothing passes
+    steps: int = 5,
+    /// Wall neighbours, of 8, that turn a cell into wall
+    birth: int = 5,
+    /// Wall neighbours that keep a wall
+    survive: int = 4,
+    /// The outer ring is always wall
     solid_edges: bool = true,
-    keep_largest: bool = true,   // fill every cavern but the largest
+    /// Fills every cavern but the largest, so the whole cave is reachable
+    keep_largest: bool = true,
 }
+
+/// ```rust
+/// let g = cave(level.rng, 60, 32, CaveOptions { .. });
+/// ```
 fn cave(rng: Rng, width: int, height: int, o: CaveOptions) -> Grid {
     return grid_answer(rng, drift::gen_cave(rng.hi, rng.lo, rng.inc, width, height, o.wall_chance, o.steps, o.birth,
                                             o.survive, o.solid_edges, o.keep_largest));
 }
 
-// A rectangle of cells: a dungeon room.
-struct GridRect { x: int = 0, y: int = 0, w: int = 0, h: int = 0 }
+/// A rectangle of cells: a dungeon room.
+///
+/// ```rust
+/// for room in d.rooms {
+///     if room.contains(player_cell) { log("in a room"); }
+/// }
+/// ```
+struct GridRect {
+    /// Left column
+    x: int = 0,
+    /// Top row
+    y: int = 0,
+    /// Width in cells
+    w: int = 0,
+    /// Height in cells
+    h: int = 0,
+}
 impl GridRect {
+    /// The cell in the middle.
+    ///
+    /// ```rust
+    /// let start = d.rooms[0].center();
+    /// ```
     fn center(self) -> Cell { return Cell { x: self.x + self.w / 2, y: self.y + self.h / 2 }; }
+    /// Whether a cell is inside the room.
+    ///
+    /// ```rust
+    /// if room.contains(c) { lit = true; }
+    /// ```
     fn contains(self, c: Cell) -> bool { return c.x >= self.x && c.y >= self.y && c.x < self.x + self.w && c.y < self.y + self.h; }
 }
 
+/// ```rust
+/// let d = dungeon(r, 40, 25, DungeonOptions { min_room: 4, max_room: 8, extra_corridors: 3, .. });
+/// ```
 struct DungeonOptions {
+    /// Smallest room side, in cells
     min_room: int = 4,
+    /// Largest room side
     max_room: int = 10,
-    padding: int = 1,             // wall kept around each room inside its partition
+    /// Wall kept around each room inside its partition
+    padding: int = 1,
+    /// Corridor width in cells
     corridor_width: int = 1,
-    extra_corridors: int = 2,     // loops on top of the corridors that join every room
+    /// Corridors between nearby rooms on top of the ones that join them all; they make loops
+    extra_corridors: int = 2,
+    /// Writes `DOOR` where a corridor enters a room
     doors: bool = true,
 }
-struct Dungeon { grid: Grid, rooms: GridRect[] }
 
-// Rooms in a binary space partition, joined by corridors so every room is
-// reachable.
+/// What `dungeon` makes.
+///
+/// ```rust
+/// let d = dungeon(r, 40, 25, DungeonOptions { .. });
+/// let stairs = d.rooms[d.rooms.len() - 1].center();
+/// ```
+struct Dungeon {
+    /// The level
+    grid: Grid,
+    /// Every room, in the order the generator made them
+    rooms: GridRect[],
+}
+
+/// Rooms in a binary space partition, joined by corridors so every room is reachable.
+///
+/// ```rust
+/// let d = dungeon(level.rng, 40, 25, DungeonOptions { .. });
+/// level.grid = d.grid;
+/// ```
 fn dungeon(rng: Rng, width: int, height: int, o: DungeonOptions) -> Dungeon {
     let r = drift::gen_dungeon(rng.hi, rng.lo, rng.inc, width, height, o.min_room, o.max_room, o.padding,
                                o.corridor_width, o.extra_corridors, o.doors);
@@ -134,19 +293,33 @@ fn dungeon(rng: Rng, width: int, height: int, o: DungeonOptions) -> Dungeon {
     return Dungeon { grid: g, rooms: rooms };
 }
 
+/// ```rust
+/// let tunnels = random_walk(r, 60, 32, WalkOptions { walkers: 4, brush: 2, .. });
+/// ```
 struct WalkOptions {
-    coverage: float = 0.4,        // stop once this share of the cells is floor
+    /// Stops once this share of the cells is floor
+    coverage: float = 0.4,
+    /// How many walkers carve at once
     walkers: int = 1,
+    /// Chance per step to turn
     turn_chance: float = 0.4,
-    brush: int = 1,               // carves brush x brush cells per step
-    start: Cell = Cell { x: -1, y: -1 },   // -1, -1: the middle
+    /// Carves `brush` by `brush` cells per step
+    brush: int = 1,
+    /// Start cell; `cell(-1, -1)` is the middle
+    start: Cell = Cell { x: -1, y: -1 },
 }
-// Walkers wander from the start and carve floor out of solid wall.
+
+/// Walkers wander from the start and carve floor out of solid wall.
+///
+/// ```rust
+/// let g = random_walk(r, 60, 32, WalkOptions { coverage: 0.35, .. });
+/// ```
 fn random_walk(rng: Rng, width: int, height: int, o: WalkOptions) -> Grid {
     return grid_answer(rng, drift::gen_walk(rng.hi, rng.lo, rng.inc, width, height, o.coverage, o.walkers,
                                             o.turn_chance, o.brush, o.start.x, o.start.y));
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn points_answer(rng: Rng, r: float[]) -> Vec2[] {
     rng.hi = int(r[0]);
     rng.lo = int(r[1]);
@@ -158,30 +331,54 @@ fn points_answer(rng: Rng, r: float[]) -> Vec2[] {
     return out;
 }
 
-// Points in `area` no closer than `min_distance` to each other: even
-// spacing without a pattern, for trees, rocks and spawn points.
+/// Points in `area` no closer than `min_distance` to each other: even spacing without a
+/// pattern, for trees, rocks and spawn points.
+///
+/// ```rust
+/// for p in poisson_disk(r, rect(0.0, 0.0, 960.0, 540.0), 48.0) {
+///     cmd.spawn([at(p.x, p.y), Sprite { image: art.tree, .. }]);
+/// }
+/// ```
 fn poisson_disk(rng: Rng, area: Rect, min_distance: float) -> Vec2[] {
     return points_answer(rng, drift::gen_poisson(rng.hi, rng.lo, rng.inc, area.x, area.y, area.w, area.h, min_distance, 30));
 }
-// The same over the cells of `g` holding `value`, in cell units: a point at
-// (3.5, 2.5) is the middle of cell (3, 2).
+
+/// The same over the cells of `g` holding `value`, in cell units: a point at (3.5, 2.5) is the
+/// middle of cell (3, 2).
+///
+/// ```rust
+/// for p in poisson_on_grid(r, level.grid, FLOOR, 6.0) {
+///     cmd.spawn([at(p.x * 16.0, p.y * 16.0), Coin {}]);
+/// }
+/// ```
 fn poisson_on_grid(rng: Rng, g: Grid, value: int, min_distance: float) -> Vec2[] {
     return points_answer(rng, drift::gen_poisson_grid(rng.hi, rng.lo, rng.inc, g.width, g.height, g.cells, value,
                                                       min_distance, 30));
 }
 
+/// ```rust
+/// let ruins = wfc(r, sample, 60, 32, WfcOptions { attempts: 20, .. });
+/// ```
 struct WfcOptions {
-    attempts: int = 10,       // restarts after a contradiction
-    periodic: bool = false,   // neighbours wrap around the edges
-    // Cells to fix before collapsing: a grid of the output size where a
-    // value from the sample forces that value and any other (such as -1)
-    // leaves the cell free. Empty for none.
+    /// Restarts after a contradiction
+    attempts: int = 10,
+    /// Neighbours wrap around the edges
+    periodic: bool = false,
+    /// Cells to fix before collapsing: a grid of the output size where a value from the sample
+    /// forces that value and any other (such as -1) leaves the cell free. Empty for none.
     preset: Grid = Grid { .. },
 }
-// Wave function collapse: a width x height grid where every pair of
-// neighbouring values also sits side by side somewhere in `sample`, with
-// values about as common as there. None when every attempt contradicted
-// itself.
+
+/// Wave function collapse: a width x height grid where every pair of neighbouring values also
+/// sits side by side somewhere in `sample`, with values about as common as there. None when
+/// every attempt contradicted itself.
+///
+/// ```rust
+/// if wfc(r, sample, 60, 32, WfcOptions { .. }) is Some(g) {
+///     g.keep_largest_region(FLOOR, WALL);
+///     level.grid = g;
+/// }
+/// ```
 fn wfc(rng: Rng, sample: Grid, width: int, height: int, o: WfcOptions) -> Option<Grid> {
     let g = grid_answer(rng, drift::gen_wfc(rng.hi, rng.lo, rng.inc, sample.width, sample.height, sample.cells,
                                             width, height, o.attempts, o.periodic, o.preset.cells));
@@ -193,12 +390,19 @@ fn wfc(rng: Rng, sample: Grid, width: int, height: int, o: WfcOptions) -> Option
 
 // ---- Pathfinding ----
 
-// Which neighbours a step on a grid can go to: the four beside a cell, or
-// the diagonals too (never cutting a blocked corner).
+/// Which neighbours a step on a grid can go to: the four beside a cell, or the diagonals too
+/// (never cutting a blocked corner).
 enum Moves { FourWay, EightWay }
 
-// The cells from start to goal, both included, avoiding cells whose value
-// is in `blocked`; empty when there is no way.
+/// The cells from start to goal, both included, avoiding cells whose value is in `blocked`;
+/// empty when there is no way.
+///
+/// ```rust
+/// let path = find_path(level.grid, monster_cell, player_cell, [WALL], Moves::FourWay);
+/// if path.len() > 1 {
+///     pos.cell = path[1];   // one step closer
+/// }
+/// ```
 fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], moves: Moves) -> Cell[] {
     let r = drift::path_find(g.width, g.height, g.cells, blocked, start.x, start.y, goal.x, goal.y, moves == Moves::EightWay);
     let out: Cell[] = [];
@@ -208,9 +412,30 @@ fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], moves: Moves) -> 
     return out;
 }
 
-// For every cell, the next step toward the nearest goal: one field steers
-// any number of chasers.
-struct FlowField { width: int = 0, height: int = 0, next: int[] = [], costs: float[] = [] }
+/// For every cell, the next step toward the nearest goal: one field steers any number of
+/// chasers.
+///
+/// ```rust
+/// level.field = flow_field(level.grid, [player_cell], [WALL], Moves::EightWay);
+/// v.linear = level.field.direction(my_cell) * 60.0;
+/// ```
+struct FlowField {
+    /// Columns
+    width: int = 0,
+    /// Rows
+    height: int = 0,
+    /// For each cell, the index of the next cell toward a goal
+    next: int[] = [],
+    /// For each cell, steps to the nearest goal
+    costs: float[] = [],
+}
+
+/// A flow field over a grid toward the nearest of `goals`, through cells whose value is not in
+/// `blocked`. Build it again when a goal moves to another cell, not every frame.
+///
+/// ```rust
+/// let field = flow_field(g, [goal], [WALL], Moves::EightWay);
+/// ```
 fn flow_field(g: Grid, goals: Cell[], blocked: int[], moves: Moves) -> FlowField {
     let flat: int[] = [];
     for c in goals {
@@ -226,16 +451,28 @@ fn flow_field(g: Grid, goals: Cell[], blocked: int[], moves: Moves) -> FlowField
     return FlowField { width: g.width, height: g.height, next: next, costs: r[n..n * 2] };
 }
 impl FlowField {
+    /// Whether a cell is inside the field.
+    ///
+    /// ```rust
+    /// if field.in_bounds(c) { step = field.step(c); }
+    /// ```
     fn in_bounds(self, c: Cell) -> bool { return c.x >= 0 && c.y >= 0 && c.x < self.width && c.y < self.height; }
-    // Steps to the nearest goal; -1.0 when none is reachable.
+    /// Steps to the nearest goal; -1.0 when none is reachable.
+    ///
+    /// ```rust
+    /// if field.cost(c) < 0.0 { log("cut off"); }
+    /// ```
     fn cost(self, c: Cell) -> float {
         if !self.in_bounds(c) {
             return -1.0;
         }
         return self.costs[c.y * self.width + c.x];
     }
-    // The neighbour one step closer; the cell itself at a goal or where no
-    // goal is reachable.
+    /// The neighbour one step closer; the cell itself at a goal or where no goal is reachable.
+    ///
+    /// ```rust
+    /// pos.cell = field.step(pos.cell);
+    /// ```
     fn step(self, c: Cell) -> Cell {
         if !self.in_bounds(c) {
             return c;
@@ -246,13 +483,20 @@ impl FlowField {
         }
         return Cell { x: n % self.width, y: n / self.width };
     }
-    // Unit vector toward the next step, for a cell.
+    /// Unit vector toward the next step, for a cell.
+    ///
+    /// ```rust
+    /// v.linear = field.direction(c) * speed;
+    /// ```
     fn direction(self, c: Cell) -> Vec2 {
         let n = self.step(c);
         return Vec2 { x: float(n.x - c.x), y: float(n.y - c.y) }.normalized();
     }
-    // The same for a world position, with cells `cell_size` wide from the
-    // origin.
+    /// The same for a world position, with cells `cell_size` wide from the origin.
+    ///
+    /// ```rust
+    /// v.linear = field.direction_at(t.position, 16.0) * speed;
+    /// ```
     fn direction_at(self, p: Vec2, cell_size: float) -> Vec2 {
         return self.direction(Cell { x: int((p.x / cell_size).floor()), y: int((p.y / cell_size).floor()) });
     }
@@ -260,18 +504,20 @@ impl FlowField {
 
 // ---- Sight on grids ----
 
-// The cells `from` sees within `radius` cells, as a grid of the same size:
-// 1 where visible, 0 elsewhere. Cells whose value is in `opaque` block
-// sight and are seen themselves. Symmetric: if a sees b, b sees a.
+/// The cells `from` sees within `radius` cells, as a grid of the same size: 1 where visible, 0
+/// elsewhere. Cells whose value is in `opaque` block sight and are seen themselves. Symmetric:
+/// if a sees b, b sees a.
 fn field_of_view(g: Grid, from: Cell, radius: int, opaque: int[]) -> Grid {
     return Grid { width: g.width, height: g.height,
                   cells: drift::grid_fov(g.width, g.height, g.cells, opaque, from.x, from.y, radius) };
 }
-// Whether no opaque cell lies strictly between a and b.
+
+/// Whether no opaque cell lies strictly between a and b.
 fn line_of_sight(g: Grid, a: Cell, b: Cell, opaque: int[]) -> bool {
     return drift::grid_los(g.width, g.height, g.cells, opaque, a.x, a.y, b.x, b.y);
 }
-// The cells of the straight line from a to b, both included.
+
+/// The cells of the straight line from a to b, both included.
 fn grid_line(a: Cell, b: Cell) -> Cell[] {
     let r = drift::grid_line(a.x, a.y, b.x, b.y);
     let out: Cell[] = [];
@@ -291,6 +537,8 @@ fn grid_line(a: Cell, b: Cell) -> Cell[] {
 //               + steer_separation(t.position, near, 24.0, 120.0) * 1.5;
 //     v.linear = steer_truncate(v.linear + steer_truncate(force, 400.0) * time.dt, 120.0);
 
+//! page: values
+
 fn flat(points: Vec2[]) -> float[] {
     let out: float[] = [];
     for p in points {
@@ -302,48 +550,56 @@ fn flat(points: Vec2[]) -> float[] {
 fn steer_call(op: string, nums: float[], a: Vec2[], b: Vec2[]) -> float[] { return drift::steer(op, nums, flat(a), flat(b), []); }
 fn steer_vec(r: float[]) -> Vec2 { return Vec2 { x: r[0], y: r[1] }; }
 
-// `v` shortened to at most `max_length`.
+/// `v` shortened to at most `max_length`.
 fn steer_truncate(v: Vec2, max_length: float) -> Vec2 { return steer_vec(steer_call("truncate", [v.x, v.y, max_length], [], [])); }
-// Full speed toward the target.
+
+/// Full speed toward the target.
 fn steer_seek(pos: Vec2, vel: Vec2, target: Vec2, max_speed: float) -> Vec2 {
     return steer_vec(steer_call("seek", [pos.x, pos.y, vel.x, vel.y, target.x, target.y, max_speed], [], []));
 }
-// Full speed away from the threat while it is within `panic_radius` (0:
-// always).
+
+/// Full speed away from the threat while it is within `panic_radius` (0: always).
 fn steer_flee(pos: Vec2, vel: Vec2, threat: Vec2, max_speed: float, panic_radius: float) -> Vec2 {
     return steer_vec(steer_call("flee", [pos.x, pos.y, vel.x, vel.y, threat.x, threat.y, max_speed, panic_radius], [], []));
 }
-// Toward the target, slowing inside `slow_radius` to stop on it.
+
+/// Toward the target, slowing inside `slow_radius` to stop on it.
 fn steer_arrive(pos: Vec2, vel: Vec2, target: Vec2, max_speed: float, slow_radius: float) -> Vec2 {
     return steer_vec(steer_call("arrive", [pos.x, pos.y, vel.x, vel.y, target.x, target.y, max_speed, slow_radius], [], []));
 }
-// Seek where a moving target will be.
+
+/// Seek where a moving target will be.
 fn steer_pursue(pos: Vec2, vel: Vec2, target: Vec2, target_vel: Vec2, max_speed: float) -> Vec2 {
     return steer_vec(steer_call("pursue", [pos.x, pos.y, vel.x, vel.y, target.x, target.y, target_vel.x, target_vel.y,
                                            max_speed], [], []));
 }
-// Flee from where a moving threat will be.
+
+/// Flee from where a moving threat will be.
 fn steer_evade(pos: Vec2, vel: Vec2, threat: Vec2, threat_vel: Vec2, max_speed: float, panic_radius: float) -> Vec2 {
     return steer_vec(steer_call("evade", [pos.x, pos.y, vel.x, vel.y, threat.x, threat.y, threat_vel.x, threat_vel.y,
                                           max_speed, panic_radius], [], []));
 }
-// Away from neighbours closer than `radius`, harder the closer they are.
+
+/// Away from neighbours closer than `radius`, harder the closer they are.
 fn steer_separation(pos: Vec2, neighbours: Vec2[], radius: float, max_speed: float) -> Vec2 {
     return steer_vec(steer_call("separation", [pos.x, pos.y, radius, max_speed], neighbours, []));
 }
-// Toward the middle of the neighbours within `radius`.
+
+/// Toward the middle of the neighbours within `radius`.
 fn steer_cohesion(pos: Vec2, vel: Vec2, neighbours: Vec2[], radius: float, max_speed: float) -> Vec2 {
     return steer_vec(steer_call("cohesion", [pos.x, pos.y, vel.x, vel.y, radius, max_speed], neighbours, []));
 }
-// Toward the average heading of the neighbours within `radius`.
+
+/// Toward the average heading of the neighbours within `radius`.
 fn steer_alignment(pos: Vec2, vel: Vec2, positions: Vec2[], velocities: Vec2[], radius: float, max_speed: float) -> Vec2 {
     return steer_vec(steer_call("alignment", [pos.x, pos.y, vel.x, vel.y, radius, max_speed], positions, velocities));
 }
 
-// An agent's wandering: keep one per agent, in a component.
+/// An agent's wandering: keep one per agent, in a component.
 struct Wander { angle: float = 0.0, distance: float = 40.0, radius: float = 20.0, jitter: float = 0.5 }
-// Aimless but smooth: each call turns the wander angle by up to `jitter`
-// radians and steers toward a point on a circle ahead.
+
+/// Aimless but smooth: each call turns the wander angle by up to `jitter` radians and steers
+/// toward a point on a circle ahead.
 fn steer_wander(vel: Vec2, w: Wander, rng: Rng, max_speed: float) -> Vec2 {
     let r = drift::steer("wander", [vel.x, vel.y, w.angle, max_speed, w.distance, w.radius, w.jitter], [], [],
                          [rng.hi, rng.lo, rng.inc]);
@@ -353,10 +609,10 @@ fn steer_wander(vel: Vec2, w: Wander, rng: Rng, max_speed: float) -> Vec2 {
     return steer_vec(r);
 }
 
-// An agent's place along a path: keep one per agent, starting at 0.
+/// An agent's place along a path: keep one per agent, starting at 0.
 struct PathFollow { index: int = 0, reach_radius: float = 8.0, slow_radius: float = 0.0 }
-// Seeks each point in turn, moving on within `reach_radius`, and arrives
-// at the last one.
+
+/// Seeks each point in turn, moving on within `reach_radius`, and arrives at the last one.
 fn steer_follow_path(pos: Vec2, vel: Vec2, path: Vec2[], f: PathFollow, max_speed: float) -> Vec2 {
     let r = steer_call("follow_path", [pos.x, pos.y, vel.x, vel.y, float(f.index), max_speed, f.reach_radius,
                                        f.slow_radius], path, []);

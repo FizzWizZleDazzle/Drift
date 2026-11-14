@@ -1,20 +1,24 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Gameplay: drift/gameplay
 
-Health and damage, hit effects, screen bounds, spawners and a saved high score: components most action games write for themselves. Import the module beside `drift`:
+Health and damage, hit effects, screen bounds, spawners and a saved high score: components
+most action games write for themselves. Import the module beside `drift`:
 
 ```rust
 import "drift" { * };
 import "drift/gameplay" { * };
 ```
 
-Each part runs only for entities that have its components. See [Building Blocks](../guides/building-blocks.md).
+Each part runs only for entities that have its components. See [Building
+Blocks](../guides/building-blocks.md).
 
 ## Health
 
-Hit points. A hit takes `amount` off unless the entity is still invulnerable from the last one (`invulnerable_for` seconds). At 0 the entity dies: Died is sent, and it is despawned unless `despawn_on_death` is off.
+Hit points. A hit takes `amount` off unless the entity is still invulnerable from the last
+one (`invulnerable_for` seconds). At 0 the entity dies: Died is sent, and it is despawned
+unless `despawn_on_death` is off.
 
 ```rust
 @component
@@ -42,7 +46,9 @@ fn health(hp: float) -> Health
 
 ## Hitbox
 
-Deals `damage` to the Hurtbox entities it touches on another `team`, through a sensor overlap or a contact. `pierce` off despawns it after its first hit, as a bullet. `knockback` pushes a dynamic body away.
+Deals `damage` to the Hurtbox entities it touches on another `team`, through a sensor
+overlap or a contact. `pierce` off despawns it after its first hit, as a bullet. `knockback`
+pushes a dynamic body away.
 
 ```rust
 @component
@@ -186,7 +192,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## HitFlash
 
-Tints the entity's Sprite, Rectangle or Circle with `color` for `seconds` each time its Health takes a hit, or when flash_entity() starts it.
+Tints the entity's Sprite, Rectangle or Circle with `color` for `seconds` each time its
+Health takes a hit, or when flash_entity() starts it.
 
 ```rust
 @component
@@ -367,7 +374,8 @@ A system the module adds: it runs in every game that imports the module.
 fn popup(cmd: Commands, pos: Vec2, text: string, c: Color) -> Entity
 ```
 
-A number or word that pops up at a world position, floats up and fades: damage numbers, "+100", "Combo!".
+A number or word that pops up at a world position, floats up and fades: damage numbers,
+"+100", "Combo!".
 
 ## bounds_or_view
 
@@ -379,7 +387,8 @@ The part of the world the main camera shows, or `area` when it is set.
 
 ## KeepInBounds
 
-Keeps the entity inside `area` (the camera's view when unset), `margin` pixels in, and stops its Velocity at the edge.
+Keeps the entity inside `area` (the camera's view when unset), `margin` pixels in, and stops
+its Velocity at the edge.
 
 ```rust
 @component
@@ -409,7 +418,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## WrapAround
 
-Moves the entity to the other side when it leaves `area` (the camera's view when unset) by more than `margin` pixels: asteroids-style wrapping.
+Moves the entity to the other side when it leaves `area` (the camera's view when unset) by
+more than `margin` pixels: asteroids-style wrapping.
 
 ```rust
 @component
@@ -430,7 +440,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## DespawnOffscreen
 
-Despawns the entity once it is more than `margin` pixels outside `area` (the camera's view when unset): bullets, debris, scrolled-past enemies.
+Despawns the entity once it is more than `margin` pixels outside `area` (the camera's view
+when unset): bullets, debris, scrolled-past enemies.
 
 ```rust
 @component
@@ -465,7 +476,8 @@ struct SpawnTick {
 
 ## Spawner
 
-Fires SpawnTick every `every` seconds at the entity's position plus a random offset up to `spread`, `count` times in all (-1 forever).
+Fires SpawnTick every `every` seconds at the entity's position plus a random offset up to
+`spread`, `count` times in all (-1 forever).
 
 ```rust
 @component
@@ -506,7 +518,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Wave
 
-One wave: `count` spawns of `id`, `every` seconds apart, starting `delay` seconds after the wave before it ends.
+One wave: `count` spawns of `id`, `every` seconds apart, starting `delay` seconds after the
+wave before it ends.
 
 ```rust
 struct Wave {
@@ -558,7 +571,8 @@ struct WavesDone {
 
 ## WaveSpawner
 
-Runs a list of waves: put it on an entity with the waves in order. It sends WaveSpawn for every spawn; `loop` starts over after the last.
+Runs a list of waves: put it on an entity with the waves in order. It sends WaveSpawn for
+every spawn; `loop` starts over after the last.
 
 ```rust
 @component
@@ -583,7 +597,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Score
 
-The score and the best one, kept in the save under `key`. The best is read when the game starts and written whenever it is beaten.
+The score and the best one, kept in the save under `key`. The best is read when the game
+starts and written whenever it is beaten.
 
 ```rust
 @resource

@@ -1,4 +1,4 @@
-// Timers, cooldowns and sequences of steps.
+//! Timers, cooldowns and sequences of steps.
 
 import "drift/core/host" { * };
 import "drift/core/values" { * };
@@ -7,11 +7,53 @@ import "drift/core/world" { * };
 
 // ---- Timers ----
 
-struct Timer { seconds: float = 1.0, left: float = 1.0, repeating: bool = false, paused: bool = false }
+//! page: values
+
+/// Counts down game time for spawn waves, cooldowns and delays. It is a plain value: keep it in
+/// a resource or component and tick it with the frame time.
+///
+/// ```rust
+/// @resource
+/// struct Waves { timer: Timer = repeating_timer(1.5) }
+///
+/// @system
+/// fn spawn(cmd: Commands, time: Time, waves: Waves) {
+///     for i in range(waves.timer.tick(time.dt)) {
+///         cmd.spawn(enemy());
+///     }
+/// }
+/// ```
+struct Timer {
+    /// The period
+    seconds: float = 1.0,
+    /// Seconds left in the current period
+    left: float = 1.0,
+    /// Starts over each time it finishes
+    repeating: bool = false,
+    /// A paused timer does not advance
+    paused: bool = false,
+}
+
+/// A timer that finishes once after `seconds`.
+///
+/// ```rust
+/// let fuse = timer(3.0);
+/// ```
 fn timer(seconds: float) -> Timer { return Timer { seconds: seconds, left: seconds, .. }; }
+
+/// A timer that finishes every `seconds`.
+///
+/// ```rust
+/// let every_second = repeating_timer(1.0);
+/// ```
 fn repeating_timer(seconds: float) -> Timer { return Timer { seconds: seconds, left: seconds, repeating: true, .. }; }
 impl Timer {
-    // Advances the timer; returns how many times it finished.
+    /// Advances by `dt` seconds and returns how many times the timer finished: 0 or 1 for a
+    /// one-shot timer, more for a repeating one in a long frame.
+    ///
+    /// ```rust
+    /// if bomb.fuse.tick(time.dt) > 0 { explode(); }
+    /// ```
     fn tick(self, dt: float) -> int {
         if self.paused || self.seconds <= 0.0 {
             return 0;
@@ -31,25 +73,82 @@ impl Timer {
         }
         return n;
     }
+    /// Whether a one-shot timer has run out. It stays finished until `reset()`.
+    ///
+    /// ```rust
+    /// if shield.timer.finished() { shield.on = false; }
+    /// ```
     fn finished(self) -> bool { return !self.repeating && self.left <= 0.0; }
+    /// Seconds left in the current period.
+    ///
+    /// ```rust
+    /// label.value = string(int(round.left.remaining())) + " s";
+    /// ```
     fn remaining(self) -> float { return max(self.left, 0.0); }
-    // How far through the current period, 0.0 at the start to 1.0 when it
-    // finishes.
+    /// Progress through the current period, 0 to 1.
+    ///
+    /// ```rust
+    /// bar.size = vec2(100.0 * reload.progress(), 6.0);
+    /// ```
     fn progress(self) -> float { return 1.0 - self.left / self.seconds; }
+    /// Starts the period again.
+    ///
+    /// ```rust
+    /// gun.reload.reset();
+    /// ```
     fn reset(self) { self.left = self.seconds; }
 }
 
-// Gates an action: ready, used, then ready again after `seconds`.
-struct Cooldown { seconds: float = 1.0, left: float = 0.0 }
+/// Gates an action: ready, used, then ready again after `seconds`.
+///
+/// ```rust
+/// @component
+/// struct Gun { reload: Cooldown = cooldown(0.25) }
+///
+/// @system
+/// fn fire(row: (Entity, Gun), input: Input, time: Time) {
+///     let (_, gun) = row;
+///     gun.reload.tick(time.dt);
+///     if input.action_held("fire") && gun.reload.try_use() {
+///         log("bang");
+///     }
+/// }
+/// ```
+struct Cooldown {
+    /// The time between uses
+    seconds: float = 1.0,
+    /// Seconds until it is ready
+    left: float = 0.0,
+}
+
+/// A cooldown of `seconds`, ready at once.
+///
+/// ```rust
+/// let dash = cooldown(0.8);
+/// ```
 fn cooldown(seconds: float) -> Cooldown { return Cooldown { seconds: seconds, left: 0.0 }; }
 impl Cooldown {
+    /// Advances it by `dt` seconds.
+    ///
+    /// ```rust
+    /// dash.tick(time.dt);
+    /// ```
     fn tick(self, dt: float) {
         if self.left > 0.0 {
             self.left = max(0.0, self.left - dt);
         }
     }
+    /// Whether it can be used.
+    ///
+    /// ```rust
+    /// icon.visible = dash.ready();
+    /// ```
     fn ready(self) -> bool { return self.left <= 0.0; }
-    // If ready, starts the cooldown and returns true.
+    /// If ready, starts the cooldown and returns true.
+    ///
+    /// ```rust
+    /// if input.action_pressed("dash") && dash.try_use() { v.linear = v.linear * 3.0; }
+    /// ```
     fn try_use(self) -> bool {
         if self.left > 0.0 {
             return false;
@@ -57,30 +156,39 @@ impl Cooldown {
         self.left = self.seconds;
         return true;
     }
-    // The share of the cooldown still to wait: 1.0 right after use, falling
-    // to 0.0 when ready.
+    /// The share of the cooldown still to wait: 1.0 right after use, falling to 0.0 when ready.
+    ///
+    /// ```rust
+    /// draw.arc(t.position, 12.0, 0.0, TAU * dash.remaining_fraction(), rgb(255, 255, 255), 2.0);
+    /// ```
     fn remaining_fraction(self) -> float {
         if self.seconds <= 0.0 {
             return 0.0;
         }
         return clamp(self.left / self.seconds, 0.0, 1.0);
     }
+    /// Makes it ready at once.
+    ///
+    /// ```rust
+    /// dash.reset();
+    /// ```
     fn reset(self) { self.left = 0.0; }
 }
 
 // ---- Sequences ----
 
 impl Commands {
-    // Sends the message once `seconds` have passed.
+    /// Sends the message once `seconds` have passed.
     fn send_after(self, seconds: float, message: any) { drift::send_message_after(seconds, message); }
 }
 
-// One step of a Sequence; build them with sequence() and its methods.
+//! page: data
+
+/// One step of a Sequence; build them with sequence() and its methods.
 struct SequenceStep { kind: int = 0, seconds: float = 0.0, name: string = "", message: any = 0 }
 
-// Steps that run one after another across frames: waits, named events,
-// messages, and waits for a signal. Keep one in a component or resource and
-// tick it every frame.
+/// Steps that run one after another across frames: waits, named events, messages, and waits for
+/// a signal. Keep one in a component or resource and tick it every frame.
 struct Sequence { steps: SequenceStep[] = [], at: int = 0, waited: float = 0.0, loops: int = 0, signals: string[] = [] }
 fn sequence() -> Sequence { return Sequence { .. }; }
 impl Sequence {
@@ -88,27 +196,27 @@ impl Sequence {
         self.steps.push(SequenceStep { kind: 0, seconds: seconds, .. });
         return self;
     }
-    // tick() returns `name` when the sequence gets here.
+    /// tick() returns `name` when the sequence gets here.
     fn then(self, name: string) -> Sequence {
         self.steps.push(SequenceStep { kind: 1, name: name, .. });
         return self;
     }
-    // Sends a message when the sequence gets here.
+    /// Sends a message when the sequence gets here.
     fn send(self, message: any) -> Sequence {
         self.steps.push(SequenceStep { kind: 2, message: message, .. });
         return self;
     }
-    // Waits until signal(name) is called.
+    /// Waits until signal(name) is called.
     fn wait_for(self, name: string) -> Sequence {
         self.steps.push(SequenceStep { kind: 3, name: name, .. });
         return self;
     }
-    // Runs the steps `times` more times once they end; -1 forever.
+    /// Runs the steps `times` more times once they end; -1 forever.
     fn repeat(self, times: int) -> Sequence {
         self.loops = times;
         return self;
     }
-    // Lets a wait_for(name) step go on, now or when the sequence reaches it.
+    /// Lets a wait_for(name) step go on, now or when the sequence reaches it.
     fn signal(self, name: string) { self.signals.push(name); }
     fn finished(self) -> bool { return self.at >= self.steps.len(); }
     fn restart(self) {
@@ -116,7 +224,7 @@ impl Sequence {
         self.waited = 0.0;
         self.signals = [];
     }
-    // Advances by dt seconds; returns the names of the `then` steps reached.
+    /// Advances by dt seconds; returns the names of the `then` steps reached.
     fn tick(self, dt: float) -> string[] {
         let reached: string[] = [];
         let budget = dt;

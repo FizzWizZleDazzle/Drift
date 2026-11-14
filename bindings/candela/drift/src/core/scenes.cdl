@@ -1,4 +1,4 @@
-// Scenes and prefabs.
+//! Scenes and prefabs.
 
 import "drift/core/values" { * };
 import "drift/core/world" { * };
@@ -6,22 +6,24 @@ import "drift/core/resources" { * };
 
 // ---- Scenes and prefabs ----
 
-// A loaded scene or prefab file.
+//! page: assets
+
+/// A loaded scene or prefab file.
 struct Scene { id: int = 0 }
 
-// How one copy of a scene spawns: `offset` moves its root entities,
-// `parent` makes them children of an entity, and `overrides` maps an
-// entity's Name to a JSON patch of its components.
+/// How one copy of a scene spawns: `offset` moves its root entities, `parent` makes them
+/// children of an entity, and `overrides` maps an entity's Name to a JSON patch of its
+/// components.
 struct SceneOptions {
     offset: Vec2 = Vec2 { .. },
     parent: Entity = Entity { .. },
     overrides: {string: string} = {},
 }
 
-// The entities one spawn made, in file order.
+/// The entities one spawn made, in file order.
 struct SceneInstance { entities: Entity[] = [], roots: Entity[] = [], names: string[] = [] }
 impl SceneInstance {
-    // The first entity with this Name.
+    /// The first entity with this Name.
     fn find(self, name: string) -> Option<Entity> {
         for i in range(self.names.len()) {
             if self.names[i] == name {
@@ -33,7 +35,7 @@ impl SceneInstance {
 }
 
 impl Assets {
-    // A scene file, loaded once per path.
+    /// A scene file, loaded once per path.
     fn scene(self, path: string) -> Scene {
         let id = drift::scene_load(path);
         if id == 0 {
@@ -44,8 +46,8 @@ impl Assets {
 }
 
 impl Commands {
-    // Spawns a copy of a scene now; its entities and components exist for
-    // the systems after this one.
+    /// Spawns a copy of a scene now; its entities and components exist for the systems after
+    /// this one.
     fn spawn_scene(self, scene: Scene, o: SceneOptions) -> SceneInstance {
         let names: string[] = [];
         let patches: string[] = [];
@@ -64,9 +66,8 @@ impl Commands {
         }
         return inst;
     }
-    // Writes every entity with a saved component to a scene file, after
-    // this system returns.
+    /// Writes every entity with a saved component to a scene file, after this system returns.
     fn save_scene(self, path: string) { drift::scene_save(path, 0); }
-    // Writes `root` and its children: a prefab of something built in game.
+    /// Writes `root` and its children: a prefab of something built in game.
     fn save_prefab(self, path: string, root: Entity) { drift::scene_save(path, root.id); }
 }

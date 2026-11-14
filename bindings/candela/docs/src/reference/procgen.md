@@ -1,13 +1,17 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Procedural Generation
 
-Seeded random numbers, noise, level generators, weighted tables and pathfinding over grids. A seed gives the same numbers and the same levels on every platform and in the browser. See [Procedural Generation](../guides/procedural-generation.md).
+Seeded random numbers, noise, level generators, weighted tables and pathfinding over grids.
+A seed gives the same numbers and the same levels on every platform and in the browser. See
+[Procedural Generation](../guides/procedural-generation.md).
 
 ## Rng
 
-A seeded random number generator. Its methods advance it, so keep it in a resource or component to carry on where it left off. Assigning a struct shares it: `let b = a;` gives a second name for the same generator, and `a.copy()` gives an independent one.
+A seeded random number generator. Its methods advance it, so keep it in a resource or
+component to carry on where it left off. Assigning a struct shares it: `let b = a;` gives a
+second name for the same generator, and `a.copy()` gives an independent one.
 
 ```rust
 struct Rng {
@@ -255,7 +259,8 @@ let r = rng(42);
 fn rng_stream(seed: int, stream: int) -> Rng
 ```
 
-Another sequence for the same seed: generators with different streams do not repeat each other.
+Another sequence for the same seed: generators with different streams do not repeat each
+other.
 
 ```rust
 let caves = rng_stream(seed, 1);
@@ -327,7 +332,8 @@ if table.roll(r) is Some(kind) { spawn(kind); }
 fn weighted_table<T>() -> WeightedTable<T>
 ```
 
-An empty table of items of type `T`. Weights are relative; an entry with weight 0 or less never comes up.
+An empty table of items of type `T`. Weights are relative; an entry with weight 0 or less
+never comes up.
 
 ```rust
 let enemies = weighted_table<int>().add(1, 10.0).add(2, 3.0);
@@ -335,7 +341,9 @@ let enemies = weighted_table<int>().add(1, 10.0).add(2, 3.0);
 
 ## Noise
 
-A noise recipe. Samples are -1.0 to 1.0; the same seed gives the same field everywhere. `frequency` scales positions (0.05 makes features about 20 units across), `octaves` layers finer detail, and `warp` bends the field by up to that many units.
+A noise recipe. Samples are -1.0 to 1.0; the same seed gives the same field everywhere.
+`frequency` scales positions (0.05 makes features about 20 units across), `octaves` layers
+finer detail, and `warp` bends the field by up to that many units.
 
 ```rust
 struct Noise {
@@ -396,7 +404,8 @@ let row = terrain.samples(vec2(0.0, 0.0), 64, 64, 1.0);
 fn grid(self, w: int, h: int, threshold: float, above: int, below: int) -> Grid
 ```
 
-A grid from the noise at each cell's center: `above` where it is at least `threshold`, `below` elsewhere.
+A grid from the noise at each cell's center: `above` where it is at least `threshold`,
+`below` elsewhere.
 
 ```rust
 let land = noise(seed).grid(60, 32, 0.1, FLOOR, WALL);
@@ -412,6 +421,42 @@ The default recipe with a seed.
 
 ```rust
 let n = noise(seed);
+```
+
+## FLOOR
+
+```rust
+const FLOOR: int = 0
+```
+
+The value generators write for open cells.
+
+```rust
+if g.get(c) == FLOOR { place_coin(c); }
+```
+
+## WALL
+
+```rust
+const WALL: int = 1
+```
+
+The value generators write for solid cells, and what `Grid.get` answers outside the grid.
+
+```rust
+let path = find_path(g, a, b, [WALL], Moves::FourWay);
+```
+
+## DOOR
+
+```rust
+const DOOR: int = 2
+```
+
+The value `dungeon` writes where a corridor enters a room.
+
+```rust
+let doors = d.grid.cells_of(DOOR);
 ```
 
 ## Cell
@@ -446,7 +491,8 @@ let start = cell(1, 1);
 
 ## Grid
 
-The generators write `FLOOR` for open cells and `WALL` for solid ones, and dungeons add `DOOR`; your own values can be anything.
+The generators write `FLOOR` for open cells and `WALL` for solid ones, and dungeons add
+`DOOR`; your own values can be anything.
 
 ```rust
 struct Grid {
@@ -597,42 +643,6 @@ A grid of `width` by `height` cells, all holding `value`.
 
 ```rust
 let g = grid(40, 25, WALL);
-```
-
-## FLOOR
-
-```rust
-const FLOOR: int = 0
-```
-
-The value generators write for open cells.
-
-```rust
-if g.get(c) == FLOOR { place_coin(c); }
-```
-
-## WALL
-
-```rust
-const WALL: int = 1
-```
-
-The value generators write for solid cells, and what `Grid.get` answers outside the grid.
-
-```rust
-let path = find_path(g, a, b, [WALL], Moves::FourWay);
-```
-
-## DOOR
-
-```rust
-const DOOR: int = 2
-```
-
-The value `dungeon` writes where a corridor enters a room.
-
-```rust
-let doors = d.grid.cells_of(DOOR);
 ```
 
 ## CaveOptions
@@ -825,7 +835,8 @@ let g = random_walk(r, 60, 32, WalkOptions { coverage: 0.35, .. });
 fn poisson_disk(rng: Rng, area: Rect, min_distance: float) -> Vec2[]
 ```
 
-Points in `area` no closer than `min_distance` to each other: even spacing without a pattern, for trees, rocks and spawn points.
+Points in `area` no closer than `min_distance` to each other: even spacing without a
+pattern, for trees, rocks and spawn points.
 
 ```rust
 for p in poisson_disk(r, rect(0.0, 0.0, 960.0, 540.0), 48.0) {
@@ -839,7 +850,8 @@ for p in poisson_disk(r, rect(0.0, 0.0, 960.0, 540.0), 48.0) {
 fn poisson_on_grid(rng: Rng, g: Grid, value: int, min_distance: float) -> Vec2[]
 ```
 
-The same over the cells of `g` holding `value`, in cell units: a point at (3.5, 2.5) is the middle of cell (3, 2).
+The same over the cells of `g` holding `value`, in cell units: a point at (3.5, 2.5) is the
+middle of cell (3, 2).
 
 ```rust
 for p in poisson_on_grid(r, level.grid, FLOOR, 6.0) {
@@ -861,7 +873,7 @@ struct WfcOptions {
 |-------|------|---------|---------|
 | `attempts` | `int` | `10` | Restarts after a contradiction |
 | `periodic` | `bool` | `false` | Neighbours wrap around the edges |
-| `preset` | `Grid` | `Grid { .. }` |  |
+| `preset` | `Grid` | `Grid { .. }` | Cells to fix before collapsing: a grid of the output size where a value from the sample forces that value and any other (such as -1) leaves the cell free. Empty for none. |
 
 ```rust
 let ruins = wfc(r, sample, 60, 32, WfcOptions { attempts: 20, .. });
@@ -873,7 +885,9 @@ let ruins = wfc(r, sample, 60, 32, WfcOptions { attempts: 20, .. });
 fn wfc(rng: Rng, sample: Grid, width: int, height: int, o: WfcOptions) -> Option<Grid>
 ```
 
-Wave function collapse: a width x height grid where every pair of neighbouring values also sits side by side somewhere in `sample`, with values about as common as there. None when every attempt contradicted itself.
+Wave function collapse: a width x height grid where every pair of neighbouring values also
+sits side by side somewhere in `sample`, with values about as common as there. None when
+every attempt contradicted itself.
 
 ```rust
 if wfc(r, sample, 60, 32, WfcOptions { .. }) is Some(g) {
@@ -882,13 +896,23 @@ if wfc(r, sample, 60, 32, WfcOptions { .. }) is Some(g) {
 }
 ```
 
+## Moves
+
+Which neighbours a step on a grid can go to: the four beside a cell, or the diagonals too
+(never cutting a blocked corner).
+
+```rust
+enum Moves { FourWay, EightWay }
+```
+
 ## find_path
 
 ```rust
 fn find_path(g: Grid, start: Cell, goal: Cell, blocked: int[], moves: Moves) -> Cell[]
 ```
 
-The cells from start to goal, both included, avoiding cells whose value is in `blocked`; empty when there is no way.
+The cells from start to goal, both included, avoiding cells whose value is in `blocked`;
+empty when there is no way.
 
 ```rust
 let path = find_path(level.grid, monster_cell, player_cell, [WALL], Moves::FourWay);
@@ -899,7 +923,8 @@ if path.len() > 1 {
 
 ## FlowField
 
-For every cell, the next step toward the nearest goal: one field steers any number of chasers.
+For every cell, the next step toward the nearest goal: one field steers any number of
+chasers.
 
 ```rust
 struct FlowField {
@@ -988,18 +1013,11 @@ v.linear = field.direction_at(t.position, 16.0) * speed;
 fn flow_field(g: Grid, goals: Cell[], blocked: int[], moves: Moves) -> FlowField
 ```
 
-A flow field over a grid toward the nearest of `goals`, through cells whose value is not in `blocked`. Build it again when a goal moves to another cell, not every frame.
+A flow field over a grid toward the nearest of `goals`, through cells whose value is not in
+`blocked`. Build it again when a goal moves to another cell, not every frame.
 
 ```rust
 let field = flow_field(g, [goal], [WALL], Moves::EightWay);
-```
-
-## Moves
-
-Which neighbours a step on a grid can go to: the four beside a cell, or the diagonals too (never cutting a blocked corner).
-
-```rust
-enum Moves { FourWay, EightWay }
 ```
 
 ## field_of_view
@@ -1008,7 +1026,9 @@ enum Moves { FourWay, EightWay }
 fn field_of_view(g: Grid, from: Cell, radius: int, opaque: int[]) -> Grid
 ```
 
-The cells `from` sees within `radius` cells, as a grid of the same size: 1 where visible, 0 elsewhere. Cells whose value is in `opaque` block sight and are seen themselves. Symmetric: if a sees b, b sees a.
+The cells `from` sees within `radius` cells, as a grid of the same size: 1 where visible, 0
+elsewhere. Cells whose value is in `opaque` block sight and are seen themselves. Symmetric:
+if a sees b, b sees a.
 
 ## line_of_sight
 
@@ -1028,7 +1048,8 @@ The cells of the straight line from a to b, both included.
 
 ## SpatialBounds
 
-Puts the entity in the spatial index: a box of `half_size` around its position plus `offset`; a zero size indexes the point.
+Puts the entity in the spatial index: a box of `half_size` around its position plus
+`offset`; a zero size indexes the point.
 
 ```rust
 struct SpatialBounds {
@@ -1039,7 +1060,8 @@ struct SpatialBounds {
 
 ## Spatial
 
-"What is near here" over the entities with SpatialBounds, without colliders. The index holds where they were at the start of the frame.
+"What is near here" over the entities with SpatialBounds, without colliders. The index holds
+where they were at the start of the frame.
 
 ```rust
 struct Spatial {
@@ -1065,4 +1087,5 @@ fn in_radius(self, center: Vec2, radius: float) -> Entity[]
 fn nearest(self, p: Vec2, max_distance: float, ignore: Entity) -> Entity
 ```
 
-The closest within `max_distance`, skipping `ignore` (pass the asking entity); Entity {} when there is none.
+The closest within `max_distance`, skipping `ignore` (pass the asking entity); Entity {}
+when there is none.

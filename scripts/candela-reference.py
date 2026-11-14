@@ -1,22 +1,41 @@
 #!/usr/bin/env python3
-"""Writes the Candela book's reference pages from the `drift` module.
+"""Writes the Candela book's reference pages from the `drift` module's source.
 
     scripts/candela-reference.py           write the pages
     scripts/candela-reference.py --check   exit 1 if a page differs from
                                            what the module gives (CI)
 
-The module, bindings/candela/drift/src/main.cdl and the core/ files it
-passes on with `export import`, is the source of every signature, field,
-default and enum variant. Descriptions come from the
-comments above each declaration in the module, and from
-bindings/candela/docs/api-notes.md, which also holds the examples and says
-which page each type and function belongs on. A note for a name the module
-no longer has is an error, so the notes cannot describe API that is gone.
+The module, bindings/candela/drift/src/main.cdl, the core/ files it passes
+on with `export import`, and the opt-in modules beside it, is the only
+source. Every signature, field, default and enum variant comes from the
+declarations, and every description and example from the `///` doc comment
+above them, the same text the editor shows on hover:
 
-The pages go to bindings/candela/docs/src/reference/, one per section of
-the notes, plus index.md, an alphabetical list of every name, and
-api-index.json, which maps every name to its entry for the book's
-shift-click links (bindings/candela/docs/theme/api-links.js).
+    /// One-sentence summary.
+    ///
+    /// Detail, then an example in a fenced code block.
+    struct Name {
+        /// What the field means.
+        field: int = 0,
+    }
+
+`//!` lines say which page the declarations go on:
+
+    //! page: components        the declarations after this line go on
+                                reference/components.md, until the next
+                                `//! page:` line
+    //! # Engine Components     right after a page line: the page's title,
+    //!                         once per page, and the `//!` lines after it
+    //! Introduction...         are the page's introduction
+
+A doc comment that starts with `Internal:` keeps a helper the module needs
+off the pages.
+
+The pages go to bindings/candela/docs/src/reference/, plus index.md, an
+alphabetical list of every name, and api-index.json, which maps every name
+to its entry for the book's shift-click links
+(bindings/candela/docs/theme/api-links.js) and for the editor's docs links
+(the `docs` URL in bindings/candela/drift/candela.toml).
 """
 
 import argparse
@@ -33,17 +52,16 @@ MODULE = SRC / "main.cdl"
 # `export import "drift/core/<name>" { * };`, in this order.
 CORE = [SRC / f"{m.group(1)}.cdl"
         for m in re.finditer(r'^export import "drift/(core/\w+)"', MODULE.read_text(), re.M)]
-# Each file of the module, and the page its names go on when the notes do
-# not place them: `drift` itself, and the opt-in modules such as `drift/ui`.
-MODULES = [(MODULE, "values")] + [(path, "values") for path in CORE] + [
-    (SRC / "ui.cdl", "ui"), (SRC / "gameplay.cdl", "gameplay"), (SRC / "control.cdl", "control"),
-    (SRC / "screens.cdl", "screens"), (SRC / "ai.cdl", "ai"), (SRC / "rpg.cdl", "rpg"),
-    (SRC / "debug.cdl", "debug")]
-NOTES = ROOT / "bindings" / "candela" / "docs" / "api-notes.md"
+# Each file of the module: `drift` itself, then the opt-in modules such as
+# `drift/ui`.
+MODULES = [MODULE] + CORE + [SRC / f"{name}.cdl" for name in
+                             ("ui", "gameplay", "control", "screens", "ai", "rpg", "debug")]
 OUT = ROOT / "bindings" / "candela" / "docs" / "src" / "reference"
 
-GENERATED = ("<!-- Written by scripts/candela-reference.py from the drift module and\n"
-             "     bindings/candela/docs/api-notes.md. Edit those, not this page. -->\n")
+GENERATED = ("<!-- Written by scripts/candela-reference.py from the doc comments in\n"
+             "     bindings/candela/drift/src. Edit those, not this page. -->\n")
+
+INTERNAL = "Internal:"
 
 
 # ---------------------------------------------------------------------------
@@ -52,19 +70,32 @@ GENERATED = ("<!-- Written by scripts/candela-reference.py from the drift module
 
 class Decl:
     def __init__(self, kind, name, doc, line):
-        self.kind = kind          # struct, enum, fn, const, attribute, method
+        self.kind = kind          # struct, enum, fn, const, attribute, method, system
         self.name = name          # Type.method for methods
-        self.doc = doc            # the comment lines above it, joined
+        self.doc = doc            # the /// doc comment, as Markdown
         self.line = line
         self.signature = ""
-        self.fields = []          # (name, type, default, comment)
-        self.variants = []
+        self.fields = []          # (name, type, default, doc)
+        self.variants = []        # (text, doc)
         self.generics = ""
         self.owner = ""           # the type of a method
         self.attrs = []           # attributes written on it, such as @component
-        self.page = ""            # the page it goes on without a note
-        self.section = ""         # the `// ---- Section ----` it sits under
+        self.page = ""            # the page it goes on
         self.module = ""          # the import path of its file: drift, drift/ui, ...
+        self.path = None
+
+    @property
+    def internal(self):
+        return self.doc.startswith(INTERNAL)
+
+
+class Page:
+    def __init__(self, slug):
+        self.slug = slug
+        self.title = ""
+        self.intro = ""
+        self.where = ""           # file:line of the title, for errors
+        self.entries = []         # Decls, in module order
 
 
 def strip_comment(line):
@@ -123,30 +154,54 @@ def split_top(text, sep=","):
     return [p.strip() for p in parts if p.strip()]
 
 
-def md_text(text):
-    """Module comment text as Markdown: `<` outside code spans would start
-    an HTML tag."""
-    parts = text.split("`")
-    for k in range(0, len(parts), 2):
-        parts[k] = parts[k].replace("<", "&lt;")
-    return "`".join(parts)
+DOC_RE = re.compile(r"^\s*///(?!/)(.*)$")
+
+
+def doc_text(line):
+    """The text of a `///` line, or None for any other line."""
+    m = DOC_RE.match(line)
+    if not m:
+        return None
+    t = m.group(1)
+    return t[1:] if t.startswith(" ") else t
 
 
 def doc_above(lines, i):
-    """The comment block that ends on the line above lines[i]."""
+    """The `///` doc comment that ends on the line above lines[i]."""
     out = []
     j = i - 1
-    while j >= 0 and lines[j].strip().startswith("//"):
-        text = lines[j].strip()[2:].strip()
-        if text.startswith("----") or text.startswith("===="):
+    while j >= 0:
+        t = doc_text(lines[j])
+        if t is None:
             break
-        out.insert(0, text)
+        out.insert(0, t.rstrip())
         j -= 1
-    # A blank comment line separates a section's prose from the
-    # declaration's own comment; keep only the last paragraph.
-    if "" in out:
-        out = out[len(out) - out[::-1].index(""):]
-    return md_text(" ".join(out).strip())
+    return "\n".join(out).strip()
+
+
+def md_text(text):
+    """Doc text as Markdown for a page: `<` outside code would start an HTML
+    tag."""
+    out, in_code, in_span = [], False, False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_code = not in_code
+        elif not in_code:
+            if not line.strip():
+                in_span = False       # a code span ends with its paragraph
+            chars = []
+            for c in line:
+                if c == "`":
+                    in_span = not in_span
+                chars.append("&lt;" if c == "<" and not in_span else c)
+            line = "".join(chars)
+        out.append(line)
+    return "\n".join(out)
+
+
+def one_line(text):
+    """Doc text for a table cell."""
+    return " ".join(md_text(text).split())
 
 
 FN_RE = re.compile(r"^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*|[-+*/<>=!]+)\s*(<[^>(]*>)?\s*\(")
@@ -208,7 +263,9 @@ def read_host(lines, i, path, decls):
 
 def read_type(lines, i, code, path, kind, name, generics):
     """A struct or enum whose declaration starts at lines[i]; `code` is that
-    line without any attribute in front. Returns the Decl and its last line."""
+    line without any attribute in front. Returns the Decl and its last line.
+    A `///` comment inside the braces documents the member that starts the
+    next line."""
     end = block_end(lines, i, lines[i].index("{"))
     d = Decl(kind, name, "", i + 1)
     d.generics = generics
@@ -217,17 +274,30 @@ def read_type(lines, i, code, path, kind, name, generics):
     else:
         last = lines[end]
         body = [code[code.index("{") + 1:]] + lines[i + 1:end] + [last[:last.rindex("}")]]
-    if kind == "struct":
-        for bl in body:
-            text, comment = strip_comment(bl)
-            for part in split_top(text):
+    pending = []
+    for n, bl in enumerate(body):
+        t = doc_text(bl)
+        if t is not None:
+            pending.append(t.rstrip())
+            continue
+        text, _ = strip_comment(bl)
+        parts = split_top(text)
+        if not parts:
+            if pending and text.strip() == "" and bl.strip():
+                pending = []          # a plain comment line ends a doc comment
+            continue
+        doc = "\n".join(pending).strip()
+        pending = []
+        for k, part in enumerate(parts):
+            member_doc = doc if k == 0 else ""
+            if kind == "struct":
                 fm = re.match(r"^([A-Za-z_]\w*)\s*:\s*(.+?)(\s*=\s*(.+))?$", part, re.S)
                 if not fm:
                     raise SystemExit(f"{path}:{i + 1}: cannot read field `{part}` of {name}")
                 d.fields.append((fm.group(1), " ".join(fm.group(2).split()),
-                                 " ".join((fm.group(4) or "").split()), comment))
-    else:
-        d.variants = split_top(" ".join(strip_comment(bl)[0] for bl in body))
+                                 " ".join((fm.group(4) or "").split()), member_doc))
+            else:
+                d.variants.append((" ".join(part.split()), member_doc))
     return d, end
 
 
@@ -249,21 +319,52 @@ def module_name(path):
 
 
 READING = MODULE                  # the file being read, for error messages
+PAGE_RE = re.compile(r"^//! page: ([\w-]+)\s*$")
 
 
-def read_module(path, page):
+def read_pages(path, lines, pages):
+    """The `//! page:` lines of a file: the page each line index is on, and
+    the titles and introductions the file gives."""
+    on = [""] * len(lines)
+    current = ""
+    i = 0
+    while i < len(lines):
+        m = PAGE_RE.match(lines[i])
+        if m:
+            current = m.group(1)
+            page = pages.setdefault(current, Page(current))
+            j = i + 1
+            if j < len(lines) and lines[j].startswith("//! # "):
+                if page.title:
+                    raise SystemExit(f"{path}:{j + 1}: page {current} already has a title, at {page.where}")
+                page.title = lines[j][len("//! # "):].strip()
+                page.where = f"{path.relative_to(ROOT)}:{j + 1}"
+                intro = []
+                j += 1
+                while j < len(lines) and lines[j].startswith("//!") and not PAGE_RE.match(lines[j]):
+                    t = lines[j][3:]
+                    intro.append(t[1:] if t.startswith(" ") else t)
+                    j += 1
+                page.intro = "\n".join(intro).strip()
+            for k in range(i, j):
+                on[k] = current
+            i = j
+            continue
+        on[i] = current
+        i += 1
+    return on
+
+
+def read_module(path, pages):
     global READING
     READING = path
     lines = path.read_text().split("\n")
+    on_page = read_pages(path, lines, pages)
     decls = []
     owner, owner_end = None, -1
-    section = ""
     i = 0
     while i < len(lines):
         line = lines[i]
-        sm = re.match(r"^// (?:----|====) (.+?) (?:----|====)\s*$", line)
-        if sm:
-            section = sm.group(1)
         if owner is not None and i > owner_end:
             owner = None
         top = not line.startswith((" ", "\t"))
@@ -276,9 +377,13 @@ def read_module(path, page):
         above, first = attrs_above(lines, i)
         attrs = above + inline
         doc = doc_above(lines, first)
+        page = on_page[i]
 
         if top and code.startswith("host "):
+            start = len(decls)
             i = read_host(lines, i, path, decls)
+            for d in decls[start:]:
+                d.page = page
             continue
         m = re.match(r"^impl\s+([A-Za-z_]\w*)(<[^>]*>)?\s*\{", code)
         if top and m:
@@ -288,7 +393,7 @@ def read_module(path, page):
         m = re.match(r"^(struct|enum)\s+([A-Za-z_]\w*)\s*(<[^>]*>)?\s*\{", code)
         if top and m:
             d, end = read_type(lines, i, code, path, m.group(1), m.group(2), m.group(3) or "")
-            d.doc, d.attrs, d.page, d.section = doc, attrs, page, section
+            d.doc, d.attrs, d.page = doc, attrs, page
             decls.append(d)
             i = end + 1
             continue
@@ -296,7 +401,7 @@ def read_module(path, page):
         if top and m:
             d = Decl("const", m.group(1), doc, i + 1)
             d.signature = f"const {m.group(1)}: {m.group(2)} = {m.group(3)}"
-            d.page, d.section = page, section
+            d.page = page
             decls.append(d)
             i += 1
             continue
@@ -312,86 +417,15 @@ def read_module(path, page):
             else:
                 d = Decl("system" if any(a.startswith("@system") for a in attrs) else "fn", m.group(1), doc, i + 1)
             d.signature = fn_signature(strip_comment(text)[0])
-            d.attrs, d.page, d.section = attrs, page, section
+            d.attrs, d.page = attrs, page
             decls.append(d)
             i = fn_end(lines, k, text)
             continue
         i += 1
     for d in decls:
         d.module = module_name(path)
+        d.path = path
     return decls
-
-
-# ---------------------------------------------------------------------------
-# Reading the notes
-# ---------------------------------------------------------------------------
-
-class Page:
-    def __init__(self, slug, title):
-        self.slug = slug
-        self.title = title
-        self.intro = []
-        self.entries = []         # names, in order
-
-
-def read_notes(path):
-    """Pages, notes per name, and the names kept off the pages."""
-    pages, notes, internal = [], {}, set()
-    page = None
-    current = None
-    in_code = False
-    for n, line in enumerate(path.read_text().split("\n"), 1):
-        if line.startswith("```"):
-            in_code = not in_code
-        if not in_code:
-            m = re.match(r"^# (.+?)\s*\{#([\w-]+)\}\s*$", line)
-            if m:
-                page = Page(m.group(2), m.group(1))
-                pages.append(page)
-                current = None
-                continue
-            m = re.match(r"^## (\S+)\s*$", line)
-            if m:
-                current = m.group(1)
-                if current in notes:
-                    raise SystemExit(f"{path}:{n}: {current} has two notes")
-                notes[current] = []
-                if page is None:
-                    raise SystemExit(f"{path}:{n}: {current} comes before any page")
-                if page.slug == "internal":
-                    internal.add(current)
-                elif "." not in current:
-                    page.entries.append(current)
-                continue
-        if current is not None:
-            notes[current].append(line)
-        elif page is not None:
-            page.intro.append(line)
-    for k in notes:
-        notes[k] = "\n".join(notes[k]).strip()
-    for p in pages:
-        p.intro = "\n".join(p.intro).strip()
-    sections = {}
-    for p in pages:
-        if p.slug == "sections":
-            for line in p.intro.split("\n"):
-                m = re.match(r"^- (.+?): ([\w-]+)\s*$", line)
-                if m:
-                    sections[m.group(1)] = m.group(2)
-    return [p for p in pages if p.slug not in ("internal", "sections")], notes, internal, sections
-
-
-def field_notes(text):
-    """`- name: text` lines of a note, and the note without them."""
-    found = {}
-    rest = []
-    for line in text.split("\n"):
-        m = re.match(r"^- `?([A-Za-z_]\w*)`?: (.+)$", line)
-        if m:
-            found[m.group(1)] = m.group(2)
-        else:
-            rest.append(line)
-    return found, "\n".join(rest).strip()
 
 
 # ---------------------------------------------------------------------------
@@ -426,12 +460,16 @@ def short(text, limit=160):
     return text if len(text) <= limit else text[:limit - 4].rstrip(" ,") + " ..."
 
 
+def variant_names(d):
+    return [v for v, _ in d.variants]
+
+
 def signature_of(d):
     """The one-line signature the shift-click tooltip shows."""
     if d.kind == "struct":
         return " ".join(d.attrs + [f"struct {d.name}{d.generics}"])
     if d.kind == "enum":
-        return short(f"enum {d.name} {{ {', '.join(d.variants)} }}")
+        return short(f"enum {d.name} {{ {', '.join(variant_names(d))} }}")
     if d.kind == "attribute":
         return f"{d.signature} on {'an' if d.target[0] in 'aeiou' else 'a'} {d.target}"
     return " ".join(d.attrs + [d.signature])
@@ -450,26 +488,6 @@ def cell(text):
     return text.replace("|", "\\|")
 
 
-def describe(d, notes):
-    """A declaration's description and example. The note's prose wins over
-    the module's comment; a note that is only an example keeps the comment
-    as its description."""
-    note = notes.get(d.name, "")
-    if d.kind == "struct" or d.kind == "enum":
-        _, note = field_notes(note)
-    prose = []
-    in_code = False
-    for line in note.split("\n"):
-        if line.startswith("```"):
-            in_code = not in_code
-            if in_code:
-                break
-        prose.append(line)
-    if "".join(prose).strip():
-        return note
-    return (d.doc + "\n\n" + note).strip()
-
-
 def split_example(text):
     """The prose of a description, and the code blocks after it."""
     i = text.find("```")
@@ -478,10 +496,9 @@ def split_example(text):
     return text[:i].strip(), text[i:].strip()
 
 
-def write_struct(d, notes, methods):
+def write_struct(d, methods):
     out = [f"## {d.name}", ""]
-    fnotes, _ = field_notes(notes.get(d.name, ""))
-    prose, example = split_example(describe(d, notes))
+    prose, example = split_example(md_text(d.doc))
     if prose:
         out += [prose, ""]
     lines = list(d.attrs) + [f"struct {d.name}{d.generics} {{"]
@@ -491,37 +508,35 @@ def write_struct(d, notes, methods):
     if not d.fields:
         lines = list(d.attrs) + [f"struct {d.name}{d.generics} {{}}"]
     out += ["```rust", *lines, "```", ""]
-    shown = [f for f in d.fields if fnotes.get(f[0]) or f[3]]
-    if d.fields and shown:
+    if any(doc for _, _, _, doc in d.fields):
         out += ["| Field | Type | Default | Meaning |", "|-------|------|---------|---------|"]
-        for name, typ, default, comment in d.fields:
-            meaning = fnotes.get(name) or md_text(comment)
-            out.append(f"| `{name}` | `{cell(typ)}` | {('`' + cell(default) + '`') if default else 'required'} | {cell(meaning)} |")
+        for name, typ, default, doc in d.fields:
+            out.append(f"| `{name}` | `{cell(typ)}` | {('`' + cell(default) + '`') if default else 'required'} "
+                       f"| {cell(one_line(doc))} |")
         out.append("")
     if example:
         out += [example, ""]
     for m in methods:
-        out += write_method(m, notes)
+        out += write_method(m)
     return out
 
 
-def write_method(m, notes):
+def write_method(m):
     out = [f"### {m.name}", "", "```rust", m.signature, "```", ""]
-    text = describe(m, notes)
-    if text:
-        out += [text, ""]
+    if m.doc:
+        out += [md_text(m.doc), ""]
     return out
 
 
-def write_enum(d, notes):
+def write_enum(d):
     out = [f"## {d.name}", ""]
-    vnotes, _ = field_notes(notes.get(d.name, ""))
-    out += [describe(d, notes), ""]
-    body = ", ".join(d.variants)
+    out += [md_text(d.doc), ""]
+    names = variant_names(d)
+    body = ", ".join(names)
     if len(body) > 70:
         out += ["```rust", f"enum {d.name} {{"]
         row = "   "
-        for v in d.variants:
+        for v in names:
             if len(row) + len(v) + 2 > 78:
                 out.append(row.rstrip())
                 row = "   "
@@ -529,38 +544,40 @@ def write_enum(d, notes):
         out += [row.rstrip(), "}", "```", ""]
     else:
         out += ["```rust", f"enum {d.name} {{ {body} }}", "```", ""]
-    if vnotes:
+    if any(doc for _, doc in d.variants):
         out += ["| Variant | Meaning |", "|---------|---------|"]
-        for v in d.variants:
-            out.append(f"| `{v}` | {cell(vnotes.get(v, ''))} |")
+        for v, doc in d.variants:
+            out.append(f"| `{v}` | {cell(one_line(doc))} |")
         out.append("")
     return out
 
 
-def write_simple(d, notes, heading=None):
-    out = [f"## {heading or d.name}", "", "```rust", *d.attrs, d.signature, "```", ""]
+def write_simple(d):
+    out = [f"## {d.name}", "", "```rust", *d.attrs, d.signature, "```", ""]
     if d.kind == "system":
         out += ["A system the module adds: it runs in every game that imports the module.", ""]
-    text = describe(d, notes)
-    if text:
-        out += [text, ""]
+    if d.doc:
+        out += [md_text(d.doc), ""]
     return out
 
 
-def write_attribute(d, notes):
+def write_attribute(d):
     out = [f"## {d.name}", "", "```rust", d.signature, "```", ""]
     out += [f"On a `{d.target}`.", ""]
-    text = describe(d, notes)
-    if text:
-        out += [text, ""]
+    if d.doc:
+        out += [md_text(d.doc), ""]
     return out
+
+
+def where(d):
+    return f"{d.path.relative_to(ROOT)}:{d.line}"
 
 
 def generate():
+    pages = {}
     decls = []
-    for path, page in MODULES:
-        decls += read_module(path, page)
-    pages, notes, internal, sections = read_notes(NOTES)
+    for path in MODULES:
+        decls += read_module(path, pages)
 
     by_name = {}
     for d in decls:
@@ -573,71 +590,57 @@ def generate():
     for d in decls:
         if d.kind == "method" and re.match(r"^\w", d.name.split(".", 1)[1]):
             methods.setdefault(d.owner, []).append(d)
-    method_names = {m.name for ms in methods.values() for m in ms}
 
     errors = []
-    for name in notes:
-        if name not in by_name and name not in method_names and name not in internal:
-            errors.append(f"{NOTES}: a note for {name}, which the drift module does not have")
-    for name in internal:
-        if name not in by_name and name not in method_names:
-            errors.append(f"{NOTES}: {name} is listed as internal but the drift module does not have it")
-
-    placed = set()
-    for p in pages:
-        for name in p.entries:
-            if name not in by_name:
-                continue
-            placed.add(name)
-    # A name the notes do not place goes on its file's page, in source order,
-    # so new API is on a page as soon as it is in the module.
-    by_slug = {p.slug: p for p in pages}
     for d in decls:
-        if d.kind == "method" or d.name in placed or d.name in internal or by_name.get(d.name) is not d:
+        if d.kind == "method" and not re.match(r"^\w", d.name.split(".", 1)[1]):
             continue
-        page = sections.get(d.section, d.page) if d.page == "values" else d.page
-        if page not in by_slug:
-            errors.append(f"{NOTES}: no page with the slug {page} for {d.name}")
+        if d.kind != "method" and by_name.get(d.name) is not d:
             continue
-        by_slug[page].entries.append(d.name)
-        placed.add(d.name)
+        if d.internal:
+            continue
+        if d.kind == "method":
+            continue
+        if not d.page:
+            errors.append(f"{where(d)}: {d.name} comes before any `//! page:` line")
+        elif d.page not in pages or not pages[d.page].title:
+            errors.append(f"{where(d)}: page {d.page} has no title; give one `//! page: {d.page}` "
+                          "line a `//! # Title` line after it")
+        else:
+            pages[d.page].entries.append(d)
     if errors:
         raise SystemExit("\n".join(errors))
 
     files = {}
     index = []                    # (name, page slug, anchor)
     api = {}                      # name -> entries, one per module that has it
-    for p in pages:
+    for p in pages.values():
         out = [GENERATED, f"# {p.title}", ""]
         if p.intro:
             out += [p.intro, ""]
         placed_here = []
-        for name in p.entries:
-            d = by_name.get(name)
-            if d is None:
-                continue
-            ms = [m for m in methods.get(name, []) if m.name not in internal]
+        for d in p.entries:
+            ms = [m for m in methods.get(d.name, []) if not m.internal]
             if d.kind == "struct":
-                out += write_struct(d, notes, ms)
+                out += write_struct(d, ms)
             elif d.kind == "enum":
-                out += write_enum(d, notes)
+                out += write_enum(d)
             elif d.kind == "attribute":
-                out += write_attribute(d, notes)
+                out += write_attribute(d)
             else:
-                out += write_simple(d, notes)
+                out += write_simple(d)
             placed_here += [d] + ms
-        # The examples of each entry sit in its note; nothing else follows.
         text = re.sub(r"\n{3,}", "\n\n", "\n".join(out).rstrip() + "\n")
         files[p.slug + ".md"] = text
-        # Each entry's heading comes after the one before it; a note's own
-        # headings sit in between.
+        # Each entry's heading comes after the one before it; a doc
+        # comment's own headings sit in between.
         ids = iter(heading_ids(text))
         for d in placed_here:
             anc = next(i for title, i in ids if title == d.name)
             index.append((d.name, p.slug, anc, d.kind))
             api.setdefault(d.name, []).append(api_entry(d, p.slug, anc))
             if d.kind == "enum":
-                for v in d.variants:
+                for v in variant_names(d):
                     vname = d.name + "::" + re.match(r"\w+", v).group(0)
                     api.setdefault(vname, []).append(api_entry(d, p.slug, anc, "variant"))
 

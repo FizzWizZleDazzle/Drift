@@ -1,52 +1,16 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Assets
 
-Images, sounds, maps and the handles that name them. A handle such as `Texture` or `Sound` names something the engine owns; copy it freely, and keep the ones you reuse in a resource. See [Assets](../concepts/assets.md).
-
-## texture
-
-```rust
-fn texture(path: string) -> Texture
-```
-
-Works anywhere, field defaults included, and hands back the same texture for the same path. A file that does not load stops the game with the path and the error. Images load from PNG, JPG, BMP, TGA and GIF files.
-
-```rust
-@resource
-struct Art { ship: Texture = texture("assets/ship.png") }
-```
-
-## sound
-
-```rust
-fn sound(path: string) -> Sound
-```
-
-Works anywhere, field defaults included. The whole file is decoded when it loads.
-
-```rust
-@resource
-struct Sfx { jump: Sound = sound("assets/jump.wav") }
-```
-
-## music
-
-```rust
-fn music(path: string) -> Sound
-```
-
-A long track, decoded while it plays instead of all at load, loaded once per path. Works anywhere, field defaults included.
-
-```rust
-@resource
-struct Tracks { theme: Sound = music("assets/theme.ogg") }
-```
+Images, sounds, maps and the handles that name them. A handle such as `Texture` or `Sound`
+names something the engine owns; copy it freely, and keep the ones you reuse in a resource.
+See [Assets](../concepts/assets.md).
 
 ## Texture
 
-An image the engine can draw. Load one with `texture(path)`, make one with `Assets.create_texture` or `Assets.render_target`, or from an [`Image`](#image).
+An image the engine can draw. Load one with `texture(path)`, make one with
+`Assets.create_texture` or `Assets.render_target`, or from an [`Image`](#image).
 
 ```rust
 struct Texture {
@@ -80,7 +44,8 @@ let s = art.ship.size();
 fn set_filter(self, f: Filter)
 ```
 
-How the texture looks when scaled. `Filter::Nearest`, the default, keeps pixel art crisp; `Filter::Linear` smooths it.
+How the texture looks when scaled. `Filter::Nearest`, the default, keeps pixel art
+crisp; `Filter::Linear` smooths it.
 
 ```rust
 art.photo.set_filter(Filter::Linear);
@@ -92,7 +57,8 @@ art.photo.set_filter(Filter::Linear);
 fn to_image(self) -> Image
 ```
 
-The texture's pixels, read back from the GPU: a render target as its last frame left it. The read waits for the GPU, so do it when you need the pixels, not every frame.
+The texture's pixels, read back from the GPU: a render target as its last frame left it.
+The read waits for the GPU, so do it when you need the pixels, not every frame.
 
 ```rust
 let img = minimap.to_image();
@@ -124,9 +90,66 @@ Writes the part `r` of the image to the same place in the texture.
 fog.update_rect(fog_image, rect(px, py, 16.0, 16.0));
 ```
 
+## texture
+
+```rust
+fn texture(path: string) -> Texture
+```
+
+Works anywhere, field defaults included, and hands back the same texture for the same path.
+A file that does not load stops the game with the path and the error. Images load from PNG,
+JPG, BMP, TGA and GIF files.
+
+```rust
+@resource
+struct Art { ship: Texture = texture("assets/ship.png") }
+```
+
+## Font
+
+A font for `Text.font`. `Font {}` is the built-in font.
+
+```rust
+struct Font {
+    id: int = 0,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | The engine's handle |
+
+```rust
+Text { value: "Hello", font: Font { .. }, .. }
+```
+
+### Font.measure
+
+```rust
+fn measure(self, s: string, size: float) -> Vec2
+```
+
+Widest line and height of `s` in this font at `size`.
+
+### Font.line_height
+
+```rust
+fn line_height(self, size: float) -> float
+```
+
+### Font.set_fallback
+
+```rust
+fn set_fallback(self, other: Font)
+```
+
+Characters this font lacks come from `other`; every font falls back to the built-in one
+until this changes it.
+
 ## Sound
 
-A sound the engine can play. Load one with `sound(path)` or make one with `Assets.create_sound`.
+A sound the engine can play. Load one with `sound(path)` or make one with
+`Assets.create_sound`.
 
 ```rust
 struct Sound {
@@ -190,9 +213,24 @@ At most `n` of this sound at once; another start fades out the oldest. 0 for no 
 sfx.step.set_max_instances(3);
 ```
 
+## sound
+
+```rust
+fn sound(path: string) -> Sound
+```
+
+Works anywhere, field defaults included. The whole file is decoded when it loads.
+
+```rust
+@resource
+struct Sfx { jump: Sound = sound("assets/jump.wav") }
+```
+
 ## PlayOptions
 
-How one playback sounds. `bus` empty plays on the sfx bus; `pan` is -1 (left) to 1 (right); `pitch` 2.0 is an octave up and twice as fast; `fade_in` in seconds. When every voice is busy, a sound with a higher `priority` takes the place of a lower one.
+How one playback sounds. `bus` empty plays on the sfx bus; `pan` is -1 (left) to 1 (right);
+`pitch` 2.0 is an octave up and twice as fast; `fade_in` in seconds. When every voice is
+busy, a sound with a higher `priority` takes the place of a lower one.
 
 ```rust
 struct PlayOptions {
@@ -220,239 +258,14 @@ struct PlayOptions {
 sfx.engine.play_with(PlayOptions { looping: true, volume: 0.4, .. });
 ```
 
-## Voice
+## Map
 
-One playback of a sound, from Sound.play. Every method is safe after the sound ended; it then does nothing.
-
-```rust
-struct Voice {
-    id: int = 0,
-}
-```
+Show a map with a [`Tilemap`](components.md#tilemap) component. Cells are
+[`Cell`](procgen.md#cell) values and tile ids count from 1, as in Tiled; 0 is an empty cell.
+See [Levels and Tilemaps](../guides/levels-and-tilemaps.md).
 
 ```rust
-@resource
-struct Engine { hum: Voice = Voice { .. } }
-
-@system(schedule: Schedule::Startup)
-fn start_engine(sfx: Sfx, engine: Engine) {
-    engine.hum = sfx.engine.play_with(PlayOptions { looping: true, volume: 0.4, .. });
-}
-```
-
-### Voice.stop
-
-```rust
-fn stop(self, fade_seconds: float)
-```
-
-Stops it, fading out over `fade` seconds.
-
-```rust
-engine.hum.stop(0.5);
-```
-
-### Voice.pause
-
-```rust
-fn pause(self, fade_seconds: float)
-```
-
-Pauses it, fading out over `fade` seconds.
-
-```rust
-engine.hum.pause(0.2);
-```
-
-### Voice.resume
-
-```rust
-fn resume(self, fade_seconds: float)
-```
-
-Resumes it, fading in over `fade` seconds.
-
-```rust
-engine.hum.resume(0.2);
-```
-
-### Voice.set_volume
-
-```rust
-fn set_volume(self, volume: float, fade_seconds: float)
-```
-
-Volume 0 to 1, reached over `fade_seconds`.
-
-```rust
-engine.hum.set_volume(0.1, 1.0);
-```
-
-### Voice.set_pan
-
-```rust
-fn set_pan(self, pan: float)
-```
-
-Pan from -1 (left) to 1 (right).
-
-```rust
-engine.hum.set_pan(-0.5);
-```
-
-### Voice.set_pitch
-
-```rust
-fn set_pitch(self, pitch: float)
-```
-
-Playback speed; 2 is an octave up.
-
-```rust
-engine.hum.set_pitch(1.0 + speed / 400.0);
-```
-
-### Voice.set_looping
-
-```rust
-fn set_looping(self, looping: bool)
-```
-
-Whether it plays again when it ends.
-
-```rust
-engine.hum.set_looping(false);
-```
-
-### Voice.playing
-
-```rust
-fn playing(self) -> bool
-```
-
-Until it ends or is stopped; a paused voice counts as playing.
-
-```rust
-if !voice.playing() { voice = sfx.alarm.play(); }
-```
-
-### Voice.paused
-
-```rust
-fn paused(self) -> bool
-```
-
-Whether it is paused.
-
-```rust
-if engine.hum.paused() { engine.hum.resume(0.2); }
-```
-
-## Bus
-
-A mixer bus. Buses form a tree under master; volume, mute and pause apply to everything below.
-
-```rust
-struct Bus {
-    id: int = 0,
-}
-```
-
-```rust
-let voices = audio.bus("voice", Bus { .. });
-voices.set_volume(options.voice_volume, 0.0);
-```
-
-### Bus.set_volume
-
-```rust
-fn set_volume(self, volume: float, fade_seconds: float)
-```
-
-Volume 0 to 1, reached over `fade` seconds.
-
-```rust
-audio.music_bus().set_volume(0.3, 0.5);
-```
-
-### Bus.volume
-
-```rust
-fn volume(self) -> float
-```
-
-The bus's volume.
-
-```rust
-let v = audio.music_bus().volume();
-```
-
-### Bus.set_muted
-
-```rust
-fn set_muted(self, muted: bool)
-```
-
-Mutes or unmutes everything on the bus.
-
-```rust
-audio.master_bus().set_muted(true);
-```
-
-### Bus.muted
-
-```rust
-fn muted(self) -> bool
-```
-
-Whether the bus is muted.
-
-```rust
-let silent = audio.master_bus().muted();
-```
-
-### Bus.set_paused
-
-```rust
-fn set_paused(self, paused: bool)
-```
-
-Pauses or resumes everything on the bus.
-
-```rust
-audio.sfx_bus().set_paused(true);
-```
-
-### Bus.paused
-
-```rust
-fn paused(self) -> bool
-```
-
-Whether the bus is paused.
-
-```rust
-if audio.sfx_bus().paused() { log("sounds paused"); }
-```
-
-### Bus.stop
-
-```rust
-fn stop(self, fade_seconds: float)
-```
-
-Stops every sound on this bus and the buses below it.
-
-```rust
-audio.sfx_bus().stop(0.2);
-```
-
-## Font
-
-A font for `Text.font`. `Font {}` is the built-in font.
-
-```rust
-struct Font {
+struct Map {
     id: int = 0,
 }
 ```
@@ -462,34 +275,355 @@ struct Font {
 | `id` | `int` | `0` | The engine's handle |
 
 ```rust
-Text { value: "Hello", font: Font { .. }, .. }
+@resource
+struct Level { map: Map = Map { .. } }
 ```
 
-### Font.measure
+### Map.size
 
 ```rust
-fn measure(self, s: string, size: float) -> Vec2
+fn size(self) -> Cell
 ```
 
-Widest line and height of `s` in this font at `size`.
-
-### Font.line_height
+Size in cells.
 
 ```rust
-fn line_height(self, size: float) -> float
+let cells = level.map.size();   // Cell { x: columns, y: rows }
 ```
 
-### Font.set_fallback
+### Map.tile_size
 
 ```rust
-fn set_fallback(self, other: Font)
+fn tile_size(self) -> Cell
 ```
 
-Characters this font lacks come from `other`; every font falls back to the built-in one until this changes it.
+Size of one cell in pixels.
+
+```rust
+let px = level.map.tile_size();
+```
+
+### Map.bounds
+
+```rust
+fn bounds(self) -> Rect
+```
+
+The world rect the map covers where its Tilemap entity puts it.
+
+```rust
+cmd.insert(camera, CameraBounds { area: level.map.bounds() });
+```
+
+### Map.layer_count
+
+```rust
+fn layer_count(self) -> int
+```
+
+How many layers the map has.
+
+```rust
+for i in range(level.map.layer_count()) { log(level.map.layer_name(i)); }
+```
+
+### Map.layer
+
+```rust
+fn layer(self, name: string) -> int
+```
+
+The index of a layer by name. Raises `drift_no_such_layer` for a name the map does not
+have.
+
+```rust
+let ground = level.map.layer("Ground");
+```
+
+### Map.layer_name
+
+```rust
+fn layer_name(self, layer: int) -> string
+```
+
+The name of the layer at an index.
+
+```rust
+let name = level.map.layer_name(0);
+```
+
+### Map.set_layer_visible
+
+```rust
+fn set_layer_visible(self, layer: int, visible: bool)
+```
+
+Shows or hides a layer.
+
+```rust
+level.map.set_layer_visible(level.map.layer("Secrets"), true);
+```
+
+### Map.set_layer_solid
+
+```rust
+fn set_layer_solid(self, layer: int, solid: bool, values: int[])
+```
+
+A solid layer becomes static colliders on its Tilemap entity: every tile (or IntGrid
+value) in `values`, or any when `values` is empty.
+
+```rust
+level.map.set_layer_solid(level.map.layer("Walls"), true, []);
+```
+
+### Map.tile
+
+```rust
+fn tile(self, layer: int, c: Cell) -> int
+```
+
+The tile id in a cell of a layer; 0 for empty.
+
+```rust
+if level.map.tile(ground, c) == 0 { log("a hole"); }
+```
+
+### Map.set_tile
+
+```rust
+fn set_tile(self, layer: int, c: Cell, id: int)
+```
+
+Changes a tile. On a solid layer the colliders follow next frame.
+
+```rust
+level.map.set_tile(ground, c, 0);   // dig
+```
+
+### Map.int_grid
+
+```rust
+fn int_grid(self, layer: int, c: Cell) -> int
+```
+
+The value in an LDtk IntGrid layer.
+
+```rust
+let v = level.map.int_grid(collision, c);
+```
+
+### Map.set_int_grid
+
+```rust
+fn set_int_grid(self, layer: int, c: Cell, value: int)
+```
+
+Changes an LDtk IntGrid value. LDtk's auto-layer rules do not run again.
+
+```rust
+level.map.set_int_grid(collision, c, 1);
+```
+
+### Map.tile_at
+
+```rust
+fn tile_at(self, layer: int, p: Vec2) -> int
+```
+
+The tile id under a world position.
+
+```rust
+let under = level.map.tile_at(ground, t.position);
+```
+
+### Map.world_to_tile
+
+```rust
+fn world_to_tile(self, layer: int, p: Vec2) -> Cell
+```
+
+The cell under a world position.
+
+```rust
+let c = level.map.world_to_tile(ground, input.mouse_world());
+```
+
+### Map.tile_to_world
+
+```rust
+fn tile_to_world(self, layer: int, c: Cell) -> Vec2
+```
+
+The world position of a cell's top-left corner.
+
+```rust
+let p = level.map.tile_to_world(ground, cell(3, 4));
+```
+
+### Map.write_grid
+
+```rust
+fn write_grid(self, layer: int, g: Grid, tiles: int[], at: Cell)
+```
+
+Writes a grid into a tile layer from cell `at`: a cell holding value v becomes tile
+tiles[v]; 0, and values past the end of `tiles`, leave the cell empty. The counterpart
+of to_grid.
+
+```rust
+level.map.write_grid(0, dungeon_grid, [1, 2, 3], cell(0, 0));   // FLOOR -> 1, WALL -> 2, DOOR -> 3
+```
+
+### Map.to_grid
+
+```rust
+fn to_grid(self, layer: int) -> Grid
+```
+
+A tile layer's ids as a grid of the map's size.
+
+```rust
+let walls = level.map.to_grid(level.map.layer("Walls"));
+let path = find_path(walls, from, to, [3], Moves::FourWay);
+```
+
+### Map.property
+
+```rust
+fn property(self, name: string) -> string
+```
+
+A property of the Tiled map or LDtk level, as text; "" when missing.
+
+```rust
+let music = level.map.property("music");
+```
+
+### Map.destroy
+
+```rust
+fn destroy(self)
+```
+
+Frees the map. Despawn its Tilemap entities first.
+
+```rust
+cmd.despawn(level.map_entity);
+level.map.destroy();
+```
+
+### Map.objects
+
+```rust
+fn objects(self, kind: string) -> MapObject[]
+```
+
+The objects of a Tiled class or LDtk identifier, every layer, in order; "" for all of
+them.
+
+### Map.object_property
+
+```rust
+fn object_property(self, o: MapObject, name: string) -> string
+```
+
+A property of an object, as text; "" when it has none of that name.
+
+### Map.tile_property
+
+```rust
+fn tile_property(self, tile: int, name: string) -> string
+```
+
+A property of a tile in the map's tilesets, as text.
+
+### Map.autotile
+
+```rust
+fn autotile(self, source: int, target: int, rules: AutotileRules)
+```
+
+Writes `target` tiles from the terrain in `source`, picking each tile by which
+neighbours are terrain too.
+
+## ObjectShape
+
+```rust
+enum ObjectShape { Rect, Point, Ellipse, Polygon, Polyline, Tile, Text }
+```
+
+## MapObject
+
+An object from a Tiled object layer or an LDtk entity, in world coordinates where its map's
+Tilemap entity puts it.
+
+```rust
+struct MapObject {
+    map: Map = Map { .. },
+    layer: int = 0,
+    index: int = 0,
+    id: int = 0,
+    name: string = "",
+    kind: string = "",
+    shape: ObjectShape = ObjectShape::Rect,
+    bounds: Rect = Rect { .. },
+    anchor: Vec2 = Vec2 { .. },
+    rotation: float = 0.0,
+    tile: int = 0,
+    points: Vec2[] = [],
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `map` | `Map` | `Map { .. }` |  |
+| `layer` | `int` | `0` |  |
+| `index` | `int` | `0` | place in its layer |
+| `id` | `int` | `0` | the Tiled object id |
+| `name` | `string` | `""` | Tiled name; LDtk identifier |
+| `kind` | `string` | `""` | Tiled class; LDtk identifier |
+| `shape` | `ObjectShape` | `ObjectShape::Rect` |  |
+| `bounds` | `Rect` | `Rect { .. }` |  |
+| `anchor` | `Vec2` | `Vec2 { .. }` | the pivot: LDtk's pivot, a Tiled tile object's bottom-left |
+| `rotation` | `float` | `0.0` | radians |
+| `tile` | `int` | `0` | the tile of a Tile object |
+| `points` | `Vec2[]` | `[]` | polygon and polyline points |
+
+## object_shape
+
+```rust
+fn object_shape(code: int) -> ObjectShape
+```
+
+## AutotileMode
+
+```rust
+enum AutotileMode { Neighbours4, Neighbours8 }
+```
+
+## AutotileRules
+
+How autotile picks tiles. A source cell is terrain when its value is in `terrain` (empty:
+any non-zero value). `tiles` holds a tile id per neighbour mask: 16 for Neighbours4 (bits
+N=1 E=2 S=4 W=8), 256 for Neighbours8 (NW=1 N=2 NE=4 W=8 E=16 SW=32 S=64 SE=128; a corner
+counts only with both edges beside it). 0 entries use `fallback`.
+
+```rust
+struct AutotileRules {
+    mode: AutotileMode = AutotileMode::Neighbours4,
+    terrain: int[] = [],
+    tiles: int[] = [],
+    fallback: int = 0,
+    edges_are_terrain: bool = false,
+}
+```
 
 ## Image
 
-Pixels in memory that you change from code and show through a texture: procedural art, paint programs, fog of war, minimaps, screenshots. The engine holds the pixels; `free()` lets them go.
+Pixels in memory that you change from code and show through a texture: procedural art, paint
+programs, fog of war, minimaps, screenshots. The engine holds the pixels; `free()` lets them
+go.
 
 ```rust
 struct Image {
@@ -585,7 +719,8 @@ img.fill_rect(rect(0.0, 0.0, 8.0, 8.0), rgb(255, 255, 255));
 fn fill_circle(self, center: Vec2, radius: float, c: Color)
 ```
 
-Sets the pixels in a circle to one color, alpha included: a transparent color cuts a round hole.
+Sets the pixels in a circle to one color, alpha included: a transparent color cuts a
+round hole.
 
 ```rust
 img.fill_circle(vec2(40.0, 40.0), 12.0, rgba(0, 0, 0, 0));
@@ -838,7 +973,8 @@ img.save_png("drawing.png");
 fn download(self, path: string)
 ```
 
-Saves the image and offers it as a download in the browser; on the desktop the file stays at `path`.
+Saves the image and offers it as a download in the browser; on the desktop the file
+stays at `path`.
 
 ```rust
 img.download("drawing.png");
@@ -882,7 +1018,8 @@ let c = color_of(img.pixels()[0]);
 
 ## Spritesheet
 
-A texture cut into a grid of frames. Show one frame with `Sprite.frame`, or play frames with an [`Animator`](components.md#animator).
+A texture cut into a grid of frames. Show one frame with `Sprite.frame`, or play frames with
+an [`Animator`](components.md#animator).
 
 ```rust
 struct Spritesheet {
@@ -951,360 +1088,14 @@ let n = sheet.count();
 fn clip(self, name: string) -> AnimationClip
 ```
 
-An Aseprite tag as a clip: its frames in the order the tag plays them (forward, reverse or ping-pong), each with its duration from the file. A tag set to repeat once plays once; any other loops. A tag the file does not have raises `drift_unknown_clip` with the tags it has.
+An Aseprite tag as a clip: its frames in the order the tag plays them (forward, reverse
+or ping-pong), each with its duration from the file. A tag set to repeat once plays
+once; any other loops. A tag the file does not have raises `drift_unknown_clip` with the
+tags it has.
 
 ```rust
 let knight = assets.aseprite("assets/knight.aseprite");
 let run = knight.clip("run");
-```
-
-## Map
-
-Show a map with a [`Tilemap`](components.md#tilemap) component. Cells are [`Cell`](procgen.md#cell) values and tile ids count from 1, as in Tiled; 0 is an empty cell. See [Levels and Tilemaps](../guides/levels-and-tilemaps.md).
-
-```rust
-struct Map {
-    id: int = 0,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `id` | `int` | `0` | The engine's handle |
-
-```rust
-@resource
-struct Level { map: Map = Map { .. } }
-```
-
-### Map.size
-
-```rust
-fn size(self) -> Cell
-```
-
-Size in cells.
-
-```rust
-let cells = level.map.size();   // Cell { x: columns, y: rows }
-```
-
-### Map.tile_size
-
-```rust
-fn tile_size(self) -> Cell
-```
-
-Size of one cell in pixels.
-
-```rust
-let px = level.map.tile_size();
-```
-
-### Map.bounds
-
-```rust
-fn bounds(self) -> Rect
-```
-
-The world rect the map covers where its Tilemap entity puts it.
-
-```rust
-cmd.insert(camera, CameraBounds { area: level.map.bounds() });
-```
-
-### Map.layer_count
-
-```rust
-fn layer_count(self) -> int
-```
-
-How many layers the map has.
-
-```rust
-for i in range(level.map.layer_count()) { log(level.map.layer_name(i)); }
-```
-
-### Map.layer
-
-```rust
-fn layer(self, name: string) -> int
-```
-
-The index of a layer by name. Raises `drift_no_such_layer` for a name the map does not have.
-
-```rust
-let ground = level.map.layer("Ground");
-```
-
-### Map.layer_name
-
-```rust
-fn layer_name(self, layer: int) -> string
-```
-
-The name of the layer at an index.
-
-```rust
-let name = level.map.layer_name(0);
-```
-
-### Map.set_layer_visible
-
-```rust
-fn set_layer_visible(self, layer: int, visible: bool)
-```
-
-Shows or hides a layer.
-
-```rust
-level.map.set_layer_visible(level.map.layer("Secrets"), true);
-```
-
-### Map.set_layer_solid
-
-```rust
-fn set_layer_solid(self, layer: int, solid: bool, values: int[])
-```
-
-A solid layer becomes static colliders on its Tilemap entity: every tile (or IntGrid value) in `values`, or any when `values` is empty.
-
-```rust
-level.map.set_layer_solid(level.map.layer("Walls"), true, []);
-```
-
-### Map.tile
-
-```rust
-fn tile(self, layer: int, c: Cell) -> int
-```
-
-The tile id in a cell of a layer; 0 for empty.
-
-```rust
-if level.map.tile(ground, c) == 0 { log("a hole"); }
-```
-
-### Map.set_tile
-
-```rust
-fn set_tile(self, layer: int, c: Cell, id: int)
-```
-
-Changes a tile. On a solid layer the colliders follow next frame.
-
-```rust
-level.map.set_tile(ground, c, 0);   // dig
-```
-
-### Map.int_grid
-
-```rust
-fn int_grid(self, layer: int, c: Cell) -> int
-```
-
-The value in an LDtk IntGrid layer.
-
-```rust
-let v = level.map.int_grid(collision, c);
-```
-
-### Map.set_int_grid
-
-```rust
-fn set_int_grid(self, layer: int, c: Cell, value: int)
-```
-
-Changes an LDtk IntGrid value. LDtk's auto-layer rules do not run again.
-
-```rust
-level.map.set_int_grid(collision, c, 1);
-```
-
-### Map.tile_at
-
-```rust
-fn tile_at(self, layer: int, p: Vec2) -> int
-```
-
-The tile id under a world position.
-
-```rust
-let under = level.map.tile_at(ground, t.position);
-```
-
-### Map.world_to_tile
-
-```rust
-fn world_to_tile(self, layer: int, p: Vec2) -> Cell
-```
-
-The cell under a world position.
-
-```rust
-let c = level.map.world_to_tile(ground, input.mouse_world());
-```
-
-### Map.tile_to_world
-
-```rust
-fn tile_to_world(self, layer: int, c: Cell) -> Vec2
-```
-
-The world position of a cell's top-left corner.
-
-```rust
-let p = level.map.tile_to_world(ground, cell(3, 4));
-```
-
-### Map.write_grid
-
-```rust
-fn write_grid(self, layer: int, g: Grid, tiles: int[], at: Cell)
-```
-
-Writes a grid into a tile layer from cell `at`: a cell holding value v becomes tile tiles[v]; 0, and values past the end of `tiles`, leave the cell empty. The counterpart of to_grid.
-
-```rust
-level.map.write_grid(0, dungeon_grid, [1, 2, 3], cell(0, 0));   // FLOOR -> 1, WALL -> 2, DOOR -> 3
-```
-
-### Map.to_grid
-
-```rust
-fn to_grid(self, layer: int) -> Grid
-```
-
-A tile layer's ids as a grid of the map's size.
-
-```rust
-let walls = level.map.to_grid(level.map.layer("Walls"));
-let path = find_path(walls, from, to, [3], Moves::FourWay);
-```
-
-### Map.property
-
-```rust
-fn property(self, name: string) -> string
-```
-
-A property of the Tiled map or LDtk level, as text; "" when missing.
-
-```rust
-let music = level.map.property("music");
-```
-
-### Map.destroy
-
-```rust
-fn destroy(self)
-```
-
-Frees the map. Despawn its Tilemap entities first.
-
-```rust
-cmd.despawn(level.map_entity);
-level.map.destroy();
-```
-
-### Map.objects
-
-```rust
-fn objects(self, kind: string) -> MapObject[]
-```
-
-The objects of a Tiled class or LDtk identifier, every layer, in order; "" for all of them.
-
-### Map.object_property
-
-```rust
-fn object_property(self, o: MapObject, name: string) -> string
-```
-
-A property of an object, as text; "" when it has none of that name.
-
-### Map.tile_property
-
-```rust
-fn tile_property(self, tile: int, name: string) -> string
-```
-
-A property of a tile in the map's tilesets, as text.
-
-### Map.autotile
-
-```rust
-fn autotile(self, source: int, target: int, rules: AutotileRules)
-```
-
-Writes `target` tiles from the terrain in `source`, picking each tile by which neighbours are terrain too.
-
-## ObjectShape
-
-```rust
-enum ObjectShape { Rect, Point, Ellipse, Polygon, Polyline, Tile, Text }
-```
-
-## MapObject
-
-An object from a Tiled object layer or an LDtk entity, in world coordinates where its map's Tilemap entity puts it.
-
-```rust
-struct MapObject {
-    map: Map = Map { .. },
-    layer: int = 0,
-    index: int = 0,
-    id: int = 0,
-    name: string = "",
-    kind: string = "",
-    shape: ObjectShape = ObjectShape::Rect,
-    bounds: Rect = Rect { .. },
-    anchor: Vec2 = Vec2 { .. },
-    rotation: float = 0.0,
-    tile: int = 0,
-    points: Vec2[] = [],
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `map` | `Map` | `Map { .. }` |  |
-| `layer` | `int` | `0` |  |
-| `index` | `int` | `0` | place in its layer |
-| `id` | `int` | `0` | the Tiled object id |
-| `name` | `string` | `""` | Tiled name; LDtk identifier |
-| `kind` | `string` | `""` | Tiled class; LDtk identifier |
-| `shape` | `ObjectShape` | `ObjectShape::Rect` |  |
-| `bounds` | `Rect` | `Rect { .. }` |  |
-| `anchor` | `Vec2` | `Vec2 { .. }` | the pivot: LDtk's pivot, a Tiled tile object's bottom-left |
-| `rotation` | `float` | `0.0` | radians |
-| `tile` | `int` | `0` | the tile of a Tile object |
-| `points` | `Vec2[]` | `[]` | polygon and polyline points |
-
-## object_shape
-
-```rust
-fn object_shape(code: int) -> ObjectShape
-```
-
-## AutotileMode
-
-```rust
-enum AutotileMode { Neighbours4, Neighbours8 }
-```
-
-## AutotileRules
-
-How autotile picks tiles. A source cell is terrain when its value is in `terrain` (empty: any non-zero value). `tiles` holds a tile id per neighbour mask: 16 for Neighbours4 (bits N=1 E=2 S=4 W=8), 256 for Neighbours8 (NW=1 N=2 NE=4 W=8 E=16 SW=32 S=64 SE=128; a corner counts only with both edges beside it). 0 entries use `fallback`.
-
-```rust
-struct AutotileRules {
-    mode: AutotileMode = AutotileMode::Neighbours4,
-    terrain: int[] = [],
-    tiles: int[] = [],
-    fallback: int = 0,
-    edges_are_terrain: bool = false,
-}
 ```
 
 ## Shader
@@ -1319,7 +1110,8 @@ struct Shader {
 
 ## Material
 
-A shader with its settings: eight vec4 parameters and up to three extra textures. Sprites and post effects use materials.
+A shader with its settings: eight vec4 parameters and up to three extra textures. Sprites
+and post effects use materials.
 
 ```rust
 struct Material {
@@ -1349,6 +1141,249 @@ fn set_texture(self, slot: int, t: Texture)
 
 Texture slot 1 to 3; slot 0 is what is being drawn.
 
+## Voice
+
+One playback of a sound, from Sound.play. Every method is safe after the sound ended; it
+then does nothing.
+
+```rust
+struct Voice {
+    id: int = 0,
+}
+```
+
+```rust
+@resource
+struct Engine { hum: Voice = Voice { .. } }
+
+@system(schedule: Schedule::Startup)
+fn start_engine(sfx: Sfx, engine: Engine) {
+    engine.hum = sfx.engine.play_with(PlayOptions { looping: true, volume: 0.4, .. });
+}
+```
+
+### Voice.stop
+
+```rust
+fn stop(self, fade_seconds: float)
+```
+
+Stops it, fading out over `fade` seconds.
+
+```rust
+engine.hum.stop(0.5);
+```
+
+### Voice.pause
+
+```rust
+fn pause(self, fade_seconds: float)
+```
+
+Pauses it, fading out over `fade` seconds.
+
+```rust
+engine.hum.pause(0.2);
+```
+
+### Voice.resume
+
+```rust
+fn resume(self, fade_seconds: float)
+```
+
+Resumes it, fading in over `fade` seconds.
+
+```rust
+engine.hum.resume(0.2);
+```
+
+### Voice.set_volume
+
+```rust
+fn set_volume(self, volume: float, fade_seconds: float)
+```
+
+Volume 0 to 1, reached over `fade_seconds`.
+
+```rust
+engine.hum.set_volume(0.1, 1.0);
+```
+
+### Voice.set_pan
+
+```rust
+fn set_pan(self, pan: float)
+```
+
+Pan from -1 (left) to 1 (right).
+
+```rust
+engine.hum.set_pan(-0.5);
+```
+
+### Voice.set_pitch
+
+```rust
+fn set_pitch(self, pitch: float)
+```
+
+Playback speed; 2 is an octave up.
+
+```rust
+engine.hum.set_pitch(1.0 + speed / 400.0);
+```
+
+### Voice.set_looping
+
+```rust
+fn set_looping(self, looping: bool)
+```
+
+Whether it plays again when it ends.
+
+```rust
+engine.hum.set_looping(false);
+```
+
+### Voice.playing
+
+```rust
+fn playing(self) -> bool
+```
+
+Until it ends or is stopped; a paused voice counts as playing.
+
+```rust
+if !voice.playing() { voice = sfx.alarm.play(); }
+```
+
+### Voice.paused
+
+```rust
+fn paused(self) -> bool
+```
+
+Whether it is paused.
+
+```rust
+if engine.hum.paused() { engine.hum.resume(0.2); }
+```
+
+## music
+
+```rust
+fn music(path: string) -> Sound
+```
+
+A long track, decoded while it plays instead of all at load, loaded once per path. Works
+anywhere, field defaults included.
+
+```rust
+@resource
+struct Tracks { theme: Sound = music("assets/theme.ogg") }
+```
+
+## Bus
+
+A mixer bus. Buses form a tree under master; volume, mute and pause apply to everything
+below.
+
+```rust
+struct Bus {
+    id: int = 0,
+}
+```
+
+```rust
+let voices = audio.bus("voice", Bus { .. });
+voices.set_volume(options.voice_volume, 0.0);
+```
+
+### Bus.set_volume
+
+```rust
+fn set_volume(self, volume: float, fade_seconds: float)
+```
+
+Volume 0 to 1, reached over `fade` seconds.
+
+```rust
+audio.music_bus().set_volume(0.3, 0.5);
+```
+
+### Bus.volume
+
+```rust
+fn volume(self) -> float
+```
+
+The bus's volume.
+
+```rust
+let v = audio.music_bus().volume();
+```
+
+### Bus.set_muted
+
+```rust
+fn set_muted(self, muted: bool)
+```
+
+Mutes or unmutes everything on the bus.
+
+```rust
+audio.master_bus().set_muted(true);
+```
+
+### Bus.muted
+
+```rust
+fn muted(self) -> bool
+```
+
+Whether the bus is muted.
+
+```rust
+let silent = audio.master_bus().muted();
+```
+
+### Bus.set_paused
+
+```rust
+fn set_paused(self, paused: bool)
+```
+
+Pauses or resumes everything on the bus.
+
+```rust
+audio.sfx_bus().set_paused(true);
+```
+
+### Bus.paused
+
+```rust
+fn paused(self) -> bool
+```
+
+Whether the bus is paused.
+
+```rust
+if audio.sfx_bus().paused() { log("sounds paused"); }
+```
+
+### Bus.stop
+
+```rust
+fn stop(self, fade_seconds: float)
+```
+
+Stops every sound on this bus and the buses below it.
+
+```rust
+audio.sfx_bus().stop(0.2);
+```
+
 ## Scene
 
 A loaded scene or prefab file.
@@ -1361,7 +1396,9 @@ struct Scene {
 
 ## SceneOptions
 
-How one copy of a scene spawns: `offset` moves its root entities, `parent` makes them children of an entity, and `overrides` maps an entity's Name to a JSON patch of its components.
+How one copy of a scene spawns: `offset` moves its root entities, `parent` makes them
+children of an entity, and `overrides` maps an entity's Name to a JSON patch of its
+components.
 
 ```rust
 struct SceneOptions {

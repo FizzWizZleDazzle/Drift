@@ -1,4 +1,4 @@
-// Drawing: render layers, cameras, immediate drawing, images, sprite sheets, sprite animation and shaders.
+//! Drawing: render layers, cameras, immediate drawing, images, sprite sheets, sprite animation and shaders.
 
 import "drift/core/host" { * };
 import "drift/core/values" { * };
@@ -15,10 +15,20 @@ import "drift/core/text" { * };
 
 // ---- Render layers ----
 
-// Every world layer, 0 to 30: the default `layer_mask` of a camera or light.
+//! page: values
+
+/// Every world layer, 0 to 30: the default `layer_mask` of a camera or light.
+///
+/// ```rust
+/// Camera { layer_mask: ALL_LAYERS, .. }
+/// ```
 const ALL_LAYERS: int = 2147483647;
 
-// A layer mask holding `layers`, for `Camera.layer_mask`.
+/// A layer mask holding `layers`, for `Camera.layer_mask`.
+///
+/// ```rust
+/// Camera { layer_mask: layer_mask([0, 1, 2]), .. }
+/// ```
 fn layer_mask(layers: int[]) -> int {
     let mask = 0;
     for l in layers {
@@ -33,48 +43,117 @@ fn layer_mask(layers: int[]) -> int {
 
 // ---- Cameras ----
 
-// A view of the world from the entity's Transform. Several active cameras
-// draw in ascending `order`: split screen, minimaps, picture in picture.
-// The first active one that draws to the window is the main camera.
+//! page: components
+
+/// Without a camera, world position (0, 0) is the top-left of the screen and one world unit is
+/// one logical pixel. A camera centers its view on its entity's position. See
+/// [Cameras](../guides/cameras.md).
+///
+/// ```rust
+/// cmd.spawn([at(480.0, 270.0), Camera { zoom: 2.0, .. }]);
+/// ```
 struct Camera {
+    /// Magnification; 2.0 shows the world twice as large
     zoom: float = 1.0,
+    /// Turn of the view in radians
     rotation: float = 0.0,
+    /// `false` stops this camera drawing
     active: bool = true,
-    viewport: Rect = Rect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 },   // part of the window, 0 to 1
+    /// The part of the window it draws to, from (0, 0) to (1, 1)
+    viewport: Rect = Rect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 },
+    /// Cameras draw in ascending order
     order: int = 0,
+    /// The layers it draws; see `layer_mask()`
     layer_mask: int = ALL_LAYERS,
-    target: Texture = Texture { .. },    // a render target; Texture {} draws to the window
+    /// A render target to draw into; `Texture {}` draws to the window
+    target: Texture = Texture { .. },
+    /// Clears its target or viewport before drawing
     clear: bool = false,
+    /// The color it clears to
     clear_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
 }
 
-// Moves the camera smoothly toward `target`, staying still while the target
-// is within `dead_zone` (half sizes) of the point it aims at.
+/// Moves the camera smoothly toward `target`, staying still while the target is within
+/// `dead_zone` (half sizes) of the point it aims at.
+///
+/// ```rust
+/// cmd.spawn([at(0.0, 0.0), Camera { .. }, CameraFollow { target: player, smoothing: 6.0, dead_zone: vec2(40.0, 24.0), .. }]);
+/// ```
 struct CameraFollow {
+    /// The entity to follow
     target: Entity = Entity { .. },
+    /// How quickly it catches up; higher is snappier
     smoothing: float = 5.0,
+    /// Aims this far from the target
     offset: Vec2 = Vec2 { .. },
+    /// Half size of the box the target moves in without moving the camera
     dead_zone: Vec2 = Vec2 { .. },
 }
 
-// Keeps what the camera shows inside `area`, such as the level's rect.
-struct CameraBounds { area: Rect = Rect { .. } }
+/// Keeps what the camera shows inside `area`, such as the level's rect.
+///
+/// ```rust
+/// cmd.insert(camera, CameraBounds { area: rect(0.0, 0.0, 3200.0, 720.0) });
+/// ```
+struct CameraBounds {
+    /// The world rect the camera's view stays inside
+    area: Rect = Rect { .. },
+}
 
-// Converting between screen and world positions.
+//! page: resources
+
+/// Converting between screen and world positions.
+///
+/// ```rust
+/// @system
+/// fn hover(input: Input, cams: Camera2D, draw: Draw) {
+///     let p = cams.screen_to_world(input.mouse_screen());
+///     draw.circle_lines(p, 10.0, rgb(255, 255, 255), 1.0);
+/// }
+/// ```
 struct Camera2D { id: int = 0 }
 impl Camera2D {
+    /// Internal: a helper the module needs; games do not call it.
     fn convert(self, camera: Entity, dir: int, p: Vec2) -> Vec2 {
         let v = drift::camera_point(camera.id, dir, p.x, p.y);
         return Vec2 { x: v[0], y: v[1] };
     }
-    // Through the main camera.
+    /// Through the main camera.
+    ///
+    /// ```rust
+    /// let world = cams.screen_to_world(vec2(0.0, 0.0));   // the world point at the top-left
+    /// ```
     fn screen_to_world(self, p: Vec2) -> Vec2 { return self.convert(Entity { .. }, 0, p); }
+    /// A world point to logical screen pixels, through the main camera.
+    ///
+    /// ```rust
+    /// let on_screen = cams.world_to_screen(boss_position);
+    /// ```
     fn world_to_screen(self, p: Vec2) -> Vec2 { return self.convert(Entity { .. }, 1, p); }
-    // The world rect the main camera shows.
+    /// The world rect the main camera shows.
+    ///
+    /// ```rust
+    /// let view = cams.visible();
+    /// if !view.contains(t.position) { cmd.despawn(e); }
+    /// ```
     fn visible(self) -> Rect { return self.visible_in(Entity { .. }); }
-    // The same through a camera entity of your own.
+    /// The same through a camera entity of your own.
+    ///
+    /// ```rust
+    /// let p = cams.screen_to_world_in(right_camera, input.mouse_screen());
+    /// ```
     fn screen_to_world_in(self, camera: Entity, p: Vec2) -> Vec2 { return self.convert(camera, 0, p); }
+    /// A world point to screen pixels through a camera entity of your own.
+    ///
+    /// ```rust
+    /// let p = cams.world_to_screen_in(minimap_camera, player_pos);
+    /// ```
     fn world_to_screen_in(self, camera: Entity, p: Vec2) -> Vec2 { return self.convert(camera, 1, p); }
+    /// The world rect a camera entity of your own shows.
+    ///
+    /// ```rust
+    /// let shown = cams.visible_in(minimap_camera);
+    /// ```
     fn visible_in(self, camera: Entity) -> Rect {
         let r = drift::camera_view(camera.id);
         return Rect { x: r[0], y: r[1], w: r[2], h: r[3] };
@@ -83,35 +162,116 @@ impl Camera2D {
 
 // ---- Immediate drawing ----
 
-// Shapes, text and images for this frame only. They draw in world
-// coordinates on layer 0 at z 1000, over entities, until `hud()`,
-// `on_layer` or `at_z` says otherwise, for the rest of the system.
-struct Draw { layer: int = 0, z: float = 1000.0 }
+/// For debugging, previews and anything with no entity of its own. See [UI and
+/// Score](../guides/ui-and-score.md#drawing-without-entities).
+///
+/// ```rust
+/// @system
+/// fn show_aim(players: (Player, Transform)[], input: Input, draw: Draw) {
+///     for (_, t) in players {
+///         draw.line(t.position, input.mouse_world(), rgb(255, 80, 80), 2.0);
+///     }
+///     draw.hud();
+///     draw.text("aim", vec2(8.0, 8.0), 16.0, rgb(255, 255, 255));
+/// }
+/// ```
+struct Draw {
+    /// The layer the next draws go on
+    layer: int = 0,
+    /// The z the next draws use
+    z: float = 1000.0,
+}
+
+/// Internal: a helper the module needs; games do not call it.
 fn color_list(c: Color) -> float[] { return [c.r, c.g, c.b, c.a]; }
 impl Draw {
+    /// Internal: a helper the module needs; games do not call it.
     fn shape(self, kind: string, nums: float[], c: Color) { drift::draw_shape(kind, self.layer, self.z, nums, color_list(c)); }
-    // Screen coordinates on the HUD layer, drawn after post effects.
+    /// Screen coordinates on the HUD layer, drawn after post effects.
+    ///
+    /// ```rust
+    /// draw.hud();
+    /// draw.rect(rect(10.0, 10.0, 100.0, 8.0), rgb(200, 40, 40));   // a health bar on the screen
+    /// ```
     fn hud(self) { self.layer = 31; }
-    // World coordinates on layer 0.
+    /// World coordinates on layer 0.
+    ///
+    /// ```rust
+    /// draw.world();
+    /// ```
     fn world(self) { self.layer = 0; }
+    /// Draws the next shapes on this render layer.
+    ///
+    /// ```rust
+    /// draw.on_layer(2);
+    /// ```
     fn on_layer(self, layer: int) { self.layer = layer; }
+    /// Draws the next shapes at this z.
+    ///
+    /// ```rust
+    /// draw.at_z(-1.0);   // under the entities of layer 0
+    /// ```
     fn at_z(self, z: float) { self.z = z; }
+    /// A filled rectangle.
+    ///
+    /// ```rust
+    /// draw.rect(rect(0.0, 0.0, 64.0, 32.0), rgba(0, 0, 0, 160));
+    /// ```
     fn rect(self, r: Rect, c: Color) { self.shape("rect", [r.x, r.y, r.w, r.h], c); }
+    /// A rectangle's outline.
+    ///
+    /// ```rust
+    /// draw.rect_lines(rect(x, y, w, h), rgb(0, 255, 0), 1.0);
+    /// ```
     fn rect_lines(self, r: Rect, c: Color, thickness: float) { self.shape("rect_lines", [r.x, r.y, r.w, r.h, thickness], c); }
+    /// A filled rectangle with rounded corners.
+    ///
+    /// ```rust
+    /// draw.rounded_rect(rect(20.0, 20.0, 200.0, 60.0), 8.0, rgba(20, 20, 30, 220));
+    /// ```
     fn rounded_rect(self, r: Rect, radius: float, c: Color) { self.shape("rounded_rect", [r.x, r.y, r.w, r.h, radius], c); }
+    /// A filled circle.
+    ///
+    /// ```rust
+    /// draw.circle(t.position, 4.0, rgb(255, 255, 0));
+    /// ```
     fn circle(self, center: Vec2, radius: float, c: Color) { self.shape("circle", [center.x, center.y, radius], c); }
+    /// A circle's outline.
+    ///
+    /// ```rust
+    /// draw.circle_lines(t.position, 48.0, rgba(255, 255, 255, 80), 1.0);
+    /// ```
     fn circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
         self.shape("circle_lines", [center.x, center.y, radius, thickness], c);
     }
-    // From `start` to `end` radians, clockwise from +x.
+    /// From `start` to `end` radians, clockwise from +x.
+    ///
+    /// ```rust
+    /// draw.arc(t.position, 20.0, -PI / 2.0, -PI / 2.0 + TAU * reload.progress(), rgb(255, 255, 255), 3.0);
+    /// ```
     fn arc(self, center: Vec2, radius: float, start: float, end: float, c: Color, thickness: float) {
         self.shape("arc", [center.x, center.y, radius, start, end, thickness], c);
     }
+    /// A line from `a` to `b`.
+    ///
+    /// ```rust
+    /// draw.line(a, b, rgb(255, 80, 80), 2.0);
+    /// ```
     fn line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { self.shape("line", [a.x, a.y, b.x, b.y, thickness], c); }
-    // Lines joining the points in order.
+    /// Lines through the points in order. `polygon_lines` also joins the last point to the
+    /// first.
+    ///
+    /// ```rust
+    /// draw.polyline(path_points, rgb(80, 200, 255), 2.0);
+    /// ```
     fn polyline(self, points: Vec2[], c: Color, thickness: float) { self.lines_through(points, c, thickness, 0.0); }
-    // The same, closed back to the first point: a polygon's outline.
+    /// A polygon's outline: lines through the points, closed back to the first.
+    ///
+    /// ```rust
+    /// draw.polygon_lines(hull, rgb(255, 220, 80), 2.0);
+    /// ```
     fn polygon_lines(self, points: Vec2[], c: Color, thickness: float) { self.lines_through(points, c, thickness, 1.0); }
+    /// Internal: a helper the module needs; games do not call it.
     fn lines_through(self, points: Vec2[], c: Color, thickness: float, closed: float) {
         let nums: float[] = [thickness, closed];
         for p in points {
@@ -120,8 +280,17 @@ impl Draw {
         }
         self.shape("polyline", nums, c);
     }
+    /// A filled triangle.
+    ///
+    /// ```rust
+    /// draw.triangle(vec2(0.0, 0.0), vec2(20.0, 10.0), vec2(0.0, 20.0), rgb(255, 255, 255));
+    /// ```
     fn triangle(self, a: Vec2, b: Vec2, d: Vec2, c: Color) { self.shape("triangle", [a.x, a.y, b.x, b.y, d.x, d.y], c); }
-    // A filled polygon, convex or not.
+    /// A filled polygon, convex or not.
+    ///
+    /// ```rust
+    /// draw.polygon([vec2(0.0, 0.0), vec2(40.0, 0.0), vec2(50.0, 30.0), vec2(10.0, 40.0)], rgb(90, 160, 90));
+    /// ```
     fn polygon(self, points: Vec2[], c: Color) {
         let nums: float[] = [];
         for p in points {
@@ -130,50 +299,106 @@ impl Draw {
         }
         self.shape("polygon", nums, c);
     }
-    // Text in the built-in font, its top-left at `pos`.
+    /// Text in the built-in font, its top-left at `pos`.
+    ///
+    /// ```rust
+    /// draw.text("fps " + string(int(1.0 / time.dt)), vec2(8.0, 8.0), 16.0, rgb(255, 255, 255));
+    /// ```
     fn text(self, s: string, pos: Vec2, size: float, c: Color) {
         drift::draw_text(s, pos, Text { size: size, color: c, .. }, self.layer, self.z);
     }
-    // Text styled like a Text component: font, size, alignment, outline and
-    // the rest. Its `value`, `layer`, `z` and `visible` are not used.
+    /// Text styled like a Text component: font, size, alignment, outline and the rest. Its
+    /// `value`, `layer`, `z` and `visible` are not used.
+    ///
+    /// ```rust
+    /// draw.text_styled("Paused", vec2(480.0, 270.0), Text { size: 48.0, align: Align::Center, outline: 3.0, .. });
+    /// ```
     fn text_styled(self, s: string, pos: Vec2, style: Text) { drift::draw_text(s, pos, style, self.layer, self.z); }
-    // An image centered at `pos`.
+    /// An image centered at `pos`.
+    ///
+    /// ```rust
+    /// draw.texture(art.cursor, input.mouse_world());
+    /// ```
     fn texture(self, t: Texture, pos: Vec2) {
         drift::draw_sprite(Sprite { image: t, .. }, Transform { position: pos, .. }, self.layer, self.z);
     }
-    // A sprite as an entity would draw it, without the entity.
+    /// A sprite as an entity would draw it, without the entity.
+    ///
+    /// ```rust
+    /// draw.sprite(Sprite { image: art.ghost, color: rgba(255, 255, 255, 100), .. }, at(x, y));
+    /// ```
     fn sprite(self, s: Sprite, t: Transform) { drift::draw_sprite(s, t, self.layer, self.z); }
-    // An image cut in nine: the corners keep their size, the edges and middle
-    // stretch over `dest`. `border` is the width of each edge in the image's
-    // pixels, inside `frame` (zero size for the whole image).
+    /// An image cut in nine: the corners keep their size, the edges and middle stretch over
+    /// `dest`. `border` is the width of each edge in the image's pixels, inside `frame` (zero
+    /// size for the whole image).
+    ///
+    /// ```rust
+    /// draw.hud();
+    /// draw.nine_slice(art.panel, rect(20.0, 300.0, 400.0, 120.0), rect(0.0, 0.0, 0.0, 0.0), edges(8.0), rgb(255, 255, 255));
+    /// ```
     fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Edges, c: Color) {
         drift::draw_nine(t.id, [dest.x, dest.y, dest.w, dest.h, frame.x, frame.y, frame.w, frame.h,
                                 border.left, border.top, border.right, border.bottom], color_list(c), self.layer, self.z);
     }
-    // Draws after this only inside `r`, in screen pixels, until pop_clip().
+    /// Draws after this only inside `r`, in screen pixels, until pop_clip().
+    ///
+    /// ```rust
+    /// draw.push_clip(rect(20.0, 20.0, 200.0, 100.0));
+    /// draw.text(long_story, vec2(20.0, 20.0 - scroll), 16.0, rgb(255, 255, 255));
+    /// draw.pop_clip();
+    /// ```
     fn push_clip(self, r: Rect) { drift::draw_clip([r.x, r.y, r.w, r.h]); }
+    /// Ends the clip `push_clip` started.
+    ///
+    /// ```rust
+    /// draw.pop_clip();
+    /// ```
     fn pop_clip(self) { drift::draw_clip([]); }
 }
 
 // ---- Images ----
 
-// Pixels in memory that you change from code and show through a texture:
-// procedural art, paint programs, fog of war, minimaps, screenshots. The
-// engine holds the pixels; `free()` lets them go.
+//! page: assets
+
+/// Pixels in memory that you change from code and show through a texture: procedural art, paint
+/// programs, fog of war, minimaps, screenshots. The engine holds the pixels; `free()` lets them
+/// go.
+///
+/// ```rust
+/// @system(schedule: Schedule::Startup)
+/// fn sky(cmd: Commands, assets: Assets) {
+///     let img = assets.create_image(320, 180, rgb(0, 0, 0));
+///     img.vertical_gradient(rgb(20, 30, 80), rgb(200, 120, 90));
+///     cmd.spawn([at(160.0, 90.0), Sprite { image: img.to_texture(), .. }]);
+///     img.free();
+/// }
+/// ```
 struct Image { id: int = 0 }
 
-// A color as one int, 0xRRGGBBAA, the form Image.pixels() and
-// Image.write_rect use.
+/// A color as one int, 0xRRGGBBAA, the form Image.pixels() and Image.write_rect use.
+///
+/// ```rust
+/// img.write_rect(rect(0.0, 0.0, 1.0, 1.0), [pixel(rgb(255, 0, 0))]);
+/// ```
 fn pixel(c: Color) -> int {
     return int(c.r * 255.0 + 0.5) * 16777216 + int(c.g * 255.0 + 0.5) * 65536 + int(c.b * 255.0 + 0.5) * 256
         + int(c.a * 255.0 + 0.5);
 }
+
+/// The color of a 0xRRGGBBAA int.
+///
+/// ```rust
+/// let c = color_of(img.pixels()[0]);
+/// ```
 fn color_of(px: int) -> Color {
     return Color { r: float(px / 16777216 % 256) / 255.0, g: float(px / 65536 % 256) / 255.0,
                    b: float(px / 256 % 256) / 255.0, a: float(px % 256) / 255.0 };
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn rect_list(r: Rect) -> float[] { return [r.x, r.y, r.w, r.h]; }
+
+/// Internal: a helper the module needs; games do not call it.
 fn flag(on: bool) -> float {
     if on {
         return 1.0;
@@ -181,6 +406,7 @@ fn flag(on: bool) -> float {
     return 0.0;
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn image_answer(id: int, what: string) -> Image {
     if id == 0 {
         throw "drift_load_failed: " + what;
@@ -189,110 +415,306 @@ fn image_answer(id: int, what: string) -> Image {
 }
 
 impl Image {
+    /// Width in pixels.
+    ///
+    /// ```rust
+    /// let w = img.width();
+    /// ```
     fn width(self) -> int { return int(drift::image_info(self.id)[0]); }
+    /// Height in pixels.
+    ///
+    /// ```rust
+    /// let h = img.height();
+    /// ```
     fn height(self) -> int { return int(drift::image_info(self.id)[1]); }
+    /// The color of one pixel.
+    ///
+    /// ```rust
+    /// let c = img.get(3, 4);
+    /// ```
     fn get(self, x: int, y: int) -> Color {
         let c = drift::image_get(self.id, x, y);
         return Color { r: c[0], g: c[1], b: c[2], a: c[3] };
     }
+    /// Sets one pixel.
+    ///
+    /// ```rust
+    /// img.set(3, 4, rgb(255, 0, 0));
+    /// ```
     fn set(self, x: int, y: int, c: Color) { drift::image_set(self.id, x, y, color_list(c)); }
+    /// Internal: a helper the module needs; games do not call it.
     fn op(self, name: string, nums: float[], c: Color) { drift::image_op(self.id, name, nums, color_list(c), []); }
+    /// Sets every pixel to one color.
+    ///
+    /// ```rust
+    /// img.fill(rgba(0, 0, 0, 0));
+    /// ```
     fn fill(self, c: Color) { self.op("fill", [], c); }
-    // Sets the pixels to `c` as it is, alpha included: a transparent color
-    // cuts a hole.
+    /// Sets the pixels in a rect to one color.
+    ///
+    /// ```rust
+    /// img.fill_rect(rect(0.0, 0.0, 8.0, 8.0), rgb(255, 255, 255));
+    /// ```
     fn fill_rect(self, r: Rect, c: Color) { self.op("fill_rect", rect_list(r), c); }
+    /// Sets the pixels in a circle to one color, alpha included: a transparent color cuts a
+    /// round hole.
+    ///
+    /// ```rust
+    /// img.fill_circle(vec2(40.0, 40.0), 12.0, rgba(0, 0, 0, 0));
+    /// ```
     fn fill_circle(self, center: Vec2, radius: float, c: Color) { self.op("fill_circle", [center.x, center.y, radius], c); }
-    // Every pixel from `left` at the left edge to `right` at the right.
+    /// Every pixel from `left` at the left edge to `right` at the right.
+    ///
+    /// ```rust
+    /// img.horizontal_gradient(rgb(255, 80, 60), rgb(60, 80, 255));
+    /// ```
     fn horizontal_gradient(self, left: Color, right: Color) {
         drift::image_op(self.id, "gradient", [0.0], color_list(left), color_list(right));
     }
-    // Every pixel from `top` at the top edge to `bottom` at the bottom.
+    /// Every pixel from `top` at the top edge to `bottom` at the bottom.
+    ///
+    /// ```rust
+    /// img.vertical_gradient(rgb(0, 0, 40), rgb(80, 160, 255));
+    /// ```
     fn vertical_gradient(self, top: Color, bottom: Color) {
         drift::image_op(self.id, "gradient", [1.0], color_list(top), color_list(bottom));
     }
-    // The noise at each pixel, from `low` where it is -1 to `high` where it
-    // is 1.
+    /// The noise at each pixel, from `low` where it is -1 to `high` where it is 1.
+    ///
+    /// ```rust
+    /// img.noise(Noise { seed: 3, frequency: 0.05, octaves: 4, .. }, rgb(30, 60, 30), rgb(120, 200, 90));
+    /// ```
     fn noise(self, n: Noise, low: Color, high: Color) {
         drift::image_op(self.id, "noise", [float(n.seed), float(n.type_code()), n.frequency, float(n.octaves), n.lacunarity,
                                            n.gain, n.warp, n.warp_frequency], color_list(low), color_list(high));
     }
-    // Shapes, blended over the pixels by their alpha.
+    /// Shapes, blended over the pixels by their alpha.
+    ///
+    /// ```rust
+    /// img.line(vec2(0.0, 0.0), vec2(63.0, 63.0), rgb(255, 255, 255), 1.0);
+    /// ```
     fn line(self, a: Vec2, b: Vec2, c: Color, thickness: float) { self.op("line", [a.x, a.y, b.x, b.y, thickness], c); }
+    /// A rectangle's outline, blended over the pixels.
+    ///
+    /// ```rust
+    /// img.rect_lines(rect(0.0, 0.0, 64.0, 64.0), rgb(255, 255, 255), 2.0);
+    /// ```
     fn rect_lines(self, r: Rect, c: Color, thickness: float) {
         self.op("rect_lines", [r.x, r.y, r.w, r.h, thickness], c);
     }
+    /// A filled circle, blended over the pixels.
+    ///
+    /// ```rust
+    /// img.circle(vec2(32.0, 32.0), 12.0, rgb(255, 200, 60));
+    /// ```
     fn circle(self, center: Vec2, radius: float, c: Color) { self.op("circle", [center.x, center.y, radius], c); }
+    /// A circle's outline, blended over the pixels.
+    ///
+    /// ```rust
+    /// img.circle_lines(vec2(32.0, 32.0), 20.0, rgb(255, 255, 255), 2.0);
+    /// ```
     fn circle_lines(self, center: Vec2, radius: float, c: Color, thickness: float) {
         self.op("circle_lines", [center.x, center.y, radius, thickness], c);
     }
-    // Another image with its top-left at (x, y), blended by its alpha.
+    /// Another image with its top-left at (x, y), blended by its alpha.
+    ///
+    /// ```rust
+    /// canvas.draw(stamp, 10, 10);
+    /// ```
     fn draw(self, src: Image, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, [], true); }
-    // The part `frame` of another image.
+    /// The part `frame` of another image.
+    ///
+    /// ```rust
+    /// canvas.draw_part(sheet_image, rect(16.0, 0.0, 16.0, 16.0), 0, 0);
+    /// ```
     fn draw_part(self, src: Image, frame: Rect, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, rect_list(frame), true); }
-    // Another image's pixels as they are, alpha included.
+    /// Another image's pixels as they are, alpha included.
+    ///
+    /// ```rust
+    /// canvas.paste(icon, 0, 0);
+    /// ```
     fn paste(self, src: Image, x: int, y: int) { drift::image_blit(self.id, src.id, x, y, [], false); }
+    /// A new image with the same pixels.
+    ///
+    /// ```rust
+    /// let backup = img.copy();
+    /// ```
     fn copy(self) -> Image { return Image { id: drift::image_crop(self.id, []) }; }
+    /// A new image of the part `r`.
+    ///
+    /// ```rust
+    /// let corner = img.crop(rect(0.0, 0.0, 16.0, 16.0));
+    /// ```
     fn crop(self, r: Rect) -> Image { return Image { id: drift::image_crop(self.id, rect_list(r)) }; }
+    /// Mirrors the pixels left to right.
+    ///
+    /// ```rust
+    /// img.flip_x();
+    /// ```
     fn flip_x(self) { self.op("flip_x", [], Color { .. }); }
+    /// Mirrors the pixels top to bottom.
+    ///
+    /// ```rust
+    /// img.flip_y();
+    /// ```
     fn flip_y(self) { self.op("flip_y", [], Color { .. }); }
-    // Every pixel as 0xRRGGBBAA, row by row; see pixel() and color_of().
+    /// Every pixel as 0xRRGGBBAA, row by row; see pixel() and color_of().
+    ///
+    /// ```rust
+    /// let px = img.pixels();
+    /// let first = color_of(px[0]);
+    /// ```
     fn pixels(self) -> int[] { return drift::image_read(self.id, []); }
+    /// Replaces every pixel, row by row, as 0xRRGGBBAA ints.
+    ///
+    /// ```rust
+    /// img.set_pixels(px);
+    /// ```
     fn set_pixels(self, px: int[]) { drift::image_write(self.id, [], px); }
+    /// The pixels of a rect, row by row, as 0xRRGGBBAA ints.
+    ///
+    /// ```rust
+    /// let tile = img.read_rect(rect(16.0, 16.0, 16.0, 16.0));
+    /// ```
     fn read_rect(self, r: Rect) -> int[] { return drift::image_read(self.id, rect_list(r)); }
+    /// Writes 0xRRGGBBAA pixels into a rect, row by row.
+    ///
+    /// ```rust
+    /// img.write_rect(rect(0.0, 0.0, 16.0, 16.0), tile);
+    /// ```
     fn write_rect(self, r: Rect, px: int[]) { drift::image_write(self.id, rect_list(r), px); }
-    // A new texture showing the pixels as they are now.
+    /// A new texture showing the pixels as they are now.
+    ///
+    /// ```rust
+    /// let t = img.to_texture();
+    /// ```
     fn to_texture(self) -> Texture { return Texture { id: drift::image_texture(self.id) }; }
+    /// Writes the image to a PNG file. Raises `drift_save_failed` when it cannot.
+    ///
+    /// ```rust
+    /// img.save_png("drawing.png");
+    /// ```
     fn save_png(self, path: string) {
         if !drift::image_save(self.id, path) {
             throw "drift_save_failed: " + path;
         }
     }
-    // Saves the image and offers it as a download in the browser; on the
-    // desktop the file stays at `path`.
+    /// Saves the image and offers it as a download in the browser; on the desktop the file
+    /// stays at `path`.
+    ///
+    /// ```rust
+    /// img.download("drawing.png");
+    /// ```
     fn download(self, path: string) {
         self.save_png(path);
         drift::download(path);
     }
+    /// Releases the pixels. Textures made from the image stay.
+    ///
+    /// ```rust
+    /// img.free();
+    /// ```
     fn free(self) { drift::image_free(self.id); }
 }
 
 impl Texture {
-    // The texture's pixels, read back from the GPU: a render target as its
-    // last frame left it. The read waits for the GPU, so do it when you
-    // need the pixels, not every frame.
+    /// The texture's pixels, read back from the GPU: a render target as its last frame left it.
+    /// The read waits for the GPU, so do it when you need the pixels, not every frame.
+    ///
+    /// ```rust
+    /// let img = minimap.to_image();
+    /// img.save_png("minimap.png");
+    /// ```
     fn to_image(self) -> Image { return image_answer(drift::image_from_texture(self.id), "texture pixels"); }
-    // Writes an image of the texture's size into it. Cheap enough to do
-    // every frame.
+    /// Writes an image of the texture's size into it. Cheap enough to do every frame.
+    ///
+    /// ```rust
+    /// fog_image.fill_rect(rect(px, py, 16.0, 16.0), rgba(0, 0, 0, 0));
+    /// fog.update(fog_image);
+    /// ```
     fn update(self, img: Image) { drift::texture_update(self.id, img.id, []); }
-    // Writes the part `r` of the image to the same place in the texture.
+    /// Writes the part `r` of the image to the same place in the texture.
+    ///
+    /// ```rust
+    /// fog.update_rect(fog_image, rect(px, py, 16.0, 16.0));
+    /// ```
     fn update_rect(self, img: Image, r: Rect) { drift::texture_update(self.id, img.id, rect_list(r)); }
 }
 
 impl Assets {
-    // A texture cameras can draw into and sprites can show.
+    /// A texture cameras can draw into and sprites can show.
+    ///
+    /// ```rust
+    /// let minimap = assets.render_target(256, 160);
+    /// cmd.spawn([at(0.0, 0.0), Camera { zoom: 0.2, order: -1, target: minimap, clear: true, .. }]);
+    /// cmd.spawn([at(1140.0, 100.0), Sprite { image: minimap, layer: hud_layer(), .. }]);
+    /// ```
     fn render_target(self, w: int, h: int) -> Texture { return Texture { id: drift::render_target(w, h) }; }
+    /// An image of `w` by `h` pixels filled with one color, to draw into from code.
+    ///
+    /// ```rust
+    /// let canvas = assets.create_image(64, 64, rgba(0, 0, 0, 0));
+    /// ```
     fn create_image(self, w: int, h: int, fill: Color) -> Image { return Image { id: drift::image_new(w, h, color_list(fill)) }; }
-    // An image file's pixels, to change before making a texture of them.
+    /// An image file's pixels, to change before making a texture of them.
+    ///
+    /// ```rust
+    /// let img = assets.image("assets/hero.png");
+    /// img.flip_x();
+    /// let mirrored = img.to_texture();
+    /// ```
     fn image(self, path: string) -> Image { return image_answer(drift::image_load(path), path); }
 }
 
 impl Window {
-    // Offers a file the game wrote, such as a screenshot, as a download in
-    // the browser. A screenshot asked for this frame is offered once it is
-    // written.
+    /// Offers a file the game wrote, such as a screenshot, as a download in the browser. A
+    /// screenshot asked for this frame is offered once it is written.
+    ///
+    /// ```rust
+    /// window.download("shot.png");
+    /// ```
     fn download(self, path: string) { drift::download(path); }
-    // Saves the next presented frame as a PNG.
+    /// Saves the next presented frame as a PNG.
+    ///
+    /// ```rust
+    /// if input.key_pressed(Key::F12) {
+    ///     window.screenshot("shot.png");
+    ///     window.download("shot.png");
+    /// }
+    /// ```
     fn screenshot(self, path: string) { drift::window_screenshot(path); }
 }
 
 // ---- Sprite sheets ----
 
-// A texture cut into a grid of equal frames, counted left to right, top to
-// bottom from 0. Put a frame in `Sprite.frame`, or play frames with an
-// Animator.
-struct Spritesheet { id: int = 0, texture: Texture = Texture { .. }, frame_w: float = 0.0, frame_h: float = 0.0, columns: int = 1,
-                    rows: int = 1 }
+/// A texture cut into a grid of frames. Show one frame with `Sprite.frame`, or play frames with
+/// an [`Animator`](components.md#animator).
+///
+/// ```rust
+/// let sheet = assets.spritesheet(texture("assets/hero.png"), 16.0, 16.0);
+/// cmd.spawn([at(100.0, 100.0), Sprite { image: sheet.texture, frame: sheet.frame_at(0), .. }]);
+/// ```
+struct Spritesheet {
+    /// The engine's sheet
+    id: int = 0,
+    /// The whole image
+    texture: Texture = Texture { .. },
+    /// Width of one frame in pixels
+    frame_w: float = 0.0,
+    /// Height of one frame in pixels
+    frame_h: float = 0.0,
+    /// Frames across
+    columns: int = 1,
+    /// Frames down
+    rows: int = 1,
+}
 impl Assets {
+    /// Cuts a texture into a grid of frames `frame_w` by `frame_h` pixels.
+    ///
+    /// ```rust
+    /// let sheet = assets.spritesheet(texture("assets/hero.png"), 16.0, 16.0);
+    /// cmd.spawn([at(100.0, 100.0), Sprite { image: sheet.texture, frame: sheet.frame(0, 0), .. }]);
+    /// ```
     fn spritesheet(self, t: Texture, frame_w: float, frame_h: float) -> Spritesheet {
         let v = drift::sheet_grid(t.id, frame_w, frame_h);
         if v.len() == 0 {
@@ -301,6 +723,8 @@ impl Assets {
         return Spritesheet { id: int(v[0]), texture: t, frame_w: frame_w, frame_h: frame_h, columns: int(v[1]), rows: int(v[2]) };
     }
 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn max_int(a: int, b: int) -> int {
     if a > b {
         return a;
@@ -308,32 +732,46 @@ fn max_int(a: int, b: int) -> int {
     return b;
 }
 impl Spritesheet {
+    /// The frame at a column and row.
+    ///
+    /// ```rust
+    /// sprite.frame = sheet.frame(2, 1);
+    /// ```
     fn frame(self, col: int, row: int) -> Rect {
         return Rect { x: float(col) * self.frame_w, y: float(row) * self.frame_h, w: self.frame_w, h: self.frame_h };
     }
+    /// The frame at an index, counted left to right, top to bottom from 0.
+    ///
+    /// ```rust
+    /// sprite.frame = sheet.frame_at(int(time.elapsed * 10.0) % sheet.count());
+    /// ```
     fn frame_at(self, i: int) -> Rect { return self.frame(i % self.columns, i / self.columns); }
+    /// How many frames the sheet has.
+    ///
+    /// ```rust
+    /// let n = sheet.count();
+    /// ```
     fn count(self) -> int { return self.columns * self.rows; }
 }
 
 // ---- Shaders and materials ----
 
-// A fragment shader: WGSL for the WebGPU backend and GLSL for OpenGL and
-// the browser's WebGL2.
+/// A fragment shader: WGSL for the WebGPU backend and GLSL for OpenGL and the browser's WebGL2.
 struct Shader { id: int = 0 }
-// A shader with its settings: eight vec4 parameters and up to three extra
-// textures. Sprites and post effects use materials.
+
+/// A shader with its settings: eight vec4 parameters and up to three extra textures. Sprites
+/// and post effects use materials.
 struct Material { id: int = 0 }
 impl Material {
-    // Parameter 0 to 7, `material.params[i]` in the shader.
+    /// Parameter 0 to 7, `material.params[i]` in the shader.
     fn set_param(self, i: int, x: float, y: float, z: float, w: float) { drift::material_param(self.id, i, x, y, z, w); }
     fn set_color(self, i: int, c: Color) { drift::material_param(self.id, i, c.r, c.g, c.b, c.a); }
-    // Texture slot 1 to 3; slot 0 is what is being drawn.
+    /// Texture slot 1 to 3; slot 0 is what is being drawn.
     fn set_texture(self, slot: int, t: Texture) { drift::material_texture(self.id, slot, t.id); }
 }
 
 impl Assets {
-    // A TrueType, OpenType or BMFont font. `size` is the size a Text with
-    // size 0 uses.
+    /// A TrueType, OpenType or BMFont font. `size` is the size a Text with size 0 uses.
     fn font(self, path: string, size: float) -> Font {
         let id = drift::font_load(path, size);
         if id == 0 {
@@ -341,7 +779,7 @@ impl Assets {
         }
         return Font { id: id };
     }
-    // `path` without an extension finds path.wgsl and path.frag.glsl.
+    /// `path` without an extension finds path.wgsl and path.frag.glsl.
     fn shader(self, path: string) -> Shader {
         let id = drift::shader_load(path);
         if id == 0 {
@@ -349,8 +787,8 @@ impl Assets {
         }
         return Shader { id: id };
     }
-    // A shader from source: the body of `fn fragment` in WGSL, the `main` of
-    // a GLSL fragment shader, or both. Empty for the one you do not have.
+    /// A shader from source: the body of `fn fragment` in WGSL, the `main` of a GLSL fragment
+    /// shader, or both. Empty for the one you do not have.
     fn create_shader(self, wgsl: string, glsl: string) -> Shader {
         let id = drift::shader_create(wgsl, glsl);
         if id == 0 {
@@ -362,19 +800,36 @@ impl Assets {
 }
 
 impl Effects {
-    // A post effect running a material's shader over the picture, which
-    // arrives as its texture0.
+    /// A post effect running a material's shader over the picture, which arrives as its
+    /// texture0.
     fn add_material(self, m: Material, order: int) -> Effect { return Effect { id: drift::effect_material(m.id, order) }; }
 }
 
 // ---- Sprite animation ----
 
-// Frames of a sprite sheet played over time: indices into the sheet and how
-// long each one shows, in seconds. Make one with clip().
-struct AnimationClip { sheet: Spritesheet = Spritesheet { .. }, frames: int[] = [], seconds: float[] = [], looping: bool = true }
+//! page: components
 
-// A clip of `frames` from `sheet`. `seconds` is one duration for every frame,
-// or a list with one duration per frame.
+/// Frames of a sprite sheet played over time. Make one with [`clip`](#clip) or an Aseprite
+/// tag's [`Spritesheet.clip`](assets.md#spritesheetclip).
+struct AnimationClip {
+    /// The sheet the frames come from; its texture shows while the clip plays
+    sheet: Spritesheet = Spritesheet { .. },
+    /// Frame indices into the sheet
+    frames: int[] = [],
+    /// How long each frame shows: one value for every frame, or one per frame
+    seconds: float[] = [],
+    /// Whether the clip starts again after its last frame
+    looping: bool = true,
+}
+
+/// A clip of `frames` from `sheet`, each shown for `seconds`: one number for every frame, or a
+/// list with one per frame. Raises `drift_bad_clip` for a frame outside the sheet or a list
+/// whose length does not match the frames.
+///
+/// ```rust
+/// let idle = clip(hero, [0, 1, 2, 3], 0.15);
+/// let swing = clip(slash, [0, 1, 2], [0.05, 0.05, 0.2]).once();
+/// ```
 fn clip(sheet: Spritesheet, frames: int[], seconds: float | float[]) -> AnimationClip {
     let durations: float[] = [];
     if seconds is float {
@@ -401,18 +856,31 @@ fn clip(sheet: Spritesheet, frames: int[], seconds: float | float[]) -> Animatio
 }
 
 impl AnimationClip {
-    // The same clip, played one time instead of looping.
+    /// The same clip, played one time instead of looping. When it ends, the animator holds its
+    /// last frame, or switches to `then`.
+    ///
+    /// ```rust
+    /// let die = clip(hero, range(16, 22), 0.1).once();
+    /// ```
     fn once(self) -> AnimationClip {
         return AnimationClip { sheet: self.sheet, frames: self.frames, seconds: self.seconds, looping: false };
     }
-    // How long frame `i` shows.
+    /// How long frame `i` of the clip shows.
+    ///
+    /// ```rust
+    /// let last = swing.frame_seconds(swing.frames.len() - 1);
+    /// ```
     fn frame_seconds(self, i: int) -> float {
         if self.seconds.len() == 1 {
             return self.seconds[0];
         }
         return self.seconds[i];
     }
-    // The whole clip, in seconds.
+    /// The whole clip, in seconds.
+    ///
+    /// ```rust
+    /// let seconds = swing.length();
+    /// ```
     fn length(self) -> float {
         let total = 0.0;
         for i in range(self.frames.len()) {
@@ -422,28 +890,73 @@ impl AnimationClip {
     }
 }
 
-// Sent when a clip plays to its end: a clip made with once(), or one started
-// with play_once.
+/// Sent when a clip plays to its end: a clip made with `once()`, or one started with
+/// `play_once`. A clip that switches to `then` sends it as it switches.
+///
+/// ```rust
+/// @system
+/// fn remove_fallen(done: AnimationFinished, cmd: Commands) {
+///     if done.clip == "die" {
+///         cmd.despawn(done.entity);
+///     }
+/// }
+/// ```
 @message
-struct AnimationFinished { entity: Entity, clip: string }
+struct AnimationFinished {
+    /// The entity whose animator played the clip
+    entity: Entity,
+    /// The clip's name
+    clip: string,
+}
 
-// Plays named clips on the entity's Sprite, setting its image and frame.
-// Start with `play` naming a clip; switch with play() and play_once().
+/// Plays named clips on the entity's `Sprite`, setting its image and frame as time passes.
+/// `play` names the clip to start with. See [Movement](../guides/movement.md#animation-frames).
+///
+/// ```rust
+/// let hero = assets.spritesheet(texture("assets/hero.png"), 32.0, 32.0);
+/// cmd.spawn([at(100.0, 100.0), Sprite { image: hero.texture, .. }, Animator {
+///     clips: {
+///         "idle":   clip(hero, [0, 1, 2, 3], 0.15),
+///         "run":    clip(hero, range(8, 14), 0.08),
+///         "attack": clip(slash, [0, 1, 2], [0.05, 0.05, 0.2]).once()
+///     },
+///     play: "idle",
+///     ..
+/// }]);
+/// ```
 struct Animator {
+    /// The clips, by name
     clips: {string: AnimationClip} = {},
+    /// The clip playing; writing an unknown name logs `drift_unknown_clip`
     play: string = "",
+    /// The clip to switch to when this one ends; empty holds the last frame
     then: string = "",
+    /// Whether the clip playing ends after one pass, even a looping one
     once: bool = false,
+    /// Time multiplier: 2.0 plays twice as fast, 0.0 freezes
     speed: float = 1.0,
+    /// False pauses on the current frame
     playing: bool = true,
+    /// Index into the playing clip's frames; setting it jumps there
     frame: int = 0,
+    /// Seconds into the playing clip; setting it jumps there
     time: float = 0.0,
+    /// The last clip that played to its end, until another starts
     ended: string = "",
 }
 
 impl Animator {
-    // Switches to a clip. Playing the clip that is already playing changes
-    // nothing; a clip that ended starts again.
+    /// Switches to a clip by name, from its first frame. The clip already playing keeps going,
+    /// so calling this every frame is fine; a clip that ended starts again. An unknown name
+    /// raises `drift_unknown_clip`.
+    ///
+    /// ```rust
+    /// if v.linear.x != 0.0 {
+    ///     anim.play("run");
+    /// } else {
+    ///     anim.play("idle");
+    /// }
+    /// ```
     fn play(self, name: string) {
         self.check_clip(name);
         if name == self.play && self.ended != name {
@@ -454,8 +967,12 @@ impl Animator {
         self.once = false;
         self.restart();
     }
-    // Plays a clip one time, then switches to `then`; an empty `then` holds
-    // the last frame.
+    /// Plays a clip one time, even a looping one, then switches to `then`. An empty `then`
+    /// holds the last frame.
+    ///
+    /// ```rust
+    /// anim.play_once("attack", "idle");
+    /// ```
     fn play_once(self, name: string, then: string) {
         self.check_clip(name);
         if then != "" {
@@ -466,14 +983,23 @@ impl Animator {
         self.once = true;
         self.restart();
     }
-    // Whether the clip played to its end and no other clip has started since.
+    /// Whether the clip played to its end and no other clip has started since. To act once when
+    /// it happens, take the `AnimationFinished` message instead.
+    ///
+    /// ```rust
+    /// if anim.finished("die") {
+    ///     cmd.despawn(e);
+    /// }
+    /// ```
     fn finished(self, name: string) -> bool { return name != "" && self.ended == name; }
+    /// Internal: a helper the module needs; games do not call it.
     fn restart(self) {
         self.frame = 0;
         self.time = 0.0;
         self.ended = "";
         self.playing = true;
     }
+    /// Internal: a helper the module needs; games do not call it.
     fn check_clip(self, name: string) {
         if !self.clips.contains(name) {
             throw "drift_unknown_clip: " + name + " (clips: " + self.clips.keys().join(", ") + ")";
@@ -482,8 +1008,8 @@ impl Animator {
 }
 
 impl Assets {
-    // An Aseprite file (.ase, .aseprite): its frames side by side in one
-    // texture, its frame durations and its tags.
+    /// An Aseprite file (.ase, .aseprite): its frames side by side in one texture, its frame
+    /// durations and its tags.
     fn aseprite(self, path: string) -> Spritesheet {
         let v = drift::sheet_aseprite(path);
         if v.len() == 0 {
@@ -494,9 +1020,15 @@ impl Assets {
 }
 
 impl Spritesheet {
-    // An Aseprite tag as a clip: its frames in the order the tag plays them,
-    // each with its duration from the file. A tag set to repeat once plays
-    // once; any other loops.
+    /// An Aseprite tag as a clip: its frames in the order the tag plays them (forward, reverse
+    /// or ping-pong), each with its duration from the file. A tag set to repeat once plays
+    /// once; any other loops. A tag the file does not have raises `drift_unknown_clip` with the
+    /// tags it has.
+    ///
+    /// ```rust
+    /// let knight = assets.aseprite("assets/knight.aseprite");
+    /// let run = knight.clip("run");
+    /// ```
     fn clip(self, name: string) -> AnimationClip {
         let v = drift::sheet_tag(self.id, name);
         if v.len() == 0 {

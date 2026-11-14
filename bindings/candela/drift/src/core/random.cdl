@@ -1,77 +1,178 @@
-// Random numbers and noise.
+//! Random numbers and noise.
 
 import "drift/core/values" { * };
 import "drift/core/procgen" { * };
 
 // ---- Random numbers ----
 
-// A seeded generator: the engine's PCG32, so a seed gives the same numbers
-// here, in C++ and in the browser. Keep one in a resource to carry on;
-// copy() it to replay a sequence later.
-struct Rng { hi: int = 0, lo: int = 0, inc: int = 1 }
+//! page: procgen
 
-// A generator seeded with `seed`.
+/// A seeded random number generator. Its methods advance it, so keep it in a resource or
+/// component to carry on where it left off. Assigning a struct shares it: `let b = a;` gives a
+/// second name for the same generator, and `a.copy()` gives an independent one.
+///
+/// ```rust
+/// @resource
+/// struct Loot { rng: Rng = rng(1234) }
+///
+/// @system
+/// fn drop(loot: Loot) {
+///     let gold = loot.rng.range(5, 10);
+/// }
+/// ```
+struct Rng {
+    /// Generator state
+    hi: int = 0,
+    /// Generator state
+    lo: int = 0,
+    /// Generator stream
+    inc: int = 1,
+}
+
+/// A generator seeded with `seed`.
+///
+/// ```rust
+/// let r = rng(42);
+/// ```
 fn rng(seed: int) -> Rng { return rng_state(drift::rng_seed(seed, 0)); }
-// Another sequence for the same seed: generators with different streams
-// do not repeat each other.
+
+/// Another sequence for the same seed: generators with different streams do not repeat each
+/// other.
+///
+/// ```rust
+/// let caves = rng_stream(seed, 1);
+/// let dungeons = rng_stream(seed, 2);
+/// ```
 fn rng_stream(seed: int, stream: int) -> Rng { return rng_state(drift::rng_seed(seed, stream)); }
-// A seed from text, for seeds players type: rng(seed_from("daily-2026-11-12")).
+
+/// A seed from text, for seeds players type: rng(seed_from("daily-2026-11-12")).
+///
+/// ```rust
+/// let r = rng(seed_from("daily-2026-11-13"));
+/// ```
 fn seed_from(text: string) -> int { return drift::hash_text(text); }
+
+/// Internal: a helper the module needs; games do not call it.
 fn rng_state(s: int[]) -> Rng { return Rng { hi: s[0], lo: s[1], inc: s[2] }; }
 
 impl Rng {
+    /// Internal: a helper the module needs; games do not call it.
     fn ints(self, op: string, a: int, b: int) -> int[] {
         let r = drift::rng_int(self.hi, self.lo, self.inc, op, a, b);
         self.hi = r[0];
         self.lo = r[1];
         return r;
     }
+    /// Internal: a helper the module needs; games do not call it.
     fn floats(self, op: string, a: float, b: float) -> float[] {
         let r = drift::rng_float(self.hi, self.lo, self.inc, op, a, b);
         self.hi = int(r[0]);
         self.lo = int(r[1]);
         return r;
     }
-    // 32 random bits, 0 to 4294967295.
+    /// 32 random bits, 0 to 4294967295.
+    ///
+    /// ```rust
+    /// let bits = r.next_int();
+    /// ```
     fn next_int(self) -> int { return self.ints("next_int", 0, 0)[2]; }
-    // 0.0 up to, not including, 1.0.
+    /// 0.0 up to, not including, 1.0.
+    ///
+    /// ```rust
+    /// if r.next_float() < 0.25 { spawn_bonus(); }
+    /// ```
     fn next_float(self) -> float { return self.floats("next_float", 0.0, 0.0)[2]; }
-    // 0 up to, not including, n.
+    /// 0 up to, not including, n.
+    ///
+    /// ```rust
+    /// let side = r.below(4);   // 0, 1, 2 or 3
+    /// ```
     fn below(self, n: int) -> int { return self.ints("below", n, 0)[2]; }
-    // lo to hi, both included.
+    /// lo to hi, both included.
+    ///
+    /// ```rust
+    /// let damage = r.range(1, 6);   // a six-sided die
+    /// ```
     fn range(self, lo: int, hi: int) -> int { return self.ints("range", lo, hi)[2]; }
-    // lo up to, not including, hi.
+    /// lo up to, not including, hi.
+    ///
+    /// ```rust
+    /// let x = r.range_float(0.0, 640.0);
+    /// ```
     fn range_float(self, lo: float, hi: float) -> float { return self.floats("range", lo, hi)[2]; }
+    /// `true` with probability `p`, 0 to 1.
+    ///
+    /// ```rust
+    /// if r.chance(0.15) { drop_rare(); }
+    /// ```
     fn chance(self, p: float) -> bool { return self.floats("chance", p, 0.0)[2] > 0.5; }
-    // -1.0 or 1.0.
+    /// -1.0 or 1.0.
+    ///
+    /// ```rust
+    /// let dir = r.sign();
+    /// ```
     fn sign(self) -> float { return self.floats("sign", 0.0, 0.0)[2]; }
-    // Radians, 0 to tau.
+    /// Radians, 0 to tau.
+    ///
+    /// ```rust
+    /// let v = from_angle(r.angle()) * 100.0;
+    /// ```
     fn angle(self) -> float { return self.floats("angle", 0.0, 0.0)[2]; }
+    /// A direction of length 1.
+    ///
+    /// ```rust
+    /// let push = r.unit_vector() * 200.0;
+    /// ```
     fn unit_vector(self) -> Vec2 {
         let r = self.floats("unit_vector", 0.0, 0.0);
         return Vec2 { x: r[2], y: r[3] };
     }
+    /// A point inside a circle of `radius` around the origin.
+    ///
+    /// ```rust
+    /// let spot = center + r.inside_circle(32.0);
+    /// ```
     fn inside_circle(self, radius: float) -> Vec2 {
         let r = self.floats("inside_circle", radius, 0.0);
         return Vec2 { x: r[2], y: r[3] };
     }
+    /// A point inside a rect.
+    ///
+    /// ```rust
+    /// let p = r.inside_rect(rect(0.0, 0.0, 640.0, 360.0));
+    /// ```
     fn inside_rect(self, r: Rect) -> Vec2 {
         let x = self.range_float(r.x, r.x + r.w);
         return Vec2 { x: x, y: self.range_float(r.y, r.y + r.h) };
     }
-    // A Gaussian sample.
+    /// A Gaussian sample.
+    ///
+    /// ```rust
+    /// let height = r.normal(170.0, 10.0);
+    /// ```
     fn normal(self, mean: float, stddev: float) -> float { return self.floats("normal", mean, stddev)[2]; }
-    // An index chosen in proportion to its weight; -1 when no weight is
-    // above zero.
+    /// An index chosen in proportion to its weight; -1 when no weight is above zero.
+    ///
+    /// ```rust
+    /// let i = r.weighted([70.0, 25.0, 5.0]);
+    /// ```
     fn weighted(self, weights: float[]) -> int {
         let r = drift::rng_weighted(self.hi, self.lo, self.inc, weights);
         self.hi = r[0];
         self.lo = r[1];
         return r[2];
     }
-    // A random element. The array must not be empty.
+    /// A random element. The array must not be empty.
+    ///
+    /// ```rust
+    /// let name = r.pick<string>(["Ada", "Grace", "Alan"]);
+    /// ```
     fn pick<T>(self, items: T[]) -> T { return items[self.below(items.len())]; }
-    // The items in a random order.
+    /// The items in a random order.
+    ///
+    /// ```rust
+    /// let deck = r.shuffle<Card>(cards);
+    /// ```
     fn shuffle<T>(self, items: T[]) -> T[] {
         let order = self.ints("shuffle", items.len(), 0);
         let out: T[] = [];
@@ -80,36 +181,95 @@ impl Rng {
         }
         return out;
     }
-    // A generator at the same point, to replay what this one produces next.
+    /// A generator at the same point, to replay what this one produces next.
+    ///
+    /// ```rust
+    /// let replay = r.copy();
+    /// ```
     fn copy(self) -> Rng { return Rng { hi: self.hi, lo: self.lo, inc: self.inc }; }
-    // A new generator seeded from this one: its own sequence for a sub-task.
+    /// A new generator seeded from this one: its own sequence for a sub-task.
+    ///
+    /// ```rust
+    /// let room_rng = level.rng.split();
+    /// ```
     fn split(self) -> Rng {
         let r = self.ints("split", 0, 0);
         return Rng { hi: r[2], lo: r[3], inc: r[4] };
     }
 }
 
-// The game's seed from drift.toml [random], and a generator per purpose.
+//! page: resources
+
+/// The game's seed from drift.toml [random], and a generator per purpose.
+///
+/// ```rust
+/// @system(schedule: Schedule::Startup)
+/// fn setup(random: Random, level: Level) {
+///     log("seed " + string(random.seed()));
+///     level.rng = random.stream("levels");
+/// }
+/// ```
 struct Random { id: int = 0 }
 impl Random {
+    /// The seed in use. With `seed = 0` in `[random]`, a new one is picked each run and logged.
+    ///
+    /// ```rust
+    /// hud.value = "Seed " + string(random.seed());
+    /// ```
     fn seed(self) -> int { return drift::random_seed(); }
-    // The same name gives the same generator for the same seed.
+    /// The same name gives the same generator for the same seed.
+    ///
+    /// ```rust
+    /// let loot = random.stream("loot");
+    /// let levels = random.stream("levels");   // independent of loot
+    /// ```
     fn stream(self, name: string) -> Rng { return rng_state(drift::random_stream(name)); }
 }
 
-// Items rolled by weight: loot, spawns, room types.
-struct WeightedTable<T> { items: T[], weights: float[] }
+//! page: procgen
+
+/// Items rolled by weight: loot, spawns, room types.
+///
+/// ```rust
+/// let loot = weighted_table<string>().add("coin", 70.0).add("potion", 25.0).add("sword", 5.0);
+/// if loot.roll(r) is Some(item) {
+///     log("found a " + item);
+/// }
+/// ```
+struct WeightedTable<T> {
+    /// The entries
+    items: T[],
+    /// Their weights
+    weights: float[],
+}
+
+/// An empty table of items of type `T`. Weights are relative; an entry with weight 0 or less
+/// never comes up.
+///
+/// ```rust
+/// let enemies = weighted_table<int>().add(1, 10.0).add(2, 3.0);
+/// ```
 fn weighted_table<T>() -> WeightedTable<T> {
     let items: T[] = [];
     let weights: float[] = [];
     return WeightedTable { items: items, weights: weights };
 }
 impl WeightedTable<T> {
+    /// Adds an item with a weight, and returns the table, so calls chain.
+    ///
+    /// ```rust
+    /// table.add("gem", 2.0);
+    /// ```
     fn add(self, item: T, weight: float) -> WeightedTable<T> {
         self.items.push(item);
         self.weights.push(weight);
         return self;
     }
+    /// An item chosen in proportion to its weight, or `None` when no entry can come up.
+    ///
+    /// ```rust
+    /// if table.roll(r) is Some(kind) { spawn(kind); }
+    /// ```
     fn roll(self, rng: Rng) -> Option<T> {
         let i = rng.weighted(self.weights);
         if i < 0 {
@@ -121,38 +281,87 @@ impl WeightedTable<T> {
 
 // ---- Noise ----
 
-enum NoiseType { Value, Perlin, Simplex }
+//! page: enums
 
-// A noise recipe. Samples are -1.0 to 1.0; the same seed gives the same
-// field everywhere. `frequency` scales positions (0.05 makes features about
-// 20 units across), `octaves` layers finer detail, and `warp` bends the
-// field by up to that many units.
+/// The kind of [`Noise`](procgen.md#noise).
+///
+/// ```rust
+/// Noise { kind: NoiseType::Perlin, frequency: 0.05, .. }
+/// ```
+enum NoiseType {
+    /// Blocky
+    Value,
+    /// Smooth
+    Perlin,
+    /// Smooth, with fewer grid patterns
+    Simplex,
+}
+
+//! page: procgen
+
+/// A noise recipe. Samples are -1.0 to 1.0; the same seed gives the same field everywhere.
+/// `frequency` scales positions (0.05 makes features about 20 units across), `octaves` layers
+/// finer detail, and `warp` bends the field by up to that many units.
+///
+/// ```rust
+/// let terrain = Noise { seed: 7, frequency: 0.03, octaves: 5, .. };
+/// let h = terrain.sample(x, y);
+/// ```
 struct Noise {
+    /// Different seeds give unrelated fields
     seed: int = 0,
+    /// `Value` is blocky; `Perlin` and `Simplex` are smooth
     kind: NoiseType = NoiseType::Simplex,
+    /// Scales positions; 0.05 makes features about 20 units across
     frequency: float = 1.0,
+    /// Layers of finer detail
     octaves: int = 1,
+    /// Each layer's frequency over the last one's
     lacunarity: float = 2.0,
+    /// Each layer's strength over the last one's
     gain: float = 0.5,
+    /// Bends the field by up to this many units, for swirls and rivers
     warp: float = 0.0,
+    /// The frequency of the bending field, as a multiple of `frequency`: 1.0 bends at the scale
+    /// of the features, lower values in broader sweeps
     warp_frequency: float = 1.0,
 }
+
+/// The default recipe with a seed.
+///
+/// ```rust
+/// let n = noise(seed);
+/// ```
 fn noise(seed: int) -> Noise { return Noise { seed: seed, .. }; }
 impl Noise {
+    /// Internal: a helper the module needs; games do not call it.
     fn type_code(self) -> int {
         return match self.kind { NoiseType::Value => 0, NoiseType::Perlin => 1, NoiseType::Simplex => 2 };
     }
+    /// The noise at a point, from -1 to 1.
+    ///
+    /// ```rust
+    /// let v = terrain.sample(float(x), float(y));
+    /// ```
     fn sample(self, x: float, y: float) -> float {
         return drift::noise_sample(self.seed, self.type_code(), self.frequency, self.octaves, self.lacunarity,
                                    self.gain, self.warp, self.warp_frequency, x, y);
     }
-    // w x h samples, row by row, starting at `from` and `step` apart.
+    /// w x h samples, row by row, starting at `from` and `step` apart.
+    ///
+    /// ```rust
+    /// let row = terrain.samples(vec2(0.0, 0.0), 64, 64, 1.0);
+    /// ```
     fn samples(self, from: Vec2, w: int, h: int, step: float) -> float[] {
         return drift::noise_grid(self.seed, self.type_code(), self.frequency, self.octaves, self.lacunarity,
                                  self.gain, self.warp, self.warp_frequency, from.x, from.y, w, h, step);
     }
-    // A grid from the noise at each cell's center: `above` where it is at
-    // least `threshold`, `below` elsewhere.
+    /// A grid from the noise at each cell's center: `above` where it is at least `threshold`,
+    /// `below` elsewhere.
+    ///
+    /// ```rust
+    /// let land = noise(seed).grid(60, 32, 0.1, FLOOR, WALL);
+    /// ```
     fn grid(self, w: int, h: int, threshold: float, above: int, below: int) -> Grid {
         let cells = drift::noise_cells(self.seed, self.type_code(), self.frequency, self.octaves, self.lacunarity,
                                        self.gain, self.warp, self.warp_frequency, w, h, threshold, above, below);

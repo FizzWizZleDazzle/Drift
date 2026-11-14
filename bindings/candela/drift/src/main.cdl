@@ -1,13 +1,114 @@
-// drift: the engine module of Candela games that `drift` runs.
-//
-// A game marks its structs and functions with the attributes below, and the
-// host reads them: components and resources it stores, systems it calls every
-// frame with the data their parameters ask for. Everything here is either one
-// of those declarations, an engine component or resource, or a value type.
-// See bindings/candela/docs for the book.
-//
-// The module is written as one file per topic under core/. Each one is
-// passed on here, so `import "drift" { * };` reaches every name.
+//! drift: the engine module of Candela games that `drift` runs.
+//!
+//! A game marks its structs and functions with the attributes below, and the
+//! host reads them: components and resources it stores, systems it calls every
+//! frame with the data their parameters ask for. Everything here is either one
+//! of those declarations, an engine component or resource, or a value type.
+//! See bindings/candela/docs for the book.
+//!
+//! The module is written as one file per topic under core/. Each one is
+//! passed on here, so `import "drift" { * };` reaches every name.
+
+//! page: attributes
+//! # Attributes
+//!
+//! Attributes tell Drift what your structs, enums and functions are. Write one in front of a
+//! top-level declaration. They come with `import "drift" { * };`; a game that imports the
+//! module by name writes `@drift::component` instead. The compiler checks each attribute and
+//! its arguments, so a misspelt attribute, an unknown type in `requires:` or an unknown
+//! function in `after:` is an error with its line, before the game starts.
+//!
+//! A struct or function with type parameters cannot carry an attribute, and neither can a
+//! method.
+
+//! page: system-parameters
+//! # System Parameters
+//!
+//! A system's parameter types say what it receives. Drift reads them when the game loads and
+//! fills each one, in any order. Every parameter needs its type written out.
+//!
+//! | Parameter type | Receives |
+//! |----------------|----------|
+//! | `(A, B)`, a tuple of components (a row) | One entity's components; the system runs once per entity that has every component in it. `Entity` in a place gives the entity. Take it apart with `let (a, b) = row;`, `_` skipping a place. At most one per system |
+//! | `(A, B)[]`, a list of tuples | One tuple per entity with every component; `Entity` in a position gives the entity's id |
+//! | `Row[]`, where `Row` is a `@query` struct | One row per matching entity |
+//! | [`Lookup<T>`](#lookup) | Every `T`, found by entity |
+//! | A `@resource` or `@settings` struct | The resource. The system is skipped while it does not exist |
+//! | [`State<S>`](#state) | The current variant of a `@state` enum, to read and change |
+//! | `M` or `M[]`, where `M` is a `@message` struct | One message per call, or every message sent since the system last ran |
+//! | [`Contact<A, B>`](#contact), [`ContactEnd`](#contactend), [`Overlap`](#overlap), [`OverlapEnd`](#overlapend), alone or as a list | Collisions between an entity with `A` and one with `B`; alone, the system runs once per collision |
+//! | [`Commands`](#commands) | Spawning, inserting, removing and despawning, applied when the call returns |
+//! | An engine resource: `Time`, `Input`, `Window`, `Assets`, `Effects`, `Save`, `Random`, `Camera2D`, `Draw`, `Physics` | See [Engine Resources](resources.md) |
+//!
+//! A component or an `Entity` on its own is not a parameter: a system that runs once per entity
+//! takes them together as one row, and a row of one component pairs it with `Entity`, as in
+//! `(Entity, Transform)`. A system takes at most one row, and not both a row and a single
+//! event: it runs once per entity or once per event. Each of these is an error when the game
+//! loads; see [Errors](errors.md).
+//!
+//! Drift keeps every change a system makes to the components and resources it receives, through
+//! a row, a list of rows, a resource or a lookup. The names a row is taken apart into share its
+//! values, so setting their fields changes the entity. The lists are built when the call
+//! starts, so spawning and despawning while looping over one is safe. Rows come in the order
+//! entities were spawned, the same on every run.
+
+//! page: components
+//! # Engine Components
+//!
+//! Components the engine draws and simulates. Use them like your own: put them in a spawn
+//! bundle, take them as parameters, look them up, and assign to their fields to change them.
+//! Build each with the fields you need and `..` for the rest.
+//!
+//! The drawn, moved and simulated components need a `Transform`; give the entity one with
+//! `at(x, y)` or `Transform { .. }`. Some fields are also changed by the engine as it runs
+//! (physics moves `Transform`, an emitter turns `playing` off when it finishes); a system sees
+//! the value from when it started.
+
+//! page: resources
+//! # Engine Resources
+//!
+//! The engine's resources reach a system as parameters, the same way as your own. Their fields
+//! are this frame's values, and their methods act on the engine at once.
+
+//! page: assets
+//! # Assets
+//!
+//! Images, sounds, maps and the handles that name them. A handle such as `Texture` or `Sound`
+//! names something the engine owns; copy it freely, and keep the ones you reuse in a resource.
+//! See [Assets](../concepts/assets.md).
+
+//! page: procgen
+//! # Procedural Generation
+//!
+//! Seeded random numbers, noise, level generators, weighted tables and pathfinding over grids.
+//! A seed gives the same numbers and the same levels on every platform and in the browser. See
+//! [Procedural Generation](../guides/procedural-generation.md).
+
+//! page: enums
+//! # Enums
+//!
+//! Every enum the `drift` module defines, with its variants.
+
+//! page: values
+//! # Values and Functions
+//!
+//! Plain values and free functions the module provides. A name you declare yourself shadows the
+//! one from the module, so a game can have its own `log` or `min`.
+
+//! page: animation
+//! # Procedural Animation
+//!
+//! Angles, easing helpers, oscillators, springs, squash and stretch, inverse kinematics, ropes
+//! and stepping feet: the pieces for animating parts in code rather than from frames. See
+//! [Procedural Animation](../guides/procedural-animation.md) and the
+//! [Creature](../examples/creature.md) example.
+
+//! page: data
+//! # Data, Networking and Text
+//!
+//! Data files, HTTP and WebSockets, sequences of timed steps, colors, text formatting and
+//! localization. See [Data Files](../guides/data-files.md),
+//! [Networking](../guides/networking.md) and [Localization](../guides/localization.md).
 
 export import "drift/core/host" { * };
 export import "drift/core/values" { * };

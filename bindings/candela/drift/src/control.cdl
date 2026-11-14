@@ -1,15 +1,30 @@
-// drift/control: movement controllers for the player's entity.
-//
-// `import "drift/control" { * };` adds three controllers: top-down 8-way
-// movement, a platformer with coyote time, jump buffering and variable jump
-// height, and an asteroids-style ship. Each reads the arrow keys, WASD and
-// the first gamepad's left stick by default, plus the input actions it
-// names, and drives the entity's Velocity.
+//! drift/control: movement controllers for the player's entity.
+//!
+//! `import "drift/control" { * };` adds three controllers: top-down 8-way
+//! movement, a platformer with coyote time, jump buffering and variable jump
+//! height, and an asteroids-style ship. Each reads the arrow keys, WASD and
+//! the first gamepad's left stick by default, plus the input actions it
+//! names, and drives the entity's Velocity.
+
+//! page: control
+//! # Controllers: drift/control
+//!
+//! Movement controllers for the player's entity: top-down 8-way movement, a platformer with
+//! coyote time, jump buffering and variable jump height, and an asteroids-style ship. Each
+//! reads the arrow keys, WASD and the first gamepad's left stick by default, plus the input
+//! actions it names, and drives the entity's `Velocity`.
+//!
+//! ```rust
+//! import "drift" { * };
+//! import "drift/control" { * };
+//! ```
+//!
+//! See [Building Blocks](../guides/building-blocks.md).
 
 import "drift" { * };
 
-// -1 to 1 on each axis from the arrow keys, WASD and the left stick, plus
-// the 2D action `action` when it is set.
+/// -1 to 1 on each axis from the arrow keys, WASD and the left stick, plus the 2D action
+/// `action` when it is set.
 fn control_axis(input: Input, action: string, defaults: bool) -> Vec2 {
     let v = Vec2 { .. };
     if action != "" {
@@ -36,7 +51,7 @@ fn control_axis(input: Input, action: string, defaults: bool) -> Vec2 {
     return Vec2 { x: clamp(v.x, -1.0, 1.0), y: clamp(v.y, -1.0, 1.0) };
 }
 
-// Moves `from` toward `to` by at most `step`.
+/// Moves `from` toward `to` by at most `step`.
 fn approach(from: float, to: float, step: float) -> float {
     if from < to {
         return min(from + step, to);
@@ -46,10 +61,9 @@ fn approach(from: float, to: float, step: float) -> float {
 
 // ---- Top-down ----
 
-// Walks in eight directions at `speed` pixels per second, reaching it in
-// `speed / acceleration` seconds and stopping in `speed / friction`.
-// Diagonals are as fast as straight lines. `facing` is the last direction
-// moved in.
+/// Walks in eight directions at `speed` pixels per second, reaching it in `speed /
+/// acceleration` seconds and stopping in `speed / friction`. Diagonals are as fast as straight
+/// lines. `facing` is the last direction moved in.
 @component(requires: [Velocity])
 struct TopDownController {
     speed: float = 220.0,
@@ -90,14 +104,10 @@ fn ctl_top_down(top_down_controller: (TopDownController, Velocity), input: Input
 // Runs and jumps on a dynamic body with fixed rotation, under the physics
 // world's gravity. Ground is found with three short rays below `foot`
 // (the distance from the entity's position to its feet), `width` apart.
-//
-// - Coyote time: a jump still works `coyote_time` seconds after running off
-//   a ledge.
-// - Jump buffering: a jump pressed `jump_buffer` seconds before landing
-//   happens on landing.
-// - Variable height: letting go of jump while rising cuts the speed by
-//   `jump_cut`, so a tap is a hop and a hold is a full jump.
-// - `air_jumps` extra jumps in the air: 1 is a double jump.
+/// - Coyote time: a jump still works `coyote_time` seconds after running off a ledge. - Jump
+///   buffering: a jump pressed `jump_buffer` seconds before landing happens on landing. -
+///   Variable height: letting go of jump while rising cuts the speed by `jump_cut`, so a tap is
+///   a hop and a hold is a full jump. - `air_jumps` extra jumps in the air: 1 is a double jump.
 @component(requires: [Velocity])
 struct PlatformerController {
     speed: float = 240.0,
@@ -124,7 +134,7 @@ struct PlatformerController {
     facing: float = 1.0,
 }
 
-// Sent when a PlatformerController jumps and when it lands.
+/// Sent when a PlatformerController jumps and when it lands.
 @message
 struct Jumped { entity: Entity = Entity { .. }, air: bool = false }
 @message
@@ -234,10 +244,10 @@ fn ctl_platformer(platformer_controller: (Entity, PlatformerController, Velocity
 
 // ---- Ship ----
 
-// Asteroids-style: Left and Right turn at `turn_speed` radians per second,
-// Up thrusts along the facing direction, and the ship drifts, slowed by
-// `drag` per second, up to `max_speed`. The ship faces +X at rotation 0.
-// `thrusting` is true while thrust is held, for a flame sprite.
+/// Asteroids-style: Left and Right turn at `turn_speed` radians per second, Up thrusts along
+/// the facing direction, and the ship drifts, slowed by `drag` per second, up to `max_speed`.
+/// The ship faces +X at rotation 0. `thrusting` is true while thrust is held, for a flame
+/// sprite.
 @component(requires: [Velocity])
 struct ShipController {
     thrust: float = 420.0,

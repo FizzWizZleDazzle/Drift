@@ -1,4 +1,4 @@
-// The engine's resources, the platform and the window.
+//! The engine's resources, the platform and the window.
 
 import "drift/core/host" { * };
 import "drift/core/values" { * };
@@ -11,29 +11,80 @@ import "drift/core/text" { * };
 
 // ---- Engine resources ----
 
-// `dt` is the frame time times `scale`; `real_dt` ignores the scale, for
-// menus and tools that keep running while the game is slowed or frozen.
-struct Time { dt: float = 0.0, elapsed: float = 0.0, frame: int = 0, scale: float = 1.0, real_dt: float = 0.0 }
+//! page: resources
+
+/// `dt` is the frame time times `scale`; `real_dt` ignores the scale, for menus and tools that
+/// keep running while the game is slowed or frozen.
+///
+/// ```rust
+/// @system
+/// fn spin(fan: (Fan, Transform), time: Time) {
+///     let (_, t) = fan;
+///     t.rotation += 3.0 * time.dt;
+/// }
+/// ```
+struct Time {
+    /// Seconds since the last frame, times `scale`; multiply speeds by it
+    dt: float = 0.0,
+    /// Seconds since the game started
+    elapsed: float = 0.0,
+    /// Frames so far
+    frame: int = 0,
+    /// The game's speed: 1 normal, 0.5 half, 0 frozen
+    scale: float = 1.0,
+    /// Seconds since the last frame, ignoring `scale`
+    real_dt: float = 0.0,
+}
 impl Time {
-    // Game speed from the next frame on: 1.0 normal, 0.5 half, 0.0 frozen.
-    // Physics, tweens, particles and every system's `dt` follow it.
+    /// Game speed from the next frame on: 1.0 normal, 0.5 half, 0.0 frozen. Physics, tweens,
+    /// particles and every system's `dt` follow it.
+    ///
+    /// ```rust
+    /// time.set_scale(0.25);   // slow motion
+    /// ```
     fn set_scale(self, s: float) {
         drift::set_time_scale(s);
         self.scale = s;
     }
 }
 
-struct Window { width: float = 0.0, height: float = 0.0 }
+/// The game's window, or the canvas on a web page.
+///
+/// ```rust
+/// @system
+/// fn center(title: (Title, Transform), window: Window) {
+///     let (_, t) = title;
+///     t.position = vec2(window.width * 0.5, 80.0);
+/// }
+/// ```
+struct Window {
+    /// Logical width in pixels
+    width: float = 0.0,
+    /// Logical height in pixels
+    height: float = 0.0,
+}
 impl Window {
+    /// Ends the game after this frame. In the browser the page stops running the game.
+    ///
+    /// ```rust
+    /// if input.key_pressed(Key::Escape) { window.quit(); }
+    /// ```
     fn quit(self) { drift::quit(); }
-    // Hides the cursor and keeps it in the window; Input.mouse_delta() still
-    // reports movement. For mouse-look and aiming. In a browser it needs a
-    // tap, click or key first; asked for without one, it waits for the next.
+    /// Hides the cursor and keeps it in the window; Input.mouse_delta() still reports movement.
+    /// For mouse-look and aiming. In a browser it needs a tap, click or key first; asked for
+    /// without one, it waits for the next.
     fn lock_pointer(self, on: bool) { drift::window_lock_pointer(on); }
-    // Screen pixels per window unit: 2 on most phones, 1 on most monitors.
+    /// Screen pixels per window unit: 2 on most phones, 1 on most monitors.
     fn pixel_ratio(self) -> float { return drift::pixel_ratio(); }
 }
 
+//! page: enums
+
+/// Keyboard keys, by position on a US layout.
+///
+/// ```rust
+/// if input.key_pressed(Key::Escape) { phase.set(Phase::Paused); }
+/// ```
 enum Key {
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9, Num0,
@@ -43,7 +94,7 @@ enum Key {
     LCtrl, LShift, LAlt, RCtrl, RShift, RAlt,
 }
 
-// The SDL scancode of a key.
+/// Internal: The SDL scancode of a key.
 fn key_code(k: Key) -> int {
     return match k {
         Key::A => 4, Key::B => 5, Key::C => 6, Key::D => 7, Key::E => 8, Key::F => 9,
@@ -62,7 +113,12 @@ fn key_code(k: Key) -> int {
     };
 }
 
+/// ```rust
+/// if input.mouse_pressed(MouseButton::Left) { shoot(); }
+/// ```
 enum MouseButton { Left, Middle, Right, X1, X2 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn mouse_code(b: MouseButton) -> int {
     return match b {
         MouseButton::Left => 1, MouseButton::Middle => 2, MouseButton::Right => 3,
@@ -70,10 +126,17 @@ fn mouse_code(b: MouseButton) -> int {
     };
 }
 
+/// Gamepad buttons in the Xbox layout: `South` is A, `East` is B, `West` is X and `North` is Y.
+///
+/// ```rust
+/// input.bind_button("jump", GamepadButton::South);
+/// ```
 enum GamepadButton {
     South, East, West, North, Back, Guide, Start, LeftStick, RightStick,
     LeftShoulder, RightShoulder, DpadUp, DpadDown, DpadLeft, DpadRight,
 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn button_code(b: GamepadButton) -> int {
     return match b {
         GamepadButton::South => 0, GamepadButton::East => 1, GamepadButton::West => 2,
@@ -85,7 +148,14 @@ fn button_code(b: GamepadButton) -> int {
     };
 }
 
+/// Sticks read -1 to 1 with Y down; triggers read 0 to 1.
+///
+/// ```rust
+/// input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+/// ```
 enum GamepadAxis { LeftX, LeftY, RightX, RightY, LeftTrigger, RightTrigger }
+
+/// Internal: a helper the module needs; games do not call it.
 fn axis_code(a: GamepadAxis) -> int {
     return match a {
         GamepadAxis::LeftX => 0, GamepadAxis::LeftY => 1, GamepadAxis::RightX => 2,
@@ -93,40 +163,167 @@ fn axis_code(a: GamepadAxis) -> int {
     };
 }
 
+//! page: resources
+
+/// The keyboard, mouse, gamepads, touch and input actions. An action is a name, such as
+/// `"jump"`, that any mix of keys, buttons and sticks can drive; write game logic against
+/// actions. Bind actions in the `[input]` section of `drift.toml` or from code. Reading an
+/// action the game never declared, such as a misspelt `"jmup"`, raises `drift_unknown_action`,
+/// which lists the actions there are. See [Input](../guides/input.md).
+///
+/// ```rust
+/// @system
+/// fn controls(input: Input, window: Window) {
+///     if input.action_pressed("pause") {
+///         log("paused at " + string(input.mouse_world().x));
+///     }
+/// }
+/// ```
 struct Input { id: int = 0 }
 impl Input {
+    /// Whether the key is held.
+    ///
+    /// ```rust
+    /// if input.key_down(Key::LShift) { speed = speed * 2.0; }
+    /// ```
     fn key_down(self, k: Key) -> bool { return drift::key_state(key_code(k), 0); }
+    /// Whether the key went down this frame.
+    ///
+    /// ```rust
+    /// if input.key_pressed(Key::F1) { show_help = !show_help; }
+    /// ```
     fn key_pressed(self, k: Key) -> bool { return drift::key_state(key_code(k), 1); }
+    /// Whether the key went up this frame.
+    ///
+    /// ```rust
+    /// if input.key_released(Key::Space) { charge = 0.0; }
+    /// ```
     fn key_released(self, k: Key) -> bool { return drift::key_state(key_code(k), 2); }
+    /// Whether the mouse button is held.
+    ///
+    /// ```rust
+    /// if input.mouse_down(MouseButton::Left) { paint(input.mouse_world()); }
+    /// ```
     fn mouse_down(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 0); }
+    /// Whether the mouse button went down this frame.
+    ///
+    /// ```rust
+    /// if input.mouse_pressed(MouseButton::Right) { place_flag(input.mouse_world()); }
+    /// ```
     fn mouse_pressed(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 1); }
+    /// Whether the mouse button went up this frame.
+    ///
+    /// ```rust
+    /// if input.mouse_released(MouseButton::Left) { drop_item(); }
+    /// ```
     fn mouse_released(self, b: MouseButton) -> bool { return drift::mouse_state(mouse_code(b), 2); }
-    // The mouse in logical screen pixels, (0, 0) at the top-left, the
-    // coordinates the HUD and Draw.hud() use.
+    /// The mouse in logical screen pixels, letterbox bars accounted for.
+    ///
+    /// ```rust
+    /// let p = input.mouse_screen();
+    /// ```
     fn mouse_screen(self) -> Vec2 { let v = drift::mouse_vec(0); return Vec2 { x: v[0], y: v[1] }; }
-    // The same point in the world, through the main camera.
+    /// The mouse in world coordinates, through the main camera.
+    ///
+    /// ```rust
+    /// let aim = (input.mouse_world() - t.position).normalized();
+    /// ```
     fn mouse_world(self) -> Vec2 { let v = drift::mouse_vec(1); return Vec2 { x: v[0], y: v[1] }; }
-    // How far the mouse moved this frame, in screen pixels.
+    /// How far the mouse moved this frame.
+    ///
+    /// ```rust
+    /// if input.mouse_delta().length() > 0.0 { show_cursor = true; }
+    /// ```
     fn mouse_delta(self) -> Vec2 { let v = drift::mouse_vec(2); return Vec2 { x: v[0], y: v[1] }; }
+    /// Whether a gamepad button is held. Pads are numbered 0 to 3 and use the Xbox layout:
+    /// `South` is A.
+    ///
+    /// ```rust
+    /// if input.gamepad_down(0, GamepadButton::South) { charge += time.dt; }
+    /// ```
     fn gamepad_down(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 0); }
+    /// Whether a gamepad button went down this frame.
+    ///
+    /// ```rust
+    /// if input.gamepad_pressed(0, GamepadButton::Start) { phase.set(Phase::Paused); }
+    /// ```
     fn gamepad_pressed(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 1); }
+    /// Whether a gamepad button went up this frame.
+    ///
+    /// ```rust
+    /// if input.gamepad_released(0, GamepadButton::South) { jump_held = false; }
+    /// ```
     fn gamepad_released(self, pad: int, b: GamepadButton) -> bool { return drift::pad_state(pad, button_code(b), 2); }
+    /// A stick axis from -1 to 1 (Y down), or a trigger from 0 to 1.
+    ///
+    /// ```rust
+    /// let x = input.gamepad_axis(0, GamepadAxis::LeftX);
+    /// ```
     fn gamepad_axis(self, pad: int, a: GamepadAxis) -> float { return drift::pad_axis(pad, axis_code(a)); }
 
+    /// Adds a key to an action.
+    ///
+    /// ```rust
+    /// input.bind_key("jump", Key::Space);
+    /// ```
     fn bind_key(self, action: string, k: Key) { drift::bind(action, "key:#" + string(key_code(k))); }
+    /// Adds a mouse button to an action.
+    ///
+    /// ```rust
+    /// input.bind_mouse("fire", MouseButton::Left);
+    /// ```
     fn bind_mouse(self, action: string, b: MouseButton) { drift::bind(action, "mouse:#" + string(mouse_code(b))); }
+    /// Adds a gamepad button to an action.
+    ///
+    /// ```rust
+    /// input.bind_button("jump", GamepadButton::South);
+    /// ```
     fn bind_button(self, action: string, b: GamepadButton) { drift::bind(action, "button:#" + string(button_code(b))); }
+    /// A 2D axis from four keys; up is -Y, and diagonal key input has length 1. Calling it
+    /// again for the same name adds another set of keys.
+    ///
+    /// ```rust
+    /// input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
+    /// input.bind_axis2d("move", Key::Left, Key::Right, Key::Up, Key::Down);
+    /// ```
     fn bind_axis2d(self, name: string, left: Key, right: Key, up: Key, down: Key) {
         drift::bind_axis2d_keys(name, key_code(left), key_code(right), key_code(up), key_code(down));
     }
+    /// A gamepad stick as a 2D axis.
+    ///
+    /// ```rust
+    /// input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
+    /// ```
     fn bind_stick(self, name: string, x: GamepadAxis, y: GamepadAxis) { drift::bind_stick(name, axis_code(x), axis_code(y)); }
-    // Actions by name. A name the game never declared, in drift.toml
-    // [input] or with a bind method, raises drift_unknown_action, which lists
-    // the actions there are.
+    /// Whether the action went down this frame.
+    ///
+    /// ```rust
+    /// fn jumped(input: Input) -> bool => input.action_pressed("jump");
+    /// ```
     fn action_pressed(self, name: string) -> bool { return action_state(name, 1); }
+    /// Whether the action is held.
+    ///
+    /// ```rust
+    /// emitter.playing = input.action_held("thrust");
+    /// ```
     fn action_held(self, name: string) -> bool { return action_state(name, 0); }
+    /// Whether the action went up this frame.
+    ///
+    /// ```rust
+    /// if input.action_released("jump") && v.linear.y < 0.0 { v.linear = vec2(v.linear.x, v.linear.y * 0.5); }
+    /// ```
     fn action_released(self, name: string) -> bool { return action_state(name, 2); }
+    /// The action's analog value from 0 to 1, for triggers.
+    ///
+    /// ```rust
+    /// let throttle = input.action_value("accelerate");
+    /// ```
     fn action_value(self, name: string) -> float { return action_number(name, drift::action_value(name)); }
+    /// A 2D axis bound with `bind_axis2d` or `bind_stick`.
+    ///
+    /// ```rust
+    /// v.linear = input.axis2d("move") * 200.0;
+    /// ```
     fn axis2d(self, name: string) -> Vec2 {
         let v = drift::action_axis2d(name);
         if v.len() < 2 {
@@ -136,6 +333,7 @@ impl Input {
     }
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn action_state(name: string, which: int) -> bool {
     let s = drift::action_state(name, which);
     if s < 0 {
@@ -143,6 +341,8 @@ fn action_state(name: string, which: int) -> bool {
     }
     return s == 1;
 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn action_number(name: string, v: float[]) -> float {
     if v.len() == 0 {
         throw drift::action_error(name);
@@ -150,8 +350,28 @@ fn action_number(name: string, v: float[]) -> float {
     return v[0];
 }
 
+/// Makes textures, sounds, images and maps from data, and loads the kinds of file that
+/// `texture(path)` and `sound(path)` do not. Loading the same path again returns the same
+/// asset. See [Assets](../concepts/assets.md).
+///
+/// ```rust
+/// @system(schedule: Schedule::Startup)
+/// fn load(cmd: Commands, assets: Assets) {
+///     let map = assets.tilemap("assets/level1.tmj");
+///     cmd.spawn([at(0.0, 0.0), Tilemap { map: map, .. }]);
+/// }
+/// ```
 struct Assets { id: int = 0 }
 impl Assets {
+    /// A texture from colors, row by row from the top-left.
+    ///
+    /// ```rust
+    /// let pixels: Color[] = [];
+    /// for i in range(16 * 16) {
+    ///     pixels.push(rgb(255, 255, 255));
+    /// }
+    /// let white = assets.create_texture(16, 16, pixels);
+    /// ```
     fn create_texture(self, w: int, h: int, pixels: Color[]) -> Texture {
         let flat: float[] = [];
         for c in pixels {
@@ -162,12 +382,35 @@ impl Assets {
         }
         return Texture { id: drift::texture_create(w, h, flat) };
     }
+    /// A mono sound from samples between -1 and 1 at `rate` samples per second, for blips made
+    /// in code.
+    ///
+    /// ```rust
+    /// let samples: float[] = [];
+    /// for i in range(2205) {
+    ///     samples.push(sin(float(i) * 0.12) * 0.3);
+    /// }
+    /// let beep = assets.create_sound(samples, 22050);
+    /// ```
     fn create_sound(self, samples: float[], rate: int) -> Sound { return Sound { id: drift::sound_create(samples, rate) }; }
-    // A Tiled map (.tmj, .json) or the first level of an LDtk project.
+    /// A Tiled map (.tmj, .json) or the first level of an LDtk project.
+    ///
+    /// ```rust
+    /// let map = assets.tilemap("assets/level1.tmj");
+    /// ```
     fn tilemap(self, path: string) -> Map { return load_map(path, ""); }
+    /// One level of an LDtk project, by its identifier.
+    ///
+    /// ```rust
+    /// let map = assets.ldtk_level("assets/world.ldtk", "Level_2");
+    /// ```
     fn ldtk_level(self, path: string, level: string) -> Map { return load_map(path, level); }
-    // An empty map of tile layers over one tileset image, for levels made in
-    // code. Tile ids count from 1 at the image's top-left, left to right.
+    /// An empty map of tile layers over one tileset image, for levels made in code. Tile ids
+    /// count from 1 at the image's top-left, left to right.
+    ///
+    /// ```rust
+    /// let map = assets.create_tilemap(40, 25, 16, art.tiles, ["Ground", "Walls"]);
+    /// ```
     fn create_tilemap(self, width: int, height: int, tile_size: int, tileset: Texture, layers: string[]) -> Map {
         let id = drift::map_create(width, height, tile_size, tile_size, tileset.id, layers);
         if id == 0 {
@@ -177,64 +420,174 @@ impl Assets {
     }
 }
 
+/// Screen flashes and shakes, particle bursts and emitter control. See [Particles and
+/// Effects](../guides/effects.md).
+///
+/// ```rust
+/// @system
+/// fn crash(_: Contact<Player, Rock>, effects: Effects) {
+///     effects.flash(rgb(255, 60, 60), 0.3);
+/// }
+/// ```
 struct Effects { id: int = 0 }
 impl Effects {
+    /// Covers the screen in a color that fades back to the picture over `seconds`.
+    ///
+    /// ```rust
+    /// effects.flash(rgb(255, 255, 255), 0.2);
+    /// ```
     fn flash(self, c: Color, seconds: float) { drift::flash(c.r, c.g, c.b, c.a, seconds); }
+    /// Shakes a camera entity; the shake dies away by itself.
+    ///
+    /// ```rust
+    /// effects.shake(camera, 8.0);
+    /// ```
     fn shake(self, camera: Entity, intensity: float) { drift::shake(camera.id, intensity); }
-    // A one-off burst of `count` particles that cleans itself up.
+    /// A one-off burst of `count` particles that cleans itself up.
+    ///
+    /// ```rust
+    /// effects.burst(t.position, ParticleEmitter {
+    ///     speed_min: 80.0, speed_max: 220.0, lifetime_max: 0.6,
+    ///     color_start: rgb(255, 240, 200), color_end: rgba(255, 80, 0, 0), ..
+    /// }, 40);
+    /// ```
     fn burst(self, pos: Vec2, emitter: ParticleEmitter, count: int) { drift::burst(pos, emitter, count); }
 }
 
-// A save slot in the per-user data directory named after [project] in
-// drift.toml: `save`, or the one `slot(name)` opens.
+/// A key-value store kept between runs. On the desktop it is a JSON file in the user's data
+/// folder, named after `organization` and `name` in `[project]`; in the browser it lives in the
+/// page's storage. Values change in memory, and `flush()` writes them. See
+/// [Saving](../guides/saving.md).
+///
+/// ```rust
+/// @system(on_enter: Phase::Over)
+/// fn keep_best(game: Game, save: Save) {
+///     if game.score > save.get_int("best", 0) {
+///         save.set_int("best", game.score);
+///         save.flush();
+///     }
+/// }
+/// ```
 struct Save { name: string = "" }
 impl Save {
+    /// The int under `key`, or `fallback` when there is none or it holds another type.
+    ///
+    /// ```rust
+    /// let best = save.get_int("best", 0);
+    /// ```
     fn get_int(self, key: string, fallback: int) -> int { return drift::save_get_int(self.name, key, fallback); }
+    /// Stores an int under `key`.
+    ///
+    /// ```rust
+    /// save.set_int("level", 3);
+    /// ```
     fn set_int(self, key: string, v: int) { drift::save_set_int(self.name, key, v); }
+    /// The float under `key`, or `fallback`.
+    ///
+    /// ```rust
+    /// let volume = save.get_float("volume", 0.8);
+    /// ```
     fn get_float(self, key: string, fallback: float) -> float { return drift::save_get_float(self.name, key, fallback); }
+    /// Stores a float under `key`.
+    ///
+    /// ```rust
+    /// save.set_float("best_time", 42.5);
+    /// ```
     fn set_float(self, key: string, v: float) { drift::save_set_float(self.name, key, v); }
+    /// The string under `key`, or `fallback`.
+    ///
+    /// ```rust
+    /// let name = save.get_string("name", "Player");
+    /// ```
     fn get_string(self, key: string, fallback: string) -> string { return drift::save_get_string(self.name, key, fallback); }
+    /// Stores a string under `key`.
+    ///
+    /// ```rust
+    /// save.set_string("name", "Ada");
+    /// ```
     fn set_string(self, key: string, v: string) { drift::save_set_string(self.name, key, v); }
+    /// The bool under `key`, or `fallback`.
+    ///
+    /// ```rust
+    /// let music_on = save.get_bool("music", true);
+    /// ```
     fn get_bool(self, key: string, fallback: bool) -> bool { return drift::save_get_bool(self.name, key, fallback); }
+    /// Stores a bool under `key`.
+    ///
+    /// ```rust
+    /// save.set_bool("music", false);
+    /// ```
     fn set_bool(self, key: string, v: bool) { drift::save_set_bool(self.name, key, v); }
+    /// Whether a value is stored under `key`.
+    ///
+    /// ```rust
+    /// if !save.has("tutorial_done") { phase.set(Phase::Tutorial); }
+    /// ```
     fn has(self, key: string) -> bool { return drift::save_has(self.name, key); }
+    /// Removes the value under `key`.
+    ///
+    /// ```rust
+    /// save.erase("checkpoint");
+    /// ```
     fn erase(self, key: string) { drift::save_erase(self.name, key); }
-    // Removes every key.
+    /// Removes every key.
+    ///
+    /// ```rust
+    /// save.clear();
+    /// save.flush();
+    /// ```
     fn clear(self) { drift::save_clear(self.name); }
-    // Writes the slot to disk.
+    /// Writes the slot to disk.
+    ///
+    /// ```rust
+    /// save.set_int("coins", wallet.coins);
+    /// save.flush();
+    /// ```
     fn flush(self) { drift::save_flush(self.name); }
-    // Another slot in the same directory, such as "slot2".
+    /// Another slot in the same directory, such as "slot2".
+    ///
+    /// ```rust
+    /// let slot = save.slot("slot2");
+    /// slot.set_int("level", 4);
+    /// slot.flush();
+    /// ```
     fn slot(self, name: string) -> Save { return Save { name: name }; }
 }
 
 // ---- Platform ----
 
-// The local date and time. month counts from 1, weekday from 0 (Sunday).
+//! page: values
+
+/// The local date and time. month counts from 1, weekday from 0 (Sunday).
 struct LocalTime {
-    year: int = 0, month: int = 0, day: int = 0,
-    hour: int = 0, minute: int = 0, second: int = 0,
+    year: int = 0,
+    month: int = 0,
+    day: int = 0,
+    hour: int = 0,
+    minute: int = 0,
+    second: int = 0,
     weekday: int = 0,
-    // Seconds since 1970-01-01 UTC.
+    /// Seconds since 1970-01-01 UTC.
     unix: float = 0.0,
 }
 
-// What the game runs on, and the browser page around it.
+/// What the game runs on, and the browser page around it.
 struct Platform { id: int = 0 }
 impl Platform {
-    // True in a browser.
+    /// True in a browser.
     fn is_web(self) -> bool { return drift::is_web(); }
-    // True when the device has a touch screen.
+    /// True when the device has a touch screen.
     fn is_touch(self) -> bool { return drift::is_touch(); }
-    // Opens a link in a new tab or the default browser. Browsers block it
-    // unless the player tapped, clicked or pressed a key just before.
+    /// Opens a link in a new tab or the default browser. Browsers block it unless the player
+    /// tapped, clicked or pressed a key just before.
     fn open_url(self, url: string) { drift::open_url(url); }
-    // Puts text on the clipboard.
+    /// Puts text on the clipboard.
     fn copy(self, text: string) { drift::clipboard_set(text); }
-    // The clipboard's text. In a browser: the text the player last pasted
-    // into the page, since pages cannot read the clipboard unasked.
+    /// The clipboard's text. In a browser: the text the player last pasted into the page, since
+    /// pages cannot read the clipboard unasked.
     fn pasted(self) -> string { return drift::clipboard_get(); }
-    // A value from the page address: query("level") is "3" for
-    // index.html?level=3, "" when absent, and always "" on the desktop.
+    /// A value from the page address: query("level") is "3" for index.html?level=3, "" when
+    /// absent, and always "" on the desktop.
     fn query(self, name: string) -> string { return drift::page_query(name); }
     fn local_time(self) -> LocalTime {
         let t = drift::local_time();
@@ -248,6 +601,8 @@ impl Platform {
 
 // ---- The window ----
 
+//! page: resources
+
 enum ScaleMode { Letterbox, Stretch, Integer, Expand }
 enum Cursor { Default, Pointer, Text, Crosshair, Move, Wait, NotAllowed }
 
@@ -259,17 +614,17 @@ impl Window {
         let code = match m { ScaleMode::Letterbox => 0.0, ScaleMode::Stretch => 1.0, ScaleMode::Integer => 2.0, ScaleMode::Expand => 3.0 };
         self.op("scale_mode", [code], "");
     }
-    // The logical resolution the game draws at.
+    /// The logical resolution the game draws at.
     fn set_logical_size(self, w: int, h: int) { self.op("logical_size", [float(w), float(h)], ""); }
-    // The window's own size in pixels; in the browser, the canvas.
+    /// The window's own size in pixels; in the browser, the canvas.
     fn size(self) -> Vec2 {
         let v = self.op("size", [], "");
         return Vec2 { x: v[0], y: v[1] };
     }
     fn set_size(self, w: int, h: int) { self.op("set_size", [float(w), float(h)], ""); }
     fn fullscreen(self) -> bool { return self.op("fullscreen", [], "")[0] > 0.5; }
-    // Browsers allow fullscreen only right after a tap, click or key; asked
-    // for at another time, it waits for the next one.
+    /// Browsers allow fullscreen only right after a tap, click or key; asked for at another
+    /// time, it waits for the next one.
     fn set_fullscreen(self, on: bool) { self.op("set_fullscreen", [flag(on)], ""); }
     fn show_cursor(self, visible: bool) { self.op("show_cursor", [flag(visible)], ""); }
     fn set_cursor(self, c: Cursor) {
@@ -279,9 +634,9 @@ impl Window {
         };
         self.op("cursor", [code], "");
     }
-    // Draw calls and sprites in the last frame.
+    /// Draw calls and sprites in the last frame.
     fn draw_calls(self) -> int { return int(self.op("stats", [], "")[0]); }
     fn sprite_count(self) -> int { return int(self.op("stats", [], "")[1]); }
-    // "gl" or "webgpu".
+    /// "gl" or "webgpu".
     fn backend(self) -> string { return drift::window_backend(); }
 }

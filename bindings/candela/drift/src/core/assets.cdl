@@ -1,48 +1,120 @@
-// Loading textures and sounds.
+//! Loading textures and sounds.
 
 import "drift/core/values" { * };
 import "drift/core/audio" { * };
 
 // ---- Assets ----
 
-struct Texture { id: int = 0 }
-// The texture of an image file, loaded once per path. Works anywhere,
-// field defaults included: `pipe: Texture = texture("assets/pipe.png")`.
+//! page: assets
+
+/// An image the engine can draw. Load one with `texture(path)`, make one with
+/// `Assets.create_texture` or `Assets.render_target`, or from an [`Image`](#image).
+///
+/// ```rust
+/// cmd.spawn([at(0.0, 0.0), Sprite { image: art.ship, .. }]);
+/// ```
+struct Texture {
+    /// The engine's handle; `Texture {}` is no texture
+    id: int = 0,
+}
+
+/// Works anywhere, field defaults included, and hands back the same texture for the same path.
+/// A file that does not load stops the game with the path and the error. Images load from PNG,
+/// JPG, BMP, TGA and GIF files.
+///
+/// ```rust
+/// @resource
+/// struct Art { ship: Texture = texture("assets/ship.png") }
+/// ```
 fn texture(path: string) -> Texture { return Texture { id: drift::texture_load(path) }; }
 impl Texture {
+    /// Width and height in pixels.
+    ///
+    /// ```rust
+    /// let s = art.ship.size();
+    /// ```
     fn size(self) -> Vec2 {
         let s = drift::texture_size(self.id);
         return Vec2 { x: s[0], y: s[1] };
     }
+    /// How the texture looks when scaled. `Filter::Nearest`, the default, keeps pixel art
+    /// crisp; `Filter::Linear` smooths it.
+    ///
+    /// ```rust
+    /// art.photo.set_filter(Filter::Linear);
+    /// ```
     fn set_filter(self, f: Filter) {
         let code = match f { Filter::Nearest => 0, Filter::Linear => 1 };
         drift::texture_filter(self.id, code);
     }
 }
 
-struct Font { id: int = 0 }
+/// A font for `Text.font`. `Font {}` is the built-in font.
+///
+/// ```rust
+/// Text { value: "Hello", font: Font { .. }, .. }
+/// ```
+struct Font {
+    /// The engine's handle
+    id: int = 0,
+}
 
-struct Sound { id: int = 0 }
-// The sound in a WAV, OGG or MP3 file, loaded once per path.
+/// A sound the engine can play. Load one with `sound(path)` or make one with
+/// `Assets.create_sound`.
+///
+/// ```rust
+/// sfx.jump.play();
+/// ```
+struct Sound {
+    /// The engine's handle
+    id: int = 0,
+}
+
+/// Works anywhere, field defaults included. The whole file is decoded when it loads.
+///
+/// ```rust
+/// @resource
+/// struct Sfx { jump: Sound = sound("assets/jump.wav") }
+/// ```
 fn sound(path: string) -> Sound { return Sound { id: drift::sound_load(path) }; }
 impl Sound {
-    // Plays at full volume on the sfx bus.
+    /// Plays the sound once at full volume and returns its `Voice`.
+    ///
+    /// ```rust
+    /// sfx.coin.play();
+    /// ```
     fn play(self) -> Voice { return self.play_with(PlayOptions { .. }); }
+    /// Plays the sound with a volume, a pitch, or looping.
+    ///
+    /// ```rust
+    /// sfx.coin.play_with(PlayOptions { volume: 0.6, pitch: 1.2, .. });
+    /// ```
     fn play_with(self, o: PlayOptions) -> Voice {
         return Voice { id: drift::voice_play(self.id, o.bus.id, o.volume, o.pan, o.pitch, o.looping, o.fade_in,
                                              o.priority) };
     }
 }
-// How one playback sounds. `bus` empty plays on the sfx bus; `pan` is -1
-// (left) to 1 (right); `pitch` 2.0 is an octave up and twice as fast;
-// `fade_in` in seconds. When every voice is busy, a sound with a higher
-// `priority` takes the place of a lower one.
+
+/// How one playback sounds. `bus` empty plays on the sfx bus; `pan` is -1 (left) to 1 (right);
+/// `pitch` 2.0 is an octave up and twice as fast; `fade_in` in seconds. When every voice is
+/// busy, a sound with a higher `priority` takes the place of a lower one.
+///
+/// ```rust
+/// sfx.engine.play_with(PlayOptions { looping: true, volume: 0.4, .. });
+/// ```
 struct PlayOptions {
+    /// 0 to 1
     volume: float = 1.0,
+    /// Playback speed; 2 is an octave up
     pitch: float = 1.0,
+    /// Plays again when it ends, until stopped
     looping: bool = false,
+    /// -1 left to 1 right
     pan: float = 0.0,
+    /// The bus it plays on; `Bus {}` is the sfx bus
     bus: Bus = Bus { .. },
+    /// Seconds to fade in
     fade_in: float = 0.0,
+    /// Keeps its voice over lower priorities when every voice is busy
     priority: int = 0,
 }

@@ -1,23 +1,37 @@
-// drift/debug: an on-screen debug overlay and time controls that work in
-// every build, the browser included.
-//
-// `import "drift/debug" { * };` adds the overlay (F2): frames per second,
-// entity count, the time scale, watched resource fields and recent
-// messages. F3 draws the colliders, F4 toggles slow motion, F6 freezes
-// time and F7 steps one frame while frozen. drift.toml [debug] sets
-// `shown`, `keys` and `slow`.
+//! drift/debug: an on-screen debug overlay and time controls that work in
+//! every build, the browser included.
+//!
+//! `import "drift/debug" { * };` adds the overlay (F2): frames per second,
+//! entity count, the time scale, watched resource fields and recent
+//! messages. F3 draws the colliders, F4 toggles slow motion, F6 freezes
+//! time and F7 steps one frame while frozen. drift.toml [debug] sets
+//! `shown`, `keys` and `slow`.
+
+//! page: debug
+//! # Debug Overlay: drift/debug
+//!
+//! An on-screen overlay and time controls that work in every build, the browser included:
+//! frames per second, the entity count, the time scale, watched resource fields and recent
+//! messages, with keys for collider outlines, slow motion, freezing and stepping.
+//!
+//! ```rust
+//! import "drift" { * };
+//! import "drift/debug" { * };
+//! ```
+//!
+//! See [Debugging](../guides/debugging.md#the-debug-overlay-in-every-build).
 
 import "drift" { * };
 
 @settings(section: "debug")
 struct Debug {
-    // The overlay shows.
+    /// The overlay shows.
     shown: bool = true,
-    // The F-keys work. Turn them off for a release.
+    /// The F-keys work. Turn them off for a release.
     keys: bool = true,
-    // The time scale of slow motion.
+    /// The time scale of slow motion.
     slow: float = 0.25,
-    // Resource fields the overlay shows; add them with watch<Game>("score").
+    /// Resource fields the overlay shows; add them with watch<Game>("score").
     watches: ResourceField[] = [],
     lines: string[] = [],
     ages: float[] = [],
@@ -29,10 +43,9 @@ struct Debug {
 }
 
 impl Debug {
-    // Shows a field of the resource T on the overlay: watch<Game>("score"),
-    // or watch<Game>("player.hp") for a field of a struct field. A type that
-    // is not a resource, or a field it does not have, raises
-    // drift_not_a_resource or drift_no_such_field.
+    /// Shows a field of the resource T on the overlay: watch<Game>("score"), or
+    /// watch<Game>("player.hp") for a field of a struct field. A type that is not a resource,
+    /// or a field it does not have, raises drift_not_a_resource or drift_no_such_field.
     fn watch<T>(self, path: string) {
         let f = resource_field<T>(path);
         for w in self.watches {
@@ -42,7 +55,7 @@ impl Debug {
         }
         self.watches.push(f);
     }
-    // A line on the overlay that goes after five seconds; also logged.
+    /// A line on the overlay that goes after five seconds; also logged.
     fn print(self, text: string) {
         log(text);
         self.lines.push(text);

@@ -1,16 +1,18 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Screens: drift/screens
 
-A title screen, play, pause and game over, with fades and wipes between them. The module adds the `Screen` state and the `Screens` resource that changes it behind a transition.
+A title screen, play, pause and game over, with fades and wipes between them. The module
+adds the `Screen` state and the `Screens` resource that changes it behind a transition.
 
 ```rust
 import "drift" { * };
 import "drift/screens" { * };
 ```
 
-Mark game systems with `in_state: [Screen::Playing], run_if: [running]` so they stop on other screens and while paused. See [Building Blocks](../guides/building-blocks.md).
+Mark game systems with `in_state: [Screen::Playing], run_if: [running]` so they stop on
+other screens and while paused. See [Building Blocks](../guides/building-blocks.md).
 
 ## Screen
 
@@ -28,7 +30,9 @@ enum TransitionKind { Fade, Wipe, Cut }
 
 ## Screens
 
-Changes screens behind a transition: go() covers the window, switches the Screen state once it is covered, then uncovers it. drift.toml [screens] can set `color`, `seconds` (each way) and `kind`.
+Changes screens behind a transition: go() covers the window, switches the Screen state once
+it is covered, then uncovers it. drift.toml [screens] can set `color`, `seconds` (each way)
+and `kind`.
 
 ```rust
 @settings(section: "screens")
@@ -87,7 +91,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## OnlyIn
 
-Despawns the entity when the game leaves `screen`: menus and anything else that belongs to one screen.
+Despawns the entity when the game leaves `screen`: menus and anything else that belongs to
+one screen.
 
 ```rust
 @component
@@ -107,7 +112,9 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Pause
 
-Whether the game is paused. Escape, P and the gamepad's Start button pause and resume while the Screen is Playing; pausing freezes game time and shows a menu with Resume and Quit. `menu` off pauses without it.
+Whether the game is paused. Escape, P and the gamepad's Start button pause and resume while
+the Screen is Playing; pausing freezes game time and shows a menu with Resume and Quit.
+`menu` off pauses without it.
 
 ```rust
 @resource
@@ -186,7 +193,8 @@ fn scr_buttons(p: ButtonPressed, screens: Screens, pause: Pause, time: Time)
 
 A system the module adds: it runs in every game that imports the module.
 
-The buttons the screens put up: "play" and "retry" start a game, "title" goes back to the title, "resume" ends a pause.
+The buttons the screens put up: "play" and "retry" start a game, "title" goes back to the
+title, "resume" ends a pause.
 
 ## title_screen
 
@@ -194,7 +202,8 @@ The buttons the screens put up: "play" and "retry" start a game, "title" goes ba
 fn title_screen(cmd: Commands, theme: Theme, title: string, subtitle: string)
 ```
 
-A title, a line under it and a Play button, gone when the title screen ends. Call it from an `on_enter: Screen::Title` system.
+A title, a line under it and a Play button, gone when the title screen ends. Call it from an
+`on_enter: Screen::Title` system.
 
 ## game_over_screen
 
@@ -202,4 +211,5 @@ A title, a line under it and a Play button, gone when the title screen ends. Cal
 fn game_over_screen(cmd: Commands, theme: Theme, title: string, detail: string)
 ```
 
-A heading, a line of detail (the score) and Play again and Title buttons, gone when the screen ends. Call it from an `on_enter: Screen::GameOver` system.
+A heading, a line of detail (the score) and Play again and Title buttons, gone when the
+screen ends. Call it from an `on_enter: Screen::GameOver` system.

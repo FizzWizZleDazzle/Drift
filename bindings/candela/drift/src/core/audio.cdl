@@ -1,20 +1,66 @@
-// Sound, music and audio buses.
+//! Sound, music and audio buses.
 
 import "drift/core/assets" { * };
 
 // ---- Audio ----
 
-// One playback of a sound, from Sound.play. Every method is safe after the
-// sound ended; it then does nothing.
+//! page: assets
+
+/// One playback of a sound, from Sound.play. Every method is safe after the sound ended; it
+/// then does nothing.
+///
+/// ```rust
+/// @resource
+/// struct Engine { hum: Voice = Voice { .. } }
+///
+/// @system(schedule: Schedule::Startup)
+/// fn start_engine(sfx: Sfx, engine: Engine) {
+///     engine.hum = sfx.engine.play_with(PlayOptions { looping: true, volume: 0.4, .. });
+/// }
+/// ```
 struct Voice { id: int = 0 }
 impl Voice {
+    /// Stops it, fading out over `fade` seconds.
+    ///
+    /// ```rust
+    /// engine.hum.stop(0.5);
+    /// ```
     fn stop(self, fade_seconds: float) { drift::voice_op(self.id, 0, fade_seconds, 0.0); }
+    /// Pauses it, fading out over `fade` seconds.
+    ///
+    /// ```rust
+    /// engine.hum.pause(0.2);
+    /// ```
     fn pause(self, fade_seconds: float) { drift::voice_op(self.id, 1, fade_seconds, 0.0); }
+    /// Resumes it, fading in over `fade` seconds.
+    ///
+    /// ```rust
+    /// engine.hum.resume(0.2);
+    /// ```
     fn resume(self, fade_seconds: float) { drift::voice_op(self.id, 2, fade_seconds, 0.0); }
-    // Volume 0 to 1, reached over `fade_seconds`.
+    /// Volume 0 to 1, reached over `fade_seconds`.
+    ///
+    /// ```rust
+    /// engine.hum.set_volume(0.1, 1.0);
+    /// ```
     fn set_volume(self, volume: float, fade_seconds: float) { drift::voice_op(self.id, 3, volume, fade_seconds); }
+    /// Pan from -1 (left) to 1 (right).
+    ///
+    /// ```rust
+    /// engine.hum.set_pan(-0.5);
+    /// ```
     fn set_pan(self, pan: float) { drift::voice_op(self.id, 4, pan, 0.0); }
+    /// Playback speed; 2 is an octave up.
+    ///
+    /// ```rust
+    /// engine.hum.set_pitch(1.0 + speed / 400.0);
+    /// ```
     fn set_pitch(self, pitch: float) { drift::voice_op(self.id, 5, pitch, 0.0); }
+    /// Whether it plays again when it ends.
+    ///
+    /// ```rust
+    /// engine.hum.set_looping(false);
+    /// ```
     fn set_looping(self, looping: bool) {
         let v = 0.0;
         if looping {
@@ -22,21 +68,42 @@ impl Voice {
         }
         drift::voice_op(self.id, 6, v, 0.0);
     }
-    // Until it ends or is stopped; a paused voice counts as playing.
+    /// Until it ends or is stopped; a paused voice counts as playing.
+    ///
+    /// ```rust
+    /// if !voice.playing() { voice = sfx.alarm.play(); }
+    /// ```
     fn playing(self) -> bool { return drift::voice_op(self.id, 7, 0.0, 0.0) > 0.5; }
+    /// Whether it is paused.
+    ///
+    /// ```rust
+    /// if engine.hum.paused() { engine.hum.resume(0.2); }
+    /// ```
     fn paused(self) -> bool { return drift::voice_op(self.id, 8, 0.0, 0.0) > 0.5; }
 }
 
 impl Sound {
-    // Length in seconds.
+    /// Length in seconds.
+    ///
+    /// ```rust
+    /// let seconds = sfx.speech.duration();
+    /// ```
     fn duration(self) -> float { return drift::sound_info(self.id, 0, 0); }
-    // At most `n` of this sound at once; another start fades out the
-    // oldest. 0 for no limit.
+    /// At most `n` of this sound at once; another start fades out the oldest. 0 for no limit.
+    ///
+    /// ```rust
+    /// sfx.step.set_max_instances(3);
+    /// ```
     fn set_max_instances(self, n: int) { drift::sound_info(self.id, 1, n); }
 }
 
-// A long track, decoded while it plays instead of all at load, loaded once
-// per path. Works anywhere, field defaults included.
+/// A long track, decoded while it plays instead of all at load, loaded once per path. Works
+/// anywhere, field defaults included.
+///
+/// ```rust
+/// @resource
+/// struct Tracks { theme: Sound = music("assets/theme.ogg") }
+/// ```
 fn music(path: string) -> Sound {
     let id = drift::music_load(path);
     if id == 0 {
@@ -45,20 +112,60 @@ fn music(path: string) -> Sound {
     return Sound { id: id };
 }
 
-// A mixer bus. Buses form a tree under master; volume, mute and pause
-// apply to everything below.
+/// A mixer bus. Buses form a tree under master; volume, mute and pause apply to everything
+/// below.
+///
+/// ```rust
+/// let voices = audio.bus("voice", Bus { .. });
+/// voices.set_volume(options.voice_volume, 0.0);
+/// ```
 struct Bus { id: int = 0 }
 impl Bus {
+    /// Volume 0 to 1, reached over `fade` seconds.
+    ///
+    /// ```rust
+    /// audio.music_bus().set_volume(0.3, 0.5);
+    /// ```
     fn set_volume(self, volume: float, fade_seconds: float) { drift::bus_op(self.id, 0, volume, fade_seconds); }
+    /// The bus's volume.
+    ///
+    /// ```rust
+    /// let v = audio.music_bus().volume();
+    /// ```
     fn volume(self) -> float { return drift::bus_op(self.id, 1, 0.0, 0.0); }
+    /// Mutes or unmutes everything on the bus.
+    ///
+    /// ```rust
+    /// audio.master_bus().set_muted(true);
+    /// ```
     fn set_muted(self, muted: bool) { drift::bus_op(self.id, 2, bool_float(muted), 0.0); }
+    /// Whether the bus is muted.
+    ///
+    /// ```rust
+    /// let silent = audio.master_bus().muted();
+    /// ```
     fn muted(self) -> bool { return drift::bus_op(self.id, 3, 0.0, 0.0) > 0.5; }
+    /// Pauses or resumes everything on the bus.
+    ///
+    /// ```rust
+    /// audio.sfx_bus().set_paused(true);
+    /// ```
     fn set_paused(self, paused: bool) { drift::bus_op(self.id, 4, bool_float(paused), 0.0); }
+    /// Whether the bus is paused.
+    ///
+    /// ```rust
+    /// if audio.sfx_bus().paused() { log("sounds paused"); }
+    /// ```
     fn paused(self) -> bool { return drift::bus_op(self.id, 5, 0.0, 0.0) > 0.5; }
-    // Stops every sound on this bus and the buses below it.
+    /// Stops every sound on this bus and the buses below it.
+    ///
+    /// ```rust
+    /// audio.sfx_bus().stop(0.2);
+    /// ```
     fn stop(self, fade_seconds: float) { drift::bus_op(self.id, 6, fade_seconds, 0.0); }
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn bool_float(b: bool) -> float {
     if b {
         return 1.0;
@@ -66,15 +173,35 @@ fn bool_float(b: bool) -> float {
     return 0.0;
 }
 
-// The mixer: music, playlists and buses.
+//! page: resources
+
+/// The mixer: one music track at a time on the music bus, playlists, and the buses every sound
+/// plays on. See [Sound and Music](../guides/sound.md).
+///
+/// ```rust
+/// @resource
+/// struct Tracks { theme: Sound = music("assets/theme.ogg") }
+///
+/// @system(schedule: Schedule::Startup)
+/// fn start_music(tracks: Tracks, audio: Audio) {
+///     audio.play_music(tracks.theme, 0.0, true);
+/// }
+/// ```
 struct Audio { id: int = 0 }
 impl Audio {
-    // One music track at a time on the music bus; another crossfades over
-    // `crossfade_seconds`.
+    /// One music track at a time on the music bus; another crossfades over `crossfade_seconds`.
+    ///
+    /// ```rust
+    /// audio.play_music(tracks.boss, 2.0, true);   // crossfade over two seconds
+    /// ```
     fn play_music(self, track: Sound, crossfade_seconds: float, looping: bool) {
         drift::music_op(0, track.id, crossfade_seconds, looping);
     }
-    // Tracks one after another, `crossfade_seconds` apart (0 is gapless).
+    /// Tracks one after another, `crossfade_seconds` apart (0 is gapless).
+    ///
+    /// ```rust
+    /// audio.play_playlist([tracks.a, tracks.b, tracks.c], 0.0, true, true);
+    /// ```
     fn play_playlist(self, tracks: Sound[], crossfade_seconds: float, looping: bool, shuffle: bool) {
         let ids: int[] = [];
         for t in tracks {
@@ -82,42 +209,127 @@ impl Audio {
         }
         drift::music_playlist(ids, crossfade_seconds, looping, shuffle, 1.0);
     }
+    /// Skips to the next track of the playlist.
+    ///
+    /// ```rust
+    /// audio.next_track();
+    /// ```
     fn next_track(self) { drift::music_op(5, 0, 0.0, false); }
+    /// Stops the music, fading out over `fade` seconds.
+    ///
+    /// ```rust
+    /// audio.stop_music(1.0);
+    /// ```
     fn stop_music(self, fade_seconds: float) { drift::music_op(1, 0, fade_seconds, false); }
+    /// Pauses the music, fading out over `fade` seconds.
+    ///
+    /// ```rust
+    /// audio.pause_music(0.3);
+    /// ```
     fn pause_music(self, fade_seconds: float) { drift::music_op(2, 0, fade_seconds, false); }
+    /// Resumes paused music, fading in over `fade` seconds.
+    ///
+    /// ```rust
+    /// audio.resume_music(0.3);
+    /// ```
     fn resume_music(self, fade_seconds: float) { drift::music_op(3, 0, fade_seconds, false); }
+    /// Whether music is playing.
+    ///
+    /// ```rust
+    /// if !audio.music_playing() { audio.play_music(tracks.theme, 0.0, true); }
+    /// ```
     fn music_playing(self) -> bool { return drift::music_op(4, 0, 0.0, false) > 0.5; }
+    /// The bus every other bus sits under.
+    ///
+    /// ```rust
+    /// audio.master_bus().set_volume(0.5, 0.0);
+    /// ```
     fn master_bus(self) -> Bus { return Bus { id: drift::audio_bus("master", 0) }; }
+    /// The bus music plays on.
+    ///
+    /// ```rust
+    /// audio.music_bus().set_volume(0.3, 0.5);   // duck the music under a dialog
+    /// ```
     fn music_bus(self) -> Bus { return Bus { id: drift::audio_bus("music", 0) }; }
+    /// The bus sounds play on unless told otherwise.
+    ///
+    /// ```rust
+    /// audio.sfx_bus().set_paused(true);   // pause the game's sounds, keep the music
+    /// ```
     fn sfx_bus(self) -> Bus { return Bus { id: drift::audio_bus("sfx", 0) }; }
-    // The bus of that name under `parent` (Bus {} for master), made the
-    // first time it is asked for.
+    /// The bus of that name under `parent` (Bus {} for master), made the first time it is asked
+    /// for.
+    ///
+    /// ```rust
+    /// let voice = audio.bus("voice", Bus { .. });
+    /// sfx.line.play_with(PlayOptions { bus: voice, .. });
+    /// ```
     fn bus(self, name: string, parent: Bus) -> Bus { return Bus { id: drift::audio_bus(name, parent.id) }; }
-    // false when no output device opened; sounds then advance silently.
+    /// false when no output device opened; sounds then advance silently.
+    ///
+    /// ```rust
+    /// if !audio.has_device() { log("no sound"); }
+    /// ```
     fn has_device(self) -> bool { return drift::music_op(6, 0, 0.0, false) > 0.5; }
 }
 
-enum Rolloff { Linear, Inverse }
+//! page: enums
 
-// Plays a sound from the entity while it lives. With `spatial`, volume
-// and pan follow its position relative to the AudioListener (or the main
-// camera): full inside `min_distance`, silent past `max_distance`. The
-// engine reads volume, pitch and looping every frame; set `play` to start
-// the sound again.
+/// How an [`AudioSource`](components.md#audiosource) gets quieter with distance.
+///
+/// ```rust
+/// AudioSource { spatial: true, rolloff: Rolloff::Inverse, .. }
+/// ```
+enum Rolloff {
+    /// Evenly from `min_distance` to `max_distance`
+    Linear,
+    /// Quickly near, slowly far
+    Inverse,
+}
+
+//! page: components
+
+/// Plays a sound from the entity while it lives. With `spatial`, volume and pan follow its
+/// position relative to the AudioListener (or the main camera): full inside `min_distance`,
+/// silent past `max_distance`. The engine reads volume, pitch and looping every frame; set
+/// `play` to start the sound again.
+///
+/// ```rust
+/// cmd.spawn([at(400.0, 200.0), AudioSource { sound: sfx.fire, looping: true, spatial: true, max_distance: 900.0, .. }]);
+/// ```
 struct AudioSource {
+    /// The sound to play
     sound: Sound = Sound { .. },
+    /// The bus it plays on; `Bus {}` is the sfx bus
     bus: Bus = Bus { .. },
+    /// 0 to 1
     volume: float = 1.0,
+    /// Playback speed; 2 is an octave up
     pitch: float = 1.0,
+    /// Plays again when it ends
     looping: bool = false,
+    /// Starts when the entity is spawned
     autoplay: bool = true,
+    /// Volume and pan follow the position relative to the listener
     spatial: bool = false,
+    /// Full volume within this distance
     min_distance: float = 64.0,
+    /// Silent past this distance
     max_distance: float = 1024.0,
+    /// How volume falls between the two
     rolloff: Rolloff = Rolloff::Linear,
+    /// Keeps its voice over lower priorities when every voice is busy
     priority: int = 0,
+    /// Set it to start the sound again
     play: bool = false,
 }
 
-// The entity spatial sounds are heard from.
-struct AudioListener { active: bool = true }
+/// The entity spatial sounds are heard from.
+///
+/// ```rust
+/// cmd.spawn([at(0.0, 0.0), Camera { .. }, AudioListener { .. }]);
+/// ```
+struct AudioListener {
+    /// Whether spatial sounds are heard from this entity
+    active: bool = true,
+}

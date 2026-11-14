@@ -1,9 +1,10 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # System Parameters
 
-A system's parameter types say what it receives. Drift reads them when the game loads and fills each one, in any order. Every parameter needs its type written out.
+A system's parameter types say what it receives. Drift reads them when the game loads and
+fills each one, in any order. Every parameter needs its type written out.
 
 | Parameter type | Receives |
 |----------------|----------|
@@ -18,13 +19,195 @@ A system's parameter types say what it receives. Drift reads them when the game 
 | [`Commands`](#commands) | Spawning, inserting, removing and despawning, applied when the call returns |
 | An engine resource: `Time`, `Input`, `Window`, `Assets`, `Effects`, `Save`, `Random`, `Camera2D`, `Draw`, `Physics` | See [Engine Resources](resources.md) |
 
-A component or an `Entity` on its own is not a parameter: a system that runs once per entity takes them together as one row, and a row of one component pairs it with `Entity`, as in `(Entity, Transform)`. A system takes at most one row, and not both a row and a single event: it runs once per entity or once per event. Each of these is an error when the game loads; see [Errors](errors.md).
+A component or an `Entity` on its own is not a parameter: a system that runs once per entity
+takes them together as one row, and a row of one component pairs it with `Entity`, as in
+`(Entity, Transform)`. A system takes at most one row, and not both a row and a single
+event: it runs once per entity or once per event. Each of these is an error when the game
+loads; see [Errors](errors.md).
 
-Drift keeps every change a system makes to the components and resources it receives, through a row, a list of rows, a resource or a lookup. The names a row is taken apart into share its values, so setting their fields changes the entity. The lists are built when the call starts, so spawning and despawning while looping over one is safe. Rows come in the order entities were spawned, the same on every run.
+Drift keeps every change a system makes to the components and resources it receives, through
+a row, a list of rows, a resource or a lookup. The names a row is taken apart into share its
+values, so setting their fields changes the entity. The lists are built when the call
+starts, so spawning and despawning while looping over one is safe. Rows come in the order
+entities were spawned, the same on every run.
+
+## Contact
+
+Two solid colliders started touching: one entity has an `A`, the other a `B`. `a` is the
+entity with `A` and `b` the one with `B`. Collisions reach systems the frame after the
+physics step that found them.
+
+```rust
+struct Contact<A, B> {
+    a: Entity,
+    b: Entity,
+    point: Vec2 = Vec2 { .. },
+    normal: Vec2 = Vec2 { .. },
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `a` | `Entity` | required | The entity with an `A` |
+| `b` | `Entity` | required | The entity with a `B` |
+| `point` | `Vec2` | `Vec2 { .. }` | The first contact point, in the world |
+| `normal` | `Vec2` | `Vec2 { .. }` | The contact direction, pointing from `a` to `b` |
+
+```rust
+@system
+fn land(hit: Contact<Player, Ground>, players: Lookup<Player>) {
+    if hit.normal.y > 0.5 {
+        if players.get(hit.a) is Some(p) {
+            p.on_ground = true;
+        }
+    }
+}
+```
+
+## ContactEnd
+
+Two solid colliders stopped touching.
+
+```rust
+struct ContactEnd<A, B> {
+    a: Entity,
+    b: Entity,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `a` | `Entity` | required | The entity with an `A` |
+| `b` | `Entity` | required | The entity with a `B` |
+
+```rust
+@system
+fn leave(hit: ContactEnd<Player, Ground>, players: Lookup<Player>) {
+    if players.get(hit.a) is Some(p) {
+        p.on_ground = false;
+    }
+}
+```
+
+## Overlap
+
+An entity entered a sensor collider (one with `sensor: true`), whichever of the two is the
+sensor. Sensors detect without pushing: pickups, trigger zones, checkpoints.
+
+```rust
+struct Overlap<A, B> {
+    a: Entity,
+    b: Entity,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `a` | `Entity` | required | The entity with an `A` |
+| `b` | `Entity` | required | The entity with a `B` |
+
+```rust
+@system
+fn collect(hit: Overlap<Player, Coin>, cmd: Commands, score: Score) {
+    score.value += 1;
+    cmd.despawn(hit.b);
+}
+```
+
+## OverlapEnd
+
+An entity left a sensor collider.
+
+```rust
+struct OverlapEnd<A, B> {
+    a: Entity,
+    b: Entity,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `a` | `Entity` | required | The entity with an `A` |
+| `b` | `Entity` | required | The entity with a `B` |
+
+```rust
+@system
+fn leave_water(hit: OverlapEnd<Player, Water>, players: Lookup<Player>) {
+    if players.get(hit.a) is Some(p) {
+        p.swimming = false;
+    }
+}
+```
+
+## Lookup
+
+Every component of type `T`, found by entity id. A query walks every match; a lookup answers
+for one entity, such as the other entity in a collision. Drift fetches an entity's component
+the first time `get` asks for it, so a lookup costs only the entities a system reads. The
+fields are Drift's bookkeeping; read through the methods.
+
+```rust
+struct Lookup<T> {
+    key: int = 0,
+    ids: int[] = [],
+    rows: T[] = [],
+    slots: {int: int} = {},
+}
+```
+
+```rust
+@system
+fn hurt(hit: Contact<Bullet, Enemy>, health: Lookup<Health>) {
+    if health.get(hit.b) is Some(h) {
+        h.hp -= 1;            // a change through a lookup is kept
+    }
+}
+```
+
+### Lookup.get
+
+```rust
+fn get(self, e: Entity) -> Option<T>
+```
+
+`Some(component)` when the entity has a `T`, `None` otherwise.
+
+```rust
+if places.get(hit.b) is Some(t) {
+    effects.burst(t.position, ParticleEmitter { .. }, 20);
+}
+```
+
+### Lookup.has
+
+```rust
+fn has(self, e: Entity) -> bool
+```
+
+Whether the entity has a `T`.
+
+```rust
+if shields.has(hit.a) { return; }
+```
+
+### Lookup.len
+
+```rust
+fn len(self) -> int
+```
+
+How many entities have a `T`.
+
+```rust
+log(string(enemies.len()) + " enemies left");
+```
 
 ## Commands
 
-Changes to the world's shape: making and removing entities, adding and removing components, inserting resources and sending messages. Drift applies them when the system returns, in the order recorded, before the next system starts. See [Components](../concepts/components.md#making-entities).
+Changes to the world's shape: making and removing entities, adding and removing components,
+inserting resources and sending messages. Drift applies them when the system returns, in the
+order recorded, before the next system starts. See
+[Components](../concepts/components.md#making-entities).
 
 ```rust
 struct Commands {
@@ -95,7 +278,8 @@ cmd.detach(sword);   // drops it where it is
 fn spawn(self, bundle: any[]) -> Entity
 ```
 
-Makes an entity with the components in the list, at most one of each type, and returns its id. The id is valid at once: use it in later commands of the same system.
+Makes an entity with the components in the list, at most one of each type, and returns
+its id. The id is valid at once: use it in later commands of the same system.
 
 ```rust
 let e = cmd.spawn([at(320.0, 180.0), Circle { radius: 8.0, .. }, Coin {}]);
@@ -119,7 +303,8 @@ cmd.insert(hit.b, Stunned { seconds: 2.0 });
 fn remove<T>(self, e: Entity)
 ```
 
-Takes a component off an entity. Name the type in angle brackets. Nothing happens if the entity does not have one.
+Takes a component off an entity. Name the type in angle brackets. Nothing happens if the
+entity does not have one.
 
 ```rust
 cmd.remove<Stunned>(e);
@@ -131,7 +316,8 @@ cmd.remove<Stunned>(e);
 fn despawn(self, e: Entity)
 ```
 
-Removes an entity, and its children. Despawning an entity that is already gone does nothing.
+Removes an entity, and its children. Despawning an entity that is already gone does
+nothing.
 
 ```rust
 cmd.despawn(hit.b);
@@ -179,7 +365,8 @@ cmd.send(Damage { target: hit.b, amount: 10 });
 fn restart(self)
 ```
 
-Starts the game over once this frame's systems have run: every entity the game spawned goes, resources and states return to their defaults, and the startup systems run again.
+Starts the game over once this frame's systems have run: every entity the game spawned
+goes, resources and states return to their defaults, and the startup systems run again.
 
 ```rust
 if input.key_pressed(Key::F5) { cmd.restart(); }
@@ -199,7 +386,8 @@ Sends the message once `seconds` have passed.
 fn spawn_scene(self, scene: Scene, o: SceneOptions) -> SceneInstance
 ```
 
-Spawns a copy of a scene now; its entities and components exist for the systems after this one.
+Spawns a copy of a scene now; its entities and components exist for the systems after
+this one.
 
 ### Commands.save_scene
 
@@ -217,69 +405,11 @@ fn save_prefab(self, path: string, root: Entity)
 
 Writes `root` and its children: a prefab of something built in game.
 
-## Lookup
-
-Every component of type `T`, found by entity id. A query walks every match; a lookup answers for one entity, such as the other entity in a collision. Drift fetches an entity's component the first time `get` asks for it, so a lookup costs only the entities a system reads. The fields are Drift's bookkeeping; read through the methods.
-
-```rust
-struct Lookup<T> {
-    key: int = 0,
-    ids: int[] = [],
-    rows: T[] = [],
-    slots: {int: int} = {},
-}
-```
-
-```rust
-@system
-fn hurt(hit: Contact<Bullet, Enemy>, health: Lookup<Health>) {
-    if health.get(hit.b) is Some(h) {
-        h.hp -= 1;            // a change through a lookup is kept
-    }
-}
-```
-
-### Lookup.get
-
-```rust
-fn get(self, e: Entity) -> Option<T>
-```
-
-`Some(component)` when the entity has a `T`, `None` otherwise.
-
-```rust
-if places.get(hit.b) is Some(t) {
-    effects.burst(t.position, ParticleEmitter { .. }, 20);
-}
-```
-
-### Lookup.has
-
-```rust
-fn has(self, e: Entity) -> bool
-```
-
-Whether the entity has a `T`.
-
-```rust
-if shields.has(hit.a) { return; }
-```
-
-### Lookup.len
-
-```rust
-fn len(self) -> int
-```
-
-How many entities have a `T`.
-
-```rust
-log(string(enemies.len()) + " enemies left");
-```
-
 ## State
 
-The current variant of a `@state` enum `S`. `now` is the variant and `since` the seconds since it last changed. `next` and `changing` belong to `set`. See [States](../concepts/states.md).
+The current variant of a `@state` enum `S`. `now` is the variant and `since` the seconds
+since it last changed. `next` and `changing` belong to `set`. See
+[States](../concepts/states.md).
 
 ```rust
 struct State<S> {
@@ -312,113 +442,11 @@ fn restart(input: Input, phase: State<Phase>) {
 fn set(self, s: S)
 ```
 
-Asks for a change of state. It takes effect after this frame's `Update` systems: the `on_exit` systems of the old variant run, then the `on_enter` systems of the new one. When several systems ask in one frame, the last one to run wins; asking for the current variant changes nothing.
+Asks for a change of state. It takes effect after this frame's `Update` systems: the
+`on_exit` systems of the old variant run, then the `on_enter` systems of the new one.
+When several systems ask in one frame, the last one to run wins; asking for the current
+variant changes nothing.
 
 ```rust
 phase.set(Phase::GameOver);
-```
-
-## Contact
-
-Two solid colliders started touching: one entity has an `A`, the other a `B`. `a` is the entity with `A` and `b` the one with `B`. Collisions reach systems the frame after the physics step that found them.
-
-```rust
-struct Contact<A, B> {
-    a: Entity,
-    b: Entity,
-    point: Vec2 = Vec2 { .. },
-    normal: Vec2 = Vec2 { .. },
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `a` | `Entity` | required | The entity with an `A` |
-| `b` | `Entity` | required | The entity with a `B` |
-| `point` | `Vec2` | `Vec2 { .. }` | The first contact point, in the world |
-| `normal` | `Vec2` | `Vec2 { .. }` | The contact direction, pointing from `a` to `b` |
-
-```rust
-@system
-fn land(hit: Contact<Player, Ground>, players: Lookup<Player>) {
-    if hit.normal.y > 0.5 {
-        if players.get(hit.a) is Some(p) {
-            p.on_ground = true;
-        }
-    }
-}
-```
-
-## ContactEnd
-
-Two solid colliders stopped touching.
-
-```rust
-struct ContactEnd<A, B> {
-    a: Entity,
-    b: Entity,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `a` | `Entity` | required | The entity with an `A` |
-| `b` | `Entity` | required | The entity with a `B` |
-
-```rust
-@system
-fn leave(hit: ContactEnd<Player, Ground>, players: Lookup<Player>) {
-    if players.get(hit.a) is Some(p) {
-        p.on_ground = false;
-    }
-}
-```
-
-## Overlap
-
-An entity entered a sensor collider (one with `sensor: true`), whichever of the two is the sensor. Sensors detect without pushing: pickups, trigger zones, checkpoints.
-
-```rust
-struct Overlap<A, B> {
-    a: Entity,
-    b: Entity,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `a` | `Entity` | required | The entity with an `A` |
-| `b` | `Entity` | required | The entity with a `B` |
-
-```rust
-@system
-fn collect(hit: Overlap<Player, Coin>, cmd: Commands, score: Score) {
-    score.value += 1;
-    cmd.despawn(hit.b);
-}
-```
-
-## OverlapEnd
-
-An entity left a sensor collider.
-
-```rust
-struct OverlapEnd<A, B> {
-    a: Entity,
-    b: Entity,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `a` | `Entity` | required | The entity with an `A` |
-| `b` | `Entity` | required | The entity with a `B` |
-
-```rust
-@system
-fn leave_water(hit: OverlapEnd<Player, Water>, players: Lookup<Player>) {
-    if players.get(hit.a) is Some(p) {
-        p.swimming = false;
-    }
-}
 ```

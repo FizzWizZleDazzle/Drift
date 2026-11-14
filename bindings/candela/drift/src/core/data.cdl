@@ -1,4 +1,4 @@
-// Data files and networking.
+//! Data files and networking.
 
 import "drift/core/host" { * };
 import "drift/core/world" { * };
@@ -7,7 +7,9 @@ import "drift/core/text" { * };
 
 // ---- Data files ----
 
-// The text of a file, such as one under assets/.
+//! page: data
+
+/// The text of a file, such as one under assets/.
 fn read_text(path: string) -> string { return parse_json<string>(read_data(path, "text")); }
 fn read_data(path: string, format: string) -> string {
     let j = drift::data_read(path, format);
@@ -16,11 +18,13 @@ fn read_data(path: string, format: string) -> string {
     }
     return j;
 }
-// A JSON, TOML or CSV file (by its extension) as a value of type T: a
-// struct, a list, a map. Fields the file leaves out keep their zero value.
-// A CSV file is a list of rows, so T is a list: load_data<Item[]>(path).
+
+/// A JSON, TOML or CSV file (by its extension) as a value of type T: a struct, a list, a map.
+/// Fields the file leaves out keep their zero value. A CSV file is a list of rows, so T is a
+/// list: load_data<Item[]>(path).
 fn load_data<T>(path: string) -> T { return parse_json<T>(read_data(path, "")); }
-// JSON text as a value of type T.
+
+/// JSON text as a value of type T.
 fn parse_json<T>(text: string) -> T {
     let r = drift::value_from_json(text, drift_type_name<T>());
     if r is string {
@@ -28,11 +32,12 @@ fn parse_json<T>(text: string) -> T {
     }
     return (r as any[])[0] as T;
 }
-// Any value as JSON text: structs become objects, enums their variant name.
+
+/// Any value as JSON text: structs become objects, enums their variant name.
 fn to_json(value: any) -> string { return drift::value_to_json(value); }
 
 impl Save {
-    // A value of any type stored as JSON under `key`, or `fallback`.
+    /// A value of any type stored as JSON under `key`, or `fallback`.
     fn get_value<T>(self, key: string, fallback: T) -> T {
         if !drift::save_has(self.name, key) {
             return fallback;
@@ -44,35 +49,36 @@ impl Save {
 
 // ---- Networking ----
 
-// A request in flight. Its answer arrives as an HttpResponse message.
+/// A request in flight. Its answer arrives as an HttpResponse message.
 struct Request { id: int = 0 }
 
-// The answer to a request. `ok` is true for a 2xx status; `status` is 0 and
-// `error` says why when there was no answer at all (offline, blocked by
-// CORS, a bad URL).
+/// The answer to a request. `ok` is true for a 2xx status; `status` is 0 and `error` says why
+/// when there was no answer at all (offline, blocked by CORS, a bad URL).
 @message
 struct HttpResponse { request: Request, status: int, ok: bool, body: string, error: string }
 
 fn http_get(url: string) -> Request { return Request { id: drift::http_request("GET", url, "", "") }; }
-// Sends `body` as JSON: http_post(url, to_json(score)).
+
+/// Sends `body` as JSON: http_post(url, to_json(score)).
 fn http_post(url: string, body: string) -> Request {
     return Request { id: drift::http_request("POST", url, body, "{\"Content-Type\": \"application/json\"}") };
 }
-// Any method, with headers.
+
+/// Any method, with headers.
 fn http_request(method: string, url: string, body: string, headers: {string: string}) -> Request {
     return Request { id: drift::http_request(method, url, body, to_json(headers)) };
 }
 
-// A WebSocket connection. What happens on it arrives as SocketEvent messages.
+/// A WebSocket connection. What happens on it arrives as SocketEvent messages.
 struct Socket { id: int = 0 }
 enum SocketEventKind { Opened, Message, Closed, Error }
 @message
 struct SocketEvent { socket: Socket, kind: SocketEventKind, text: string, code: int }
 
-// Opens a WebSocket to a ws:// or wss:// URL. Send once Opened has arrived.
+/// Opens a WebSocket to a ws:// or wss:// URL. Send once Opened has arrived.
 fn websocket(url: string) -> Socket { return Socket { id: drift::ws_open(url) }; }
 impl Socket {
-    // False when the socket is not open.
+    /// False when the socket is not open.
     fn send(self, text: string) -> bool { return drift::ws_send(self.id, text); }
     fn close(self) { drift::ws_close(self.id); }
 }

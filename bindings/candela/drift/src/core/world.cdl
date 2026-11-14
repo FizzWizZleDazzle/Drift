@@ -1,25 +1,112 @@
-// What systems are handed: collision events, lookups, commands, states and system switches.
+//! What systems are handed: collision events, lookups, commands, states and system switches.
 
 import "drift/core/host" { * };
 import "drift/core/values" { * };
 
 // ---- Collisions ----
 
-// A contact that began also has the first contact point and the normal,
-// pointing from a to b.
-struct Contact<A, B> { a: Entity, b: Entity, point: Vec2 = Vec2 { .. }, normal: Vec2 = Vec2 { .. } }
-struct ContactEnd<A, B> { a: Entity, b: Entity }
-struct Overlap<A, B> { a: Entity, b: Entity }
-struct OverlapEnd<A, B> { a: Entity, b: Entity }
+//! page: system-parameters
+
+/// Two solid colliders started touching: one entity has an `A`, the other a `B`. `a` is the
+/// entity with `A` and `b` the one with `B`. Collisions reach systems the frame after the
+/// physics step that found them.
+///
+/// ```rust
+/// @system
+/// fn land(hit: Contact<Player, Ground>, players: Lookup<Player>) {
+///     if hit.normal.y > 0.5 {
+///         if players.get(hit.a) is Some(p) {
+///             p.on_ground = true;
+///         }
+///     }
+/// }
+/// ```
+struct Contact<A, B> {
+    /// The entity with an `A`
+    a: Entity,
+    /// The entity with a `B`
+    b: Entity,
+    /// The first contact point, in the world
+    point: Vec2 = Vec2 { .. },
+    /// The contact direction, pointing from `a` to `b`
+    normal: Vec2 = Vec2 { .. },
+}
+
+/// Two solid colliders stopped touching.
+///
+/// ```rust
+/// @system
+/// fn leave(hit: ContactEnd<Player, Ground>, players: Lookup<Player>) {
+///     if players.get(hit.a) is Some(p) {
+///         p.on_ground = false;
+///     }
+/// }
+/// ```
+struct ContactEnd<A, B> {
+    /// The entity with an `A`
+    a: Entity,
+    /// The entity with a `B`
+    b: Entity,
+}
+
+/// An entity entered a sensor collider (one with `sensor: true`), whichever of the two is the
+/// sensor. Sensors detect without pushing: pickups, trigger zones, checkpoints.
+///
+/// ```rust
+/// @system
+/// fn collect(hit: Overlap<Player, Coin>, cmd: Commands, score: Score) {
+///     score.value += 1;
+///     cmd.despawn(hit.b);
+/// }
+/// ```
+struct Overlap<A, B> {
+    /// The entity with an `A`
+    a: Entity,
+    /// The entity with a `B`
+    b: Entity,
+}
+
+/// An entity left a sensor collider.
+///
+/// ```rust
+/// @system
+/// fn leave_water(hit: OverlapEnd<Player, Water>, players: Lookup<Player>) {
+///     if players.get(hit.a) is Some(p) {
+///         p.swimming = false;
+///     }
+/// }
+/// ```
+struct OverlapEnd<A, B> {
+    /// The entity with an `A`
+    a: Entity,
+    /// The entity with a `B`
+    b: Entity,
+}
 
 // ---- Lookups ----
 
-// The host fetches an entity's component the first time `get` asks for it
-// and keeps it in `rows`, so a system pays only for the entities it reads,
-// and a second `get` of the same entity hands back the same value. The host
-// keeps the changes made to `rows`.
+/// Every component of type `T`, found by entity id. A query walks every match; a lookup answers
+/// for one entity, such as the other entity in a collision. Drift fetches an entity's component
+/// the first time `get` asks for it, so a lookup costs only the entities a system reads. The
+/// fields are Drift's bookkeeping; read through the methods.
+///
+/// ```rust
+/// @system
+/// fn hurt(hit: Contact<Bullet, Enemy>, health: Lookup<Health>) {
+///     if health.get(hit.b) is Some(h) {
+///         h.hp -= 1;            // a change through a lookup is kept
+///     }
+/// }
+/// ```
 struct Lookup<T> { key: int = 0, ids: int[] = [], rows: T[] = [], slots: {int: int} = {} }
 impl Lookup<T> {
+    /// `Some(component)` when the entity has a `T`, `None` otherwise.
+    ///
+    /// ```rust
+    /// if places.get(hit.b) is Some(t) {
+    ///     effects.burst(t.position, ParticleEmitter { .. }, 20);
+    /// }
+    /// ```
     fn get(self, e: Entity) -> Option<T> {
         if self.slots.contains(e.id) {
             return Some(self.rows[self.slots[e.id]]);
@@ -34,40 +121,110 @@ impl Lookup<T> {
         self.rows.push(row);
         return Some(row);
     }
+    /// Whether the entity has a `T`.
+    ///
+    /// ```rust
+    /// if shields.has(hit.a) { return; }
+    /// ```
     fn has(self, e: Entity) -> bool { return self.slots.contains(e.id) || drift::lookup_has(self.key, e.id); }
+    /// How many entities have a `T`.
+    ///
+    /// ```rust
+    /// log(string(enemies.len()) + " enemies left");
+    /// ```
     fn len(self) -> int { return drift::lookup_len(self.key); }
 }
 
 // ---- Commands ----
 
+/// Internal: a helper the module needs; games do not call it.
 fn drift_type_name<T>() -> string {
     let probe: T[] = [];
     let s = type(probe);
     return s[..s.len() - 2];
 }
 
+/// Changes to the world's shape: making and removing entities, adding and removing components,
+/// inserting resources and sending messages. Drift applies them when the system returns, in the
+/// order recorded, before the next system starts. See
+/// [Components](../concepts/components.md#making-entities).
+///
+/// ```rust
+/// @system(schedule: Schedule::Startup)
+/// fn setup(cmd: Commands) {
+///     let player = cmd.spawn([at(100.0, 100.0), Rectangle { .. }, Player { .. }]);
+///     cmd.insert(player, Velocity { linear: vec2(50.0, 0.0), .. });
+/// }
+/// ```
 struct Commands { id: int = 0 }
 impl Commands {
+    /// Makes an entity with the components in the list, at most one of each type, and returns
+    /// its id. The id is valid at once: use it in later commands of the same system.
+    ///
+    /// ```rust
+    /// let e = cmd.spawn([at(320.0, 180.0), Circle { radius: 8.0, .. }, Coin {}]);
+    /// ```
     fn spawn(self, bundle: any[]) -> Entity {
         let id = drift::entity_new();
         drift::spawn_bundle(id, bundle);
         return Entity { id: id };
     }
+    /// Adds a component to an entity, or replaces the one of its type.
+    ///
+    /// ```rust
+    /// cmd.insert(hit.b, Stunned { seconds: 2.0 });
+    /// ```
     fn insert(self, e: Entity, component: any) { drift::insert_component(e.id, component); }
+    /// Takes a component off an entity. Name the type in angle brackets. Nothing happens if the
+    /// entity does not have one.
+    ///
+    /// ```rust
+    /// cmd.remove<Stunned>(e);
+    /// ```
     fn remove<T>(self, e: Entity) { drift::remove_component(e.id, drift_type_name<T>()); }
+    /// Removes an entity, and its children. Despawning an entity that is already gone does
+    /// nothing.
+    ///
+    /// ```rust
+    /// cmd.despawn(hit.b);
+    /// ```
     fn despawn(self, e: Entity) { drift::despawn_entity(e.id); }
+    /// Adds a resource, or replaces the one of its type. Systems that take it start running.
+    ///
+    /// ```rust
+    /// cmd.insert_resource(Level { map: map, number: 1 });
+    /// ```
     fn insert_resource(self, r: any) { drift::insert_resource(r); }
+    /// Removes a resource. Systems that take it stop running until it is inserted again.
+    ///
+    /// ```rust
+    /// cmd.remove_resource<Boss>();
+    /// ```
     fn remove_resource<R>(self) { drift::remove_resource(drift_type_name<R>()); }
+    /// Sends a message to the systems that read its type. See [Events](../concepts/events.md).
+    ///
+    /// ```rust
+    /// cmd.send(Damage { target: hit.b, amount: 10 });
+    /// ```
     fn send(self, message: any) { drift::send_message(message); }
-    // Starts the game over once this frame's systems have run: every entity
-    // the game spawned goes, resources and states return to their
-    // defaults, and the startup systems run again.
+    /// Starts the game over once this frame's systems have run: every entity the game spawned
+    /// goes, resources and states return to their defaults, and the startup systems run again.
+    ///
+    /// ```rust
+    /// if input.key_pressed(Key::F5) { cmd.restart(); }
+    /// ```
     fn restart(self) { drift::restart(); }
 }
 
-// A bundle with more components after it, for prefabs with extras:
-// `cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}, Health { hp: 500.0, .. }]))`.
-// A component given twice is the later one, so this also overrides.
+//! page: values
+
+/// A bundle with more components after it, for prefabs with extras:
+/// `cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}, Health { hp: 500.0, .. }]))`. A component
+/// given twice is the later one, so this also overrides.
+///
+/// ```rust
+/// cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}]));
+/// ```
 fn plus(bundle: any[], more: any[]) -> any[] {
     let out: any[] = [];
     for c in bundle {
@@ -81,11 +238,39 @@ fn plus(bundle: any[], more: any[]) -> any[] {
 
 // ---- States ----
 
-// The current variant of a @drift::state enum. `set` asks for a change; the
-// change happens after this frame's Update systems, running the on_exit
-// systems of the old variant and the on_enter systems of the new one.
-struct State<S> { now: S, since: float, next: S, changing: bool }
+//! page: system-parameters
+
+/// The current variant of a `@state` enum `S`. `now` is the variant and `since` the seconds
+/// since it last changed. `next` and `changing` belong to `set`. See
+/// [States](../concepts/states.md).
+///
+/// ```rust
+/// @system(in_state: [Phase::Over])
+/// fn restart(input: Input, phase: State<Phase>) {
+///     if phase.since > 1.0 && input.action_pressed("jump") {
+///         phase.set(Phase::Playing);
+///     }
+/// }
+/// ```
+struct State<S> {
+    /// The current variant
+    now: S,
+    /// Seconds since the state last changed
+    since: float,
+    /// The variant `set` asked for
+    next: S,
+    /// Whether `set` was called this frame
+    changing: bool,
+}
 impl State<S> {
+    /// Asks for a change of state. It takes effect after this frame's `Update` systems: the
+    /// `on_exit` systems of the old variant run, then the `on_enter` systems of the new one.
+    /// When several systems ask in one frame, the last one to run wins; asking for the current
+    /// variant changes nothing.
+    ///
+    /// ```rust
+    /// phase.set(Phase::GameOver);
+    /// ```
     fn set(self, s: S) {
         self.next = s;
         self.changing = true;
@@ -94,25 +279,53 @@ impl State<S> {
 
 // ---- Systems ----
 
-// Turns systems on and off by function name, from the next system on: a
-// paused game turns off its gameplay systems and keeps its menu running.
-// A name that is not one of the game's systems raises drift_unknown_system,
-// which lists the systems there are.
+//! page: resources
+
+/// Turns systems on and off by function name, from the next system on: a paused game turns off
+/// its gameplay systems and keeps its menu running. A name that is not one of the game's
+/// systems raises drift_unknown_system, which lists the systems there are.
+///
+/// ```rust
+/// @system(on_enter: Phase::Paused)
+/// fn freeze(systems: Systems) {
+///     systems.disable("spawn_enemies");
+/// }
+/// ```
 struct Systems { id: int = 0 }
 impl Systems {
+    /// Turns a system on by its function name. A name that is not one of the game's systems
+    /// raises `drift_unknown_system`, which lists them.
+    ///
+    /// ```rust
+    /// systems.enable("spawn_enemies");
+    /// ```
     fn enable(self, system_name: string) {
         check_system(system_name);
         drift::system_switch(system_name, true);
     }
+    /// Turns a system off by its function name. A name that is not one of the game's systems
+    /// raises `drift_unknown_system`.
+    ///
+    /// ```rust
+    /// systems.disable("spawn_enemies");
+    /// ```
     fn disable(self, system_name: string) {
         check_system(system_name);
         drift::system_switch(system_name, false);
     }
+    /// Whether a system is on. A name that is not one of the game's systems raises
+    /// `drift_unknown_system`.
+    ///
+    /// ```rust
+    /// if !systems.enabled("autosave") { log("autosave is off"); }
+    /// ```
     fn enabled(self, system_name: string) -> bool {
         check_system(system_name);
         return drift::system_enabled(system_name);
     }
 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn check_system(name: string) {
     let e = drift::system_error(name);
     if e != "" {
@@ -122,39 +335,52 @@ fn check_system(name: string) {
 
 // ---- Resource fields ----
 
-// One field of a resource, such as `score` in a `Game` resource, for HUD
-// text, bars and the debug overlay to read every frame. Make one with
-// resource_field<Game>("score").
+/// One field of a resource, for widgets and tools that read it every frame: the `drift/ui`
+/// bindings and bars, and the debug overlay. Make one with `resource_field<T>(path)`; the
+/// compiler checks the type, and the field name is checked when it is made.
+///
+/// ```rust
+/// @resource
+/// struct Game { score: int = 0, player: PlayerStats = PlayerStats { .. } }
+///
+/// let score = resource_field<Game>("score");
+/// let hp = resource_field<Game>("player.hp");    // a field of a struct field
+/// log(score.label() + " is " + score.text());   // "Game.score is 120"
+/// ```
 struct ResourceField { resource: string = "", field: string = "" }
 
-// The field `path` of the resource T: "score", or "player.hp" for a field of
-// a struct field. T must be a @resource or @settings struct and the path a
-// field of it; otherwise this raises drift_not_a_resource or
-// drift_no_such_field, naming the type and listing its fields. Made in a
-// resource's field default, it is checked when the game loads.
+/// The field `path` of the resource `T`. `T` must be a struct marked `@resource` or
+/// `@settings`, or this raises `drift_not_a_resource`; the path must name a field of it, or
+/// this raises `drift_no_such_field`, which lists the fields the type has. Made in a resource's
+/// field default, it is checked when the game loads.
+///
+/// ```rust
+/// spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
+///           Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. });
+/// ```
 fn resource_field<T>(path: string) -> ResourceField {
     let f = ResourceField { resource: drift_type_name<T>(), field: path };
     f.check();
     return f;
 }
 impl ResourceField {
-    // Whether it names a field; `ResourceField {}` names none.
+    /// Whether it names a field; `ResourceField {}` names none.
     fn is_set(self) -> bool { return self.resource != ""; }
-    // Raises drift_not_a_resource or drift_no_such_field unless it names a
-    // field of a resource.
+    /// Raises drift_not_a_resource or drift_no_such_field unless it names a field of a
+    /// resource.
     fn check(self) {
         let e = drift::resource_field_error(self.resource, self.field);
         if e != "" {
             throw e;
         }
     }
-    // "Game.score".
+    /// "Game.score".
     fn label(self) -> string {
         let parts = self.resource.split("::");
         return parts[parts.len() - 1] + "." + self.field;
     }
-    // The value as text: numbers and bools as written, "" while the
-    // resource does not exist.
+    /// The field's value as text: numbers and bools as written, strings as they are, and `""`
+    /// while the resource does not exist.
     fn text(self) -> string {
         let t = drift::resource_text(self.label());
         if t == "" && self.is_set() {
@@ -163,8 +389,7 @@ impl ResourceField {
         }
         return t;
     }
-    // The value as a number: true is 1.0, and anything that is not a
-    // number 0.0.
+    /// The field's value as a number: `true` is 1.0, and anything that is not a number is 0.0.
     fn number(self) -> float {
         let s = self.text();
         if s.parse<float>() is Some(v) {

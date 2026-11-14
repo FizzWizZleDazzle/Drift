@@ -1,19 +1,32 @@
-// drift/ui: HUD and menu widgets on the screen layer.
-//
-// `import "drift/ui" { * };` adds the components, the messages and the
-// systems that run them. Every widget is an entity on hud_layer(), placed
-// by an Anchor relative to the window, so it stays put when the window
-// changes size and when the camera shakes. Widgets that are more than one
-// shape (bars, buttons, toggles, sliders, icon rows) keep their extra
-// shapes as part entities and move them along.
+//! drift/ui: HUD and menu widgets on the screen layer.
+//!
+//! `import "drift/ui" { * };` adds the components, the messages and the
+//! systems that run them. Every widget is an entity on hud_layer(), placed
+//! by an Anchor relative to the window, so it stays put when the window
+//! changes size and when the camera shakes. Widgets that are more than one
+//! shape (bars, buttons, toggles, sliders, icon rows) keep their extra
+//! shapes as part entities and move them along.
+
+//! page: ui
+//! # HUD and Menus: drift/ui
+//!
+//! The `drift/ui` module: labels, panels, bars, buttons, toggles, sliders, toasts and dialog
+//! boxes on the screen layer. Import it beside `drift`:
+//!
+//! ```rust
+//! import "drift" { * };
+//! import "drift/ui" { * };
+//! ```
+//!
+//! See [UI and Score](../guides/ui-and-score.md) for a walk through it.
 
 import "drift" { * };
 
 // ---- Theme ----
 
-// The look every widget starts from. Set it once in drift.toml [theme] or
-// from a system; a widget copies what it needs when it is made, so change
-// one widget afterwards through its own components.
+/// The look every widget starts from. Set it once in drift.toml [theme] or from a system; a
+/// widget copies what it needs when it is made, so change one widget afterwards through its own
+/// components.
 @settings(section: "theme")
 struct Theme {
     font: Font = Font { .. },
@@ -34,27 +47,26 @@ struct Theme {
     bar_trail: Color = Color { r: 0.95, g: 0.85, b: 0.4, a: 1.0 },
     padding: Vec2 = Vec2 { x: 16.0, y: 10.0 },
     corner_radius: float = 6.0,
-    // The narrowest a button, toggle or slider is; slider tracks add half.
+    /// The narrowest a button, toggle or slider is; slider tracks add half.
     widget_width: float = 220.0,
-    // Kept clear on every side of the window: notches and rounded corners
-    // on phones.
+    /// Kept clear on every side of the window: notches and rounded corners on phones.
     safe_margin: Vec2 = Vec2 { x: 0.0, y: 0.0 },
 }
 
 impl Theme {
-    // A copy with another text size, for one widget.
+    /// A copy with another text size, for one widget.
     fn sized(self, size: float) -> Theme {
         let t = self.copy();
         t.text_size = size;
         return t;
     }
-    // A copy with another text color.
+    /// A copy with another text color.
     fn colored(self, c: Color) -> Theme {
         let t = self.copy();
         t.text_color = c;
         return t;
     }
-    // A copy with another accent: bar fill and focus color.
+    /// A copy with another accent: bar fill and focus color.
     fn accented(self, c: Color) -> Theme {
         let t = self.copy();
         t.accent = c;
@@ -75,7 +87,7 @@ impl Theme {
             safe_margin: self.safe_margin,
         };
     }
-    // Text in this theme. `pivot` picks the alignment, as in Anchor.
+    /// Text in this theme. `pivot` picks the alignment, as in Anchor.
     fn text(self, value: string, pivot: Vec2) -> Text {
         return Text {
             value: value, size: self.text_size, color: self.text_color,
@@ -89,8 +101,7 @@ impl Theme {
 
 // ---- Anchors and layout ----
 
-// Points of the window, for Anchor.to: (0, 0) is the top-left, (1, 1) the
-// bottom-right.
+/// Points of the window, for Anchor.to: (0, 0) is the top-left, (1, 1) the bottom-right.
 const TOP_LEFT: Vec2 = Vec2 { x: 0.0, y: 0.0 };
 const TOP: Vec2 = Vec2 { x: 0.5, y: 0.0 };
 const TOP_RIGHT: Vec2 = Vec2 { x: 1.0, y: 0.0 };
@@ -101,14 +112,15 @@ const BOTTOM_LEFT: Vec2 = Vec2 { x: 0.0, y: 1.0 };
 const BOTTOM: Vec2 = Vec2 { x: 0.5, y: 1.0 };
 const BOTTOM_RIGHT: Vec2 = Vec2 { x: 1.0, y: 1.0 };
 
-// Keeps the entity at a point of the window plus `offset` pixels, inside
-// the theme's safe margin. Widgets made here also take `to` as their pivot,
-// so a TOP_RIGHT widget hangs from the top-right corner.
+/// Keeps the entity at a point of the window plus `offset` pixels, inside the theme's safe
+/// margin. Widgets made here also take `to` as their pivot, so a TOP_RIGHT widget hangs from
+/// the top-right corner.
 @component
 struct Anchor { to: Vec2 = Vec2 { .. }, offset: Vec2 = Vec2 { .. } }
 
 fn anchor(to: Vec2, x: float, y: float) -> Anchor { return Anchor { to: to, offset: Vec2 { x: x, y: y } }; }
 
+/// Internal: a helper the module needs; games do not call it.
 fn anchor_point(a: Anchor, win: Window, theme: Theme) -> Vec2 {
     let m = theme.safe_margin;
     return Vec2 {
@@ -126,8 +138,7 @@ fn ui_anchor(anchor: (Anchor, Transform), win: Window, theme: Theme) {
     }
 }
 
-// Offsets for `count` widgets in a row, `gap` pixels apart, going right
-// from `start`.
+/// Offsets for `count` widgets in a row, `gap` pixels apart, going right from `start`.
 fn row(start: Vec2, gap: float, count: int) -> Vec2[] {
     let out: Vec2[] = [];
     for i in range(count) {
@@ -136,7 +147,7 @@ fn row(start: Vec2, gap: float, count: int) -> Vec2[] {
     return out;
 }
 
-// The same going down.
+/// The same going down.
 fn column(start: Vec2, gap: float, count: int) -> Vec2[] {
     let out: Vec2[] = [];
     for i in range(count) {
@@ -145,7 +156,7 @@ fn column(start: Vec2, gap: float, count: int) -> Vec2[] {
     return out;
 }
 
-// Offsets for `count` widgets in rows of `columns`, `cell` apart.
+/// Offsets for `count` widgets in rows of `columns`, `cell` apart.
 fn grid_layout(start: Vec2, cell: Vec2, columns: int, count: int) -> Vec2[] {
     let out: Vec2[] = [];
     for i in range(count) {
@@ -154,6 +165,7 @@ fn grid_layout(start: Vec2, cell: Vec2, columns: int, count: int) -> Vec2[] {
     return out;
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn align_of(x: float) -> Align {
     if x < 0.25 {
         return Align::Left;
@@ -164,6 +176,7 @@ fn align_of(x: float) -> Align {
     return Align::Center;
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn valign_of(y: float) -> VAlign {
     if y < 0.25 {
         return VAlign::Top;
@@ -176,12 +189,12 @@ fn valign_of(y: float) -> VAlign {
 
 // ---- Labels ----
 
-// Text on the HUD.
+/// Text on the HUD.
 fn label(theme: Theme, value: string, at: Anchor) -> any[] {
     return [Transform { .. }, theme.text(value, at.to), at];
 }
 
-// A rounded panel behind other widgets, `size` pixels.
+/// A rounded panel behind other widgets, `size` pixels.
 fn panel(theme: Theme, at: Anchor, size: Vec2) -> any[] {
     return [
         Transform { .. },
@@ -191,12 +204,11 @@ fn panel(theme: Theme, at: Anchor, size: Vec2) -> any[] {
     ];
 }
 
-// Fills a Text from a field of a resource: `source` names it, made with
-// resource_field<Game>("score"), and `format` is the text with {} where the
-// value goes. `count_speed` above 0 counts a number up or down to its new
-// value at that many units per second, with at least a quarter second per
-// change, instead of jumping. `decimals` is how many digits a number shows
-// after the point.
+/// Fills a Text from a field of a resource: `source` names it, made with
+/// resource_field<Game>("score"), and `format` is the text with {} where the value goes.
+/// `count_speed` above 0 counts a number up or down to its new value at that many units per
+/// second, with at least a quarter second per change, instead of jumping. `decimals` is how
+/// many digits a number shows after the point.
 @component
 struct Bind {
     source: ResourceField = ResourceField { .. },
@@ -207,11 +219,12 @@ struct Bind {
     started: bool = false,
 }
 
-// A Bind showing the field `path` of the resource T: bind_text<Game>("score",
-// "Score {}"). A type that is not a resource, or a field it does not have,
-// raises drift_not_a_resource or drift_no_such_field.
+/// A Bind showing the field `path` of the resource T: bind_text<Game>("score", "Score {}"). A
+/// type that is not a resource, or a field it does not have, raises drift_not_a_resource or
+/// drift_no_such_field.
 fn bind_text<T>(path: string, format: string) -> Bind { return Bind { source: resource_field<T>(path), format: format, .. }; }
-// The same, counting toward a new number at `units_per_second` or faster.
+
+/// The same, counting toward a new number at `units_per_second` or faster.
 fn bind_counter<T>(path: string, format: string, units_per_second: float) -> Bind {
     return Bind { source: resource_field<T>(path), format: format, count_speed: units_per_second, .. };
 }
@@ -244,9 +257,8 @@ fn ui_bind(bind: (Bind, Text), time: Time) {
     }
 }
 
-// A Text that shows a resource field holding seconds as a clock, "m:ss",
-// or "m:ss.d" with `tenths`: ClockBind { source:
-// resource_field<Game>("time_left"), .. }.
+/// A Text that shows a resource field holding seconds as a clock, "m:ss", or "m:ss.d" with
+/// `tenths`: ClockBind { source: resource_field<Game>("time_left"), .. }.
 @component
 struct ClockBind { source: ResourceField = ResourceField { .. }, format: string = "{}", tenths: bool = false }
 
@@ -266,7 +278,7 @@ fn ui_clock(clock_bind: (ClockBind, Text)) {
 
 // ---- Parts ----
 
-// A shape that belongs to a widget: it goes when the widget goes.
+/// A shape that belongs to a widget: it goes when the widget goes.
 @component
 struct PartOf { owner: Entity = Entity { .. } }
 
@@ -278,11 +290,12 @@ fn ui_parts(part_of: (Entity, PartOf), cmd: Commands) {
     }
 }
 
-// The top-left corner of a rectangle drawn at `t` with its pivot at `pivot`.
+/// Internal: The top-left corner of a rectangle drawn at `t` with its pivot at `pivot`.
 fn top_left(t: Transform, size: Vec2, pivot: Vec2) -> Vec2 {
     return Vec2 { x: t.position.x - size.x * pivot.x, y: t.position.y - size.y * pivot.y };
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn part_rect(at: Vec2, size: Vec2, c: Color, corner: float, z: float, visible: bool) -> any[] {
     return [
         Transform { position: at, .. },
@@ -291,8 +304,8 @@ fn part_rect(at: Vec2, size: Vec2, c: Color, corner: float, z: float, visible: b
     ];
 }
 
-// How faded a widget is: its background alpha against the one it was made
-// with, so fading the background fades the parts too.
+/// Internal: How faded a widget is: its background alpha against the one it was made with, so
+/// fading the background fades the parts too.
 fn fade_of(r: Rectangle, alpha: float) -> float {
     if alpha <= 0.0 {
         return 1.0;
@@ -302,13 +315,12 @@ fn fade_of(r: Rectangle, alpha: float) -> float {
 
 // ---- Bars ----
 
-// A bar that fills to value / max: health, stamina, progress. The fill
-// slides toward a new value at `smooth` per second (0 jumps), and a trail
-// in `trail_color` shows recent damage, shrinking after `trail_delay`
-// seconds. `value_from` and `max_from`, made with resource_field<Game>("hp"),
-// fill value and max from resource fields every frame. `smooth` is a rate
-// per second (0 jumps); `trail_speed` is the share of the bar the trail
-// shrinks per second. Colors left unset come from the theme.
+/// A bar that fills to value / max: health, stamina, progress. The fill slides toward a new
+/// value at `smooth` per second (0 jumps), and a trail in `trail_color` shows recent damage,
+/// shrinking after `trail_delay` seconds. `value_from` and `max_from`, made with
+/// resource_field<Game>("hp"), fill value and max from resource fields every frame. `smooth` is
+/// a rate per second (0 jumps); `trail_speed` is the share of the bar the trail shrinks per
+/// second. Colors left unset come from the theme.
 @component
 struct Bar {
     value: float = 1.0,
@@ -330,11 +342,10 @@ struct Bar {
     trail_part: Entity = Entity { .. },
 }
 
-// Spawns a bar `size` pixels at `at` and answers its entity:
-// `spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
-// Bar { value_from: resource_field<Game>("hp"), max_from:
-// resource_field<Game>("max_hp"), .. })`. Change it later
-// through a system that takes its Bar.
+/// Spawns a bar `size` pixels at `at` and answers its entity: `spawn_bar(cmd, theme,
+/// anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0), Bar { value_from:
+/// resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. })`. Change it
+/// later through a system that takes its Bar.
 fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> Entity {
     let e = cmd.spawn([
         Transform { .. },
@@ -425,9 +436,9 @@ fn ui_bars(row: (Bar, Rectangle, Transform), time: Time, cmd: Commands) {
 
 // ---- Icon rows ----
 
-// A row of `max` icons with the first `count` lit: hearts, ammo, lives.
-// Icons are `image` when it is set, circles otherwise. `count_from`, made
-// with resource_field<Game>("lives"), fills count from a resource field.
+/// A row of `max` icons with the first `count` lit: hearts, ammo, lives. Icons are `image` when
+/// it is set, circles otherwise. `count_from`, made with resource_field<Game>("lives"), fills
+/// count from a resource field.
 @component
 struct IconRow {
     count: int = 3,
@@ -484,28 +495,28 @@ fn ui_icon_rows(icon_row: (Entity, IconRow, Transform), cmd: Commands) {
 
 // ---- Buttons, toggles and sliders ----
 
-// Sent when a button is clicked, tapped, or activated with Return, Space or
-// the gamepad's South button while focused.
+/// Sent when a button is clicked, tapped, or activated with Return, Space or the gamepad's
+/// South button while focused.
 @message
 struct ButtonPressed { id: string = "", button: Entity = Entity { .. } }
 
-// Sent when a toggle flips.
+/// Sent when a toggle flips.
 @message
 struct ToggleChanged { id: string = "", on: bool = false, toggle: Entity = Entity { .. } }
 
-// Sent while a slider moves.
+/// Sent while a slider moves.
 @message
 struct SliderChanged { id: string = "", value: float = 0.0, slider: Entity = Entity { .. } }
 
 enum WidgetKind { Button, Toggle, Slider }
 
-// Which widget the keyboard or gamepad is on: the `order` of a Widget, or
-// -1 before anyone navigates. Up/Down (W/S, the d-pad, the left stick)
-// move it; Left/Right change a focused slider.
+/// Which widget the keyboard or gamepad is on: the `order` of a Widget, or -1 before anyone
+/// navigates. Up/Down (W/S, the d-pad, the left stick) move it; Left/Right change a focused
+/// slider.
 @resource
 struct UiFocus { index: int = -1, held: float = 0.0, enabled: bool = true }
 
-// What a clickable widget is. Made by button(), toggle() and slider().
+/// What a clickable widget is. Made by button(), toggle() and slider().
 @component
 struct Widget {
     id: string = "",
@@ -529,11 +540,13 @@ struct Widget {
     mark_part: Entity = Entity { .. },
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn widget_size(theme: Theme, text: string, min_width: float) -> Vec2 {
     let w = max(min_width, float(text.len()) * theme.text_size * 0.55 + theme.padding.x * 2.0);
     return Vec2 { x: w, y: theme.text_size + theme.padding.y * 2.0 };
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn spawn_widget(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, w: Widget, text: string) -> Entity {
     let e = cmd.spawn([
         Transform { .. },
@@ -561,20 +574,20 @@ fn spawn_widget(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, w: Widget, 
     return e;
 }
 
-// A button with `text`; pressing it sends ButtonPressed with `id`. `order`
-// is its place in keyboard and gamepad navigation.
+/// A button with `text`; pressing it sends ButtonPressed with `id`. `order` is its place in
+/// keyboard and gamepad navigation.
 fn button(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, order: int) -> Entity {
     return spawn_widget(cmd, theme, at, widget_size(theme, text, theme.widget_width),
                         Widget { id: id, order: order, .. }, text);
 }
 
-// An on/off switch; flipping it sends ToggleChanged.
+/// An on/off switch; flipping it sends ToggleChanged.
 fn toggle(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, on: bool, order: int) -> Entity {
     let size = widget_size(theme, text, theme.widget_width);
     return spawn_widget(cmd, theme, at, size, Widget { id: id, kind: WidgetKind::Toggle, on: on, order: order, .. }, text);
 }
 
-// A slider from `min` to `max`; moving it sends SliderChanged.
+/// A slider from `min` to `max`; moving it sends SliderChanged.
 fn slider(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, value: float,
           min: float, max: float, order: int) -> Entity {
     let size = widget_size(theme, text, theme.widget_width);
@@ -585,15 +598,22 @@ fn slider(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, val
     }, text);
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn ui_nav_up(input: Input) -> bool {
     return input.key_pressed(Key::Up) || input.key_pressed(Key::W) || input.gamepad_pressed(0, GamepadButton::DpadUp);
 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn ui_nav_down(input: Input) -> bool {
     return input.key_pressed(Key::Down) || input.key_pressed(Key::S) || input.gamepad_pressed(0, GamepadButton::DpadDown);
 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn ui_activate(input: Input) -> bool {
     return input.key_pressed(Key::Return) || input.key_pressed(Key::Space) || input.gamepad_pressed(0, GamepadButton::South);
 }
+
+/// Internal: a helper the module needs; games do not call it.
 fn ui_nav_x(input: Input) -> float {
     let x = 0.0;
     if input.key_down(Key::Left) || input.key_down(Key::A) || input.gamepad_down(0, GamepadButton::DpadLeft) {
@@ -609,7 +629,7 @@ fn ui_nav_x(input: Input) -> float {
     return x;
 }
 
-// Moves the focus between the visible widgets in `order`.
+/// Moves the focus between the visible widgets in `order`.
 @system
 fn ui_focus_nav(focus: UiFocus, input: Input, time: Time, widgets: (Widget, Rectangle)[]) {
     if !focus.enabled {
@@ -760,9 +780,9 @@ fn ui_widgets(widget: (Entity, Widget, Rectangle, Transform), input: Input, focu
 
 // ---- Show, hide, slide and fade ----
 
-// Fades and slides a widget in and out: set `shown` and it moves from
-// `offset + slide` (hidden) to `offset` (shown) over `seconds`, fading its
-// Rectangle or Text. A hidden widget stops drawing.
+/// Fades and slides a widget in and out: set `shown` and it moves from `offset + slide`
+/// (hidden) to `offset` (shown) over `seconds`, fading its Rectangle or Text. A hidden widget
+/// stops drawing.
 @component
 struct Reveal {
     shown: bool = true,
@@ -775,11 +795,13 @@ struct Reveal {
 
 fn reveal(shown: bool, slide: Vec2) -> Reveal { return Reveal { shown: shown, slide: slide, .. }; }
 
+/// Internal: a helper the module needs; games do not call it.
 fn ease_out(t: float) -> float {
     let u = 1.0 - t;
     return 1.0 - u * u * u;
 }
 
+/// Internal: a helper the module needs; games do not call it.
 fn reveal_step(rv: Reveal, a: Anchor, dt: float) -> float {
     if rv.t < 0.0 {
         rv.home = a.offset;
@@ -833,8 +855,8 @@ fn ui_reveal_texts(reveal: (Reveal, Anchor, Text), time: Time) {
 
 // ---- Toasts ----
 
-// A message that shows for a few seconds below the top of the window and
-// goes; newer ones stack under older ones.
+/// A message that shows for a few seconds below the top of the window and goes; newer ones
+/// stack under older ones.
 @component
 struct Toast { seconds: float = 2.5, age: float = 0.0, slot: float = -1.0 }
 
@@ -870,8 +892,8 @@ fn ui_toasts(toasts: (Entity, Toast, Anchor, Text)[], time: Time, theme: Theme, 
 
 // ---- Typewriter text and dialog boxes ----
 
-// Reveals a Text's `full` string a few characters at a time.
-// `finished` turns true once all of it shows; finish() shows it at once.
+/// Reveals a Text's `full` string a few characters at a time. `finished` turns true once all of
+/// it shows; finish() shows it at once.
 @component
 struct Typewriter { full: string = "", chars_per_second: float = 40.0, shown: float = 0.0, finished: bool = false }
 
@@ -899,13 +921,13 @@ fn ui_typewriter(typewriter: (Typewriter, Text), time: Time) {
     }
 }
 
-// Sent when the player closes a dialog box.
+/// Sent when the player closes a dialog box.
 @message
 struct DialogClosed { id: string = "", dialog: Entity = Entity { .. } }
 
-// A box along the bottom of the window that types out `pages` one after
-// another. Return, Space, a click or the South button finishes the page,
-// then turns it; after the last page the box closes and sends DialogClosed.
+/// A box along the bottom of the window that types out `pages` one after another. Return,
+/// Space, a click or the South button finishes the page, then turns it; after the last page the
+/// box closes and sends DialogClosed.
 @component
 struct DialogBox { id: string = "", pages: string[] = [], page: int = 0, text_part: Entity = Entity { .. } }
 
@@ -952,9 +974,9 @@ fn ui_dialogs(dialog_box: (Entity, DialogBox, Rectangle, Transform), input: Inpu
 
 // ---- Widgets that follow the world ----
 
-// Keeps an anchored widget over an entity in the world: `offset` pixels
-// from where the camera shows the target. Floating names, prompts and
-// health bars over heads. The widget hides while the target is gone.
+/// Keeps an anchored widget over an entity in the world: `offset` pixels from where the camera
+/// shows the target. Floating names, prompts and health bars over heads. The widget hides while
+/// the target is gone.
 @component
 struct FollowWorld { target: Entity = Entity { .. }, offset: Vec2 = Vec2 { x: 0.0, y: -32.0 } }
 
@@ -976,8 +998,8 @@ fn ui_follow_world(follow_world: (Entity, FollowWorld, Anchor), camera: Camera2D
     a.offset = Vec2 { x: p.x - m.x, y: p.y - m.y };
 }
 
-// An arrow at the edge of the window pointing at `target` while the camera
-// does not show it: the way to the exit, a lost teammate, a boss.
+/// An arrow at the edge of the window pointing at `target` while the camera does not show it:
+/// the way to the exit, a lost teammate, a boss.
 @component
 struct OffscreenArrow {
     target: Entity = Entity { .. },
@@ -1025,8 +1047,8 @@ fn ui_offscreen_arrows(offscreen_arrow: (Entity, OffscreenArrow), camera: Camera
     draw.triangle(tip, back + side, back - side, a.color);
 }
 
-// A round radar on the HUD at the anchor: entities with a RadarBlip within
-// `range` world units of `center` show as dots.
+/// A round radar on the HUD at the anchor: entities with a RadarBlip within `range` world units
+/// of `center` show as dots.
 @component
 struct Radar {
     center: Entity = Entity { .. },
@@ -1036,7 +1058,7 @@ struct Radar {
     ring: Color = Color { r: 0.35, g: 0.67, b: 1.0, a: 0.8 },
 }
 
-// Shows the entity on every Radar.
+/// Shows the entity on every Radar.
 @component
 struct RadarBlip { color: Color = Color { r: 1.0, g: 0.35, b: 0.4, a: 1.0 }, size: float = 3.0 }
 
@@ -1061,10 +1083,9 @@ fn ui_radars(radar: (Radar, Transform), blips: (Entity, RadarBlip)[], draw: Draw
     }
 }
 
-// A panel drawn from an image cut in nine: the corners keep their size and
-// the edges and middle stretch, so one small image frames any size.
-// `border` is the width of each edge in the image's pixels; `frame` picks
-// part of the image (zero for all of it).
+/// A panel drawn from an image cut in nine: the corners keep their size and the edges and
+/// middle stretch, so one small image frames any size. `border` is the width of each edge in
+/// the image's pixels; `frame` picks part of the image (zero for all of it).
 @component
 struct NineSlice {
     image: Texture = Texture { .. },
@@ -1093,14 +1114,14 @@ fn ui_nine_slices(nine_slice: (NineSlice, Anchor, Transform), draw: Draw) {
     draw.nine_slice(n.image, Rect { x: corner.x, y: corner.y, w: n.size.x, h: n.size.y }, n.frame, n.border, n.color);
 }
 
-// An icon and text side by side, as one anchored line: coins, ammo, keys.
-// Answers the text's entity; the icon is a part of it.
+/// An icon and text side by side, as one anchored line: coins, ammo, keys. Answers the text's
+/// entity; the icon is a part of it.
 fn icon_label(cmd: Commands, theme: Theme, icon: Texture, text: string, at: Anchor) -> Entity {
     let e = cmd.spawn([Transform { .. }, theme.text(text, Vec2 { x: 0.0, y: 0.5 }), at, IconOf { icon: icon, .. }]);
     return e;
 }
 
-// Draws `icon` left of the entity's Text, `size` pixels tall.
+/// Draws `icon` left of the entity's Text, `size` pixels tall.
 @component
 struct IconOf { icon: Texture = Texture { .. }, size: float = 0.0, gap: float = 8.0, part: Entity = Entity { .. } }
 

@@ -1,4 +1,4 @@
-// Keyboard, mouse, gamepad, touch and input actions.
+//! Keyboard, mouse, gamepad, touch and input actions.
 
 import "drift/core/values" { * };
 import "drift/core/resources" { * };
@@ -6,65 +6,167 @@ import "drift/core/text" { * };
 
 // ---- Input ----
 
-// A finger on a touch screen, in logical screen coordinates.
+//! page: resources
+
+/// A finger on a touch screen, in logical screen coordinates.
+///
+/// ```rust
+/// for t in input.touches() {
+///     if t.released && (t.position - t.start).length() > 50.0 {
+///         log("swipe");
+///     }
+/// }
+/// ```
 struct Touch {
-    id: int = 0,              // the same while the finger stays down
+    /// Stays the same while the finger is down
+    id: int = 0,
+    /// Where the finger is, in logical screen pixels
     position: Vec2 = Vec2 { .. },
-    start: Vec2 = Vec2 { .. },  // where it went down
-    delta: Vec2 = Vec2 { .. },  // movement this frame
-    pressed: bool = false,    // went down this frame
-    released: bool = false,   // went up this frame; the touch is gone next frame
+    /// Where it went down
+    start: Vec2 = Vec2 { .. },
+    /// How far it moved this frame
+    delta: Vec2 = Vec2 { .. },
+    /// It went down this frame
+    pressed: bool = false,
+    /// It went up this frame; the touch is gone next frame
+    released: bool = false,
 }
 
 impl Input {
-    // The mouse wheel this frame: positive away from the player.
+    /// The mouse wheel this frame: positive away from the player.
+    ///
+    /// ```rust
+    /// camera.zoom = clamp(camera.zoom + input.mouse_wheel() * 0.1, 0.5, 3.0);
+    /// ```
     fn mouse_wheel(self) -> float { return drift::mouse_vec(3)[0]; }
+    /// Whether pad `pad` is connected.
+    ///
+    /// ```rust
+    /// if !input.gamepad_connected(0) { hint.value = "Plug in a gamepad or use the keyboard"; }
+    /// ```
     fn gamepad_connected(self, pad: int) -> bool { return drift::pad_connected(pad); }
 
-    // Adds a binding in text form, as drift.toml writes them: "key:Space",
-    // "mouse:Left", "button:South", "axis:+LeftX".
+    /// Adds a binding in text form, as drift.toml writes them: "key:Space", "mouse:Left",
+    /// "button:South", "axis:+LeftX".
+    ///
+    /// ```rust
+    /// input.bind("jump", "key:W");
+    /// input.bind("throttle", "axis:+RightTrigger");
+    /// ```
     fn bind(self, action: string, binding: string) { drift::bind(action, binding); }
-    // A 1D axis from two keys, -1 to 1.
+    /// A 1D axis from two keys, -1 to 1.
+    ///
+    /// ```rust
+    /// input.bind_axis("steer", Key::Left, Key::Right);
+    /// ```
     fn bind_axis(self, name: string, negative: Key, positive: Key) {
         drift::bind_axis_keys(name, key_code(negative), key_code(positive));
     }
+    /// A 1D axis bound with `bind_axis`, from -1 to 1.
+    ///
+    /// ```rust
+    /// v.angular = input.axis("steer") * 3.0;
+    /// ```
     fn axis(self, name: string) -> float { return action_number(name, drift::action_axis(name)); }
 
-    // Rebinding. Actions have slot 0; a 1D axis has 0 (negative) and 1
-    // (positive); a 2D axis 0 to 3 for left, right, up and down.
+    /// Rebinding. Actions have slot 0; a 1D axis has 0 (negative) and 1 (positive); a 2D axis 0
+    /// to 3 for left, right, up and down.
+    ///
+    /// ```rust
+    /// let shown = input.bindings("jump", 0).join(", ");   // "key:Space, button:South"
+    /// ```
     fn bindings(self, name: string, slot: int) -> string[] { return drift::input_bindings(name, slot); }
-    // Replaces binding `index` of a slot, or adds one when `index` is past
-    // the end.
+    /// Replaces binding `index` of a slot, or adds one when `index` is past the end.
+    ///
+    /// ```rust
+    /// input.rebind("jump", 0, 0, "key:W");
+    /// ```
     fn rebind(self, name: string, slot: int, index: int, binding: string) {
         drift::input_rebind(name, slot, index, binding);
     }
-    // The first key, button or stick that went down this frame, as text;
-    // "" when none did.
+    /// The first key, button or stick that went down this frame, as text; "" when none did.
+    ///
+    /// ```rust
+    /// let pressed = input.capture_binding();
+    /// if pressed != "" {
+    ///     input.rebind(menu.waiting_for, 0, 0, pressed);
+    /// }
+    /// ```
     fn capture_binding(self) -> string { return drift::input_capture(); }
-    // Stick dead zone, the analog value that counts as held, and the pad
-    // actions read (-1 for any).
+    /// Stick dead zone, the analog value that counts as held, and the pad actions read (-1 for
+    /// any).
+    ///
+    /// ```rust
+    /// input.set_action_tuning(0.2, 0.5, -1);
+    /// ```
     fn set_action_tuning(self, dead_zone: float, press_threshold: float, pad: int) {
         drift::input_tuning(dead_zone, press_threshold, pad);
     }
+    /// Every binding as JSON text, to keep in save data.
+    ///
+    /// ```rust
+    /// save.set_string("bindings", input.bindings_json());
+    /// save.flush();
+    /// ```
     fn bindings_json(self) -> string { return drift::input_bindings_json(); }
-    // Restores bindings saved with bindings_json() for names that exist;
-    // returns how many it changed.
+    /// Restores bindings saved with bindings_json() for names that exist; returns how many it
+    /// changed.
+    ///
+    /// ```rust
+    /// input.load_bindings_json(save.get_string("bindings", ""));
+    /// ```
     fn load_bindings_json(self, text: string) -> int { return drift::input_load_bindings(text); }
 
-    // Input as if from the device; it arrives at the start of next frame.
+    /// Input as if from the device; it arrives at the start of next frame.
+    ///
+    /// ```rust
+    /// input.send_key(Key::Right, true);   // a demo holds Right from next frame
+    /// ```
     fn send_key(self, k: Key, down: bool) { drift::input_send(0, key_code(k), down, 0.0, 0.0); }
+    /// Moves the mouse, as if from the device, next frame.
+    ///
+    /// ```rust
+    /// input.send_mouse_move(vec2(100.0, 100.0));
+    /// ```
     fn send_mouse_move(self, pos: Vec2) { drift::input_send(1, 0, false, pos.x, pos.y); }
+    /// Presses or releases a mouse button at a position, as if from the device, next frame.
+    ///
+    /// ```rust
+    /// input.send_mouse_button(vec2(100.0, 100.0), MouseButton::Left, true);
+    /// ```
     fn send_mouse_button(self, pos: Vec2, b: MouseButton, down: bool) {
         drift::input_send(2, mouse_code(b), down, pos.x, pos.y);
     }
 
-    // Text typed this frame while text input is on, for name entry and
-    // chat. Starting it brings up the on-screen keyboard where there is one.
+    /// Text typed this frame while text input is on, for name entry and chat. Starting it
+    /// brings up the on-screen keyboard where there is one.
+    ///
+    /// ```rust
+    /// input.start_text_input();
+    /// ```
     fn start_text_input(self) { drift::text_input(1); }
+    /// Turns text input off.
+    ///
+    /// ```rust
+    /// input.stop_text_input();
+    /// ```
     fn stop_text_input(self) { drift::text_input(2); }
+    /// The text typed this frame while text input is on.
+    ///
+    /// ```rust
+    /// form.name = form.name + input.text();
+    /// ```
     fn text(self) -> string { return drift::text_input(0); }
 
-    // Fingers on a touch screen. The first finger also drives the mouse.
+    /// Fingers on a touch screen. The first finger also drives the mouse.
+    ///
+    /// ```rust
+    /// for t in input.touches() {
+    ///     if t.pressed {
+    ///         effects.burst(t.position, ParticleEmitter { .. }, 10);
+    ///     }
+    /// }
+    /// ```
     fn touches(self) -> Touch[] {
         let f = drift::touch_list();
         let out: Touch[] = [];

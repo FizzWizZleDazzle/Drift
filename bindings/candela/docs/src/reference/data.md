@@ -1,9 +1,11 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Data, Networking and Text
 
-Data files, HTTP and WebSockets, sequences of timed steps, colors, text formatting and localization. See [Data Files](../guides/data-files.md), [Networking](../guides/networking.md) and [Localization](../guides/localization.md).
+Data files, HTTP and WebSockets, sequences of timed steps, colors, text formatting and
+localization. See [Data Files](../guides/data-files.md),
+[Networking](../guides/networking.md) and [Localization](../guides/localization.md).
 
 ## hsv
 
@@ -11,7 +13,8 @@ Data files, HTTP and WebSockets, sequences of timed steps, colors, text formatti
 fn hsv(h: float, s: float, v: float) -> Color
 ```
 
-A color from hue, saturation and value, each 0.0 to 1.0 (hue goes once around the color wheel: 0.0 red, 0.33 green, 0.67 blue).
+A color from hue, saturation and value, each 0.0 to 1.0 (hue goes once around the color
+wheel: 0.0 red, 0.33 green, 0.67 blue).
 
 ## Hsv
 
@@ -87,7 +90,8 @@ fn palette(hexes: string[]) -> Palette
 fn pico8() -> Palette
 ```
 
-The PICO-8 sixteen: black, dark blue, purple, dark green, brown, dark grey, light grey, white, red, orange, yellow, green, blue, lavender, pink, peach.
+The PICO-8 sixteen: black, dark blue, purple, dark green, brown, dark grey, light grey,
+white, red, orange, yellow, green, blue, lavender, pink, peach.
 
 ## SequenceStep
 
@@ -104,7 +108,8 @@ struct SequenceStep {
 
 ## Sequence
 
-Steps that run one after another across frames: waits, named events, messages, and waits for a signal. Keep one in a component or resource and tick it every frame.
+Steps that run one after another across frames: waits, named events, messages, and waits for
+a signal. Keep one in a component or resource and tick it every frame.
 
 ```rust
 struct Sequence {
@@ -194,7 +199,8 @@ fn sequence() -> Sequence
 fn format(pattern: string, args: any[]) -> string
 ```
 
-The pattern with each {} replaced by the next argument and each {0}, {1} by the argument at that index: format("{} of {}", [3, 10]) is "3 of 10".
+The pattern with each {} replaced by the next argument and each {0}, {1} by the argument at
+that index: format("{} of {}", [3, 10]) is "3 of 10".
 
 ## format_named
 
@@ -202,7 +208,8 @@ The pattern with each {} replaced by the next argument and each {0}, {1} by the 
 fn format_named(pattern: string, values: {string: any}) -> string
 ```
 
-The pattern with each {name} replaced by values[name]: format_named("Hi {who}", {"who": "Ana"}). Names not in `values` stay as they are.
+The pattern with each {name} replaced by values[name]: format_named("Hi {who}", {"who":
+"Ana"}). Names not in `values` stay as they are.
 
 ## fixed
 
@@ -246,7 +253,9 @@ The same with a digit of tenths after a point: "1:05.3".
 
 ## Strings
 
-[locale] folder = "assets/lang"   # files named &lt;language>.json or .toml language = "auto"        # the browser's (or system's) language, or "fr" fallback = "en"          # where keys missing from a language come from
+[locale] folder = "assets/lang"   # files named &lt;language>.json or .toml language = "auto"
+# the browser's (or system's) language, or "fr" fallback = "en"          # where keys
+missing from a language come from
 
 ```rust
 struct Strings {
@@ -262,7 +271,8 @@ struct Strings {
 fn get(self, key: string) -> string
 ```
 
-The text for `key`, from the fallback language when this one lacks it, or the key itself when neither has it.
+The text for `key`, from the fallback language when this one lacks it, or the key itself
+when neither has it.
 
 ### Strings.get_with
 
@@ -320,7 +330,9 @@ fn read_data(path: string, format: string) -> string
 fn load_data<T>(path: string) -> T
 ```
 
-A JSON, TOML or CSV file (by its extension) as a value of type T: a struct, a list, a map. Fields the file leaves out keep their zero value. A CSV file is a list of rows, so T is a list: load_data&lt;Item[]>(path).
+A JSON, TOML or CSV file (by its extension) as a value of type T: a struct, a list, a map.
+Fields the file leaves out keep their zero value. A CSV file is a list of rows, so T is a
+list: load_data&lt;Item[]>(path).
 
 ## parse_json
 
@@ -350,7 +362,8 @@ struct Request {
 
 ## HttpResponse
 
-The answer to a request. `ok` is true for a 2xx status; `status` is 0 and `error` says why when there was no answer at all (offline, blocked by CORS, a bad URL).
+The answer to a request. `ok` is true for a 2xx status; `status` is 0 and `error` says why
+when there was no answer at all (offline, blocked by CORS, a bad URL).
 
 ```rust
 @message

@@ -1,13 +1,153 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Engine Resources
 
-The engine's resources reach a system as parameters, the same way as your own. Their fields are this frame's values, and their methods act on the engine at once.
+The engine's resources reach a system as parameters, the same way as your own. Their fields
+are this frame's values, and their methods act on the engine at once.
+
+## Systems
+
+Turns systems on and off by function name, from the next system on: a paused game turns off
+its gameplay systems and keeps its menu running. A name that is not one of the game's
+systems raises drift_unknown_system, which lists the systems there are.
+
+```rust
+struct Systems {
+    id: int = 0,
+}
+```
+
+```rust
+@system(on_enter: Phase::Paused)
+fn freeze(systems: Systems) {
+    systems.disable("spawn_enemies");
+}
+```
+
+### Systems.enable
+
+```rust
+fn enable(self, system_name: string)
+```
+
+Turns a system on by its function name. A name that is not one of the game's systems
+raises `drift_unknown_system`, which lists them.
+
+```rust
+systems.enable("spawn_enemies");
+```
+
+### Systems.disable
+
+```rust
+fn disable(self, system_name: string)
+```
+
+Turns a system off by its function name. A name that is not one of the game's systems
+raises `drift_unknown_system`.
+
+```rust
+systems.disable("spawn_enemies");
+```
+
+### Systems.enabled
+
+```rust
+fn enabled(self, system_name: string) -> bool
+```
+
+Whether a system is on. A name that is not one of the game's systems raises
+`drift_unknown_system`.
+
+```rust
+if !systems.enabled("autosave") { log("autosave is off"); }
+```
+
+## ResourceField
+
+One field of a resource, for widgets and tools that read it every frame: the `drift/ui`
+bindings and bars, and the debug overlay. Make one with `resource_field<T>(path)`; the
+compiler checks the type, and the field name is checked when it is made.
+
+```rust
+struct ResourceField {
+    resource: string = "",
+    field: string = "",
+}
+```
+
+```rust
+@resource
+struct Game { score: int = 0, player: PlayerStats = PlayerStats { .. } }
+
+let score = resource_field<Game>("score");
+let hp = resource_field<Game>("player.hp");    // a field of a struct field
+log(score.label() + " is " + score.text());   // "Game.score is 120"
+```
+
+### ResourceField.is_set
+
+```rust
+fn is_set(self) -> bool
+```
+
+Whether it names a field; `ResourceField {}` names none.
+
+### ResourceField.check
+
+```rust
+fn check(self)
+```
+
+Raises drift_not_a_resource or drift_no_such_field unless it names a field of a
+resource.
+
+### ResourceField.label
+
+```rust
+fn label(self) -> string
+```
+
+"Game.score".
+
+### ResourceField.text
+
+```rust
+fn text(self) -> string
+```
+
+The field's value as text: numbers and bools as written, strings as they are, and `""`
+while the resource does not exist.
+
+### ResourceField.number
+
+```rust
+fn number(self) -> float
+```
+
+The field's value as a number: `true` is 1.0, and anything that is not a number is 0.0.
+
+## resource_field
+
+```rust
+fn resource_field<T>(path: string) -> ResourceField
+```
+
+The field `path` of the resource `T`. `T` must be a struct marked `@resource` or
+`@settings`, or this raises `drift_not_a_resource`; the path must name a field of it, or
+this raises `drift_no_such_field`, which lists the fields the type has. Made in a resource's
+field default, it is checked when the game loads.
+
+```rust
+spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
+          Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. });
+```
 
 ## Time
 
-`dt` is the frame time times `scale`; `real_dt` ignores the scale, for menus and tools that keep running while the game is slowed or frozen.
+`dt` is the frame time times `scale`; `real_dt` ignores the scale, for menus and tools that
+keep running while the game is slowed or frozen.
 
 ```rust
 struct Time {
@@ -41,15 +181,197 @@ fn spin(fan: (Fan, Transform), time: Time) {
 fn set_scale(self, s: float)
 ```
 
-Game speed from the next frame on: 1.0 normal, 0.5 half, 0.0 frozen. Physics, tweens, particles and every system's `dt` follow it.
+Game speed from the next frame on: 1.0 normal, 0.5 half, 0.0 frozen. Physics, tweens,
+particles and every system's `dt` follow it.
 
 ```rust
 time.set_scale(0.25);   // slow motion
 ```
 
+## Window
+
+The game's window, or the canvas on a web page.
+
+```rust
+struct Window {
+    width: float = 0.0,
+    height: float = 0.0,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `width` | `float` | `0.0` | Logical width in pixels |
+| `height` | `float` | `0.0` | Logical height in pixels |
+
+```rust
+@system
+fn center(title: (Title, Transform), window: Window) {
+    let (_, t) = title;
+    t.position = vec2(window.width * 0.5, 80.0);
+}
+```
+
+### Window.quit
+
+```rust
+fn quit(self)
+```
+
+Ends the game after this frame. In the browser the page stops running the game.
+
+```rust
+if input.key_pressed(Key::Escape) { window.quit(); }
+```
+
+### Window.lock_pointer
+
+```rust
+fn lock_pointer(self, on: bool)
+```
+
+Hides the cursor and keeps it in the window; Input.mouse_delta() still reports movement.
+For mouse-look and aiming. In a browser it needs a tap, click or key first; asked for
+without one, it waits for the next.
+
+### Window.pixel_ratio
+
+```rust
+fn pixel_ratio(self) -> float
+```
+
+Screen pixels per window unit: 2 on most phones, 1 on most monitors.
+
+### Window.op
+
+```rust
+fn op(self, name: string, nums: float[], text: string) -> float[]
+```
+
+### Window.set_title
+
+```rust
+fn set_title(self, title: string)
+```
+
+### Window.set_clear_color
+
+```rust
+fn set_clear_color(self, c: Color)
+```
+
+### Window.set_scale_mode
+
+```rust
+fn set_scale_mode(self, m: ScaleMode)
+```
+
+### Window.set_logical_size
+
+```rust
+fn set_logical_size(self, w: int, h: int)
+```
+
+The logical resolution the game draws at.
+
+### Window.size
+
+```rust
+fn size(self) -> Vec2
+```
+
+The window's own size in pixels; in the browser, the canvas.
+
+### Window.set_size
+
+```rust
+fn set_size(self, w: int, h: int)
+```
+
+### Window.fullscreen
+
+```rust
+fn fullscreen(self) -> bool
+```
+
+### Window.set_fullscreen
+
+```rust
+fn set_fullscreen(self, on: bool)
+```
+
+Browsers allow fullscreen only right after a tap, click or key; asked for at another
+time, it waits for the next one.
+
+### Window.show_cursor
+
+```rust
+fn show_cursor(self, visible: bool)
+```
+
+### Window.set_cursor
+
+```rust
+fn set_cursor(self, c: Cursor)
+```
+
+### Window.draw_calls
+
+```rust
+fn draw_calls(self) -> int
+```
+
+Draw calls and sprites in the last frame.
+
+### Window.sprite_count
+
+```rust
+fn sprite_count(self) -> int
+```
+
+### Window.backend
+
+```rust
+fn backend(self) -> string
+```
+
+"gl" or "webgpu".
+
+### Window.download
+
+```rust
+fn download(self, path: string)
+```
+
+Offers a file the game wrote, such as a screenshot, as a download in the browser. A
+screenshot asked for this frame is offered once it is written.
+
+```rust
+window.download("shot.png");
+```
+
+### Window.screenshot
+
+```rust
+fn screenshot(self, path: string)
+```
+
+Saves the next presented frame as a PNG.
+
+```rust
+if input.key_pressed(Key::F12) {
+    window.screenshot("shot.png");
+    window.download("shot.png");
+}
+```
+
 ## Input
 
-The keyboard, mouse, gamepads, touch and input actions. An action is a name, such as `"jump"`, that any mix of keys, buttons and sticks can drive; write game logic against actions. Bind actions in the `[input]` section of `drift.toml` or from code. Reading an action the game never declared, such as a misspelt `"jmup"`, raises `drift_unknown_action`, which lists the actions there are. See [Input](../guides/input.md).
+The keyboard, mouse, gamepads, touch and input actions. An action is a name, such as
+`"jump"`, that any mix of keys, buttons and sticks can drive; write game logic against
+actions. Bind actions in the `[input]` section of `drift.toml` or from code. Reading an
+action the game never declared, such as a misspelt `"jmup"`, raises `drift_unknown_action`,
+which lists the actions there are. See [Input](../guides/input.md).
 
 ```rust
 struct Input {
@@ -180,7 +502,8 @@ if input.mouse_delta().length() > 0.0 { show_cursor = true; }
 fn gamepad_down(self, pad: int, b: GamepadButton) -> bool
 ```
 
-Whether a gamepad button is held. Pads are numbered 0 to 3 and use the Xbox layout: `South` is A.
+Whether a gamepad button is held. Pads are numbered 0 to 3 and use the Xbox layout:
+`South` is A.
 
 ```rust
 if input.gamepad_down(0, GamepadButton::South) { charge += time.dt; }
@@ -264,7 +587,8 @@ input.bind_button("jump", GamepadButton::South);
 fn bind_axis2d(self, name: string, left: Key, right: Key, up: Key, down: Key)
 ```
 
-A 2D axis from four keys; up is -Y, and diagonal key input has length 1. Calling it again for the same name adds another set of keys.
+A 2D axis from four keys; up is -Y, and diagonal key input has length 1. Calling it
+again for the same name adds another set of keys.
 
 ```rust
 input.bind_axis2d("move", Key::A, Key::D, Key::W, Key::S);
@@ -373,7 +697,8 @@ if !input.gamepad_connected(0) { hint.value = "Plug in a gamepad or use the keyb
 fn bind(self, action: string, binding: string)
 ```
 
-Adds a binding in text form, as drift.toml writes them: "key:Space", "mouse:Left", "button:South", "axis:+LeftX".
+Adds a binding in text form, as drift.toml writes them: "key:Space", "mouse:Left",
+"button:South", "axis:+LeftX".
 
 ```rust
 input.bind("jump", "key:W");
@@ -410,7 +735,8 @@ v.angular = input.axis("steer") * 3.0;
 fn bindings(self, name: string, slot: int) -> string[]
 ```
 
-Rebinding. Actions have slot 0; a 1D axis has 0 (negative) and 1 (positive); a 2D axis 0 to 3 for left, right, up and down.
+Rebinding. Actions have slot 0; a 1D axis has 0 (negative) and 1 (positive); a 2D axis 0
+to 3 for left, right, up and down.
 
 ```rust
 let shown = input.bindings("jump", 0).join(", ");   // "key:Space, button:South"
@@ -449,7 +775,8 @@ if pressed != "" {
 fn set_action_tuning(self, dead_zone: float, press_threshold: float, pad: int)
 ```
 
-Stick dead zone, the analog value that counts as held, and the pad actions read (-1 for any).
+Stick dead zone, the analog value that counts as held, and the pad actions read (-1 for
+any).
 
 ```rust
 input.set_action_tuning(0.2, 0.5, -1);
@@ -474,7 +801,8 @@ save.flush();
 fn load_bindings_json(self, text: string) -> int
 ```
 
-Restores bindings saved with bindings_json() for names that exist; returns how many it changed.
+Restores bindings saved with bindings_json() for names that exist; returns how many it
+changed.
 
 ```rust
 input.load_bindings_json(save.get_string("bindings", ""));
@@ -522,7 +850,8 @@ input.send_mouse_button(vec2(100.0, 100.0), MouseButton::Left, true);
 fn start_text_input(self)
 ```
 
-Text typed this frame while text input is on, for name entry and chat. Starting it brings up the on-screen keyboard where there is one.
+Text typed this frame while text input is on, for name entry and chat. Starting it
+brings up the on-screen keyboard where there is one.
 
 ```rust
 input.start_text_input();
@@ -568,214 +897,11 @@ for t in input.touches() {
 }
 ```
 
-## Touch
-
-A finger on a touch screen, in logical screen coordinates.
-
-```rust
-struct Touch {
-    id: int = 0,
-    position: Vec2 = Vec2 { .. },
-    start: Vec2 = Vec2 { .. },
-    delta: Vec2 = Vec2 { .. },
-    pressed: bool = false,
-    released: bool = false,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `id` | `int` | `0` | Stays the same while the finger is down |
-| `position` | `Vec2` | `Vec2 { .. }` | Where the finger is, in logical screen pixels |
-| `start` | `Vec2` | `Vec2 { .. }` | Where it went down |
-| `delta` | `Vec2` | `Vec2 { .. }` | How far it moved this frame |
-| `pressed` | `bool` | `false` | It went down this frame |
-| `released` | `bool` | `false` | It went up this frame; the touch is gone next frame |
-
-```rust
-for t in input.touches() {
-    if t.released && (t.position - t.start).length() > 50.0 {
-        log("swipe");
-    }
-}
-```
-
-## Window
-
-The game's window, or the canvas on a web page.
-
-```rust
-struct Window {
-    width: float = 0.0,
-    height: float = 0.0,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `width` | `float` | `0.0` | Logical width in pixels |
-| `height` | `float` | `0.0` | Logical height in pixels |
-
-```rust
-@system
-fn center(title: (Title, Transform), window: Window) {
-    let (_, t) = title;
-    t.position = vec2(window.width * 0.5, 80.0);
-}
-```
-
-### Window.quit
-
-```rust
-fn quit(self)
-```
-
-Ends the game after this frame. In the browser the page stops running the game.
-
-```rust
-if input.key_pressed(Key::Escape) { window.quit(); }
-```
-
-### Window.lock_pointer
-
-```rust
-fn lock_pointer(self, on: bool)
-```
-
-Hides the cursor and keeps it in the window; Input.mouse_delta() still reports movement. For mouse-look and aiming. In a browser it needs a tap, click or key first; asked for without one, it waits for the next.
-
-### Window.pixel_ratio
-
-```rust
-fn pixel_ratio(self) -> float
-```
-
-Screen pixels per window unit: 2 on most phones, 1 on most monitors.
-
-### Window.op
-
-```rust
-fn op(self, name: string, nums: float[], text: string) -> float[]
-```
-
-### Window.set_title
-
-```rust
-fn set_title(self, title: string)
-```
-
-### Window.set_clear_color
-
-```rust
-fn set_clear_color(self, c: Color)
-```
-
-### Window.set_scale_mode
-
-```rust
-fn set_scale_mode(self, m: ScaleMode)
-```
-
-### Window.set_logical_size
-
-```rust
-fn set_logical_size(self, w: int, h: int)
-```
-
-The logical resolution the game draws at.
-
-### Window.size
-
-```rust
-fn size(self) -> Vec2
-```
-
-The window's own size in pixels; in the browser, the canvas.
-
-### Window.set_size
-
-```rust
-fn set_size(self, w: int, h: int)
-```
-
-### Window.fullscreen
-
-```rust
-fn fullscreen(self) -> bool
-```
-
-### Window.set_fullscreen
-
-```rust
-fn set_fullscreen(self, on: bool)
-```
-
-Browsers allow fullscreen only right after a tap, click or key; asked for at another time, it waits for the next one.
-
-### Window.show_cursor
-
-```rust
-fn show_cursor(self, visible: bool)
-```
-
-### Window.set_cursor
-
-```rust
-fn set_cursor(self, c: Cursor)
-```
-
-### Window.draw_calls
-
-```rust
-fn draw_calls(self) -> int
-```
-
-Draw calls and sprites in the last frame.
-
-### Window.sprite_count
-
-```rust
-fn sprite_count(self) -> int
-```
-
-### Window.backend
-
-```rust
-fn backend(self) -> string
-```
-
-"gl" or "webgpu".
-
-### Window.download
-
-```rust
-fn download(self, path: string)
-```
-
-Offers a file the game wrote, such as a screenshot, as a download in the browser. A screenshot asked for this frame is offered once it is written.
-
-```rust
-window.download("shot.png");
-```
-
-### Window.screenshot
-
-```rust
-fn screenshot(self, path: string)
-```
-
-Saves the next presented frame as a PNG.
-
-```rust
-if input.key_pressed(Key::F12) {
-    window.screenshot("shot.png");
-    window.download("shot.png");
-}
-```
-
 ## Assets
 
-Makes textures, sounds, images and maps from data, and loads the kinds of file that `texture(path)` and `sound(path)` do not. Loading the same path again returns the same asset. See [Assets](../concepts/assets.md).
+Makes textures, sounds, images and maps from data, and loads the kinds of file that
+`texture(path)` and `sound(path)` do not. Loading the same path again returns the same
+asset. See [Assets](../concepts/assets.md).
 
 ```rust
 struct Assets {
@@ -813,7 +939,8 @@ let white = assets.create_texture(16, 16, pixels);
 fn create_sound(self, samples: float[], rate: int) -> Sound
 ```
 
-A mono sound from samples between -1 and 1 at `rate` samples per second, for blips made in code.
+A mono sound from samples between -1 and 1 at `rate` samples per second, for blips made
+in code.
 
 ```rust
 let samples: float[] = [];
@@ -853,7 +980,8 @@ let map = assets.ldtk_level("assets/world.ldtk", "Level_2");
 fn create_tilemap(self, width: int, height: int, tile_size: int, tileset: Texture, layers: string[]) -> Map
 ```
 
-An empty map of tile layers over one tileset image, for levels made in code. Tile ids count from 1 at the image's top-left, left to right.
+An empty map of tile layers over one tileset image, for levels made in code. Tile ids
+count from 1 at the image's top-left, left to right.
 
 ```rust
 let map = assets.create_tilemap(40, 25, 16, art.tiles, ["Ground", "Walls"]);
@@ -934,7 +1062,8 @@ fn shader(self, path: string) -> Shader
 fn create_shader(self, wgsl: string, glsl: string) -> Shader
 ```
 
-A shader from source: the body of `fn fragment` in WGSL, the `main` of a GLSL fragment shader, or both. Empty for the one you do not have.
+A shader from source: the body of `fn fragment` in WGSL, the `main` of a GLSL fragment
+shader, or both. Empty for the one you do not have.
 
 ### Assets.create_material
 
@@ -948,7 +1077,8 @@ fn create_material(self, s: Shader) -> Material
 fn aseprite(self, path: string) -> Spritesheet
 ```
 
-An Aseprite file (.ase, .aseprite): its frames side by side in one texture, its frame durations and its tags.
+An Aseprite file (.ase, .aseprite): its frames side by side in one texture, its frame
+durations and its tags.
 
 ### Assets.scene
 
@@ -960,7 +1090,8 @@ A scene file, loaded once per path.
 
 ## Effects
 
-Screen flashes and shakes, particle bursts and emitter control. See [Particles and Effects](../guides/effects.md).
+Screen flashes and shakes, particle bursts and emitter control. See [Particles and
+Effects](../guides/effects.md).
 
 ```rust
 struct Effects {
@@ -1020,7 +1151,8 @@ effects.burst(t.position, ParticleEmitter {
 fn add_material(self, m: Material, order: int) -> Effect
 ```
 
-A post effect running a material's shader over the picture, which arrives as its texture0.
+A post effect running a material's shader over the picture, which arrives as its
+texture0.
 
 ### Effects.restart_particles
 
@@ -1040,7 +1172,8 @@ effects.restart_particles(fountain);
 fn add(self, settings: any) -> Effect
 ```
 
-A post effect from its settings: Bloom, ColorGrading, Blur, Pixelate, Grayscale, Sepia, Vignette or Crt. Each kind has its own place in the chain; add_at picks one.
+A post effect from its settings: Bloom, ColorGrading, Blur, Pixelate, Grayscale, Sepia,
+Vignette or Crt. Each kind has its own place in the chain; add_at picks one.
 
 ```rust
 let grade = effects.add(ColorGrading { saturation: 0.6, brightness: 0.9, .. });
@@ -1052,7 +1185,8 @@ let grade = effects.add(ColorGrading { saturation: 0.6, brightness: 0.9, .. });
 fn add_at(self, settings: any, order: int) -> Effect
 ```
 
-The same, at a place of your choosing in the chain; effects run from the lowest order up.
+The same, at a place of your choosing in the chain; effects run from the lowest order
+up.
 
 ```rust
 effects.add_at(Vignette { intensity: 0.8, .. }, 100);
@@ -1148,7 +1282,8 @@ let soft = effects.blur(2.0, 2);
 fn fade_to(self, c: Color, amount: float, seconds: float)
 ```
 
-Moves the screen `amount` of the way to `c` over `seconds` and holds it there; amount 0 fades back.
+Moves the screen `amount` of the way to `c` over `seconds` and holds it there; amount 0
+fades back.
 
 ```rust
 effects.fade_to(rgb(0, 0, 0), 1.0, 0.5);   // to black over half a second
@@ -1191,242 +1326,12 @@ Multiplies time for every tween; 0 freezes them.
 effects.set_tween_speed(0.0);   // freeze every tween
 ```
 
-## Effect
-
-A post effect running on the picture.
-
-```rust
-struct Effect {
-    id: int = 0,
-}
-```
-
-```rust
-@resource
-struct Looks { crt: Effect }
-
-@system
-fn toggle_crt(input: Input, looks: Looks) {
-    if input.key_pressed(Key::F2) {
-        looks.crt.set_enabled(!looks.crt.enabled());
-    }
-}
-```
-
-### Effect.set
-
-```rust
-fn set(self, settings: any)
-```
-
-New settings of the same kind as the effect was added with.
-
-```rust
-glow.set(Bloom { threshold: 0.5, intensity: 2.5, .. });
-```
-
-### Effect.set_enabled
-
-```rust
-fn set_enabled(self, on: bool)
-```
-
-Switches the effect on or off.
-
-```rust
-looks.crt.set_enabled(false);
-```
-
-### Effect.enabled
-
-```rust
-fn enabled(self) -> bool
-```
-
-Whether the effect is on.
-
-```rust
-if looks.crt.enabled() { log("crt on"); }
-```
-
-### Effect.set_order
-
-```rust
-fn set_order(self, order: int)
-```
-
-Effects run from the lowest order up.
-
-```rust
-glow.set_order(10);
-```
-
-### Effect.remove
-
-```rust
-fn remove(self)
-```
-
-Removes the effect from the chain.
-
-```rust
-looks.crt.remove();
-```
-
-## Bloom
-
-Bright parts bleed light around them.
-
-```rust
-struct Bloom {
-    threshold: float = 0.7,
-    soft_knee: float = 0.5,
-    intensity: float = 1.0,
-    radius: float = 1.0,
-    levels: int = 5,
-    tint: Color = Color { .. },
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `threshold` | `float` | `0.7` | brightness where it starts, 0 to 1 |
-| `soft_knee` | `float` | `0.5` | 0 cuts off hard, 1 eases in |
-| `intensity` | `float` | `1.0` |  |
-| `radius` | `float` | `1.0` |  |
-| `levels` | `int` | `5` | 1 to 8; more spreads wider |
-| `tint` | `Color` | `Color { .. }` |  |
-
-```rust
-effects.add(Bloom { threshold: 0.5, intensity: 1.4, levels: 6, tint: rgb(255, 230, 200), .. });
-```
-
-## ColorGrading
-
-Brightness, contrast, saturation and tint, and an optional lookup table: a strip of N slices of N x N, red across a slice, green down it, blue picking the slice.
-
-```rust
-struct ColorGrading {
-    brightness: float = 1.0,
-    contrast: float = 1.0,
-    saturation: float = 1.0,
-    tint: Color = Color { .. },
-    lut: Texture = Texture { .. },
-    lut_strength: float = 1.0,
-}
-```
-
-```rust
-effects.add(ColorGrading { saturation: 0.6, contrast: 1.1, .. });
-```
-
-## Blur
-
-```rust
-struct Blur {
-    radius: float = 1.0,
-    iterations: int = 2,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `radius` | `float` | `1.0` | Spread in pixels |
-| `iterations` | `int` | `2` | Passes; more is smoother |
-
-```rust
-effects.add(Blur { radius: 2.0, iterations: 3 });
-```
-
-## Pixelate
-
-```rust
-struct Pixelate {
-    size: float = 6.0,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `size` | `float` | `6.0` | Block size in pixels |
-
-```rust
-effects.add(Pixelate { size: 6.0 });
-```
-
-## Grayscale
-
-```rust
-struct Grayscale {
-    amount: float = 1.0,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `amount` | `float` | `1.0` | 0 leaves the colors, 1 is fully gray |
-
-```rust
-effects.add(Grayscale { amount: 1.0 });
-```
-
-## Sepia
-
-```rust
-struct Sepia {
-    amount: float = 1.0,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `amount` | `float` | `1.0` | 0 leaves the colors, 1 is fully brown |
-
-```rust
-effects.add(Sepia { amount: 0.7 });
-```
-
-## Vignette
-
-```rust
-struct Vignette {
-    intensity: float = 0.6,
-    radius: float = 0.75,
-    softness: float = 0.45,
-    color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `intensity` | `float` | `0.6` |  |
-| `radius` | `float` | `0.75` | distance from the center where it is full |
-| `softness` | `float` | `0.45` | it starts this far inside `radius` |
-| `color` | `Color` | `Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }` |  |
-
-```rust
-effects.add(Vignette { intensity: 0.8, color: rgb(40, 0, 0), .. });
-```
-
-## Crt
-
-```rust
-struct Crt {
-    curvature: float = 0.15,
-    scanlines: float = 0.35,
-    scanline_spacing: float = 3.0,
-    chromatic_aberration: float = 1.5,
-    vignette: float = 0.3,
-}
-```
-
-```rust
-effects.add(Crt { curvature: 0.2, scanlines: 0.5, chromatic_aberration: 2.0, .. });
-```
-
 ## Save
 
-A key-value store kept between runs. On the desktop it is a JSON file in the user's data folder, named after `organization` and `name` in `[project]`; in the browser it lives in the page's storage. Values change in memory, and `flush()` writes them. See [Saving](../guides/saving.md).
+A key-value store kept between runs. On the desktop it is a JSON file in the user's data
+folder, named after `organization` and `name` in `[project]`; in the browser it lives in the
+page's storage. Values change in memory, and `flush()` writes them. See
+[Saving](../guides/saving.md).
 
 ```rust
 struct Save {
@@ -1618,6 +1523,61 @@ A value of any type stored as JSON under `key`, or `fallback`.
 fn set_value(self, key: string, value: any)
 ```
 
+## ScaleMode
+
+```rust
+enum ScaleMode { Letterbox, Stretch, Integer, Expand }
+```
+
+## Cursor
+
+```rust
+enum Cursor { Default, Pointer, Text, Crosshair, Move, Wait, NotAllowed }
+```
+
+## Random
+
+The game's seed from drift.toml [random], and a generator per purpose.
+
+```rust
+struct Random {
+    id: int = 0,
+}
+```
+
+```rust
+@system(schedule: Schedule::Startup)
+fn setup(random: Random, level: Level) {
+    log("seed " + string(random.seed()));
+    level.rng = random.stream("levels");
+}
+```
+
+### Random.seed
+
+```rust
+fn seed(self) -> int
+```
+
+The seed in use. With `seed = 0` in `[random]`, a new one is picked each run and logged.
+
+```rust
+hud.value = "Seed " + string(random.seed());
+```
+
+### Random.stream
+
+```rust
+fn stream(self, name: string) -> Rng
+```
+
+The same name gives the same generator for the same seed.
+
+```rust
+let loot = random.stream("loot");
+let levels = random.stream("levels");   // independent of loot
+```
+
 ## Camera2D
 
 Converting between screen and world positions.
@@ -1711,7 +1671,8 @@ let shown = cams.visible_in(minimap_camera);
 
 ## Draw
 
-For debugging, previews and anything with no entity of its own. See [UI and Score](../guides/ui-and-score.md#drawing-without-entities).
+For debugging, previews and anything with no entity of its own. See [UI and
+Score](../guides/ui-and-score.md#drawing-without-entities).
 
 ```rust
 struct Draw {
@@ -1875,7 +1836,8 @@ draw.line(a, b, rgb(255, 80, 80), 2.0);
 fn polyline(self, points: Vec2[], c: Color, thickness: float)
 ```
 
-Lines through the points in order. `polygon_lines` also joins the last point to the first.
+Lines through the points in order. `polygon_lines` also joins the last point to the
+first.
 
 ```rust
 draw.polyline(path_points, rgb(80, 200, 255), 2.0);
@@ -1935,7 +1897,8 @@ draw.text("fps " + string(int(1.0 / time.dt)), vec2(8.0, 8.0), 16.0, rgb(255, 25
 fn text_styled(self, s: string, pos: Vec2, style: Text)
 ```
 
-Text styled like a Text component: font, size, alignment, outline and the rest. Its `value`, `layer`, `z` and `visible` are not used.
+Text styled like a Text component: font, size, alignment, outline and the rest. Its
+`value`, `layer`, `z` and `visible` are not used.
 
 ```rust
 draw.text_styled("Paused", vec2(480.0, 270.0), Text { size: 48.0, align: Align::Center, outline: 3.0, .. });
@@ -1971,7 +1934,9 @@ draw.sprite(Sprite { image: art.ghost, color: rgba(255, 255, 255, 100), .. }, at
 fn nine_slice(self, t: Texture, dest: Rect, frame: Rect, border: Edges, c: Color)
 ```
 
-An image cut in nine: the corners keep their size, the edges and middle stretch over `dest`. `border` is the width of each edge in the image's pixels, inside `frame` (zero size for the whole image).
+An image cut in nine: the corners keep their size, the edges and middle stretch over
+`dest`. `border` is the width of each edge in the image's pixels, inside `frame` (zero
+size for the whole image).
 
 ```rust
 draw.hud();
@@ -2004,9 +1969,305 @@ Ends the clip `push_clip` started.
 draw.pop_clip();
 ```
 
+## Bloom
+
+Bright parts bleed light around them.
+
+```rust
+struct Bloom {
+    threshold: float = 0.7,
+    soft_knee: float = 0.5,
+    intensity: float = 1.0,
+    radius: float = 1.0,
+    levels: int = 5,
+    tint: Color = Color { .. },
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `threshold` | `float` | `0.7` | brightness where it starts, 0 to 1 |
+| `soft_knee` | `float` | `0.5` | 0 cuts off hard, 1 eases in |
+| `intensity` | `float` | `1.0` |  |
+| `radius` | `float` | `1.0` |  |
+| `levels` | `int` | `5` | 1 to 8; more spreads wider |
+| `tint` | `Color` | `Color { .. }` |  |
+
+```rust
+effects.add(Bloom { threshold: 0.5, intensity: 1.4, levels: 6, tint: rgb(255, 230, 200), .. });
+```
+
+## ColorGrading
+
+Brightness, contrast, saturation and tint, and an optional lookup table: a strip of N slices
+of N x N, red across a slice, green down it, blue picking the slice.
+
+```rust
+struct ColorGrading {
+    brightness: float = 1.0,
+    contrast: float = 1.0,
+    saturation: float = 1.0,
+    tint: Color = Color { .. },
+    lut: Texture = Texture { .. },
+    lut_strength: float = 1.0,
+}
+```
+
+```rust
+effects.add(ColorGrading { saturation: 0.6, contrast: 1.1, .. });
+```
+
+## Blur
+
+```rust
+struct Blur {
+    radius: float = 1.0,
+    iterations: int = 2,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `radius` | `float` | `1.0` | Spread in pixels |
+| `iterations` | `int` | `2` | Passes; more is smoother |
+
+```rust
+effects.add(Blur { radius: 2.0, iterations: 3 });
+```
+
+## Pixelate
+
+```rust
+struct Pixelate {
+    size: float = 6.0,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `size` | `float` | `6.0` | Block size in pixels |
+
+```rust
+effects.add(Pixelate { size: 6.0 });
+```
+
+## Grayscale
+
+```rust
+struct Grayscale {
+    amount: float = 1.0,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `amount` | `float` | `1.0` | 0 leaves the colors, 1 is fully gray |
+
+```rust
+effects.add(Grayscale { amount: 1.0 });
+```
+
+## Sepia
+
+```rust
+struct Sepia {
+    amount: float = 1.0,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `amount` | `float` | `1.0` | 0 leaves the colors, 1 is fully brown |
+
+```rust
+effects.add(Sepia { amount: 0.7 });
+```
+
+## Vignette
+
+```rust
+struct Vignette {
+    intensity: float = 0.6,
+    radius: float = 0.75,
+    softness: float = 0.45,
+    color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `intensity` | `float` | `0.6` |  |
+| `radius` | `float` | `0.75` | distance from the center where it is full |
+| `softness` | `float` | `0.45` | it starts this far inside `radius` |
+| `color` | `Color` | `Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }` |  |
+
+```rust
+effects.add(Vignette { intensity: 0.8, color: rgb(40, 0, 0), .. });
+```
+
+## Crt
+
+```rust
+struct Crt {
+    curvature: float = 0.15,
+    scanlines: float = 0.35,
+    scanline_spacing: float = 3.0,
+    chromatic_aberration: float = 1.5,
+    vignette: float = 0.3,
+}
+```
+
+```rust
+effects.add(Crt { curvature: 0.2, scanlines: 0.5, chromatic_aberration: 2.0, .. });
+```
+
+## Effect
+
+A post effect running on the picture.
+
+```rust
+struct Effect {
+    id: int = 0,
+}
+```
+
+```rust
+@resource
+struct Looks { crt: Effect }
+
+@system
+fn toggle_crt(input: Input, looks: Looks) {
+    if input.key_pressed(Key::F2) {
+        looks.crt.set_enabled(!looks.crt.enabled());
+    }
+}
+```
+
+### Effect.set
+
+```rust
+fn set(self, settings: any)
+```
+
+New settings of the same kind as the effect was added with.
+
+```rust
+glow.set(Bloom { threshold: 0.5, intensity: 2.5, .. });
+```
+
+### Effect.set_enabled
+
+```rust
+fn set_enabled(self, on: bool)
+```
+
+Switches the effect on or off.
+
+```rust
+looks.crt.set_enabled(false);
+```
+
+### Effect.enabled
+
+```rust
+fn enabled(self) -> bool
+```
+
+Whether the effect is on.
+
+```rust
+if looks.crt.enabled() { log("crt on"); }
+```
+
+### Effect.set_order
+
+```rust
+fn set_order(self, order: int)
+```
+
+Effects run from the lowest order up.
+
+```rust
+glow.set_order(10);
+```
+
+### Effect.remove
+
+```rust
+fn remove(self)
+```
+
+Removes the effect from the chain.
+
+```rust
+looks.crt.remove();
+```
+
+## Touch
+
+A finger on a touch screen, in logical screen coordinates.
+
+```rust
+struct Touch {
+    id: int = 0,
+    position: Vec2 = Vec2 { .. },
+    start: Vec2 = Vec2 { .. },
+    delta: Vec2 = Vec2 { .. },
+    pressed: bool = false,
+    released: bool = false,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `id` | `int` | `0` | Stays the same while the finger is down |
+| `position` | `Vec2` | `Vec2 { .. }` | Where the finger is, in logical screen pixels |
+| `start` | `Vec2` | `Vec2 { .. }` | Where it went down |
+| `delta` | `Vec2` | `Vec2 { .. }` | How far it moved this frame |
+| `pressed` | `bool` | `false` | It went down this frame |
+| `released` | `bool` | `false` | It went up this frame; the touch is gone next frame |
+
+```rust
+for t in input.touches() {
+    if t.released && (t.position - t.start).length() > 50.0 {
+        log("swipe");
+    }
+}
+```
+
+## RayHit
+
+What a ray hit; `hit` false when it hit nothing.
+
+```rust
+struct RayHit {
+    hit: bool = false,
+    entity: Entity = Entity { .. },
+    point: Vec2 = Vec2 { .. },
+    normal: Vec2 = Vec2 { .. },
+    fraction: float = 0.0,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `hit` | `bool` | `false` | Whether the ray hit anything |
+| `entity` | `Entity` | `Entity { .. }` | The entity it hit |
+| `point` | `Vec2` | `Vec2 { .. }` | Where, in the world |
+| `normal` | `Vec2` | `Vec2 { .. }` | The surface direction at the hit |
+| `fraction` | `float` | `0.0` | How far along the ray, 0 to 1 |
+
+```rust
+let ray = physics.raycast(origin, dir, 300.0);
+if ray.hit {
+    draw.circle(ray.point, 3.0, rgb(255, 0, 0));
+}
+```
+
 ## Physics
 
-Gravity, queries about colliders, and pushes on bodies. See [Collisions and Physics](../guides/collisions.md).
+Gravity, queries about colliders, and pushes on bodies. See [Collisions and
+Physics](../guides/collisions.md).
 
 ```rust
 struct Physics {
@@ -2035,7 +2296,8 @@ fn line_of_sight(guard: (Guard, Transform), physics: Physics,
 fn gravity(self) -> Vec2
 ```
 
-World gravity in pixels per second squared. `[physics] gravity` in `drift.toml` sets where it starts.
+World gravity in pixels per second squared. `[physics] gravity` in `drift.toml` sets
+where it starts.
 
 ```rust
 let g = physics.gravity();
@@ -2136,7 +2398,8 @@ let enemies_near = physics.overlap_circle_mask(t.position, 120.0, ENEMIES);
 fn apply_impulse(self, e: Entity, impulse: Vec2)
 ```
 
-Pushes on a dynamic body: an impulse changes its velocity at once (a jump, a hit), a force acts over this step (thrust, wind).
+Pushes on a dynamic body: an impulse changes its velocity at once (a jump, a hit), a
+force acts over this step (thrust, wind).
 
 ```rust
 physics.apply_impulse(player, vec2(0.0, -350.0));   // a jump
@@ -2194,7 +2457,11 @@ if input.key_pressed(Key::F3) { physics.set_debug_draw(true); }
 fn rebuild_shapes(self, t: Texture, pixels: Image)
 ```
 
-Makes every TextureCollider showing the texture again next frame, from `pixels`: call it after changing the image and writing it into the texture, such as carving a hole in terrain with Image.fill_circle and Texture.update. It traces the whole image, so do it when the pixels change, not every frame. With Image {} the texture is read back from the GPU instead, which costs more.
+Makes every TextureCollider showing the texture again next frame, from `pixels`: call it
+after changing the image and writing it into the texture, such as carving a hole in
+terrain with Image.fill_circle and Texture.update. It traces the whole image, so do it
+when the pixels change, not every frame. With Image {} the texture is read back from the
+GPU instead, which costs more.
 
 ```rust
 ground_image.fill_circle(hit, 40.0, rgba(0, 0, 0, 0));   // a crater
@@ -2208,7 +2475,10 @@ physics.rebuild_shapes(ground, ground_image);
 fn texture_outlines(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][]
 ```
 
-The outlines a TextureCollider with settings `c` traces in `frame` of the texture (Rect {} for all of it), in pixels from the frame's top-left corner, to draw or check. Solid outlines wind clockwise on screen and holes the other way. Worked out once and kept, like the collider's.
+The outlines a TextureCollider with settings `c` traces in `frame` of the texture (Rect {}
+for all of it), in pixels from the frame's top-left corner, to draw or check. Solid outlines
+wind clockwise on screen and holes the other way. Worked out once and kept, like the
+collider's.
 
 ```rust
 for points in texture_outlines(rock, Rect { .. }, TextureCollider { .. }) {
@@ -2222,87 +2492,17 @@ for points in texture_outlines(rock, Rect { .. }, TextureCollider { .. }) {
 fn texture_pieces(t: Texture, frame: Rect, c: TextureCollider) -> Vec2[][]
 ```
 
-The convex pieces, of at most 8 points, that cover those outlines: the shapes a dynamic body gets.
+The convex pieces, of at most 8 points, that cover those outlines: the shapes a dynamic body
+gets.
 
 ```rust
 let pieces = texture_pieces(rock, Rect { .. }, TextureCollider { .. });
 ```
 
-## RayHit
-
-What a ray hit; `hit` false when it hit nothing.
-
-```rust
-struct RayHit {
-    hit: bool = false,
-    entity: Entity = Entity { .. },
-    point: Vec2 = Vec2 { .. },
-    normal: Vec2 = Vec2 { .. },
-    fraction: float = 0.0,
-}
-```
-
-| Field | Type | Default | Meaning |
-|-------|------|---------|---------|
-| `hit` | `bool` | `false` | Whether the ray hit anything |
-| `entity` | `Entity` | `Entity { .. }` | The entity it hit |
-| `point` | `Vec2` | `Vec2 { .. }` | Where, in the world |
-| `normal` | `Vec2` | `Vec2 { .. }` | The surface direction at the hit |
-| `fraction` | `float` | `0.0` | How far along the ray, 0 to 1 |
-
-```rust
-let ray = physics.raycast(origin, dir, 300.0);
-if ray.hit {
-    draw.circle(ray.point, 3.0, rgb(255, 0, 0));
-}
-```
-
-## Random
-
-The game's seed from drift.toml [random], and a generator per purpose.
-
-```rust
-struct Random {
-    id: int = 0,
-}
-```
-
-```rust
-@system(schedule: Schedule::Startup)
-fn setup(random: Random, level: Level) {
-    log("seed " + string(random.seed()));
-    level.rng = random.stream("levels");
-}
-```
-
-### Random.seed
-
-```rust
-fn seed(self) -> int
-```
-
-The seed in use. With `seed = 0` in `[random]`, a new one is picked each run and logged.
-
-```rust
-hud.value = "Seed " + string(random.seed());
-```
-
-### Random.stream
-
-```rust
-fn stream(self, name: string) -> Rng
-```
-
-The same name gives the same generator for the same seed.
-
-```rust
-let loot = random.stream("loot");
-let levels = random.stream("levels");   // independent of loot
-```
-
 ## Audio
 
-The mixer: one music track at a time on the music bus, playlists, and the buses every sound plays on. See [Sound and Music](../guides/sound.md).
+The mixer: one music track at a time on the music bus, playlists, and the buses every sound
+plays on. See [Sound and Music](../guides/sound.md).
 
 ```rust
 struct Audio {
@@ -2446,7 +2646,8 @@ audio.sfx_bus().set_paused(true);   // pause the game's sounds, keep the music
 fn bus(self, name: string, parent: Bus) -> Bus
 ```
 
-The bus of that name under `parent` (Bus {} for master), made the first time it is asked for.
+The bus of that name under `parent` (Bus {} for master), made the first time it is asked
+for.
 
 ```rust
 let voice = audio.bus("voice", Bus { .. });
@@ -2463,142 +2664,4 @@ false when no output device opened; sounds then advance silently.
 
 ```rust
 if !audio.has_device() { log("no sound"); }
-```
-
-## Systems
-
-Turns systems on and off by function name, from the next system on: a paused game turns off its gameplay systems and keeps its menu running. A name that is not one of the game's systems raises drift_unknown_system, which lists the systems there are.
-
-```rust
-struct Systems {
-    id: int = 0,
-}
-```
-
-```rust
-@system(on_enter: Phase::Paused)
-fn freeze(systems: Systems) {
-    systems.disable("spawn_enemies");
-}
-```
-
-### Systems.enable
-
-```rust
-fn enable(self, system_name: string)
-```
-
-Turns a system on by its function name. A name that is not one of the game's systems raises `drift_unknown_system`, which lists them.
-
-```rust
-systems.enable("spawn_enemies");
-```
-
-### Systems.disable
-
-```rust
-fn disable(self, system_name: string)
-```
-
-Turns a system off by its function name. A name that is not one of the game's systems raises `drift_unknown_system`.
-
-```rust
-systems.disable("spawn_enemies");
-```
-
-### Systems.enabled
-
-```rust
-fn enabled(self, system_name: string) -> bool
-```
-
-Whether a system is on. A name that is not one of the game's systems raises `drift_unknown_system`.
-
-```rust
-if !systems.enabled("autosave") { log("autosave is off"); }
-```
-
-## ResourceField
-
-One field of a resource, for widgets and tools that read it every frame: the `drift/ui` bindings and bars, and the debug overlay. Make one with `resource_field<T>(path)`; the compiler checks the type, and the field name is checked when it is made.
-
-```rust
-struct ResourceField {
-    resource: string = "",
-    field: string = "",
-}
-```
-
-```rust
-@resource
-struct Game { score: int = 0, player: PlayerStats = PlayerStats { .. } }
-
-let score = resource_field<Game>("score");
-let hp = resource_field<Game>("player.hp");    // a field of a struct field
-log(score.label() + " is " + score.text());   // "Game.score is 120"
-```
-
-### ResourceField.is_set
-
-```rust
-fn is_set(self) -> bool
-```
-
-Whether it names a field; `ResourceField {}` names none.
-
-### ResourceField.check
-
-```rust
-fn check(self)
-```
-
-Raises drift_not_a_resource or drift_no_such_field unless it names a field of a resource.
-
-### ResourceField.label
-
-```rust
-fn label(self) -> string
-```
-
-"Game.score".
-
-### ResourceField.text
-
-```rust
-fn text(self) -> string
-```
-
-The field's value as text: numbers and bools as written, strings as they are, and `""` while the resource does not exist.
-
-### ResourceField.number
-
-```rust
-fn number(self) -> float
-```
-
-The field's value as a number: `true` is 1.0, and anything that is not a number is 0.0.
-
-## resource_field
-
-```rust
-fn resource_field<T>(path: string) -> ResourceField
-```
-
-The field `path` of the resource `T`. `T` must be a struct marked `@resource` or `@settings`, or this raises `drift_not_a_resource`; the path must name a field of it, or this raises `drift_no_such_field`, which lists the fields the type has. Made in a resource's field default, it is checked when the game loads.
-
-```rust
-spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0),
-          Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. });
-```
-
-## ScaleMode
-
-```rust
-enum ScaleMode { Letterbox, Stretch, Integer, Expand }
-```
-
-## Cursor
-
-```rust
-enum Cursor { Default, Pointer, Text, Crosshair, Move, Wait, NotAllowed }
 ```

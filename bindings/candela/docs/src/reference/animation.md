@@ -1,9 +1,12 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Procedural Animation
 
-Angles, easing helpers, oscillators, springs, squash and stretch, inverse kinematics, ropes and stepping feet: the pieces for animating parts in code rather than from frames. See [Procedural Animation](../guides/procedural-animation.md) and the [Creature](../examples/creature.md) example.
+Angles, easing helpers, oscillators, springs, squash and stretch, inverse kinematics, ropes
+and stepping feet: the pieces for animating parts in code rather than from frames. See
+[Procedural Animation](../guides/procedural-animation.md) and the
+[Creature](../examples/creature.md) example.
 
 ## wrap_angle
 
@@ -19,7 +22,8 @@ An angle brought into -PI to PI.
 fn angle_diff(from: float, to: float) -> float
 ```
 
-The shortest turn from `from` to `to`, -PI to PI: negative turns counter-clockwise on screen.
+The shortest turn from `from` to `to`, -PI to PI: negative turns counter-clockwise on
+screen.
 
 ## lerp_angle
 
@@ -35,7 +39,8 @@ From `a` toward `b` along the shorter arc; t = 0 gives a, 1 gives b.
 fn rotate_towards(current: float, target: float, max_step: float) -> float
 ```
 
-`current` turned toward `target` by at most `max_step` radians, the short way round. Use `speed * dt` as the step for a turn rate.
+`current` turned toward `target` by at most `max_step` radians, the short way round. Use
+`speed * dt` as the step for a turn rate.
 
 ## look_at
 
@@ -65,7 +70,8 @@ fn move_towards(current: float, target: float, max_step: float) -> float
 fn damp(current: float, target: float, rate: float, dt: float) -> float
 ```
 
-From `current` toward `target`, covering the same share of the distance each second whatever the frame rate: higher `rate` is snappier.
+From `current` toward `target`, covering the same share of the distance each second whatever
+the frame rate: higher `rate` is snappier.
 
 ## damp2
 
@@ -87,7 +93,9 @@ fn smoothstep(lo: float, hi: float, x: float) -> float
 fn sine_wave(t: float, frequency: float, amplitude: float, phase: float) -> float
 ```
 
-A sine wave over time `t` (seconds): `frequency` cycles a second between -amplitude and amplitude, shifted by `phase` radians. Give each leg or tentacle its own phase to keep them out of step.
+A sine wave over time `t` (seconds): `frequency` cycles a second between -amplitude and
+amplitude, shifted by `phase` radians. Give each leg or tentacle its own phase to keep them
+out of step.
 
 ## cosine_wave
 
@@ -107,7 +115,8 @@ fn wobble_hash(i: int, seed: int) -> float
 fn wobble(t: float, frequency: float, amplitude: float, seed: int) -> float
 ```
 
-Smooth random motion between -amplitude and amplitude, about `frequency` changes a second: idle sway, hover, trembling. Different seeds give different wobbles.
+Smooth random motion between -amplitude and amplitude, about `frequency` changes a second:
+idle sway, hover, trembling. Different seeds give different wobbles.
 
 ## wobble2
 
@@ -121,7 +130,8 @@ fn wobble2(t: float, frequency: float, amplitude: float, seed: int) -> Vec2
 fn squash(amount: float) -> Vec2
 ```
 
-A scale that keeps the area: `amount` 0.2 is 20 percent taller and thinner, -0.2 shorter and wider. Multiply it into Transform.scale.
+A scale that keeps the area: `amount` 0.2 is 20 percent taller and thinner, -0.2 shorter and
+wider. Multiply it into Transform.scale.
 
 ## stretch
 
@@ -129,11 +139,15 @@ A scale that keeps the area: `amount` 0.2 is 20 percent taller and thinner, -0.2
 fn stretch(velocity: Vec2, per_speed: float, max_stretch: float) -> Vec2
 ```
 
-Stretched along a velocity: rotate the part to `velocity.angle()` and use this scale, longer along x the faster it moves, up to `max_stretch`.
+Stretched along a velocity: rotate the part to `velocity.angle()` and use this scale, longer
+along x the faster it moves, up to `max_stretch`.
 
 ## Spring
 
-A value that chases a target like a weight on a spring. `stiffness` pulls (try 100 to 400), `damping` slows (2 * sqrt(stiffness) settles fastest without overshooting; less wobbles and overshoots). `smooth` instead eases in about `seconds` with no overshoot. Keep the spring in a component so it carries its velocity from frame to frame.
+A value that chases a target like a weight on a spring. `stiffness` pulls (try 100 to 400),
+`damping` slows (2 * sqrt(stiffness) settles fastest without overshooting; less wobbles and
+overshoots). `smooth` instead eases in about `seconds` with no overshoot. Keep the spring in
+a component so it carries its velocity from frame to frame.
 
 ```rust
 struct Spring {
@@ -220,7 +234,8 @@ fn angle_spring(value: float) -> AngleSpring
 
 ## TwoBone
 
-The pose of a two-bone limb: where the elbow or knee goes, where the hand or foot ends up, and the world rotation of each bone.
+The pose of a two-bone limb: where the elbow or knee goes, where the hand or foot ends up,
+and the world rotation of each bone.
 
 ```rust
 struct TwoBone {
@@ -238,11 +253,17 @@ struct TwoBone {
 fn two_bone_ik(root: Vec2, target: Vec2, upper_len: float, lower_len: float, bend: float) -> TwoBone
 ```
 
-Bones of `upper_len` and `lower_len` from `root` reaching for `target`. `bend` 1.0 puts the joint clockwise of the root-to-target line on screen, -1.0 counter-clockwise: pick the side a knee or elbow points. Out of reach, the limb points straight at the target and `reached` is false.
+Bones of `upper_len` and `lower_len` from `root` reaching for `target`. `bend` 1.0 puts the
+joint clockwise of the root-to-target line on screen, -1.0 counter-clockwise: pick the side
+a knee or elbow points. Out of reach, the limb points straight at the target and `reached`
+is false.
 
 ## IkChain
 
-A chain of segments whose end reaches for a target while its first joint stays put: tentacles, necks, spines, long arms. `joints` has one more entry than `lengths`. Limits, when set, keep each segment within `min_angles[i]`..`max_angles[i]` of the one before it (the first one of `base_angle`).
+A chain of segments whose end reaches for a target while its first joint stays put:
+tentacles, necks, spines, long arms. `joints` has one more entry than `lengths`. Limits,
+when set, keep each segment within `min_angles[i]`..`max_angles[i]` of the one before it
+(the first one of `base_angle`).
 
 ```rust
 struct IkChain {
@@ -270,7 +291,8 @@ Limits every joint to `max_bend` radians either way.
 fn solve(self, root: Vec2, target: Vec2) -> bool
 ```
 
-Moves the first joint to `root`, then reaches for `target`. Returns true when the end got within `tolerance`.
+Moves the first joint to `root`, then reaches for `target`. Returns true when the end
+got within `tolerance`.
 
 ### IkChain.end
 
@@ -298,11 +320,14 @@ fn len(self) -> int
 fn ik_chain(root: Vec2, count: int, length: float, direction: float) -> IkChain
 ```
 
-A straight chain of `count` segments of `length` from `root`, pointing along `direction` radians.
+A straight chain of `count` segments of `length` from `root`, pointing along `direction`
+radians.
 
 ## Rope
 
-Points joined by fixed-length links that swing under gravity, the first one held at an anchor: tails, tentacles, hair, scarves, ropes, cloth strips. `stiffness` 0 hangs like a rope; toward 1 it resists bending, like a tail. Points stay above `ground`.
+Points joined by fixed-length links that swing under gravity, the first one held at an
+anchor: tails, tentacles, hair, scarves, ropes, cloth strips. `stiffness` 0 hangs like a
+rope; toward 1 it resists bending, like a tail. Points stay above `ground`.
 
 ```rust
 struct Rope {
@@ -333,7 +358,8 @@ One step with the first point at `anchor`.
 fn pin(self, target: Vec2)
 ```
 
-Holds the last point at `target` as well, as for a rope tied at both ends; `release()` lets it go.
+Holds the last point at `target` as well, as for a rope tied at both ends; `release()`
+lets it go.
 
 ### Rope.release
 
@@ -373,7 +399,9 @@ fn rope(start: Vec2, count: int, segment: float, direction: float) -> Rope
 
 ## Gait
 
-How a foot steps: once it is more than `distance` from where it should stand, it lifts `height` along `up` and lands there over `duration` seconds, `lead` times `distance` further on in the direction it moved.
+How a foot steps: once it is more than `distance` from where it should stand, it lifts
+`height` along `up` and lands there over `duration` seconds, `lead` times `distance` further
+on in the direction it moved.
 
 ```rust
 struct Gait {
@@ -387,7 +415,8 @@ struct Gait {
 
 ## Foot
 
-A foot that stays planted where it landed while the body moves on, and steps when it strays. Draw it at `position`.
+A foot that stays planted where it landed while the body moves on, and steps when it strays.
+Draw it at `position`.
 
 ```rust
 struct Foot {
@@ -410,7 +439,9 @@ fn planted(self) -> bool
 fn update(self, rest: Vec2, g: Gait, can_step: bool, dt: float) -> bool
 ```
 
-Advances the foot toward `rest`, where it would stand under the body now. A planted foot only starts a step when `can_step`: pass whether the opposite foot is planted to make legs take turns. Returns true on the frame it lands.
+Advances the foot toward `rest`, where it would stand under the body now. A planted foot
+only starts a step when `can_step`: pass whether the opposite foot is planted to make
+legs take turns. Returns true on the frame it lands.
 
 ## foot
 

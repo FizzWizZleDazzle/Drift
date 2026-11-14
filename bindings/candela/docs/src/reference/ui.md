@@ -1,9 +1,10 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # HUD and Menus: drift/ui
 
-The `drift/ui` module: labels, panels, bars, buttons, toggles, sliders, toasts and dialog boxes on the screen layer. Import it beside `drift`:
+The `drift/ui` module: labels, panels, bars, buttons, toggles, sliders, toasts and dialog
+boxes on the screen layer. Import it beside `drift`:
 
 ```rust
 import "drift" { * };
@@ -14,7 +15,9 @@ See [UI and Score](../guides/ui-and-score.md) for a walk through it.
 
 ## Theme
 
-The look every widget starts from. Set it once in drift.toml [theme] or from a system; a widget copies what it needs when it is made, so change one widget afterwards through its own components.
+The look every widget starts from. Set it once in drift.toml [theme] or from a system; a
+widget copies what it needs when it is made, so change one widget afterwards through its own
+components.
 
 ```rust
 @settings(section: "theme")
@@ -41,6 +44,29 @@ struct Theme {
     safe_margin: Vec2 = Vec2 { x: 0.0, y: 0.0 },
 }
 ```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `font` | `Font` | `Font { .. }` |  |
+| `text_size` | `float` | `22.0` |  |
+| `text_color` | `Color` | `Color { r: 0.93, g: 0.94, b: 0.97, a: 1.0 }` |  |
+| `outline` | `float` | `0.0` |  |
+| `outline_color` | `Color` | `Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }` |  |
+| `shadow_offset` | `Vec2` | `Vec2 { x: 0.0, y: 2.0 }` |  |
+| `shadow_color` | `Color` | `Color { r: 0.0, g: 0.0, b: 0.0, a: 0.55 }` |  |
+| `panel_color` | `Color` | `Color { r: 0.08, g: 0.09, b: 0.14, a: 0.86 }` |  |
+| `accent` | `Color` | `Color { r: 0.35, g: 0.67, b: 1.0, a: 1.0 }` |  |
+| `button_color` | `Color` | `Color { r: 0.18, g: 0.21, b: 0.32, a: 1.0 }` |  |
+| `button_hover` | `Color` | `Color { r: 0.26, g: 0.31, b: 0.46, a: 1.0 }` |  |
+| `button_pressed` | `Color` | `Color { r: 0.13, g: 0.15, b: 0.24, a: 1.0 }` |  |
+| `button_focus` | `Color` | `Color { r: 0.35, g: 0.67, b: 1.0, a: 1.0 }` |  |
+| `bar_back` | `Color` | `Color { r: 0.05, g: 0.06, b: 0.09, a: 0.9 }` |  |
+| `bar_fill` | `Color` | `Color { r: 0.36, g: 0.85, b: 0.45, a: 1.0 }` |  |
+| `bar_trail` | `Color` | `Color { r: 0.95, g: 0.85, b: 0.4, a: 1.0 }` |  |
+| `padding` | `Vec2` | `Vec2 { x: 16.0, y: 10.0 }` |  |
+| `corner_radius` | `float` | `6.0` |  |
+| `widget_width` | `float` | `220.0` | The narrowest a button, toggle or slider is; slider tracks add half. |
+| `safe_margin` | `Vec2` | `Vec2 { x: 0.0, y: 0.0 }` | Kept clear on every side of the window: notches and rounded corners on phones. |
 
 ### Theme.sized
 
@@ -138,7 +164,9 @@ const BOTTOM_RIGHT: Vec2 = Vec2 { x: 1.0, y: 1.0 }
 
 ## Anchor
 
-Keeps the entity at a point of the window plus `offset` pixels, inside the theme's safe margin. Widgets made here also take `to` as their pivot, so a TOP_RIGHT widget hangs from the top-right corner.
+Keeps the entity at a point of the window plus `offset` pixels, inside the theme's safe
+margin. Widgets made here also take `to` as their pivot, so a TOP_RIGHT widget hangs from
+the top-right corner.
 
 ```rust
 @component
@@ -205,7 +233,11 @@ A rounded panel behind other widgets, `size` pixels.
 
 ## Bind
 
-Fills a Text from a field of a resource: `source` names it, made with resource_field&lt;Game>("score"), and `format` is the text with {} where the value goes. `count_speed` above 0 counts a number up or down to its new value at that many units per second, with at least a quarter second per change, instead of jumping. `decimals` is how many digits a number shows after the point.
+Fills a Text from a field of a resource: `source` names it, made with
+resource_field&lt;Game>("score"), and `format` is the text with {} where the value goes.
+`count_speed` above 0 counts a number up or down to its new value at that many units per
+second, with at least a quarter second per change, instead of jumping. `decimals` is how
+many digits a number shows after the point.
 
 ```rust
 @component
@@ -225,7 +257,9 @@ struct Bind {
 fn bind_text<T>(path: string, format: string) -> Bind
 ```
 
-A Bind showing the field `path` of the resource T: bind_text&lt;Game>("score", "Score {}"). A type that is not a resource, or a field it does not have, raises drift_not_a_resource or drift_no_such_field.
+A Bind showing the field `path` of the resource T: bind_text&lt;Game>("score", "Score {}"). A
+type that is not a resource, or a field it does not have, raises drift_not_a_resource or
+drift_no_such_field.
 
 ## bind_counter
 
@@ -246,7 +280,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## ClockBind
 
-A Text that shows a resource field holding seconds as a clock, "m:ss", or "m:ss.d" with `tenths`: ClockBind { source: resource_field&lt;Game>("time_left"), .. }.
+A Text that shows a resource field holding seconds as a clock, "m:ss", or "m:ss.d" with
+`tenths`: ClockBind { source: resource_field&lt;Game>("time_left"), .. }.
 
 ```rust
 @component
@@ -288,7 +323,12 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Bar
 
-A bar that fills to value / max: health, stamina, progress. The fill slides toward a new value at `smooth` per second (0 jumps), and a trail in `trail_color` shows recent damage, shrinking after `trail_delay` seconds. `value_from` and `max_from`, made with resource_field&lt;Game>("hp"), fill value and max from resource fields every frame. `smooth` is a rate per second (0 jumps); `trail_speed` is the share of the bar the trail shrinks per second. Colors left unset come from the theme.
+A bar that fills to value / max: health, stamina, progress. The fill slides toward a new
+value at `smooth` per second (0 jumps), and a trail in `trail_color` shows recent damage,
+shrinking after `trail_delay` seconds. `value_from` and `max_from`, made with
+resource_field&lt;Game>("hp"), fill value and max from resource fields every frame. `smooth` is
+a rate per second (0 jumps); `trail_speed` is the share of the bar the trail shrinks per
+second. Colors left unset come from the theme.
 
 ```rust
 @component
@@ -319,7 +359,10 @@ struct Bar {
 fn spawn_bar(cmd: Commands, theme: Theme, at: Anchor, size: Vec2, bar: Bar) -> Entity
 ```
 
-Spawns a bar `size` pixels at `at` and answers its entity: `spawn_bar(cmd, theme, anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0), Bar { value_from: resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. })`. Change it later through a system that takes its Bar.
+Spawns a bar `size` pixels at `at` and answers its entity: `spawn_bar(cmd, theme,
+anchor(TOP_LEFT, 16.0, 48.0), vec2(220.0, 18.0), Bar { value_from:
+resource_field<Game>("hp"), max_from: resource_field<Game>("max_hp"), .. })`. Change it
+later through a system that takes its Bar.
 
 ## ui_bars
 
@@ -332,7 +375,9 @@ A system the module adds: it runs in every game that imports the module.
 
 ## IconRow
 
-A row of `max` icons with the first `count` lit: hearts, ammo, lives. Icons are `image` when it is set, circles otherwise. `count_from`, made with resource_field&lt;Game>("lives"), fills count from a resource field.
+A row of `max` icons with the first `count` lit: hearts, ammo, lives. Icons are `image` when
+it is set, circles otherwise. `count_from`, made with resource_field&lt;Game>("lives"), fills
+count from a resource field.
 
 ```rust
 @component
@@ -366,7 +411,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## ButtonPressed
 
-Sent when a button is clicked, tapped, or activated with Return, Space or the gamepad's South button while focused.
+Sent when a button is clicked, tapped, or activated with Return, Space or the gamepad's
+South button while focused.
 
 ```rust
 @message
@@ -410,7 +456,9 @@ enum WidgetKind { Button, Toggle, Slider }
 
 ## UiFocus
 
-Which widget the keyboard or gamepad is on: the `order` of a Widget, or -1 before anyone navigates. Up/Down (W/S, the d-pad, the left stick) move it; Left/Right change a focused slider.
+Which widget the keyboard or gamepad is on: the `order` of a Widget, or -1 before anyone
+navigates. Up/Down (W/S, the d-pad, the left stick) move it; Left/Right change a focused
+slider.
 
 ```rust
 @resource
@@ -456,7 +504,8 @@ struct Widget {
 fn button(cmd: Commands, theme: Theme, at: Anchor, id: string, text: string, order: int) -> Entity
 ```
 
-A button with `text`; pressing it sends ButtonPressed with `id`. `order` is its place in keyboard and gamepad navigation.
+A button with `text`; pressing it sends ButtonPressed with `id`. `order` is its place in
+keyboard and gamepad navigation.
 
 ## toggle
 
@@ -496,7 +545,9 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Reveal
 
-Fades and slides a widget in and out: set `shown` and it moves from `offset + slide` (hidden) to `offset` (shown) over `seconds`, fading its Rectangle or Text. A hidden widget stops drawing.
+Fades and slides a widget in and out: set `shown` and it moves from `offset + slide`
+(hidden) to `offset` (shown) over `seconds`, fading its Rectangle or Text. A hidden widget
+stops drawing.
 
 ```rust
 @component
@@ -536,7 +587,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Toast
 
-A message that shows for a few seconds below the top of the window and goes; newer ones stack under older ones.
+A message that shows for a few seconds below the top of the window and goes; newer ones
+stack under older ones.
 
 ```rust
 @component
@@ -564,7 +616,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Typewriter
 
-Reveals a Text's `full` string a few characters at a time. `finished` turns true once all of it shows; finish() shows it at once.
+Reveals a Text's `full` string a few characters at a time. `finished` turns true once all of
+it shows; finish() shows it at once.
 
 ```rust
 @component
@@ -605,7 +658,9 @@ struct DialogClosed {
 
 ## DialogBox
 
-A box along the bottom of the window that types out `pages` one after another. Return, Space, a click or the South button finishes the page, then turns it; after the last page the box closes and sends DialogClosed.
+A box along the bottom of the window that types out `pages` one after another. Return,
+Space, a click or the South button finishes the page, then turns it; after the last page the
+box closes and sends DialogClosed.
 
 ```rust
 @component
@@ -634,7 +689,9 @@ A system the module adds: it runs in every game that imports the module.
 
 ## FollowWorld
 
-Keeps an anchored widget over an entity in the world: `offset` pixels from where the camera shows the target. Floating names, prompts and health bars over heads. The widget hides while the target is gone.
+Keeps an anchored widget over an entity in the world: `offset` pixels from where the camera
+shows the target. Floating names, prompts and health bars over heads. The widget hides while
+the target is gone.
 
 ```rust
 @component
@@ -661,7 +718,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## OffscreenArrow
 
-An arrow at the edge of the window pointing at `target` while the camera does not show it: the way to the exit, a lost teammate, a boss.
+An arrow at the edge of the window pointing at `target` while the camera does not show it:
+the way to the exit, a lost teammate, a boss.
 
 ```rust
 @component
@@ -684,7 +742,8 @@ A system the module adds: it runs in every game that imports the module.
 
 ## Radar
 
-A round radar on the HUD at the anchor: entities with a RadarBlip within `range` world units of `center` show as dots.
+A round radar on the HUD at the anchor: entities with a RadarBlip within `range` world units
+of `center` show as dots.
 
 ```rust
 @component
@@ -720,7 +779,9 @@ A system the module adds: it runs in every game that imports the module.
 
 ## NineSlice
 
-A panel drawn from an image cut in nine: the corners keep their size and the edges and middle stretch, so one small image frames any size. `border` is the width of each edge in the image's pixels; `frame` picks part of the image (zero for all of it).
+A panel drawn from an image cut in nine: the corners keep their size and the edges and
+middle stretch, so one small image frames any size. `border` is the width of each edge in
+the image's pixels; `frame` picks part of the image (zero for all of it).
 
 ```rust
 @component
@@ -756,7 +817,8 @@ A system the module adds: it runs in every game that imports the module.
 fn icon_label(cmd: Commands, theme: Theme, icon: Texture, text: string, at: Anchor) -> Entity
 ```
 
-An icon and text side by side, as one anchored line: coins, ammo, keys. Answers the text's entity; the icon is a part of it.
+An icon and text side by side, as one anchored line: coins, ammo, keys. Answers the text's
+entity; the icon is a part of it.
 
 ## IconOf
 

@@ -1,4 +1,4 @@
-// Fonts, text formatting and localization.
+//! Fonts, text formatting and localization.
 
 import "drift/core/values" { * };
 import "drift/core/assets" { * };
@@ -8,18 +8,18 @@ import "drift/core/data" { * };
 // ---- Fonts and text ----
 
 impl Font {
-    // Widest line and height of `s` in this font at `size`.
+    /// Widest line and height of `s` in this font at `size`.
     fn measure(self, s: string, size: float) -> Vec2 {
         let m = drift::text_measure(s, Text { size: size, font: self, .. });
         return Vec2 { x: m[0], y: m[1] };
     }
     fn line_height(self, size: float) -> float { return drift::font_line_height(self.id, size); }
-    // Characters this font lacks come from `other`; every font falls back to
-    // the built-in one until this changes it.
+    /// Characters this font lacks come from `other`; every font falls back to the built-in one
+    /// until this changes it.
     fn set_fallback(self, other: Font) { drift::font_fallback(self.id, other.id); }
 }
 impl Text {
-    // The size this text covers as drawn, outline and shadow left out.
+    /// The size this text covers as drawn, outline and shadow left out.
     fn measure(self) -> Vec2 {
         let m = drift::text_measure(self.value, self);
         return Vec2 { x: m[0], y: m[1] };
@@ -28,8 +28,10 @@ impl Text {
 
 // ---- Text formatting ----
 
-// The pattern with each {} replaced by the next argument and each {0}, {1}
-// by the argument at that index: format("{} of {}", [3, 10]) is "3 of 10".
+//! page: data
+
+/// The pattern with each {} replaced by the next argument and each {0}, {1} by the argument at
+/// that index: format("{} of {}", [3, 10]) is "3 of 10".
 fn format(pattern: string, args: any[]) -> string {
     let out = "";
     let next = 0;
@@ -69,9 +71,9 @@ fn format(pattern: string, args: any[]) -> string {
     }
     return out;
 }
-// The pattern with each {name} replaced by values[name]:
-// format_named("Hi {who}", {"who": "Ana"}). Names not in `values` stay as
-// they are.
+
+/// The pattern with each {name} replaced by values[name]: format_named("Hi {who}", {"who":
+/// "Ana"}). Names not in `values` stay as they are.
 fn format_named(pattern: string, values: {string: any}) -> string {
     let out = pattern;
     for k in values.keys() {
@@ -79,7 +81,8 @@ fn format_named(pattern: string, values: {string: any}) -> string {
     }
     return out;
 }
-// x with exactly `decimals` digits after the point: fixed(3.14159, 2) is "3.14".
+
+/// x with exactly `decimals` digits after the point: fixed(3.14159, 2) is "3.14".
 fn fixed(x: float, decimals: int) -> string {
     let scale = 1;
     for i in range(decimals) {
@@ -99,7 +102,8 @@ fn fixed(x: float, decimals: int) -> string {
     }
     return sign_text + string(n / scale) + "." + frac;
 }
-// n with zeros in front up to `width` digits: pad(7, 3) is "007".
+
+/// n with zeros in front up to `width` digits: pad(7, 3) is "007".
 fn pad(n: int, width: int) -> string {
     let digits = string(n.abs());
     while digits.len() < width {
@@ -110,7 +114,8 @@ fn pad(n: int, width: int) -> string {
     }
     return digits;
 }
-// n with a comma between each group of three digits: "12,345".
+
+/// n with a comma between each group of three digits: "12,345".
 fn grouped(n: int) -> string {
     let digits = string(n.abs());
     let out = "";
@@ -130,10 +135,14 @@ fn grouped(n: int) -> string {
     }
     return out;
 }
-// Seconds as "m:ss", or "h:mm:ss" from an hour up: "1:05".
+
+/// Seconds as "m:ss", or "h:mm:ss" from an hour up: "1:05".
 fn format_clock(seconds: float) -> string { return clock_text(seconds, false); }
-// The same with a digit of tenths after a point: "1:05.3".
+
+/// The same with a digit of tenths after a point: "1:05.3".
 fn format_clock_tenths(seconds: float) -> string { return clock_text(seconds, true); }
+
+/// Internal: a helper the module needs; games do not call it.
 fn clock_text(seconds: float, tenths: bool) -> string {
     let s = max(seconds, 0.0);
     let total = int(s.floor());
@@ -153,11 +162,9 @@ fn clock_text(seconds: float, tenths: bool) -> string {
 
 // The game's text in the player's language: one file per language, key ->
 // text, in JSON or TOML. drift.toml [locale] says where:
-//
-//     [locale]
-//     folder = "assets/lang"   # files named <language>.json or .toml
-//     language = "auto"        # the browser's (or system's) language, or "fr"
-//     fallback = "en"          # where keys missing from a language come from
+/// [locale] folder = "assets/lang"   # files named <language>.json or .toml language = "auto"
+/// # the browser's (or system's) language, or "fr" fallback = "en"          # where keys
+/// missing from a language come from
 struct Strings { language: string = "", table: {string: string} = {}, fallback: {string: string} = {} }
 
 fn locale_setting(key: string, fallback: string) -> string {
@@ -176,10 +183,11 @@ fn locale_table(folder: string, language: string) -> Option<{string: string}> {
     }
     return None;
 }
-// The text the player reads, as [locale] in drift.toml picks it.
+
+/// The text the player reads, as [locale] in drift.toml picks it.
 fn localization() -> Strings { return localization_for(locale_setting("language", "auto")); }
-// The text in one language ("fr-CA" falls back to "fr", then to the
-// fallback language).
+
+/// The text in one language ("fr-CA" falls back to "fr", then to the fallback language).
 fn localization_for(language: string) -> Strings {
     let folder = locale_setting("folder", "assets/lang");
     let fallback = locale_setting("fallback", "en");
@@ -216,8 +224,8 @@ fn localization_for(language: string) -> Strings {
     return out;
 }
 impl Strings {
-    // The text for `key`, from the fallback language when this one lacks
-    // it, or the key itself when neither has it.
+    /// The text for `key`, from the fallback language when this one lacks it, or the key itself
+    /// when neither has it.
     fn get(self, key: string) -> string {
         if self.table.contains(key) {
             return self.table[key];
@@ -227,6 +235,6 @@ impl Strings {
         }
         return key;
     }
-    // The text for `key` with its {name} parts filled from `values`.
+    /// The text for `key` with its {name} parts filled from `values`.
     fn get_with(self, key: string, values: {string: any}) -> string { return format_named(self.get(key), values); }
 }

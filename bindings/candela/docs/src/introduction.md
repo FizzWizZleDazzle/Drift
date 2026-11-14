@@ -40,7 +40,7 @@ drift build --web
 3. Read the [concepts](concepts/components.md) once; every game uses them.
 4. Pick the [guide](guides/input.md) for what you are building, or start from an [example](examples/gallery.md) and change it.
 
-The [reference](reference/index.md) lists every type, field, function and attribute of the `drift` module, each with an example. Use the search box (press `S`) to find a name, or Shift-click a name in any code on these pages to open its entry; hover a name to see its signature.
+The [reference](reference/index.md) lists every type, field, function and attribute of the `drift` module, each with an example. Use the search box (press `S`) to find a name, or Shift-click a name in any code on these pages to open its entry; hover a name to see its signature. The entries are written from the doc comments in the module's source, so your editor shows the same text when you hover a name (see [Editor support](getting-started/install.md#editor-support)).
 
 You need to know Candela itself: structs, functions, lists and imports. The [Candela book](https://docs.lumenfx.dev/candela/) covers the language. Drift's engine is also a C++ library; its [engine book](https://fizzwizzledazzle.github.io/Drift/) covers C++ games and the engine's design.
 

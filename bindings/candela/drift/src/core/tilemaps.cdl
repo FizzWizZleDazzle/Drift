@@ -1,4 +1,4 @@
-// Tilemaps, their objects and autotiling.
+//! Tilemaps, their objects and autotiling.
 
 import "drift/core/values" { * };
 import "drift/core/components" { * };
@@ -7,9 +7,22 @@ import "drift/core/text" { * };
 
 // ---- Tilemaps ----
 
-// A loaded or generated map. Layers count from 0 at the bottom.
-struct Map { id: int = 0 }
+//! page: assets
 
+/// Show a map with a [`Tilemap`](components.md#tilemap) component. Cells are
+/// [`Cell`](procgen.md#cell) values and tile ids count from 1, as in Tiled; 0 is an empty cell.
+/// See [Levels and Tilemaps](../guides/levels-and-tilemaps.md).
+///
+/// ```rust
+/// @resource
+/// struct Level { map: Map = Map { .. } }
+/// ```
+struct Map {
+    /// The engine's handle
+    id: int = 0,
+}
+
+/// Internal: a helper the module needs; games do not call it.
 fn load_map(path: string, level: string) -> Map {
     let id = drift::map_load(path, level);
     if id == 0 {
@@ -19,22 +32,45 @@ fn load_map(path: string, level: string) -> Map {
 }
 
 impl Map {
-    // Size in cells.
+    /// Size in cells.
+    ///
+    /// ```rust
+    /// let cells = level.map.size();   // Cell { x: columns, y: rows }
+    /// ```
     fn size(self) -> Cell {
         let i = drift::map_info(self.id);
         return Cell { x: int(i[0]), y: int(i[1]) };
     }
-    // Size of one cell in pixels.
+    /// Size of one cell in pixels.
+    ///
+    /// ```rust
+    /// let px = level.map.tile_size();
+    /// ```
     fn tile_size(self) -> Cell {
         let i = drift::map_info(self.id);
         return Cell { x: int(i[2]), y: int(i[3]) };
     }
-    // The world rect the map covers where its Tilemap entity puts it.
+    /// The world rect the map covers where its Tilemap entity puts it.
+    ///
+    /// ```rust
+    /// cmd.insert(camera, CameraBounds { area: level.map.bounds() });
+    /// ```
     fn bounds(self) -> Rect {
         let i = drift::map_info(self.id);
         return Rect { x: i[4], y: i[5], w: i[6], h: i[7] };
     }
+    /// How many layers the map has.
+    ///
+    /// ```rust
+    /// for i in range(level.map.layer_count()) { log(level.map.layer_name(i)); }
+    /// ```
     fn layer_count(self) -> int { return int(drift::map_info(self.id)[8]); }
+    /// The index of a layer by name. Raises `drift_no_such_layer` for a name the map does not
+    /// have.
+    ///
+    /// ```rust
+    /// let ground = level.map.layer("Ground");
+    /// ```
     fn layer(self, name: string) -> int {
         let l = drift::map_layer(self.id, name);
         if l < 0 {
@@ -42,71 +78,158 @@ impl Map {
         }
         return l;
     }
+    /// The name of the layer at an index.
+    ///
+    /// ```rust
+    /// let name = level.map.layer_name(0);
+    /// ```
     fn layer_name(self, layer: int) -> string { return drift::map_layer_name(self.id, layer); }
+    /// Shows or hides a layer.
+    ///
+    /// ```rust
+    /// level.map.set_layer_visible(level.map.layer("Secrets"), true);
+    /// ```
     fn set_layer_visible(self, layer: int, visible: bool) { drift::map_layer_visible(self.id, layer, visible); }
-    // A solid layer becomes static colliders on its Tilemap entity: every
-    // tile (or IntGrid value) in `values`, or any when `values` is empty.
+    /// A solid layer becomes static colliders on its Tilemap entity: every tile (or IntGrid
+    /// value) in `values`, or any when `values` is empty.
+    ///
+    /// ```rust
+    /// level.map.set_layer_solid(level.map.layer("Walls"), true, []);
+    /// ```
     fn set_layer_solid(self, layer: int, solid: bool, values: int[]) { drift::map_layer_solid(self.id, layer, solid, values); }
+    /// The tile id in a cell of a layer; 0 for empty.
+    ///
+    /// ```rust
+    /// if level.map.tile(ground, c) == 0 { log("a hole"); }
+    /// ```
     fn tile(self, layer: int, c: Cell) -> int { return drift::map_tile(self.id, layer, c.x, c.y, 0); }
+    /// Changes a tile. On a solid layer the colliders follow next frame.
+    ///
+    /// ```rust
+    /// level.map.set_tile(ground, c, 0);   // dig
+    /// ```
     fn set_tile(self, layer: int, c: Cell, id: int) { drift::map_set_tile(self.id, layer, c.x, c.y, id, 0); }
+    /// The value in an LDtk IntGrid layer.
+    ///
+    /// ```rust
+    /// let v = level.map.int_grid(collision, c);
+    /// ```
     fn int_grid(self, layer: int, c: Cell) -> int { return drift::map_tile(self.id, layer, c.x, c.y, 1); }
+    /// Changes an LDtk IntGrid value. LDtk's auto-layer rules do not run again.
+    ///
+    /// ```rust
+    /// level.map.set_int_grid(collision, c, 1);
+    /// ```
     fn set_int_grid(self, layer: int, c: Cell, value: int) { drift::map_set_tile(self.id, layer, c.x, c.y, value, 1); }
+    /// The tile id under a world position.
+    ///
+    /// ```rust
+    /// let under = level.map.tile_at(ground, t.position);
+    /// ```
     fn tile_at(self, layer: int, p: Vec2) -> int { return drift::map_tile_at(self.id, layer, p.x, p.y); }
-    // The cell of a layer under a world position.
+    /// The cell under a world position.
+    ///
+    /// ```rust
+    /// let c = level.map.world_to_tile(ground, input.mouse_world());
+    /// ```
     fn world_to_tile(self, layer: int, p: Vec2) -> Cell {
         let c = drift::map_world_to_tile(self.id, p.x, p.y, layer);
         return Cell { x: c[0], y: c[1] };
     }
-    // The world position of a cell's top-left corner.
+    /// The world position of a cell's top-left corner.
+    ///
+    /// ```rust
+    /// let p = level.map.tile_to_world(ground, cell(3, 4));
+    /// ```
     fn tile_to_world(self, layer: int, c: Cell) -> Vec2 {
         let p = drift::map_tile_to_world(self.id, c.x, c.y, layer);
         return Vec2 { x: p[0], y: p[1] };
     }
-    // Writes a grid into a tile layer from cell `at`: a cell holding value v
-    // becomes tile tiles[v]; 0, and values past the end of `tiles`, leave
-    // the cell empty. The counterpart of to_grid.
+    /// Writes a grid into a tile layer from cell `at`: a cell holding value v becomes tile
+    /// tiles[v]; 0, and values past the end of `tiles`, leave the cell empty. The counterpart
+    /// of to_grid.
+    ///
+    /// ```rust
+    /// level.map.write_grid(0, dungeon_grid, [1, 2, 3], cell(0, 0));   // FLOOR -> 1, WALL -> 2, DOOR -> 3
+    /// ```
     fn write_grid(self, layer: int, g: Grid, tiles: int[], at: Cell) {
         drift::map_fill(self.id, layer, g.width, g.height, g.cells, tiles, at.x, at.y);
     }
-    // A tile layer's ids as a grid of the map's size.
+    /// A tile layer's ids as a grid of the map's size.
+    ///
+    /// ```rust
+    /// let walls = level.map.to_grid(level.map.layer("Walls"));
+    /// let path = find_path(walls, from, to, [3], Moves::FourWay);
+    /// ```
     fn to_grid(self, layer: int) -> Grid {
         let s = self.size();
         return Grid { width: s.x, height: s.y, cells: drift::map_read(self.id, layer) };
     }
-    // A property of the Tiled map or LDtk level, as text; "" when missing.
+    /// A property of the Tiled map or LDtk level, as text; "" when missing.
+    ///
+    /// ```rust
+    /// let music = level.map.property("music");
+    /// ```
     fn property(self, name: string) -> string { return drift::map_property(self.id, name); }
-    // Frees the map. Despawn its Tilemap entities first.
+    /// Frees the map. Despawn its Tilemap entities first.
+    ///
+    /// ```rust
+    /// cmd.despawn(level.map_entity);
+    /// level.map.destroy();
+    /// ```
     fn destroy(self) { drift::map_destroy(self.id); }
 }
 
-// Puts a map in the world, its top-left at the entity's Transform.
+//! page: components
+
+/// Shows a [`Map`](assets.md#map) in the world.
+///
+/// ```rust
+/// let map = assets.tilemap("assets/level1.tmj");
+/// cmd.spawn([at(0.0, 0.0), Tilemap { map: map, .. }]);
+/// ```
 struct Tilemap {
+    /// The map to show
     map: Map = Map { .. },
+    /// Draw order within the layer
     z: float = 0.0,
+    /// Render layer
     layer: int = 0,
-    colliders: bool = true,   // static colliders from the solid layers
+    /// Builds static colliders from the map's solid layers
+    colliders: bool = true,
+    /// `false` hides it
     visible: bool = true,
 }
 
 // ---- Tilemap objects and autotiling ----
 
+//! page: assets
+
 enum ObjectShape { Rect, Point, Ellipse, Polygon, Polyline, Tile, Text }
 
-// An object from a Tiled object layer or an LDtk entity, in world
-// coordinates where its map's Tilemap entity puts it.
+/// An object from a Tiled object layer or an LDtk entity, in world coordinates where its map's
+/// Tilemap entity puts it.
 struct MapObject {
     map: Map = Map { .. },
     layer: int = 0,
-    index: int = 0,             // place in its layer
-    id: int = 0,                // the Tiled object id
-    name: string = "",          // Tiled name; LDtk identifier
-    kind: string = "",          // Tiled class; LDtk identifier
+    /// place in its layer
+    index: int = 0,
+    /// the Tiled object id
+    id: int = 0,
+    /// Tiled name; LDtk identifier
+    name: string = "",
+    /// Tiled class; LDtk identifier
+    kind: string = "",
     shape: ObjectShape = ObjectShape::Rect,
     bounds: Rect = Rect { .. },
-    anchor: Vec2 = Vec2 { .. }, // the pivot: LDtk's pivot, a Tiled tile object's bottom-left
-    rotation: float = 0.0,      // radians
-    tile: int = 0,              // the tile of a Tile object
-    points: Vec2[] = [],        // polygon and polyline points
+    /// the pivot: LDtk's pivot, a Tiled tile object's bottom-left
+    anchor: Vec2 = Vec2 { .. },
+    /// radians
+    rotation: float = 0.0,
+    /// the tile of a Tile object
+    tile: int = 0,
+    /// polygon and polyline points
+    points: Vec2[] = [],
 }
 
 fn object_shape(code: int) -> ObjectShape {
@@ -118,11 +241,10 @@ fn object_shape(code: int) -> ObjectShape {
 
 enum AutotileMode { Neighbours4, Neighbours8 }
 
-// How autotile picks tiles. A source cell is terrain when its value is in
-// `terrain` (empty: any non-zero value). `tiles` holds a tile id per
-// neighbour mask: 16 for Neighbours4 (bits N=1 E=2 S=4 W=8), 256 for
-// Neighbours8 (NW=1 N=2 NE=4 W=8 E=16 SW=32 S=64 SE=128; a corner counts
-// only with both edges beside it). 0 entries use `fallback`.
+/// How autotile picks tiles. A source cell is terrain when its value is in `terrain` (empty:
+/// any non-zero value). `tiles` holds a tile id per neighbour mask: 16 for Neighbours4 (bits
+/// N=1 E=2 S=4 W=8), 256 for Neighbours8 (NW=1 N=2 NE=4 W=8 E=16 SW=32 S=64 SE=128; a corner
+/// counts only with both edges beside it). 0 entries use `fallback`.
 struct AutotileRules {
     mode: AutotileMode = AutotileMode::Neighbours4,
     terrain: int[] = [],
@@ -132,8 +254,8 @@ struct AutotileRules {
 }
 
 impl Map {
-    // The objects of a Tiled class or LDtk identifier, every layer, in
-    // order; "" for all of them.
+    /// The objects of a Tiled class or LDtk identifier, every layer, in order; "" for all of
+    /// them.
     fn objects(self, kind: string) -> MapObject[] {
         let f = drift::map_objects(self.id, kind);
         let names = drift::map_object_names(self.id, kind);
@@ -156,14 +278,14 @@ impl Map {
         }
         return out;
     }
-    // A property of an object, as text; "" when it has none of that name.
+    /// A property of an object, as text; "" when it has none of that name.
     fn object_property(self, o: MapObject, name: string) -> string {
         return drift::map_object_property(self.id, o.layer, o.index, name);
     }
-    // A property of a tile in the map's tilesets, as text.
+    /// A property of a tile in the map's tilesets, as text.
     fn tile_property(self, tile: int, name: string) -> string { return drift::map_tile_property(self.id, tile, name); }
-    // Writes `target` tiles from the terrain in `source`, picking each tile
-    // by which neighbours are terrain too.
+    /// Writes `target` tiles from the terrain in `source`, picking each tile by which
+    /// neighbours are terrain too.
     fn autotile(self, source: int, target: int, rules: AutotileRules) {
         let mode = match rules.mode { AutotileMode::Neighbours4 => 0, AutotileMode::Neighbours8 => 1 };
         drift::map_autotile(self.id, source, target, mode, rules.terrain, rules.tiles, rules.fallback,

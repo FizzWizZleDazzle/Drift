@@ -1,5 +1,5 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Enums
 
@@ -25,7 +25,8 @@ enum Schedule { Startup, Update }
 
 ## Align
 
-Which point of a `Text` sits on its position, left to right; the text also turns around this point.
+Which point of a `Text` sits on its position, left to right; the text also turns around this
+point.
 
 ```rust
 Text { value: "Title", align: Align::Center, .. }
@@ -103,26 +104,10 @@ enum BodyKind { Static, Dynamic, Kinematic }
 | `Dynamic` | Falls, collides and is pushed |
 | `Kinematic` | Moves only by its Velocity; pushes dynamic bodies and is not pushed |
 
-## JointKind
-
-```rust
-Joint { kind: JointKind::Revolute, target: wheel, .. }
-```
-
-```rust
-enum JointKind { Distance, Revolute, Prismatic, Weld }
-```
-
-| Variant | Meaning |
-|---------|---------|
-| `Distance` | Keeps the anchors a distance apart, or within `min_length` and `max_length`, as a rod, spring or rope |
-| `Revolute` | A hinge: the bodies turn about the anchor |
-| `Prismatic` | A slider along `axis` |
-| `Weld` | Glues the bodies together, or holds them with a spring |
-
 ## Ease
 
-Easing curves for tweens. `In` starts slow, `Out` ends slow and `InOut` does both. `Back` overshoots, `Elastic` wobbles, `Bounce` bounces, and `Spring` settles like a spring.
+Easing curves for tweens. `In` starts slow, `Out` ends slow and `InOut` does both. `Back`
+overshoots, `Elastic` wobbles, `Bounce` bounces, and `Spring` settles like a spring.
 
 ```rust
 tween().move_to(vec2(400.0, 300.0), 0.6, Ease::OutBack)
@@ -157,60 +142,6 @@ enum EmitShape { Point, Circle, Ring, Box, Line }
 | `Ring` | On a circle of `shape_radius` |
 | `Box` | Inside a box of half size `shape_extents` |
 | `Line` | Along the line from `-shape_extents` to `shape_extents` |
-
-## NoiseType
-
-The kind of [`Noise`](procgen.md#noise).
-
-```rust
-Noise { kind: NoiseType::Perlin, frequency: 0.05, .. }
-```
-
-```rust
-enum NoiseType { Value, Perlin, Simplex }
-```
-
-| Variant | Meaning |
-|---------|---------|
-| `Value` | Blocky |
-| `Perlin` | Smooth |
-| `Simplex` | Smooth, with fewer grid patterns |
-
-## OccluderShape
-
-The shape of a [`LightOccluder`](components.md#lightoccluder).
-
-```rust
-LightOccluder { shape: OccluderShape::FromCollider, .. }
-```
-
-```rust
-enum OccluderShape { Box, Circle, Polygon, FromCollider }
-```
-
-| Variant | Meaning |
-|---------|---------|
-| `Box` | A box of `half_size` |
-| `Circle` | A circle of `radius` |
-| `Polygon` | The corners in `points` |
-| `FromCollider` | The entity's collider |
-
-## Rolloff
-
-How an [`AudioSource`](components.md#audiosource) gets quieter with distance.
-
-```rust
-AudioSource { spatial: true, rolloff: Rolloff::Inverse, .. }
-```
-
-```rust
-enum Rolloff { Linear, Inverse }
-```
-
-| Variant | Meaning |
-|---------|---------|
-| `Linear` | Evenly from `min_distance` to `max_distance` |
-| `Inverse` | Quickly near, slowly far |
 
 ## Key
 
@@ -265,3 +196,74 @@ input.bind_stick("move", GamepadAxis::LeftX, GamepadAxis::LeftY);
 ```rust
 enum GamepadAxis { LeftX, LeftY, RightX, RightY, LeftTrigger, RightTrigger }
 ```
+
+## NoiseType
+
+The kind of [`Noise`](procgen.md#noise).
+
+```rust
+Noise { kind: NoiseType::Perlin, frequency: 0.05, .. }
+```
+
+```rust
+enum NoiseType { Value, Perlin, Simplex }
+```
+
+| Variant | Meaning |
+|---------|---------|
+| `Value` | Blocky |
+| `Perlin` | Smooth |
+| `Simplex` | Smooth, with fewer grid patterns |
+
+## OccluderShape
+
+The shape of a [`LightOccluder`](components.md#lightoccluder).
+
+```rust
+LightOccluder { shape: OccluderShape::FromCollider, .. }
+```
+
+```rust
+enum OccluderShape { Box, Circle, Polygon, FromCollider }
+```
+
+| Variant | Meaning |
+|---------|---------|
+| `Box` | A box of `half_size` |
+| `Circle` | A circle of `radius` |
+| `Polygon` | The corners in `points` |
+| `FromCollider` | The entity's collider |
+
+## JointKind
+
+```rust
+Joint { kind: JointKind::Revolute, target: wheel, .. }
+```
+
+```rust
+enum JointKind { Distance, Revolute, Prismatic, Weld }
+```
+
+| Variant | Meaning |
+|---------|---------|
+| `Distance` | Keeps the anchors a distance apart, or within `min_length` and `max_length`, as a rod, spring or rope |
+| `Revolute` | A hinge: the bodies turn about the anchor |
+| `Prismatic` | A slider along `axis` |
+| `Weld` | Glues the bodies together, or holds them with a spring |
+
+## Rolloff
+
+How an [`AudioSource`](components.md#audiosource) gets quieter with distance.
+
+```rust
+AudioSource { spatial: true, rolloff: Rolloff::Inverse, .. }
+```
+
+```rust
+enum Rolloff { Linear, Inverse }
+```
+
+| Variant | Meaning |
+|---------|---------|
+| `Linear` | Evenly from `min_distance` to `max_distance` |
+| `Inverse` | Quickly near, slowly far |

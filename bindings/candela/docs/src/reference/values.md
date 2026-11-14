@@ -1,13 +1,15 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # Values and Functions
 
-Plain values and free functions the module provides. A name you declare yourself shadows the one from the module, so a game can have its own `log` or `min`.
+Plain values and free functions the module provides. A name you declare yourself shadows the
+one from the module, so a game can have its own `log` or `min`.
 
 ## Vec2
 
-A 2D vector: a position, an offset, a direction or a velocity. `a + b`, `a - b`, `-a`, `a * s` and `a / s` (with a float `s`) work as expected.
+A 2D vector: a position, an offset, a direction or a velocity. `a + b`, `a - b`, `-a`, `a *
+s` and `a / s` (with a float `s`) work as expected.
 
 ```rust
 struct Vec2 {
@@ -169,18 +171,6 @@ fn vec2(x: float, y: float) -> Vec2
 let up = vec2(0.0, -1.0);
 ```
 
-## from_angle
-
-```rust
-fn from_angle(radians: float) -> Vec2
-```
-
-The unit vector at `radians` from the +x axis.
-
-```rust
-let v = from_angle(t.rotation) * 300.0;
-```
-
 ## Rect
 
 A rectangle: top-left corner and size.
@@ -275,9 +265,31 @@ fn rect(x: float, y: float, w: float, h: float) -> Rect
 let r = rect(10.0, 10.0, 100.0, 40.0);
 ```
 
+## Edges
+
+A width for each side of a box: nine-slice borders, padding.
+
+```rust
+struct Edges {
+    left: float = 0.0,
+    top: float = 0.0,
+    right: float = 0.0,
+    bottom: float = 0.0,
+}
+```
+
+## edges
+
+```rust
+fn edges(all: float) -> Edges
+```
+
+The same width on every side.
+
 ## Color
 
-A color with red, green, blue and alpha from 0.0 to 1.0. Build one from 0 to 255 values with `rgb` and `rgba`.
+A color with red, green, blue and alpha from 0.0 to 1.0. Build one from 0 to 255 values with
+`rgb` and `rgba`.
 
 ```rust
 struct Color {
@@ -420,104 +432,11 @@ Whether the entity exists: false for `Entity {}` and after a despawn has been ap
 fn hud_layer() -> int
 ```
 
-The screen layer. It draws last, after post effects, in screen pixels without a camera: (0, 0) is the top-left of the window's logical area. Put scores, menus and health bars there.
+The screen layer. It draws last, after post effects, in screen pixels without a camera: (0, 0)
+is the top-left of the window's logical area. Put scores, menus and health bars there.
 
 ```rust
 Text { value: "Lives 3", layer: hud_layer(), .. }
-```
-
-## layer_mask
-
-```rust
-fn layer_mask(layers: int[]) -> int
-```
-
-A layer mask holding `layers`, for `Camera.layer_mask`.
-
-```rust
-Camera { layer_mask: layer_mask([0, 1, 2]), .. }
-```
-
-## ALL_LAYERS
-
-```rust
-const ALL_LAYERS: int = 2147483647
-```
-
-Every world layer, 0 to 30: the default `layer_mask` of a camera or light.
-
-```rust
-Camera { layer_mask: ALL_LAYERS, .. }
-```
-
-## ALL_CATEGORIES
-
-```rust
-const ALL_CATEGORIES: int = 65535
-```
-
-Every collider category, for queries that see everything.
-
-```rust
-let ray = physics.raycast_mask(p, dir, 100.0, ALL_CATEGORIES);
-```
-
-## PI
-
-```rust
-const PI: float = 3.14159265358979
-```
-
-Half a turn in radians.
-
-```rust
-tween().rotate_by(PI, 0.3, Ease::OutQuad)
-```
-
-## TAU
-
-```rust
-const TAU: float = 6.28318530717959
-```
-
-A whole turn in radians.
-
-```rust
-let angle = r.range_float(0.0, TAU);
-```
-
-## sin
-
-```rust
-fn sin(x: float) -> float
-```
-
-Trigonometry in radians, without importing std/math.
-
-```rust
-t.position = vec2(x, 100.0 + sin(time.elapsed * 2.0) * 20.0);
-```
-
-## cos
-
-```rust
-fn cos(x: float) -> float
-```
-
-```rust
-let x = cos(angle) * radius;
-```
-
-## atan2
-
-```rust
-fn atan2(y: float, x: float) -> float
-```
-
-The angle of the point (x, y) from the +x axis, -PI to PI.
-
-```rust
-let a = atan2(dy, dx);
 ```
 
 ## clamp
@@ -562,7 +481,8 @@ let left = max(0.0, timer - time.dt);
 fn log(message: string)
 ```
 
-Writes a line to the engine log: the terminal on the desktop, the browser console on the web.
+Writes a line to the engine log: the terminal on the desktop, the browser console on the
+web.
 
 ```rust
 log("wave " + string(waves.count));
@@ -580,9 +500,259 @@ Writes a warning to the engine log.
 warn("no spawn point in this level");
 ```
 
+## inverse_lerp
+
+```rust
+fn inverse_lerp(a: float, b: float, x: float) -> float
+```
+
+Where x sits between a and b: 0.0 at a, 1.0 at b.
+
+## remap
+
+```rust
+fn remap(x: float, a: float, b: float, c: float, d: float) -> float
+```
+
+x moved from the range a..b to the range c..d.
+
+## wrap
+
+```rust
+fn wrap(x: float, lo: float, hi: float) -> float
+```
+
+x wrapped into lo up to, not including, hi: angles, looping worlds.
+
+## sign
+
+```rust
+fn sign(x: float) -> float
+```
+
+-1.0, 0.0 or 1.0.
+
+## radians
+
+```rust
+fn radians(degrees: float) -> float
+```
+
+## degrees
+
+```rust
+fn degrees(radians: float) -> float
+```
+
+## circles_overlap
+
+```rust
+fn circles_overlap(a: Vec2, ra: float, b: Vec2, rb: float) -> bool
+```
+
+Whether two circles touch.
+
+## circle_overlaps_rect
+
+```rust
+fn circle_overlaps_rect(c: Vec2, r: float, box: Rect) -> bool
+```
+
+Whether a circle touches a rect.
+
+## segments_intersect
+
+```rust
+fn segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> Option<Vec2>
+```
+
+Where segments a1-a2 and b1-b2 cross, if they do.
+
+## parent_of
+
+```rust
+fn parent_of(e: Entity) -> Entity
+```
+
+The entity's parent; `Entity {}` for a root.
+
+```rust
+if parent_of(e).id == 0 { log("a root"); }
+```
+
+## children_of
+
+```rust
+fn children_of(e: Entity) -> Entity[]
+```
+
+The entity's direct children, in the order they were added.
+
+```rust
+for c in children_of(ship) { cmd.despawn(c); }
+```
+
+## descendants_of
+
+```rust
+fn descendants_of(e: Entity) -> Entity[]
+```
+
+Everything below the entity, depth first.
+
+```rust
+let parts = descendants_of(robot);
+```
+
+## world_transform
+
+```rust
+fn world_transform(e: Entity) -> GlobalTransform
+```
+
+The entity's transform after every parent, from the engine's current Transforms (changes a
+running system made land when it returns).
+
+```rust
+let tip = world_transform(sword_tip).position;
+```
+
+## local_to_world
+
+```rust
+fn local_to_world(e: Entity, local: Vec2) -> Vec2
+```
+
+A point in the entity's space (where a child at `local` would be) to the world, and a world
+point to the entity's space.
+
+```rust
+let muzzle = local_to_world(gun, vec2(18.0, 0.0));
+```
+
+## world_to_local
+
+```rust
+fn world_to_local(e: Entity, world: Vec2) -> Vec2
+```
+
+```rust
+let local = world_to_local(ship, input.mouse_world());
+```
+
+## plus
+
+```rust
+fn plus(bundle: any[], more: any[]) -> any[]
+```
+
+A bundle with more components after it, for prefabs with extras:
+`cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}, Health { hp: 500.0, .. }]))`. A component
+given twice is the later one, so this also overrides.
+
+```rust
+cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}]));
+```
+
+## LocalTime
+
+The local date and time. month counts from 1, weekday from 0 (Sunday).
+
+```rust
+struct LocalTime {
+    year: int = 0,
+    month: int = 0,
+    day: int = 0,
+    hour: int = 0,
+    minute: int = 0,
+    second: int = 0,
+    weekday: int = 0,
+    unix: float = 0.0,
+}
+```
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `year` | `int` | `0` |  |
+| `month` | `int` | `0` |  |
+| `day` | `int` | `0` |  |
+| `hour` | `int` | `0` |  |
+| `minute` | `int` | `0` |  |
+| `second` | `int` | `0` |  |
+| `weekday` | `int` | `0` |  |
+| `unix` | `float` | `0.0` | Seconds since 1970-01-01 UTC. |
+
+## Platform
+
+What the game runs on, and the browser page around it.
+
+```rust
+struct Platform {
+    id: int = 0,
+}
+```
+
+### Platform.is_web
+
+```rust
+fn is_web(self) -> bool
+```
+
+True in a browser.
+
+### Platform.is_touch
+
+```rust
+fn is_touch(self) -> bool
+```
+
+True when the device has a touch screen.
+
+### Platform.open_url
+
+```rust
+fn open_url(self, url: string)
+```
+
+Opens a link in a new tab or the default browser. Browsers block it unless the player
+tapped, clicked or pressed a key just before.
+
+### Platform.copy
+
+```rust
+fn copy(self, text: string)
+```
+
+Puts text on the clipboard.
+
+### Platform.pasted
+
+```rust
+fn pasted(self) -> string
+```
+
+The clipboard's text. In a browser: the text the player last pasted into the page, since
+pages cannot read the clipboard unasked.
+
+### Platform.query
+
+```rust
+fn query(self, name: string) -> string
+```
+
+A value from the page address: query("level") is "3" for index.html?level=3, "" when
+absent, and always "" on the desktop.
+
+### Platform.local_time
+
+```rust
+fn local_time(self) -> LocalTime
+```
+
 ## Timer
 
-Counts down game time for spawn waves, cooldowns and delays. It is a plain value: keep it in a resource or component and tick it with the frame time.
+Counts down game time for spawn waves, cooldowns and delays. It is a plain value: keep it in
+a resource or component and tick it with the frame time.
 
 ```rust
 struct Timer {
@@ -618,7 +788,8 @@ fn spawn(cmd: Commands, time: Time, waves: Waves) {
 fn tick(self, dt: float) -> int
 ```
 
-Advances by `dt` seconds and returns how many times the timer finished: 0 or 1 for a one-shot timer, more for a repeating one in a long frame.
+Advances by `dt` seconds and returns how many times the timer finished: 0 or 1 for a
+one-shot timer, more for a repeating one in a long frame.
 
 ```rust
 if bomb.fuse.tick(time.dt) > 0 { explode(); }
@@ -798,258 +969,6 @@ A cooldown of `seconds`, ready at once.
 let dash = cooldown(0.8);
 ```
 
-## plus
-
-```rust
-fn plus(bundle: any[], more: any[]) -> any[]
-```
-
-A bundle with more components after it, for prefabs with extras: `cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}, Health { hp: 500.0, .. }]))`. A component given twice is the later one, so this also overrides.
-
-```rust
-cmd.spawn(plus(enemy(at(10.0, 20.0)), [Boss {}]));
-```
-
-## parent_of
-
-```rust
-fn parent_of(e: Entity) -> Entity
-```
-
-The entity's parent; `Entity {}` for a root.
-
-```rust
-if parent_of(e).id == 0 { log("a root"); }
-```
-
-## children_of
-
-```rust
-fn children_of(e: Entity) -> Entity[]
-```
-
-The entity's direct children, in the order they were added.
-
-```rust
-for c in children_of(ship) { cmd.despawn(c); }
-```
-
-## descendants_of
-
-```rust
-fn descendants_of(e: Entity) -> Entity[]
-```
-
-Everything below the entity, depth first.
-
-```rust
-let parts = descendants_of(robot);
-```
-
-## world_transform
-
-```rust
-fn world_transform(e: Entity) -> GlobalTransform
-```
-
-The entity's transform after every parent, from the engine's current Transforms (changes a running system made land when it returns).
-
-```rust
-let tip = world_transform(sword_tip).position;
-```
-
-## local_to_world
-
-```rust
-fn local_to_world(e: Entity, local: Vec2) -> Vec2
-```
-
-A point in the entity's space (where a child at `local` would be) to the world, and a world point to the entity's space.
-
-```rust
-let muzzle = local_to_world(gun, vec2(18.0, 0.0));
-```
-
-## world_to_local
-
-```rust
-fn world_to_local(e: Entity, world: Vec2) -> Vec2
-```
-
-```rust
-let local = world_to_local(ship, input.mouse_world());
-```
-
-## Edges
-
-A width for each side of a box: nine-slice borders, padding.
-
-```rust
-struct Edges {
-    left: float = 0.0,
-    top: float = 0.0,
-    right: float = 0.0,
-    bottom: float = 0.0,
-}
-```
-
-## edges
-
-```rust
-fn edges(all: float) -> Edges
-```
-
-The same width on every side.
-
-## inverse_lerp
-
-```rust
-fn inverse_lerp(a: float, b: float, x: float) -> float
-```
-
-Where x sits between a and b: 0.0 at a, 1.0 at b.
-
-## remap
-
-```rust
-fn remap(x: float, a: float, b: float, c: float, d: float) -> float
-```
-
-x moved from the range a..b to the range c..d.
-
-## wrap
-
-```rust
-fn wrap(x: float, lo: float, hi: float) -> float
-```
-
-x wrapped into lo up to, not including, hi: angles, looping worlds.
-
-## sign
-
-```rust
-fn sign(x: float) -> float
-```
-
--1.0, 0.0 or 1.0.
-
-## radians
-
-```rust
-fn radians(degrees: float) -> float
-```
-
-## degrees
-
-```rust
-fn degrees(radians: float) -> float
-```
-
-## circles_overlap
-
-```rust
-fn circles_overlap(a: Vec2, ra: float, b: Vec2, rb: float) -> bool
-```
-
-Whether two circles touch.
-
-## circle_overlaps_rect
-
-```rust
-fn circle_overlaps_rect(c: Vec2, r: float, box: Rect) -> bool
-```
-
-Whether a circle touches a rect.
-
-## segments_intersect
-
-```rust
-fn segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> Option<Vec2>
-```
-
-Where segments a1-a2 and b1-b2 cross, if they do.
-
-## LocalTime
-
-The local date and time. month counts from 1, weekday from 0 (Sunday).
-
-```rust
-struct LocalTime {
-    year: int = 0,
-    month: int = 0,
-    day: int = 0,
-    hour: int = 0,
-    minute: int = 0,
-    second: int = 0,
-    weekday: int = 0,
-    unix: float = 0.0,
-}
-```
-
-## Platform
-
-What the game runs on, and the browser page around it.
-
-```rust
-struct Platform {
-    id: int = 0,
-}
-```
-
-### Platform.is_web
-
-```rust
-fn is_web(self) -> bool
-```
-
-True in a browser.
-
-### Platform.is_touch
-
-```rust
-fn is_touch(self) -> bool
-```
-
-True when the device has a touch screen.
-
-### Platform.open_url
-
-```rust
-fn open_url(self, url: string)
-```
-
-Opens a link in a new tab or the default browser. Browsers block it unless the player tapped, clicked or pressed a key just before.
-
-### Platform.copy
-
-```rust
-fn copy(self, text: string)
-```
-
-Puts text on the clipboard.
-
-### Platform.pasted
-
-```rust
-fn pasted(self) -> string
-```
-
-The clipboard's text. In a browser: the text the player last pasted into the page, since pages cannot read the clipboard unasked.
-
-### Platform.query
-
-```rust
-fn query(self, name: string) -> string
-```
-
-A value from the page address: query("level") is "3" for index.html?level=3, "" when absent, and always "" on the desktop.
-
-### Platform.local_time
-
-```rust
-fn local_time(self) -> LocalTime
-```
-
 ## flat
 
 ```rust
@@ -1159,7 +1078,8 @@ struct Wander {
 fn steer_wander(vel: Vec2, w: Wander, rng: Rng, max_speed: float) -> Vec2
 ```
 
-Aimless but smooth: each call turns the wander angle by up to `jitter` radians and steers toward a point on a circle ahead.
+Aimless but smooth: each call turns the wander angle by up to `jitter` radians and steers
+toward a point on a circle ahead.
 
 ## PathFollow
 
@@ -1180,3 +1100,109 @@ fn steer_follow_path(pos: Vec2, vel: Vec2, path: Vec2[], f: PathFollow, max_spee
 ```
 
 Seeks each point in turn, moving on within `reach_radius`, and arrives at the last one.
+
+## ALL_LAYERS
+
+```rust
+const ALL_LAYERS: int = 2147483647
+```
+
+Every world layer, 0 to 30: the default `layer_mask` of a camera or light.
+
+```rust
+Camera { layer_mask: ALL_LAYERS, .. }
+```
+
+## layer_mask
+
+```rust
+fn layer_mask(layers: int[]) -> int
+```
+
+A layer mask holding `layers`, for `Camera.layer_mask`.
+
+```rust
+Camera { layer_mask: layer_mask([0, 1, 2]), .. }
+```
+
+## PI
+
+```rust
+const PI: float = 3.14159265358979
+```
+
+Half a turn in radians.
+
+```rust
+tween().rotate_by(PI, 0.3, Ease::OutQuad)
+```
+
+## TAU
+
+```rust
+const TAU: float = 6.28318530717959
+```
+
+A whole turn in radians.
+
+```rust
+let angle = r.range_float(0.0, TAU);
+```
+
+## sin
+
+```rust
+fn sin(x: float) -> float
+```
+
+Trigonometry in radians, without importing std/math.
+
+```rust
+t.position = vec2(x, 100.0 + sin(time.elapsed * 2.0) * 20.0);
+```
+
+## cos
+
+```rust
+fn cos(x: float) -> float
+```
+
+```rust
+let x = cos(angle) * radius;
+```
+
+## atan2
+
+```rust
+fn atan2(y: float, x: float) -> float
+```
+
+The angle of the point (x, y) from the +x axis, -PI to PI.
+
+```rust
+let a = atan2(dy, dx);
+```
+
+## from_angle
+
+```rust
+fn from_angle(radians: float) -> Vec2
+```
+
+The unit vector at `radians` from the +x axis.
+
+```rust
+let v = from_angle(t.rotation) * 300.0;
+```
+
+## ALL_CATEGORIES
+
+```rust
+const ALL_CATEGORIES: int = 65535
+```
+
+Every collider category, for queries that see everything.
+
+```rust
+let ray = physics.raycast_mask(p, dir, 100.0, ALL_CATEGORIES);
+```

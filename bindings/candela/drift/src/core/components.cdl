@@ -1,4 +1,4 @@
-// The engine's components, and the parent and child links between entities.
+//! The engine's components, and the parent and child links between entities.
 
 import "drift/core/values" { * };
 import "drift/core/assets" { * };
@@ -8,130 +8,297 @@ import "drift/core/animation" { * };
 
 // ---- Engine components ----
 
-struct Transform { position: Vec2 = Vec2 { .. }, rotation: float = 0.0, scale: Vec2 = Vec2 { x: 1.0, y: 1.0 } }
+//! page: components
+
+/// Where the entity is, relative to its parent when it has one. Physics, `Velocity`, tweens and
+/// camera followers move it.
+///
+/// ```rust
+/// cmd.spawn([Transform { position: vec2(100.0, 50.0), rotation: 0.5, .. }, Sprite { image: art.ship, .. }]);
+/// ```
+struct Transform {
+    /// Position in pixels; +Y points down
+    position: Vec2 = Vec2 { .. },
+    /// Turn in radians, clockwise on screen
+    rotation: float = 0.0,
+    /// Size multiplier
+    scale: Vec2 = Vec2 { x: 1.0, y: 1.0 },
+}
+
+/// The `Transform` at a position, the shortest way to place an entity.
+///
+/// ```rust
+/// cmd.spawn([at(480.0, 270.0), Circle { radius: 10.0, .. }]);
+/// ```
 fn at(x: float, y: float) -> Transform { return Transform { position: Vec2 { x: x, y: y }, .. }; }
 
+/// Draws a texture at the entity's position. Load the texture with
+/// [`texture`](assets.md#texture).
+///
+/// ```rust
+/// cmd.spawn([at(160.0, 90.0), Sprite { image: texture("assets/ship.png"), anchor: vec2(0.5, 1.0), .. }]);
+/// ```
 struct Sprite {
+    /// The texture to draw
     image: Texture = Texture { .. },
+    /// The part of the image to draw, in pixels; a zero-size rect draws all of it
     frame: Rect = Rect { .. },
+    /// The point of the image placed at the position, from (0, 0) top-left to (1, 1)
+    /// bottom-right; it turns and scales around this point
     anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },
+    /// Tint, multiplied with the image's colors
     color: Color = Color { .. },
+    /// Mirrors the image left to right
     flip_x: bool = false,
+    /// Mirrors the image top to bottom
     flip_y: bool = false,
+    /// Draw order within the layer; higher draws on top
     z: float = 0.0,
+    /// Render layer, 0 to 30 for the world, `hud_layer()` for the screen
     layer: int = 0,
+    /// `false` hides it without removing it
     visible: bool = true,
+    /// How it mixes with what is behind it
     blend: Blend = Blend::Alpha,
-    material: Material = Material { .. },   // a custom shader; Material {} draws as usual
+    /// a custom shader; Material {} draws as usual
+    material: Material = Material { .. },
 }
 
+/// Draws a filled rectangle, or its outline.
+///
+/// ```rust
+/// cmd.spawn([at(320.0, 340.0), Rectangle { size: vec2(640.0, 20.0), color: rgb(70, 70, 90), .. }]);
+/// ```
 struct Rectangle {
+    /// Width and height in pixels
     size: Vec2 = Vec2 { x: 32.0, y: 32.0 },
+    /// Fill or line color
     color: Color = Color { .. },
+    /// Line width; 0 fills the rectangle
     outline: float = 0.0,
+    /// Rounds the corners
     corner_radius: float = 0.0,
+    /// The point placed at the position, from (0, 0) top-left to (1, 1) bottom-right
     anchor: Vec2 = Vec2 { x: 0.5, y: 0.5 },
+    /// Draw order within the layer
     z: float = 0.0,
+    /// Render layer
     layer: int = 0,
+    /// `false` hides it
     visible: bool = true,
 }
 
+/// Draws a filled circle, or its outline.
+///
+/// ```rust
+/// cmd.spawn([at(100.0, 100.0), Circle { radius: 20.0, color: rgb(255, 200, 60), .. }]);
+/// ```
 struct Circle {
+    /// Radius in pixels
     radius: float = 16.0,
+    /// Fill or line color
     color: Color = Color { .. },
+    /// Line width; 0 fills the circle
     outline: float = 0.0,
+    /// Draw order within the layer
     z: float = 0.0,
+    /// Render layer
     layer: int = 0,
+    /// `false` hides it
     visible: bool = true,
 }
 
+/// Draws a string at the entity's position.
+///
+/// ```rust
+/// cmd.spawn([at(16.0, 12.0), Text { value: "Score 0", size: 28.0, outline: 2.0, layer: hud_layer(), .. }, ScoreLabel {}]);
+/// ```
 struct Text {
+    /// The string
     value: string = "",
+    /// Pixel height; raise it rather than scaling the Transform, so the glyphs stay sharp
     size: float = 24.0,
+    /// Text color
     color: Color = Color { .. },
+    /// Which point of the text sits on the position, left to right
     align: Align = Align::Left,
+    /// Which point of the text sits on the position, top to bottom
     valign: VAlign = VAlign::Top,
+    /// Wraps lines at this width in pixels; 0 does not wrap
     wrap: float = 0.0,
+    /// Multiplies the distance between lines
     line_spacing: float = 1.0,
+    /// Outline width around each glyph; 0 for none
     outline: float = 0.0,
+    /// Outline color
     outline_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+    /// Drop shadow offset; zero for none
     shadow_offset: Vec2 = Vec2 { .. },
+    /// Drop shadow color
     shadow_color: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.6 },
+    /// Reads `[color=#rrggbb]...[/color]` tags in `value`
     rich_text: bool = false,
+    /// The font; `Font {}` is the built-in one
     font: Font = Font { .. },
+    /// Draw order within the layer
     z: float = 0.0,
+    /// Render layer; `hud_layer()` places it in screen pixels
     layer: int = 0,
+    /// `false` hides it
     visible: bool = true,
 }
 
-struct Velocity { linear: Vec2 = Vec2 { .. }, angular: float = 0.0 }
+/// Moves the entity every frame. On an entity with a dynamic `RigidBody` it is the body's
+/// velocity: read it to see how fast the body moves, write it to set its speed.
+///
+/// ```rust
+/// cmd.spawn([at(0.0, 80.0), Sprite { image: art.cloud, .. }, Velocity { linear: vec2(12.0, 0.0), .. }]);
+/// ```
+struct Velocity {
+    /// Pixels per second
+    linear: Vec2 = Vec2 { .. },
+    /// Radians per second
+    angular: float = 0.0,
+}
 
+/// Makes the entity a physics body. Give it a collider, and a `Velocity`: a moving body shows
+/// its motion through the entity's `Velocity`, and without one it stays where it was drawn. The
+/// body is made at the end of the frame its components are added; changing a field later makes
+/// it again. See [Collisions and Physics](../guides/collisions.md).
+///
+/// ```rust
+/// cmd.spawn([at(200.0, 50.0), Rectangle { .. }, RigidBody { fixed_rotation: true, .. }, BoxCollider { .. }, Velocity { .. }]);
+/// ```
 struct RigidBody {
+    /// `Dynamic` falls and is pushed, `Kinematic` moves only by its Velocity, `Static` never
+    /// moves
     kind: BodyKind = BodyKind::Dynamic,
+    /// Keeps it upright, for characters
     fixed_rotation: bool = false,
+    /// Multiplies world gravity for this body
     gravity_scale: float = 1.0,
+    /// Slows its motion over time
     linear_damping: float = 0.0,
+    /// Slows its spin over time
     angular_damping: float = 0.0,
 }
 
+/// A box-shaped collider. Without a `RigidBody` it is static.
+///
+/// ```rust
+/// cmd.spawn([at(320.0, 470.0), BoxCollider { half_size: vec2(320.0, 10.0), .. }]);   // a floor
+/// ```
 struct BoxCollider {
+    /// Half the width and height, in pixels
     half_size: Vec2 = Vec2 { x: 16.0, y: 16.0 },
+    /// Moves the box from the entity's position
     offset: Vec2 = Vec2 { .. },
+    /// Detects overlaps without pushing anything
     sensor: bool = false,
+    /// Mass per area
     density: float = 1.0,
+    /// 0 is ice
     friction: float = 0.3,
+    /// Bounciness; 1 keeps all the speed
     restitution: float = 0.0,
-    category: int = 1,        // bits this collider is
-    mask: int = 65535,        // bits it collides with
+    /// The bits this collider is
+    category: int = 1,
+    /// The categories it collides with; two colliders touch when each one's category is in the
+    /// other's mask
+    mask: int = 65535,
 }
 
+/// A circle-shaped collider. Without a `RigidBody` it is static.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), Circle { radius: 8.0, .. }, CircleCollider { radius: 8.0, sensor: true, .. }, Coin {}]);
+/// ```
 struct CircleCollider {
+    /// Radius in pixels
     radius: float = 16.0,
+    /// Moves the circle from the entity's position
     offset: Vec2 = Vec2 { .. },
+    /// Detects overlaps without pushing anything
     sensor: bool = false,
+    /// Mass per area
     density: float = 1.0,
+    /// 0 is ice
     friction: float = 0.3,
+    /// Bounciness; 1 keeps all the speed
     restitution: float = 0.0,
-    category: int = 1,        // bits this collider is
-    mask: int = 65535,        // bits it collides with
+    /// The bits this collider is
+    category: int = 1,
+    /// The categories it collides with
+    mask: int = 65535,
 }
 
-// A collider the shape of the entity's Sprite: the outline of every pixel
-// whose alpha is at least `threshold`, holes included, placed by the
-// sprite's frame, anchor and flips and the Transform's scale. A static body
-// (or no RigidBody) collides along the outlines; dynamic and kinematic
-// bodies and sensors get convex pieces. Shapes are worked out once per
-// image, frame and settings and shared by every entity that shows them;
-// after changing the image's pixels, call Physics.rebuild_shapes.
+/// A collider the shape of the entity's `Sprite`: its solid pixels, holes included. It follows
+/// the sprite's frame, anchor, flips and the `Transform`'s scale. Without a `RigidBody`, or
+/// with a static one, it collides along the outlines, which suits large terrain; dynamic and
+/// kinematic bodies and sensors get convex pieces. Every entity showing the same image, frame
+/// and settings shares one tracing. See [Colliders from
+/// images](../guides/collisions.md#colliders-from-images).
+///
+/// ```rust
+/// cmd.spawn([at(x, y), Sprite { image: rock, .. }, RigidBody { .. }, TextureCollider { .. }, Velocity { .. }]);
+/// ```
 struct TextureCollider {
-    threshold: float = 0.5,      // alpha, 0 to 1, from which a pixel is solid
-    tolerance: float = 1.0,      // how far in image pixels the outline may stray from the pixels
-    min_area: float = 4.0,       // solid parts and holes smaller than this many square pixels are dropped
-    follow_sprite: bool = false, // make the shape again when the frame, anchor, a flip or the scale changes
+    /// A pixel is solid when its alpha, 0 to 1, is at least this
+    threshold: float = 0.5,
+    /// How far, in image pixels, the outline may stray from the pixels; higher gives fewer
+    /// points
+    tolerance: float = 1.0,
+    /// Solid specks and holes smaller than this many square pixels are dropped
+    min_area: float = 4.0,
+    /// Make the shape again when the frame, anchor, a flip or the scale changes, for animated
+    /// sprites; each change costs a new body
+    follow_sprite: bool = false,
+    /// Detects overlaps without pushing anything
     sensor: bool = false,
+    /// Mass per area
     density: float = 1.0,
+    /// 0 is ice
     friction: float = 0.3,
+    /// Bounciness; 1 keeps all the speed
     restitution: float = 0.0,
-    category: int = 1,           // bits this collider is
-    mask: int = 65535,           // bits it collides with
+    /// The bits this collider is
+    category: int = 1,
+    /// The categories it collides with
+    mask: int = 65535,
 }
 
-struct Lifetime { seconds: float = 1.0 }
+/// Despawns the entity, with its children, when the time runs out. Use it for bullets, floating
+/// labels and debris.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), Text { value: "+1", .. }, Velocity { linear: vec2(0.0, -60.0), .. }, Lifetime { seconds: 0.6 }]);
+/// ```
+struct Lifetime {
+    /// Seconds left
+    seconds: float = 1.0,
+}
 
-// Swings the entity back and forth around where it is: `amplitude` pixels
-// each way, `frequency` times a second. Adds to whatever else moves it.
+/// Swings the entity back and forth around where it is: `amplitude` pixels each way,
+/// `frequency` times a second. Adds to whatever else moves it.
 struct Oscillate { amplitude: Vec2 = Vec2 { x: 0.0, y: 8.0 }, frequency: float = 1.0, phase: float = 0.0 }
 
-// Moves the entity toward `target` plus `offset` at `speed` pixels per
-// second, stopping `distance` short. Nothing happens while the target is
-// missing.
+/// Moves the entity toward `target` plus `offset` at `speed` pixels per second, stopping
+/// `distance` short. Nothing happens while the target is missing.
 struct Follow { target: Entity = Entity { .. }, speed: float = 100.0, distance: float = 0.0, offset: Vec2 = Vec2 { .. } }
 
-// Circles the entity around `center`, or around `point` while `center` is
-// unset or gone: `radius` pixels out, `speed` radians per second (negative
-// turns the other way), from `angle`.
+/// Circles the entity around `center`, or around `point` while `center` is unset or gone:
+/// `radius` pixels out, `speed` radians per second (negative turns the other way), from
+/// `angle`.
 struct Orbit { center: Entity = Entity { .. }, point: Vec2 = Vec2 { .. }, radius: float = 64.0, speed: float = 1.0, angle: float = 0.0 }
 
+//! page: enums
+
+/// Easing curves for tweens. `In` starts slow, `Out` ends slow and `InOut` does both. `Back`
+/// overshoots, `Elastic` wobbles, `Bounce` bounces, and `Spring` settles like a spring.
+///
+/// ```rust
+/// tween().move_to(vec2(400.0, 300.0), 0.6, Ease::OutBack)
+/// ```
 enum Ease {
     Linear,
     InSine, OutSine, InOutSine,
@@ -147,122 +314,316 @@ enum Ease {
     Spring,
 }
 
-enum EmitShape { Point, Circle, Ring, Box, Line }
+/// Where a `ParticleEmitter`'s particles start.
+///
+/// ```rust
+/// ParticleEmitter { shape: EmitShape::Ring, shape_radius: 40.0, .. }
+/// ```
+enum EmitShape {
+    /// At the entity's position
+    Point,
+    /// Inside a circle of `shape_radius`
+    Circle,
+    /// On a circle of `shape_radius`
+    Ring,
+    /// Inside a box of half size `shape_extents`
+    Box,
+    /// Along the line from `-shape_extents` to `shape_extents`
+    Line,
+}
 
-// `count` particles at once, `time` seconds into the emitter's run, repeated
-// `cycles` times (0 forever) `interval` seconds apart.
+//! page: components
+
+/// `count` particles at once, `time` seconds into the emitter's run, repeated `cycles` times (0
+/// forever) `interval` seconds apart.
+///
+/// ```rust
+/// ParticleEmitter { rate: 0.0, bursts: [Burst { count: 30, cycles: 0, interval: 1.0, .. }], .. }   // 30 every second
+/// ```
 struct Burst { time: float = 0.0, count: int = 10, cycles: int = 1, interval: float = 0.0 }
 
-// Particles from the entity's position. `rate` per second; `duration` -1.0
-// emits forever. A `_max` of 0.0 is the same as its minimum.
+/// Emits particles from its entity for as long as `playing` is on. A one-off burst does not
+/// need an entity: see [`Effects.burst`](resources.md#effectsburst). See [Particles and
+/// Effects](../guides/effects.md).
+///
+/// ```rust
+/// cmd.spawn([at(200.0, 300.0), ParticleEmitter {
+///     rate: 40.0, lifetime_min: 0.4, lifetime_max: 0.8, speed_min: 20.0, speed_max: 60.0,
+///     angle_min: -2.0, angle_max: -1.1, size_start: 6.0, size_end: 1.0,
+///     color_start: rgb(255, 200, 80), color_end: rgba(255, 60, 20, 0), blend: Blend::Additive, ..
+/// }]);
+/// ```
 struct ParticleEmitter {
+    /// Particles per second
     rate: float = 20.0,
+    /// Shortest life in seconds
     lifetime_min: float = 0.5,
+    /// Longest life in seconds
     lifetime_max: float = 1.5,
+    /// Slowest start speed in pixels per second
     speed_min: float = 20.0,
+    /// Fastest start speed
     speed_max: float = 60.0,
+    /// Smallest start direction, in radians from +x; -PI/2 is up
     angle_min: float = 0.0,
+    /// Largest start direction
     angle_max: float = 6.2831853,
+    /// Size at birth, in pixels
     size_start: float = 6.0,
+    /// Size at death
     size_end: float = 1.0,
+    /// Color at birth
     color_start: Color = Color { .. },
+    /// Color at death; an alpha of 0 fades them out
     color_end: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.0 },
+    /// Acceleration in pixels per second squared
     gravity: Vec2 = Vec2 { .. },
+    /// Slows particles; 0 for none
     drag: float = 0.0,
+    /// How many may be alive at once
     max_particles: int = 256,
+    /// `Blend::Additive` makes overlapping particles glow
     blend: Blend = Blend::Alpha,
+    /// An image for each particle; `Texture {}` draws soft squares
     texture: Texture = Texture { .. },
+    /// Where particles start
     shape: EmitShape = EmitShape::Point,
+    /// Radius for `Circle` and `Ring` shapes
     shape_radius: float = 0.0,
+    /// Half size for `Box`, direction for `Line`
     shape_extents: Vec2 = Vec2 { .. },
+    /// Seconds the emitter runs; -1 forever
     duration: float = -1.0,
+    /// Starts over when `duration` runs out
     looping: bool = true,
+    /// Draw order
     z: float = 10.0,
+    /// Whether it emits; write it to switch the emitter on and off
     playing: bool = true,
-    frame: Rect = Rect { .. },           // part of `texture`; zero size for all of it
+    /// Part of `texture` to draw
+    frame: Rect = Rect { .. },
+    /// With it above `size_start`, birth sizes vary between the two
     size_start_max: float = 0.0,
+    /// The same for the size at death
     size_end_max: float = 0.0,
-    rotation_min: float = 0.0,           // radians at birth
+    /// radians at birth
+    rotation_min: float = 0.0,
     rotation_max: float = 0.0,
-    spin_min: float = 0.0,               // radians per second
+    /// radians per second
+    spin_min: float = 0.0,
     spin_max: float = 0.0,
-    inherit_velocity: float = 0.0,       // share of the emitter's own motion particles keep
-    local: bool = false,                 // particles move with the emitter
-    prewarm: float = 0.0,                // seconds simulated before the first frame
-    bounds: Rect = Rect { .. },          // particles stop at its edges; zero size for none
-    seed: int = 0,                       // 0 picks one
+    /// share of the emitter's own motion particles keep
+    inherit_velocity: float = 0.0,
+    /// particles move with the emitter
+    local: bool = false,
+    /// seconds simulated before the first frame
+    prewarm: float = 0.0,
+    /// particles stop at its edges; zero size for none
+    bounds: Rect = Rect { .. },
+    /// 0 picks one
+    seed: int = 0,
+    /// Extra particles at set times; see `Burst`
     bursts: Burst[] = [],
 }
 
-// One step of a Tween; build them with tween() and its methods.
+/// Internal: One step of a Tween; build them with tween() and its methods.
 struct TweenStep { kind: int, a: float, b: float, c: float = 0.0, d: float = 0.0, seconds: float, ease: Ease = Ease::Linear }
 
-// Animates the entity in the engine: the steps in order, repeated `loops`
-// times (-1 forever), forward and back when `mirror` is set. Inserting a
-// changed Tween starts it again.
-struct Tween { steps: TweenStep[] = [], loops: int = 0, mirror: bool = false }
+/// Animates the entity from where it is to a target, over time, along an easing curve. Build
+/// one with `tween()` and chain steps; they run one after another. An entity holds one tween;
+/// inserting a changed one starts it again.
+///
+/// ```rust
+/// cmd.spawn([at(x, y), Sprite { image: art.star, .. },
+///            tween().scale_to(vec2(1.4, 1.4), 0.1, Ease::OutQuad).scale_to(vec2(1.0, 1.0), 0.3, Ease::OutBack)]);
+/// ```
+struct Tween {
+    /// The steps, built by the methods below
+    steps: TweenStep[] = [],
+    /// How many times to play the steps again; -1 forever
+    loops: int = 0,
+    /// Plays back and forth instead of from the start
+    mirror: bool = false,
+}
 
+/// An empty `Tween` to chain steps onto.
+///
+/// ```rust
+/// let bob = tween().move_by(vec2(0.0, -6.0), 0.5, Ease::InOutSine).yoyo(-1);
+/// ```
 fn tween() -> Tween { return Tween { .. }; }
 
 impl Tween {
+    /// Internal: a helper the module needs; games do not call it.
     fn add_step(self, kind: int, a: float, b: float, seconds: float, e: Ease) -> Tween {
         self.steps.push(TweenStep { kind: kind, a: a, b: b, seconds: seconds, ease: e, .. });
         return self;
     }
+    /// Moves to a position.
+    ///
+    /// ```rust
+    /// tween().move_to(vec2(400.0, 100.0), 1.0, Ease::OutCubic)
+    /// ```
     fn move_to(self, to: Vec2, seconds: float, e: Ease) -> Tween { return self.add_step(0, to.x, to.y, seconds, e); }
+    /// Moves by an offset from where the step starts.
+    ///
+    /// ```rust
+    /// tween().move_by(vec2(0.0, -20.0), 0.3, Ease::OutQuad)
+    /// ```
     fn move_by(self, by: Vec2, seconds: float, e: Ease) -> Tween { return self.add_step(1, by.x, by.y, seconds, e); }
+    /// Scales to a size multiplier.
+    ///
+    /// ```rust
+    /// tween().scale_to(vec2(2.0, 2.0), 0.2, Ease::OutBack)
+    /// ```
     fn scale_to(self, to: Vec2, seconds: float, e: Ease) -> Tween { return self.add_step(2, to.x, to.y, seconds, e); }
+    /// Turns to an angle in radians.
+    ///
+    /// ```rust
+    /// tween().rotate_to(PI, 0.5, Ease::InOutSine)
+    /// ```
     fn rotate_to(self, radians: float, seconds: float, e: Ease) -> Tween { return self.add_step(3, radians, 0.0, seconds, e); }
+    /// Turns by an angle in radians.
+    ///
+    /// ```rust
+    /// tween().rotate_by(TAU, 1.0, Ease::Linear).repeat(-1)   // spins forever
+    /// ```
     fn rotate_by(self, radians: float, seconds: float, e: Ease) -> Tween { return self.add_step(4, radians, 0.0, seconds, e); }
-    // Sprite alpha, 0.0 to 1.0.
+    /// Sprite alpha, 0.0 to 1.0.
+    ///
+    /// ```rust
+    /// tween().delay(1.0).fade_to(0.0, 0.5, Ease::InQuad)
+    /// ```
     fn fade_to(self, alpha: float, seconds: float, e: Ease) -> Tween { return self.add_step(5, alpha, 0.0, seconds, e); }
-    // Camera zoom.
+    /// Camera zoom.
+    ///
+    /// ```rust
+    /// cmd.insert(camera, tween().zoom_to(2.0, 0.8, Ease::InOutCubic));
+    /// ```
     fn zoom_to(self, zoom: float, seconds: float, e: Ease) -> Tween { return self.add_step(6, zoom, 0.0, seconds, e); }
+    /// Changes the sprite's color.
+    ///
+    /// ```rust
+    /// tween().tint_to(rgb(255, 80, 80), 0.1, Ease::Linear).tint_to(rgb(255, 255, 255), 0.3, Ease::OutQuad)
+    /// ```
     fn tint_to(self, c: Color, seconds: float, e: Ease) -> Tween {
         self.steps.push(TweenStep { kind: 7, a: c.r, b: c.g, c: c.b, d: c.a, seconds: seconds, ease: e });
         return self;
     }
+    /// Waits before the next step.
+    ///
+    /// ```rust
+    /// tween().delay(0.5).move_by(vec2(0.0, 40.0), 0.3, Ease::OutBounce)
+    /// ```
     fn delay(self, seconds: float) -> Tween { return self.add_step(8, 0.0, 0.0, seconds, Ease::Linear); }
+    /// Plays the whole chain again `times` more times from the start; -1 repeats forever.
+    ///
+    /// ```rust
+    /// tween().rotate_by(TAU, 2.0, Ease::Linear).repeat(-1)
+    /// ```
     fn repeat(self, times: int) -> Tween {
         self.loops = times;
         self.mirror = false;
         return self;
     }
+    /// Plays the chain forward, then backward, `times` more times; -1 forever.
+    ///
+    /// ```rust
+    /// tween().scale_to(vec2(1.2, 1.2), 0.4, Ease::InOutSine).yoyo(-1)   // a pulse
+    /// ```
     fn yoyo(self, times: int) -> Tween {
         self.loops = times;
         self.mirror = true;
         return self;
     }
 }
-struct Name { value: string = "" }
+
+/// A name for an entity, shown in the inspector.
+///
+/// ```rust
+/// cmd.spawn([at(0.0, 0.0), Name { value: "Boss" }, Boss { .. }]);
+/// ```
+struct Name {
+    /// The name
+    value: string = "",
+}
 
 // ---- Hierarchy ----
 
-// Makes the entity's Transform relative to `entity`. With `keep_world`, the
-// child's Transform is rewritten when the link is made so it stays where it
-// is on screen. `Parent { entity: Entity {}, .. }` detaches it.
-struct Parent { entity: Entity = Entity { .. }, keep_world: bool = false }
+/// Makes the entity's Transform relative to `entity`. With `keep_world`, the child's Transform
+/// is rewritten when the link is made so it stays where it is on screen. `Parent { entity:
+/// Entity {}, .. }` detaches it.
+///
+/// ```rust
+/// cmd.spawn([at(12.0, 0.0), Sprite { image: art.gun, .. }, Parent { entity: ship, .. }]);
+/// ```
+struct Parent {
+    /// The parent; no entity detaches
+    entity: Entity = Entity { .. },
+    /// Rewrite the child's Transform when linking, so it stays where it is
+    keep_world: bool = false,
+}
 
-// The entity's position, rotation and scale after every parent. Assigning
-// one moves the entity there in world space.
-struct GlobalTransform { position: Vec2 = Vec2 { .. }, rotation: float = 0.0, scale: Vec2 = Vec2 { x: 1.0, y: 1.0 } }
+/// The entity's position, rotation and scale after every parent. Assigning one moves the entity
+/// there in world space.
+///
+/// ```rust
+/// @system
+/// fn aim(turret: (Turret, GlobalTransform), draw: Draw) {
+///     let (_, g) = turret;
+///     draw.line(g.position, g.position + from_angle(g.rotation) * 40.0, rgb(255, 80, 80), 2.0);
+/// }
+/// ```
+struct GlobalTransform {
+    /// Position in the world
+    position: Vec2 = Vec2 { .. },
+    /// Turn in radians in the world
+    rotation: float = 0.0,
+    /// Size multiplier in the world
+    scale: Vec2 = Vec2 { x: 1.0, y: 1.0 },
+}
 
 impl Commands {
-    // Spawns an entity whose Transform is relative to `parent`.
+    /// Spawns an entity whose Transform is relative to `parent`.
+    ///
+    /// ```rust
+    /// let ship = cmd.spawn([at(200.0, 200.0), Sprite { image: art.ship, .. }]);
+    /// cmd.spawn_child(ship, [at(0.0, -20.0), Sprite { image: art.turret, .. }]);
+    /// ```
     fn spawn_child(self, parent: Entity, bundle: any[]) -> Entity {
         bundle.push(Parent { entity: parent, keep_world: false });
         return self.spawn(bundle);
     }
-    // Moves `child` under `parent`, keeping its Transform's numbers.
+    /// Moves `child` under `parent`, keeping its Transform's numbers.
+    ///
+    /// ```rust
+    /// cmd.set_parent(sword, hand);
+    /// ```
     fn set_parent(self, child: Entity, parent: Entity) { self.insert(child, Parent { entity: parent, keep_world: false }); }
-    // Moves `child` under `parent`, keeping it where it is on screen.
+    /// Moves `child` under `parent`, keeping it where it is on screen.
+    ///
+    /// ```rust
+    /// cmd.set_parent_in_place(crate_entity, platform);   // rides along from where it is
+    /// ```
     fn set_parent_in_place(self, child: Entity, parent: Entity) { self.insert(child, Parent { entity: parent, keep_world: true }); }
-    // Makes `child` a root again, where it is on screen.
+    /// Makes `child` a root again, where it is on screen.
+    ///
+    /// ```rust
+    /// cmd.detach(sword);   // drops it where it is
+    /// ```
     fn detach(self, child: Entity) { self.remove<Parent>(child); }
 }
 
-// The entity's parent; `Entity {}` for a root.
+//! page: values
+
+/// The entity's parent; `Entity {}` for a root.
+///
+/// ```rust
+/// if parent_of(e).id == 0 { log("a root"); }
+/// ```
 fn parent_of(e: Entity) -> Entity { return Entity { id: drift::hier_parent(e.id) }; }
+
+/// Internal: a helper the module needs; games do not call it.
 fn ids_to_entities(ids: int[]) -> Entity[] {
     let out: Entity[] = [];
     for id in ids {
@@ -270,22 +631,46 @@ fn ids_to_entities(ids: int[]) -> Entity[] {
     }
     return out;
 }
-// The entity's direct children, in the order they were added.
+
+/// The entity's direct children, in the order they were added.
+///
+/// ```rust
+/// for c in children_of(ship) { cmd.despawn(c); }
+/// ```
 fn children_of(e: Entity) -> Entity[] { return ids_to_entities(drift::hier_children(e.id)); }
-// Everything below the entity, depth first.
+
+/// Everything below the entity, depth first.
+///
+/// ```rust
+/// let parts = descendants_of(robot);
+/// ```
 fn descendants_of(e: Entity) -> Entity[] { return ids_to_entities(drift::hier_descendants(e.id)); }
-// The entity's transform after every parent, from the engine's current
-// Transforms (changes a running system made land when it returns).
+
+/// The entity's transform after every parent, from the engine's current Transforms (changes a
+/// running system made land when it returns).
+///
+/// ```rust
+/// let tip = world_transform(sword_tip).position;
+/// ```
 fn world_transform(e: Entity) -> GlobalTransform {
     let w = drift::hier_world(e.id);
     return GlobalTransform { position: Vec2 { x: w[0], y: w[1] }, rotation: w[2], scale: Vec2 { x: w[3], y: w[4] } };
 }
-// A point in the entity's space (where a child at `local` would be) to the
-// world, and a world point to the entity's space.
+
+/// A point in the entity's space (where a child at `local` would be) to the world, and a world
+/// point to the entity's space.
+///
+/// ```rust
+/// let muzzle = local_to_world(gun, vec2(18.0, 0.0));
+/// ```
 fn local_to_world(e: Entity, local: Vec2) -> Vec2 {
     let p = drift::hier_to_world(e.id, local.x, local.y);
     return Vec2 { x: p[0], y: p[1] };
 }
+
+/// ```rust
+/// let local = world_to_local(ship, input.mouse_world());
+/// ```
 fn world_to_local(e: Entity, world: Vec2) -> Vec2 {
     let p = drift::hier_to_local(e.id, world.x, world.y);
     return Vec2 { x: p[0], y: p[1] };

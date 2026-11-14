@@ -1,5 +1,5 @@
-<!-- Written by scripts/candela-reference.py from the drift module and
-     bindings/candela/docs/api-notes.md. Edit those, not this page. -->
+<!-- Written by scripts/candela-reference.py from the doc comments in
+     bindings/candela/drift/src. Edit those, not this page. -->
 
 # API Index
 
@@ -802,8 +802,8 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`Socket.send`](data.md#socketsend) method
 - [`SocketEvent`](data.md#socketevent) type
 - [`SocketEventKind`](data.md#socketeventkind) enum
-- [`Sound`](assets.md#sound-1) type
-- [`sound`](assets.md#sound) function
+- [`Sound`](assets.md#sound) type
+- [`sound`](assets.md#sound-1) function
 - [`Sound.duration`](assets.md#soundduration) method
 - [`Sound.play`](assets.md#soundplay) method
 - [`Sound.play_with`](assets.md#soundplay_with) method
@@ -874,8 +874,8 @@ Every name the `drift` module gives a game, in alphabetical order. Search the bo
 - [`TAU`](values.md#tau) constant
 - [`Text`](components.md#text) type
 - [`Text.measure`](components.md#textmeasure) method
-- [`Texture`](assets.md#texture-1) type
-- [`texture`](assets.md#texture) function
+- [`Texture`](assets.md#texture) type
+- [`texture`](assets.md#texture-1) function
 - [`Texture.set_filter`](assets.md#textureset_filter) method
 - [`Texture.size`](assets.md#texturesize) method
 - [`Texture.to_image`](assets.md#textureto_image) method

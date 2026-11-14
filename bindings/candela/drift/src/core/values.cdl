@@ -1,4 +1,4 @@
-// Vectors, rectangles and colors, and the math helpers that work on them.
+//! Vectors, rectangles and colors, and the math helpers that work on them.
 
 import "drift/core/host" { * };
 import "drift/core/components" { * };
@@ -7,7 +7,24 @@ import "drift/core/animation" { * };
 
 // ---- Values ----
 
-struct Vec2 { x: float = 0.0, y: float = 0.0 }
+//! page: values
+
+/// A 2D vector: a position, an offset, a direction or a velocity. `a + b`, `a - b`, `-a`, `a *
+/// s` and `a / s` (with a float `s`) work as expected.
+///
+/// ```rust
+/// let p = vec2(10.0, 20.0) + vec2(1.0, 0.0) * 5.0;
+/// ```
+struct Vec2 {
+    /// Horizontal, growing to the right
+    x: float = 0.0,
+    /// Vertical, growing downward
+    y: float = 0.0,
+}
+
+/// ```rust
+/// let up = vec2(0.0, -1.0);
+/// ```
 fn vec2(x: float, y: float) -> Vec2 { return Vec2 { x: x, y: y }; }
 impl Vec2 {
     fn +(self, o: Vec2) -> Vec2 { return Vec2 { x: self.x + o.x, y: self.y + o.y }; }
@@ -15,9 +32,23 @@ impl Vec2 {
     fn -(self) -> Vec2 { return Vec2 { x: -self.x, y: -self.y }; }
     fn *(self, s: float) -> Vec2 { return Vec2 { x: self.x * s, y: self.y * s }; }
     fn /(self, s: float) -> Vec2 { return Vec2 { x: self.x / s, y: self.y / s }; }
+    /// ```rust
+    /// let facing = dir.dot(to_player) > 0.0;
+    /// ```
     fn dot(self, o: Vec2) -> float { return self.x * o.x + self.y * o.y; }
+    /// ```rust
+    /// if v.linear.length() > 300.0 { v.linear = v.linear.normalized() * 300.0; }
+    /// ```
     fn length(self) -> float { return (self.x * self.x + self.y * self.y).sqrt(); }
+    /// ```rust
+    /// if t.position.distance(goal) < 8.0 { arrived = true; }
+    /// ```
     fn distance(self, o: Vec2) -> float { return (self - o).length(); }
+    /// The same direction with length 1; the zero vector stays zero.
+    ///
+    /// ```rust
+    /// let dir = (target - t.position).normalized();
+    /// ```
     fn normalized(self) -> Vec2 {
         let l = self.length();
         if l == 0.0 {
@@ -25,48 +56,136 @@ impl Vec2 {
         }
         return self / l;
     }
+    /// ```rust
+    /// t.position = t.position.lerp(target, 0.1);   // eases toward the target
+    /// ```
     fn lerp(self, o: Vec2, t: float) -> Vec2 { return self + (o - self) * t; }
 }
 
-struct Rect { x: float = 0.0, y: float = 0.0, w: float = 0.0, h: float = 0.0 }
+/// A rectangle: top-left corner and size.
+///
+/// ```rust
+/// let arena = rect(0.0, 0.0, 960.0, 540.0);
+/// ```
+struct Rect {
+    /// Left edge
+    x: float = 0.0,
+    /// Top edge
+    y: float = 0.0,
+    /// Width
+    w: float = 0.0,
+    /// Height
+    h: float = 0.0,
+}
+
+/// ```rust
+/// let r = rect(10.0, 10.0, 100.0, 40.0);
+/// ```
 fn rect(x: float, y: float, w: float, h: float) -> Rect { return Rect { x: x, y: y, w: w, h: h }; }
 impl Rect {
+    /// Whether a point is inside.
+    ///
+    /// ```rust
+    /// if button.contains(input.mouse_screen()) { hovered = true; }
+    /// ```
     fn contains(self, p: Vec2) -> bool {
         return p.x >= self.x && p.y >= self.y && p.x < self.x + self.w && p.y < self.y + self.h;
     }
+    /// Whether two rects overlap.
+    ///
+    /// ```rust
+    /// if a.overlaps(b) { log("touching"); }
+    /// ```
     fn overlaps(self, o: Rect) -> bool {
         return self.x < o.x + o.w && o.x < self.x + self.w && self.y < o.y + o.h && o.y < self.y + self.h;
     }
+    /// The middle point.
+    ///
+    /// ```rust
+    /// let mid = arena.center();
+    /// ```
     fn center(self) -> Vec2 { return Vec2 { x: self.x + self.w * 0.5, y: self.y + self.h * 0.5 }; }
 }
 
-// A width for each side of a box: nine-slice borders, padding.
+/// A width for each side of a box: nine-slice borders, padding.
 struct Edges { left: float = 0.0, top: float = 0.0, right: float = 0.0, bottom: float = 0.0 }
-// The same width on every side.
+
+/// The same width on every side.
 fn edges(all: float) -> Edges { return Edges { left: all, top: all, right: all, bottom: all }; }
 
-struct Color { r: float = 1.0, g: float = 1.0, b: float = 1.0, a: float = 1.0 }
+/// A color with red, green, blue and alpha from 0.0 to 1.0. Build one from 0 to 255 values with
+/// `rgb` and `rgba`.
+///
+/// ```rust
+/// let sky = Color { r: 0.4, g: 0.6, b: 0.9, a: 1.0 };
+/// ```
+struct Color {
+    /// Red
+    r: float = 1.0,
+    /// Green
+    g: float = 1.0,
+    /// Blue
+    b: float = 1.0,
+    /// Alpha: 0 is invisible, 1 is solid
+    a: float = 1.0,
+}
+
+/// A solid color from 0 to 255 values.
+///
+/// ```rust
+/// let gold = rgb(255, 210, 60);
+/// ```
 fn rgb(r: int, g: int, b: int) -> Color {
     return Color { r: float(r) / 255.0, g: float(g) / 255.0, b: float(b) / 255.0, a: 1.0 };
 }
+
+/// A color with alpha, all from 0 to 255.
+///
+/// ```rust
+/// let shade = rgba(0, 0, 0, 128);
+/// ```
 fn rgba(r: int, g: int, b: int, a: int) -> Color {
     return Color { r: float(r) / 255.0, g: float(g) / 255.0, b: float(b) / 255.0, a: float(a) / 255.0 };
 }
 impl Color {
+    /// The same color with another alpha, 0 to 1.
+    ///
+    /// ```rust
+    /// let faded = gold.alpha(0.3);
+    /// ```
     fn alpha(self, a: float) -> Color { return Color { r: self.r, g: self.g, b: self.b, a: a }; }
 }
 
-// An entity's id. `Entity {}` is no entity.
-struct Entity { id: int = 0 }
+/// An entity's id. `Entity {}` is no entity.
+///
+/// ```rust
+/// @resource
+/// struct Target { entity: Entity = Entity { .. } }
+///
+/// if target.entity.id == 0 { log("nothing selected"); }
+/// ```
+struct Entity {
+    /// The engine's id; 0 is no entity
+    id: int = 0,
+}
 impl Entity {
-    // Whether the entity exists: false for `Entity {}` and after a despawn
-    // has been applied.
+    /// Whether the entity exists: false for `Entity {}` and after a despawn has been applied.
     fn alive(self) -> bool { return drift::entity_alive(self.id); }
 }
 
+/// The screen layer. It draws last, after post effects, in screen pixels without a camera: (0, 0)
+/// is the top-left of the window's logical area. Put scores, menus and health bars there.
+///
+/// ```rust
+/// Text { value: "Lives 3", layer: hud_layer(), .. }
+/// ```
 fn hud_layer() -> int { return 31; }
 
-// Numbers held between bounds, and the smaller or larger of two.
+/// Numbers held between bounds, and the smaller or larger of two.
+///
+/// ```rust
+/// hp = clamp(hp + 10.0, 0.0, 100.0);
+/// ```
 fn clamp(x: float, lo: float, hi: float) -> float {
     if x < lo {
         return lo;
@@ -76,39 +195,125 @@ fn clamp(x: float, lo: float, hi: float) -> float {
     }
     return x;
 }
+
+/// The smaller of two floats.
+///
+/// ```rust
+/// let step = min(distance, speed * time.dt);
+/// ```
 fn min(a: float, b: float) -> float {
     if a < b {
         return a;
     }
     return b;
 }
+
+/// The larger of two floats.
+///
+/// ```rust
+/// let left = max(0.0, timer - time.dt);
+/// ```
 fn max(a: float, b: float) -> float {
     if a > b {
         return a;
     }
     return b;
 }
+
+/// Writes a line to the engine log: the terminal on the desktop, the browser console on the
+/// web.
+///
+/// ```rust
+/// log("wave " + string(waves.count));
+/// ```
 fn log(message: string) { drift::log_message(0, message); }
+
+/// Writes a warning to the engine log.
+///
+/// ```rust
+/// warn("no spawn point in this level");
+/// ```
 fn warn(message: string) { drift::log_message(1, message); }
 
+//! page: enums
+
+/// Which point of a `Text` sits on its position, left to right; the text also turns around this
+/// point.
+///
+/// ```rust
+/// Text { value: "Title", align: Align::Center, .. }
+/// ```
 enum Align { Left, Center, Right }
+
+/// Which point of a `Text` sits on its position, top to bottom.
+///
+/// ```rust
+/// Text { value: "Paused", align: Align::Center, valign: VAlign::Middle, .. }
+/// ```
 enum VAlign { Top, Middle, Bottom }
-enum Blend { Alpha, Additive, Multiply, Screen, Premultiplied, Opaque }
-enum Filter { Nearest, Linear }
-enum BodyKind { Static, Dynamic, Kinematic }
+
+/// How a drawable mixes with what is behind it.
+///
+/// ```rust
+/// Sprite { image: art.glow, blend: Blend::Additive, .. }
+/// ```
+enum Blend {
+    /// Ordinary transparency
+    Alpha,
+    /// Adds light: glows, fire, sparks
+    Additive,
+    /// Darkens: shadows, tints
+    Multiply,
+    /// Lightens softly
+    Screen,
+    /// For images whose colors are already multiplied by their alpha
+    Premultiplied,
+    /// Ignores alpha
+    Opaque,
+}
+
+/// How a texture looks scaled; see [`Texture.set_filter`](assets.md#textureset_filter).
+///
+/// ```rust
+/// art.background.set_filter(Filter::Linear);
+/// ```
+enum Filter {
+    /// Crisp pixels
+    Nearest,
+    /// Smooth
+    Linear,
+}
+
+/// What kind of physics body a `RigidBody` is.
+///
+/// ```rust
+/// RigidBody { kind: BodyKind::Kinematic, .. }
+/// ```
+enum BodyKind {
+    /// Never moves
+    Static,
+    /// Falls, collides and is pushed
+    Dynamic,
+    /// Moves only by its Velocity; pushes dynamic bodies and is not pushed
+    Kinematic,
+}
 
 // ---- Math helpers ----
 
-// Where x sits between a and b: 0.0 at a, 1.0 at b.
+//! page: values
+
+/// Where x sits between a and b: 0.0 at a, 1.0 at b.
 fn inverse_lerp(a: float, b: float, x: float) -> float {
     if a == b {
         return 0.0;
     }
     return (x - a) / (b - a);
 }
-// x moved from the range a..b to the range c..d.
+
+/// x moved from the range a..b to the range c..d.
 fn remap(x: float, a: float, b: float, c: float, d: float) -> float { return lerp(c, d, inverse_lerp(a, b, x)); }
-// x wrapped into lo up to, not including, hi: angles, looping worlds.
+
+/// x wrapped into lo up to, not including, hi: angles, looping worlds.
 fn wrap(x: float, lo: float, hi: float) -> float {
     let span = hi - lo;
     if span <= 0.0 {
@@ -120,7 +325,8 @@ fn wrap(x: float, lo: float, hi: float) -> float {
     }
     return r;
 }
-// -1.0, 0.0 or 1.0.
+
+/// -1.0, 0.0 or 1.0.
 fn sign(x: float) -> float {
     if x > 0.0 {
         return 1.0;
@@ -135,7 +341,7 @@ fn degrees(radians: float) -> float { return radians * 180.0 / PI; }
 
 impl Vec2 {
     fn cross(self, o: Vec2) -> float { return self.x * o.y - self.y * o.x; }
-    // Toward target by at most max_distance, never past it.
+    /// Toward target by at most max_distance, never past it.
     fn move_towards(self, target: Vec2, max_distance: float) -> Vec2 {
         let d = target - self;
         let l = d.length();
@@ -144,7 +350,7 @@ impl Vec2 {
         }
         return self + d / l * max_distance;
     }
-    // Bounced off a surface with this normal.
+    /// Bounced off a surface with this normal.
     fn reflect(self, normal: Vec2) -> Vec2 {
         let n = normal.normalized();
         return self - n * (2.0 * self.dot(n));
@@ -152,29 +358,31 @@ impl Vec2 {
 }
 
 impl Rect {
-    // The point inside the rect nearest p.
+    /// The point inside the rect nearest p.
     fn clamp_point(self, p: Vec2) -> Vec2 {
         return Vec2 { x: clamp(p.x, self.x, self.x + self.w), y: clamp(p.y, self.y, self.y + self.h) };
     }
-    // Grown by `by` on every side; negative shrinks it.
+    /// Grown by `by` on every side; negative shrinks it.
     fn expand(self, by: float) -> Rect {
         return Rect { x: self.x - by, y: self.y - by, w: self.w + by * 2.0, h: self.h + by * 2.0 };
     }
-    // A rect of size w x h centred on c.
+    /// A rect of size w x h centred on c.
     fn centered_at(self, c: Vec2) -> Rect {
         return Rect { x: c.x - self.w * 0.5, y: c.y - self.h * 0.5, w: self.w, h: self.h };
     }
 }
 
-// Whether two circles touch.
+/// Whether two circles touch.
 fn circles_overlap(a: Vec2, ra: float, b: Vec2, rb: float) -> bool {
     return (a - b).length_squared() <= (ra + rb) * (ra + rb);
 }
-// Whether a circle touches a rect.
+
+/// Whether a circle touches a rect.
 fn circle_overlaps_rect(c: Vec2, r: float, box: Rect) -> bool {
     return (box.clamp_point(c) - c).length_squared() <= r * r;
 }
-// Where segments a1-a2 and b1-b2 cross, if they do.
+
+/// Where segments a1-a2 and b1-b2 cross, if they do.
 fn segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> Option<Vec2> {
     let r = a2 - a1;
     let s = b2 - b1;
@@ -192,8 +400,10 @@ fn segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> Option<Vec2> {
 
 // ---- Colors ----
 
-// A color from hue, saturation and value, each 0.0 to 1.0 (hue goes once
-// around the color wheel: 0.0 red, 0.33 green, 0.67 blue).
+//! page: data
+
+/// A color from hue, saturation and value, each 0.0 to 1.0 (hue goes once around the color
+/// wheel: 0.0 red, 0.33 green, 0.67 blue).
 fn hsv(h: float, s: float, v: float) -> Color {
     let hh = wrap(h, 0.0, 1.0) * 6.0;
     let i = int(hh.floor());
@@ -225,7 +435,8 @@ fn hex_digit(c: string) -> int {
     let digits = "0123456789abcdef";
     return match digits.index_of(c.lowercase()) { Some(i) => i, None => 0 };
 }
-// A color from "#rgb", "#rrggbb" or "#rrggbbaa" (the # is optional).
+
+/// A color from "#rgb", "#rrggbb" or "#rrggbbaa" (the # is optional).
 fn hex(text: string) -> Color {
     let t = text.trim_start_chars("#");
     if t.len() == 3 {
@@ -265,20 +476,20 @@ impl Color {
         }
         return Hsv { h: h, s: s, v: hi };
     }
-    // Toward white (amount 0.0 to 1.0), keeping alpha.
+    /// Toward white (amount 0.0 to 1.0), keeping alpha.
     fn lighten(self, amount: float) -> Color {
         return self.lerp(Color { r: 1.0, g: 1.0, b: 1.0, a: self.a }, amount);
     }
-    // Toward black, keeping alpha.
+    /// Toward black, keeping alpha.
     fn darken(self, amount: float) -> Color {
         return self.lerp(Color { r: 0.0, g: 0.0, b: 0.0, a: self.a }, amount);
     }
-    // The hue turned by `turn` (1.0 is once around).
+    /// The hue turned by `turn` (1.0 is once around).
     fn shift_hue(self, turn: float) -> Color {
         let c = self.to_hsv();
         return hsv(c.h + turn, c.s, c.v).alpha(self.a);
     }
-    // "#rrggbb", or "#rrggbbaa" when not opaque.
+    /// "#rrggbb", or "#rrggbbaa" when not opaque.
     fn to_hex(self) -> string {
         let digits = "0123456789abcdef";
         let out = "#";
@@ -294,7 +505,7 @@ impl Color {
     }
 }
 
-// An ordered set of colors: pick by index, or blend along it as a gradient.
+/// An ordered set of colors: pick by index, or blend along it as a gradient.
 struct Palette { colors: Color[] = [] }
 fn palette(hexes: string[]) -> Palette {
     let colors: Color[] = [];
@@ -305,12 +516,12 @@ fn palette(hexes: string[]) -> Palette {
 }
 impl Palette {
     fn len(self) -> int { return self.colors.len(); }
-    // The color at i, wrapping around the end.
+    /// The color at i, wrapping around the end.
     fn at(self, i: int) -> Color {
         let n = self.colors.len();
         return self.colors[((i % n) + n) % n];
     }
-    // A gradient through every color: 0.0 is the first, 1.0 the last.
+    /// A gradient through every color: 0.0 is the first, 1.0 the last.
     fn sample(self, t: float) -> Color {
         let n = self.colors.len();
         if n == 1 {
@@ -325,8 +536,9 @@ impl Palette {
     }
     fn random(self, rng: Rng) -> Color { return self.colors[rng.below(self.colors.len())]; }
 }
-// The PICO-8 sixteen: black, dark blue, purple, dark green, brown, dark grey,
-// light grey, white, red, orange, yellow, green, blue, lavender, pink, peach.
+
+/// The PICO-8 sixteen: black, dark blue, purple, dark green, brown, dark grey, light grey,
+/// white, red, orange, yellow, green, blue, lavender, pink, peach.
 fn pico8() -> Palette {
     return palette(["#000000", "#1d2b53", "#7e2553", "#008751", "#ab5236", "#5f574f", "#c2c3c7", "#fff1e8",
                     "#ff004d", "#ffa300", "#ffec27", "#00e436", "#29adff", "#83769c", "#ff77a8", "#ffccaa"]);
