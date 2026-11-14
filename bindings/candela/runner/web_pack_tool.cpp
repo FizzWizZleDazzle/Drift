@@ -1,8 +1,9 @@
 // drift_web_pack <game folder> <out folder> <web runtime folder> [--dev]
 //
-// The page writer of `drift build --web`, on its own, for the web build of
-// this tree: there is no desktop `drift` there, so the pages of the Candela
-// examples are written by this program, built for Node.js.
+// The page writer of `drift build --web`, on its own and without the
+// compiler, built for Node.js: small and quick to start, for writing a page
+// again on every save. Its pages compile the game when they load;
+// `node drift_node.js build --web` writes pages with the game compiled in.
 
 #include "web_pack.hpp"
 

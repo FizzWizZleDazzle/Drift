@@ -114,23 +114,29 @@ if(EMSCRIPTEN)
         VERBATIM)
     set_property(TARGET drift_web APPEND PROPERTY LINK_DEPENDS ${_runner}/drift-dev.js)
 
-    # `drift check` run by Node.js, for a machine that has the web build and
-    # no desktop drift: the same program, reading the game and the module
-    # from the disk. `node drift_check.js check [folder | script] [--json]`.
-    drift_candela_program(drift_check)
-    target_compile_definitions(drift_check PRIVATE DRIFT_NODE_CHECK=1)
-    target_link_options(drift_check PRIVATE -sNODERAWFS=1 -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
+    # `drift check` and `drift build --web` run by Node.js, for a machine
+    # that has the web build and no desktop drift: the same program, reading
+    # the game and the module from the disk.
+    # `node drift_node.js check [folder | script] [--json]`,
+    # `node drift_node.js build --web <folder> -o <out> --runtime <web runtime>`.
+    drift_candela_program(drift_node)
+    target_sources(drift_node PRIVATE ${_runner}/web_pack.cpp)
+    target_link_libraries(drift_node PRIVATE tomlplusplus::tomlplusplus)
+    target_compile_definitions(drift_node PRIVATE DRIFT_NODE=1)
+    target_link_options(drift_node PRIVATE -sNODERAWFS=1 -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=1)
 
-    # The page writer of `drift build --web`, run by Node.js, so the pages
-    # below are made the way `drift build --web` makes them.
+    # The page writer alone, without the compiler: small and quick to start,
+    # for writing a page again on every save (dev pages compile the game in
+    # the browser anyway). Its pages start by compiling the game.
     add_executable(drift_web_pack ${_runner}/web_pack.cpp ${_runner}/web_pack_tool.cpp)
     target_link_libraries(drift_web_pack PRIVATE nlohmann_json::nlohmann_json tomlplusplus::tomlplusplus)
     target_link_options(drift_web_pack PRIVATE -sNODERAWFS=1 -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1)
 
     # drift_candela_web_game(<target> PROJECT <dir>): the game in <dir> as a
     # web page, the folder <target>/ beside the runtime: index.html, drift.js,
-    # drift.wasm and the game's game.pack. The page is written again when a
-    # file in the game folder or the runtime changes.
+    # drift.wasm and the game's game.pack, written the way `drift build --web`
+    # writes them, the game compiled in. The page is written again when a
+    # file in the game folder, the runtime or the compiler changes.
     function(drift_candela_web_game target)
         cmake_parse_arguments(ARG "" "PROJECT" "" ${ARGN})
         get_filename_component(project ${ARG_PROJECT} ABSOLUTE)
@@ -144,9 +150,9 @@ if(EMSCRIPTEN)
         endforeach()
         add_custom_command(
             OUTPUT ${out}/index.html ${out}/game.pack ${out}/drift.js ${out}/drift.wasm
-            COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:drift_web_pack>
-                ${project} ${out} $<TARGET_FILE_DIR:drift_web>
-            DEPENDS drift_web drift_web_pack ${inputs}
+            COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:drift_node>
+                build --web ${project} -o ${out} --runtime $<TARGET_FILE_DIR:drift_web>
+            DEPENDS drift_web drift_node ${inputs}
             COMMENT "Writing the web page ${target}/"
             VERBATIM)
         add_custom_target(${target} ALL DEPENDS ${out}/index.html)

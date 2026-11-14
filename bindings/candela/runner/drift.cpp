@@ -63,7 +63,8 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
-#else
+#endif
+#if !defined(__EMSCRIPTEN__) || defined(DRIFT_NODE)
 #include "web_pack.hpp"
 #endif
 
@@ -100,6 +101,7 @@ void drift_host_frame(double dt, double elapsed, int64_t frame, double scale, do
 void drift_host_unload();
 int32_t drift_host_is_component(const char* name);
 void drift_host_scene_component(uint64_t e, const char* name, const char* value, const char* ids);
+const uint8_t* drift_host_build(const char* entry, const char* module_dir, size_t* len);
 }
 
 namespace {
@@ -3817,7 +3819,7 @@ std::string installed(const char* what) {
 // source tree this program was built from.
 std::string moduleDir() {
     if (const char* env = SDL_getenv("DRIFT_CANDELA_MODULE")) return env;
-#if defined(__EMSCRIPTEN__) && defined(DRIFT_NODE_CHECK)
+#if defined(__EMSCRIPTEN__) && defined(DRIFT_NODE)
     return DRIFT_CANDELA_MODULE_DIR;   // read from the disk through Node.js
 #elif defined(__EMSCRIPTEN__)
     return "/drift-module";   // embedded in drift.wasm
@@ -3854,15 +3856,17 @@ const char* usage =
     "Usage:\n"
     "  drift run [folder | script] [--config <path>] [--set section.key=value]...\n"
     "  drift check [folder | script] [--json]\n"
-    "  drift build --web [folder] [-o <out folder>] [--dev]\n"
+    "  drift build --web [folder] [-o <out folder>] [--dev] [--runtime <folder>]\n"
     "  drift --version\n"
     "  drift --help\n"
     "\n"
     "run plays the game in a folder (default: this one) or starts at a script.\n"
     "check reports what loading the game would refuse or warn about, without running it.\n"
     "  --json prints the problems as JSON, for an editor.\n"
-    "build --web writes a page to serve over HTTP (default: <folder>/build/web).\n"
-    "  --dev makes a page that hot reloads the game when the page is written again.\n";
+    "build --web writes a page to serve over HTTP (default: <folder>/build/web), with the game\n"
+    "  compiled so the page starts without compiling it.\n"
+    "  --dev makes a page that hot reloads the game when the page is written again.\n"
+    "  --runtime <folder> takes the web runtime from that folder instead of the installed one.\n";
 
 // The plugins every game runs with; `drift run` and `drift check` add the
 // same ones, so a check reads drift.toml the way a run does.
@@ -3956,7 +3960,7 @@ int checkCommand(int argc, char** argv, int first) {
     return errors ? 1 : 0;
 }
 
-#ifndef __EMSCRIPTEN__
+#if !defined(__EMSCRIPTEN__) || defined(DRIFT_NODE)
 // The web runtime `drift build --web` copies: DRIFT_WEB_RUNTIME, or the
 // installed copy.
 std::string webRuntimeDir() {
@@ -3964,15 +3968,48 @@ std::string webRuntimeDir() {
     return installed("web");
 }
 
-// drift build --web [folder] [-o <out>] [--dev]
+// Compiles the game in `folder` to the bytecode its page starts from, the
+// way a run reads it: from the game's folder, with its drift.toml.
+bool compileGame(const std::string& folder, const std::string& entry, std::string& bytes, std::string& error) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path was = fs::current_path(ec);
+    fs::current_path(folder, ec);
+    if (ec) {
+        error = folder + ": " + ec.message();
+        return false;
+    }
+    useStdLib();
+    bool ok = false;
+    {
+        App app;
+        g_app = &app;
+        addGamePlugins(app);
+        app.loadSettings();
+        size_t len = 0;
+        const uint8_t* p = drift_host_build(entry.c_str(), moduleDir().c_str(), &len);
+        if (p) {
+            bytes.assign(reinterpret_cast<const char*>(p), len);
+            ok = true;
+        } else {
+            error = drift_host_error();
+        }
+        g_app = nullptr;
+    }
+    fs::current_path(was, ec);
+    return ok;
+}
+
+// drift build --web [folder] [-o <out>] [--dev] [--runtime <web runtime folder>]
 int buildCommand(int argc, char** argv, int first) {
     bool web = false, dev = false;
-    std::string folder, out;
+    std::string folder, out, runtimeArg;
     for (int i = first; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--web") web = true;
         else if (arg == "--dev") dev = true;
         else if (arg == "-o" && i + 1 < argc) out = argv[++i];
+        else if (arg == "--runtime" && i + 1 < argc) runtimeArg = argv[++i];
         else if (arg.rfind("-", 0) == 0) {
             std::fprintf(stderr, "drift build: unknown option %s\n\n%s", arg.c_str(), usage);
             return 2;
@@ -3988,14 +4025,14 @@ int buildCommand(int argc, char** argv, int first) {
     }
     if (folder.empty()) folder = ".";
     if (out.empty()) out = (std::filesystem::path(folder) / "build" / "web").string();
-    std::string runtime = webRuntimeDir();
+    std::string runtime = runtimeArg.empty() ? webRuntimeDir() : runtimeArg;
     if (runtime.empty()) {
         std::fprintf(stderr, "drift build: no web runtime installed beside this drift; "
                              "set DRIFT_WEB_RUNTIME to a folder holding drift.html, drift.js and drift.wasm\n");
         return 1;
     }
     std::string error, summary;
-    if (!drift::web::buildWebPage(folder, out, runtime, dev, error, summary)) {
+    if (!drift::web::buildWebPage(folder, out, runtime, dev, error, summary, compileGame)) {
         std::fprintf(stderr, "drift build: %s\n", error.c_str());
         return 1;
     }
@@ -4027,13 +4064,13 @@ int main(int argc, char** argv) {
         }
     }
     if (command == "check") return checkCommand(argc, argv, first);
-#ifdef DRIFT_NODE_CHECK
-    // The Node.js build runs checks only.
-    std::fprintf(stderr, "drift_check.js runs checks: node drift_check.js check [folder | script] [--json]\n");
-    return 2;
-#endif
-#ifndef __EMSCRIPTEN__
+#if !defined(__EMSCRIPTEN__) || defined(DRIFT_NODE)
     if (command == "build") return buildCommand(argc, argv, first);
+#endif
+#ifdef DRIFT_NODE
+    // The Node.js build checks games and writes their pages; it plays none.
+    std::fprintf(stderr, "drift_node.js checks games and writes pages: node drift_node.js check | build --web ...\n");
+    return 2;
 #endif
 
     // The first argument that is not an option is the game: a folder to play

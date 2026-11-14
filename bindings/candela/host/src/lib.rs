@@ -10,8 +10,8 @@
 //! is kept.
 
 use candela::{
-    AttributeTable, AttributeTarget, AttributeValue, DataType, Diagnostic, Engine, HostError, HostType, Program,
-    Value,
+    AttributeTable, AttributeTarget, AttributeValue, DataType, Diagnostic, Engine, HostError, HostRegistry, HostType,
+    IntoHostFn, Program, RuntimeProgram, Value,
 };
 use serde_json::{json, Map as JsonMap, Value as Json};
 use std::cell::RefCell;
@@ -613,6 +613,12 @@ thread_local! {
     /// What each lookup handed out during the current call, by (key,
     /// entity), to tell what the system changed.
     static LOOKUP_SEEN: RefCell<HashMap<(i64, u64), Value>> = RefCell::new(HashMap::new());
+    /// Whether a load may start from the bytecode beside the entry: the
+    /// first load of a page does; hot reloads and checks compile the
+    /// scripts.
+    static USE_BUILT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The last drift_host_build answer.
+    static BUILT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     /// is_engine's answers by component name.
     static ENGINE_COMPONENTS: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
 }
@@ -759,7 +765,7 @@ fn queue(c: Command) {
 }
 
 struct Host {
-    program: Program,
+    program: Prog,
     types: std::rc::Rc<Types>,
     systems: Vec<System>,
     components: HashSet<String>,
@@ -806,6 +812,59 @@ struct Host {
     /// on_enter systems having run.
     pending_startup: Vec<String>,
     pending_enter: Vec<(String, String)>,
+}
+
+/// The game's program: compiled here from its scripts, or loaded from the
+/// bytecode `drift build --web` compiled them to (see `built_program`).
+enum Prog {
+    Source(Program),
+    /// The program, and the name each function a system or a condition
+    /// names is exported under.
+    Built(RuntimeProgram, HashMap<String, String>),
+}
+
+/// An error a call raised: its kind and its message.
+struct Raised {
+    code: String,
+    message: String,
+}
+
+impl From<Diagnostic> for Raised {
+    fn from(d: Diagnostic) -> Self {
+        Raised { code: d.code, message: d.message }
+    }
+}
+
+impl From<candela::CallError> for Raised {
+    fn from(e: candela::CallError) -> Self {
+        match e {
+            candela::CallError::Runtime(d) => d.into(),
+            other => Raised { code: String::from("host_call"), message: other.to_string() },
+        }
+    }
+}
+
+impl Prog {
+    fn call(&mut self, name: &str, args: &[Value]) -> Result<Value, Raised> {
+        match self {
+            Prog::Source(p) => p.call(name, args).map_err(Raised::from),
+            Prog::Built(p, exports) => p.call(exports.get(name).map_or(name, String::as_str), args).map_err(Raised::from),
+        }
+    }
+
+    fn call_in_out(&mut self, name: &str, args: &mut [Value]) -> Result<Value, Raised> {
+        match self {
+            Prog::Source(p) => p.call_in_out(name, args).map_err(Raised::from),
+            Prog::Built(p, exports) => p.call_in_out(exports.get(name).map_or(name, String::as_str), args).map_err(Raised::from),
+        }
+    }
+
+    fn collect(&mut self, budget: u32) -> bool {
+        match self {
+            Prog::Source(p) => p.collect(budget),
+            Prog::Built(p, _) => p.collect(budget),
+        }
+    }
 }
 
 struct StateNow {
@@ -1961,6 +2020,68 @@ fn engine(module_dir: &str) -> Engine {
     if let Some(dir) = lib_dir() {
         e = e.with_lib_dir(dir);
     }
+    register_hosts(&mut e);
+    e
+}
+
+/// Where host functions are registered: the compiler's Engine, or the
+/// registry a compiled program binds its host functions from.
+trait Hosts {
+    fn register_host_fn<Marker, F>(&mut self, namespace: &str, name: &str, f: F)
+    where
+        F: IntoHostFn<Marker>;
+    fn register_host_fn_typed<F>(&mut self, namespace: &str, name: &str, args: Vec<HostType>, ret: HostType, f: F)
+    where
+        F: Fn(&[Value]) -> Result<Value, HostError> + 'static;
+    fn register_host_fn_variadic<F>(&mut self, namespace: &str, name: &str, f: F)
+    where
+        F: Fn(&[Value]) -> Result<Value, HostError> + 'static;
+}
+
+impl Hosts for Engine {
+    fn register_host_fn<Marker, F>(&mut self, namespace: &str, name: &str, f: F)
+    where
+        F: IntoHostFn<Marker>,
+    {
+        Engine::register_host_fn(self, namespace, name, f);
+    }
+    fn register_host_fn_typed<F>(&mut self, namespace: &str, name: &str, args: Vec<HostType>, ret: HostType, f: F)
+    where
+        F: Fn(&[Value]) -> Result<Value, HostError> + 'static,
+    {
+        Engine::register_host_fn_typed(self, namespace, name, args, ret, f);
+    }
+    fn register_host_fn_variadic<F>(&mut self, namespace: &str, name: &str, f: F)
+    where
+        F: Fn(&[Value]) -> Result<Value, HostError> + 'static,
+    {
+        Engine::register_host_fn_variadic(self, namespace, name, f);
+    }
+}
+
+impl Hosts for HostRegistry {
+    fn register_host_fn<Marker, F>(&mut self, namespace: &str, name: &str, f: F)
+    where
+        F: IntoHostFn<Marker>,
+    {
+        HostRegistry::register_host_fn(self, namespace, name, f);
+    }
+    fn register_host_fn_typed<F>(&mut self, namespace: &str, name: &str, args: Vec<HostType>, ret: HostType, f: F)
+    where
+        F: Fn(&[Value]) -> Result<Value, HostError> + 'static,
+    {
+        HostRegistry::register_host_fn_typed(self, namespace, name, args, ret, f);
+    }
+    fn register_host_fn_variadic<F>(&mut self, namespace: &str, name: &str, f: F)
+    where
+        F: Fn(&[Value]) -> Result<Value, HostError> + 'static,
+    {
+        HostRegistry::register_host_fn_variadic(self, namespace, name, f);
+    }
+}
+
+/// Every host function of the `drift` module.
+fn register_hosts<H: Hosts>(e: &mut H) {
     let v = |args: &[Value], i: usize| args.get(i).cloned().unwrap_or(Value::Null);
     e.register_host_fn("drift", "entity_new", || {
         let e = unsafe { drift_bridge_new() };
@@ -2148,12 +2269,11 @@ fn engine(module_dir: &str) -> Engine {
         resource_field_check(&ty, &path).err().unwrap_or_default()
     });
     for (name, args, ret) in forwarded().into_iter().chain(presentation_forwarded()) {
-        forward(&mut e, name, args, ret);
+        forward(e, name, args, ret);
     }
     for (name, ret) in presentation_values() {
-        forward_values(&mut e, name, ret);
+        forward_values(e, name, ret);
     }
-    e
 }
 
 /// Engine functions the host only passes through: the arguments go to the
@@ -2389,14 +2509,14 @@ fn typed_json(v: &Value) -> Json {
     j
 }
 
-fn forward_values(e: &mut Engine, name: &'static str, ret: HostType) {
+fn forward_values<H: Hosts>(e: &mut H, name: &'static str, ret: HostType) {
     e.register_host_fn_variadic("drift", name, move |a| {
         let answer = call(name, Json::Array(a.iter().map(typed_json).collect()));
         Ok(host_value(&answer, &ret))
     });
 }
 
-fn forward(e: &mut Engine, name: &'static str, args: Vec<HostType>, ret: HostType) {
+fn forward<H: Hosts>(e: &mut H, name: &'static str, args: Vec<HostType>, ret: HostType) {
     let shape = ret.clone();
     let f = cstr(name);
     e.register_host_fn_typed("drift", name, args, ret, move |a| {
@@ -2531,20 +2651,31 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
             }
         }
     };
-    let mut guessed: Vec<(String, String)> =
-        marked_structs(entry, module_dir).into_iter().enumerate().map(|(i, n)| (format!("__drift_default_g{i}"), n)).collect();
+    // A page `drift build --web` wrote carries the game compiled to
+    // bytecode, and starts without compiling (see `built_program`).
+    let built = if USE_BUILT.with(std::cell::Cell::get) { built_program(entry) } else { None };
+    let mut guessed: Vec<(String, String)> = Vec::new();
     let mut dropped: Vec<(String, Diagnostic)> = Vec::new();
-    let first = match compile_with(&mut guessed, &mut dropped) {
-        Ok(p) => p,
-        // The glue may be what failed (a default that raises somewhere the
-        // error cannot place): the game alone says whose error it is.
-        Err(_) => {
-            guessed.clear();
-            dropped.clear();
-            engine(module_dir).compile(&base, entry).map_err(|d| Unread::Compile(d, src.clone()))?
-        }
+    let first = if built.is_some() {
+        None
+    } else {
+        guessed = marked_structs(entry, module_dir).into_iter().enumerate().map(|(i, n)| (format!("__drift_default_g{i}"), n)).collect();
+        Some(match compile_with(&mut guessed, &mut dropped) {
+            Ok(p) => p,
+            // The glue may be what failed (a default that raises somewhere
+            // the error cannot place): the game alone says whose error it is.
+            Err(_) => {
+                guessed.clear();
+                dropped.clear();
+                engine(module_dir).compile(&base, entry).map_err(|d| Unread::Compile(d, src.clone()))?
+            }
+        })
     };
-    let table = first.attributes();
+    let table = match (&built, &first) {
+        (Some(b), _) => b.program.attributes(),
+        (None, Some(p)) => p.attributes(),
+        (None, None) => unreachable!("a game is built or compiled"),
+    };
     let types = std::rc::Rc::new(Types::new(table));
     let named = |n: &str| -> Vec<(u16, Option<String>)> {
         types
@@ -2591,8 +2722,16 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
             covered = false;
         }
     }
-    let program = if covered {
-        first
+    let program = if let Some(b) = built {
+        for (id, _) in &all_defaults {
+            if let Some(f) = b.defaults.get(types.struct_name(*id)) {
+                default_fn.insert(*id, f.clone());
+            }
+        }
+        unbuildable.clear();
+        Prog::Built(b.program, b.calls)
+    } else if covered {
+        Prog::Source(first.expect("compiled"))
     } else {
         default_fn.clear();
         unbuildable.clear();
@@ -2617,7 +2756,7 @@ fn read_game(entry: &str, module_dir: &str) -> Result<Reading, Unread> {
                 unbuildable.push((*id, d.clone()));
             }
         }
-        program
+        Prog::Source(program)
     };
     let buildable: Vec<(u16, Option<String>)> = all_defaults.iter().filter(|(id, _)| default_fn.contains_key(id)).cloned().collect();
 
@@ -3028,6 +3167,163 @@ fn marked_in(src: &str) -> Vec<String> {
     out
 }
 
+/// A game compiled to bytecode by `drift build --web`, loaded.
+struct Built {
+    program: RuntimeProgram,
+    /// The export each system and condition is called through, by the
+    /// function's name.
+    calls: HashMap<String, String>,
+    /// The export that builds each struct from its defaults, by the
+    /// struct's name.
+    defaults: HashMap<String, String>,
+}
+
+/// The bytecode `drift build --web` writes beside the entry script, `main.cdlb`
+/// for `main.cdl`, when it is there and loads. A web page carries its
+/// scripts too, so a page whose bytecode does not load (an older format)
+/// compiles them instead.
+fn built_program(entry: &str) -> Option<Built> {
+    let path = format!("{entry}b");
+    let bytes = std::fs::read(&path).ok()?;
+    let mut program = match candela::load_program(&bytes, &hosts()) {
+        Ok(p) => p,
+        Err(e) => {
+            log(1, &format!("Candela: {path} does not load ({e}); compiling the scripts instead"));
+            return None;
+        }
+    };
+    program.run();
+    let list = |program: &mut RuntimeProgram, f: &str| -> Option<Vec<String>> {
+        match program.call(f, &[]) {
+            Ok(Value::Array(items)) => Some(items.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect()),
+            _ => None,
+        }
+    };
+    let (Some(calls), Some(defaults)) = (list(&mut program, "__drift_calls"), list(&mut program, "__drift_defaults")) else {
+        log(1, &format!("Candela: {path} was not written by drift build; compiling the scripts instead"));
+        return None;
+    };
+    let calls: HashMap<String, String> = calls.into_iter().enumerate().map(|(k, n)| (n, format!("__drift_call_{k}"))).collect();
+    let defaults: HashMap<String, String> = defaults.into_iter().enumerate().map(|(k, n)| (n, format!("__drift_default_b{k}"))).collect();
+    let exported: HashSet<&str> = program.exports().collect();
+    if let Some(missing) = calls.values().chain(defaults.values()).find(|f| !exported.contains(f.as_str())) {
+        log(1, &format!("Candela: {path} does not export {missing}; compiling the scripts instead"));
+        return None;
+    }
+    Some(Built { program, calls, defaults })
+}
+
+/// The registry a compiled program binds the drift module's host functions from.
+fn hosts() -> HostRegistry {
+    let mut r = HostRegistry::new();
+    register_hosts(&mut r);
+    r
+}
+
+/// Compiles a game to bytecode a page starts from without compiling: the
+/// scripts with a function that builds each struct with defaults, and a
+/// function each system and condition is called through, so every one of
+/// them is a function the program exports wherever the game declares it.
+fn build(entry: &str, module_dir: &str) -> Result<Vec<u8>, String> {
+    let reading = read_game(entry, module_dir).map_err(|why| match why {
+        Unread::NoEntry(why) => why,
+        Unread::Compile(d, src) => report(&d, entry, &src),
+    })?;
+    if !reading.errors.is_empty() {
+        return Err(reading.errors.iter().map(|f| f.message.as_str()).collect::<Vec<_>>().join("\n"));
+    }
+    let types = reading.host.types.clone();
+    let src = std::fs::read_to_string(entry).map_err(|e| format!("{entry}: {e}"))?;
+    let main = if src.contains("fn main(") { String::new() } else { String::from("\nfn main() {}\n") };
+    let quote = |n: &str| format!("\"{}\"", n.replace('\\', "\\\\").replace('"', "\\\""));
+    // A name of the entry that an import also has is qualified by the
+    // entry's module; inside the entry the bare name is the entry's own.
+    let stem = std::path::Path::new(entry).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let entry_module = format!("{stem}::");
+    let mut glue = String::new();
+    let mut defaults = Vec::new();
+    for (k, (id, _)) in reading.buildable.iter().enumerate() {
+        let name = types.struct_name(*id);
+        let n = name.replace(&entry_module, "");
+        glue.push_str(&format!("\nfn __drift_default_b{k}() -> {n} {{ return {n} {{ .. }}; }}\n"));
+        defaults.push(quote(name));
+    }
+    let mut calls = Vec::new();
+    let mut wrap = |name: &str, returns: bool| -> Result<(), String> {
+        let params = function_params(&types.table, name).ok_or_else(|| format!("{name}: no such function"))?;
+        let k = calls.len();
+        let decl: Vec<String> = params.iter().enumerate().map(|(i, (_, t))| format!("a{i}: {}", types.table.type_name(t).replace(&entry_module, ""))).collect();
+        let pass: Vec<String> = (0..params.len()).map(|i| format!("a{i}")).collect();
+        let callee = name.strip_prefix(&entry_module).unwrap_or(name);
+        if returns {
+            glue.push_str(&format!("\nfn __drift_call_{k}({}) -> bool {{ return {callee}({}); }}\n", decl.join(", "), pass.join(", ")));
+        } else {
+            glue.push_str(&format!("\nfn __drift_call_{k}({}) {{ {callee}({}); }}\n", decl.join(", "), pass.join(", ")));
+        }
+        calls.push(quote(name));
+        Ok(())
+    };
+    for sys in &reading.host.systems {
+        wrap(&sys.name, false)?;
+    }
+    let mut conditions: Vec<&String> = reading.host.conditions.keys().collect();
+    conditions.sort();
+    for cond in conditions {
+        wrap(cond, true)?;
+    }
+    glue.push_str(&format!("\nfn __drift_calls() -> string[] {{ return [{}]; }}\n", calls.join(", ")));
+    glue.push_str(&format!("\nfn __drift_defaults() -> string[] {{ return [{}]; }}\n", defaults.join(", ")));
+    let source = format!("{src}{main}{glue}");
+    // Compiled the way a load compiles, so what does not compile says why.
+    engine(module_dir).compile(&source, entry).map_err(|d| report(&d, entry, &src))?;
+    let mut resolver = candela::compiler::imports::ImportResolver::new();
+    resolver.add_package("drift", std::path::PathBuf::from(module_dir));
+    if let Some(dir) = lib_dir() {
+        resolver.set_lib_dir(dir);
+    }
+    let options = candela::BuildOptions { release: true, native: candela::NativeCode::None };
+    let bytes = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| candela::build_artifact(source, entry, &resolver, &options)))
+        .map_err(|_| String::from("the candela compiler stopped unexpectedly"))??;
+    // Bytecode exports only functions whose parameters a host can build
+    // without naming an enum; a system that takes one (a Text holds an
+    // Align) is called through the compiler instead, so such a game keeps
+    // compiling when its page loads.
+    let program = candela::load_program(&bytes, &hosts()).map_err(|e| e.to_string())?;
+    let exported: HashSet<&str> = program.exports().collect();
+    let names: Vec<String> = calls.iter().map(|q| q.trim_matches('"').to_owned()).collect();
+    for (k, name) in names.iter().enumerate() {
+        if !exported.contains(format!("__drift_call_{k}").as_str()) {
+            return Err(format!("{name} cannot be called from bytecode, since a parameter holds an enum"));
+        }
+    }
+    Ok(bytes)
+}
+
+/// Compiles the game at `entry` to bytecode (see `build`). Returns the bytes,
+/// valid until the next call, or null with drift_host_error saying why.
+#[no_mangle]
+pub extern "C" fn drift_host_build(entry: *const c_char, module_dir: *const c_char, len: *mut usize) -> *const u8 {
+    let (Some(entry), Some(dir)) = (from_c(entry), from_c(module_dir)) else { return std::ptr::null() };
+    match std::panic::catch_unwind(|| build(&entry, &dir)) {
+        Ok(Ok(bytes)) => BUILT.with(|b| {
+            let mut b = b.borrow_mut();
+            *b = bytes;
+            if !len.is_null() {
+                unsafe { *len = b.len() };
+            }
+            b.as_ptr()
+        }),
+        Ok(Err(e)) => {
+            set_error(&e);
+            std::ptr::null()
+        }
+        Err(_) => {
+            set_error("the candela compiler stopped unexpectedly");
+            std::ptr::null()
+        }
+    }
+}
+
 /// The parameters of a function the attribute table describes: an attributed
 /// function, or one an attribute argument names.
 fn function_params(table: &AttributeTable, name: &str) -> Option<Vec<(String, DataType)>> {
@@ -3078,7 +3374,10 @@ pub extern "C" fn drift_host_scene_component(e: u64, name: *const c_char, value:
 #[no_mangle]
 pub extern "C" fn drift_host_load(entry: *const c_char, module_dir: *const c_char) -> i32 {
     let (Some(entry), Some(dir)) = (from_c(entry), from_c(module_dir)) else { return 0 };
-    match std::panic::catch_unwind(|| load(&entry, &dir)) {
+    USE_BUILT.with(|u| u.set(cfg!(target_os = "emscripten")));
+    let loaded = std::panic::catch_unwind(|| load(&entry, &dir));
+    USE_BUILT.with(|u| u.set(false));
+    match loaded {
         Ok(Ok(host)) => {
             let names: Vec<&str> = host.systems.iter().map(|s| s.name.as_str()).collect();
             log(0, &format!("Candela: {} systems: {}", names.len(), names.join(", ")));

@@ -11,13 +11,17 @@ drift build --web path/to/game -o site   # to site/
 drift build --web --dev                  # a page that hot reloads
 ```
 
-Writes the game as a web page: `index.html`, the web runtime `drift.js` and `drift.wasm`, and `game.pack`, which holds `drift.toml`, every `.cdl` script in the folder and its subfolders, and the assets folder. Hidden files and folders and build output folders (`build`, `build-*`) are left out. No compiler or SDK is needed; the runtime comes with `drift`.
+Writes the game as a web page: `index.html`, the web runtime `drift.js` and `drift.wasm`, and `game.pack`, which holds `drift.toml`, every `.cdl` script in the folder and its subfolders, the assets folder, and the game compiled to bytecode (`main.cdlb` beside `main.cdl`), so the page starts without compiling the scripts. Hidden files and folders and build output folders (`build`, `build-*`) are left out. No compiler or SDK is needed; the runtime comes with `drift`.
+
+When the game cannot be compiled ahead, such as when a script does not compile, the page is still written, without the bytecode, and `drift build` prints why; the page compiles the scripts when it loads and shows any compile error there.
 
 The page takes its title, description and icon from `[project]`, and its touch controls, orientation, colors and offline mode from `[web]` in `drift.toml`. With `[project] icon` it also writes the icon beside `index.html`; with `[web] offline = true`, `manifest.webmanifest` and `sw.js`. A `[web]` value it does not understand stops the build with a message naming the key.
 
 It reports an error and writes nothing when the folder has no entry script, and stops before writing `index.html` when `[project] icon` names a missing file. Serve the folder over HTTP to play it; see [Publishing to the Web](../guides/publishing.md).
 
-With `--dev` the page also gets `drift-dev.js`, which watches `game.pack` on the server and swaps each new build into the running game; see [Hot reload while you work](../guides/publishing.md#hot-reload-while-you-work). A dev page ignores `[web] offline`. Build without `--dev` to publish.
+With `--dev` the page also gets `drift-dev.js`, which watches `game.pack` on the server and swaps each new build into the running game; see [Hot reload while you work](../guides/publishing.md#hot-reload-while-you-work). A dev page carries no bytecode, since it compiles each change in the browser, and ignores `[web] offline`. Build without `--dev` to publish.
+
+`--runtime <folder>` takes the web runtime from that folder instead of the one installed with `drift`, as `DRIFT_WEB_RUNTIME` does.
 
 `drift build` without `--web` stops with a message: the web page is the only build.
 
@@ -53,7 +57,7 @@ Reads the game the way loading it does, without opening a window or running any 
 
 With `--json` it prints a list of objects with `file`, `line`, `column`, `end_line`, `end_column`, `severity` (`error` or `warning`), `code` and `message`; a `drift.toml` problem has no column and covers its line. The editor runs `drift check --json` after each save and shows what it prints; see [Editor support](../getting-started/install.md#editor-support).
 
-A machine with only the web build has no desktop `drift`; the same checker runs under Node.js from the web build: `node build-web/bindings/candela/drift_check.js check path/to/game`, built by the `drift_check` target.
+A machine with only the web build has no desktop `drift`; the same checker runs under Node.js from the web build: `node build-web/bindings/candela/drift_node.js check path/to/game`, built by the `drift_node` target. The same program writes pages: `node build-web/bindings/candela/drift_node.js build --web path/to/game --runtime build-web/bindings/candela/web`.
 
 ## Other commands
 

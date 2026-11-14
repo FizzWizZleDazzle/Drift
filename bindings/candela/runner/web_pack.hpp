@@ -21,9 +21,16 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 
 namespace drift::web {
+
+// Compiles the game in `folder`, whose entry script is `entry` (relative to
+// it), to the bytecode a page starts from: true with the bytes, or false
+// with the reason.
+using CompileGame =
+    std::function<bool(const std::string& folder, const std::string& entry, std::string& bytes, std::string& error)>;
 
 // Writes the page for the game in `folder` to `out`: index.html, drift.js,
 // drift.wasm from `runtime` and the game's game.pack. A `dev` page also
@@ -32,7 +39,12 @@ namespace drift::web {
 // when the folder, its entry script or the runtime is missing, or a file
 // cannot be read or written. `summary` gets one line saying what was
 // written.
+//
+// With `compile`, a page that is not a dev page also carries the game
+// compiled to bytecode, `<entry>b` beside the entry script, so it starts
+// without compiling the scripts; when the game does not compile, the page
+// is written without it and `summary` says why.
 bool buildWebPage(const std::string& folder, const std::string& out, const std::string& runtime,
-                  bool dev, std::string& error, std::string& summary);
+                  bool dev, std::string& error, std::string& summary, const CompileGame& compile = {});
 
 } // namespace drift::web

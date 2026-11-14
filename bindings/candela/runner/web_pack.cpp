@@ -22,6 +22,8 @@ namespace {
 struct Entry {
     std::string path;   // in the pack: relative to the game folder, '/' separated
     fs::path source;
+    std::string data;   // the bytes, for a file made here rather than read
+    bool inMemory = false;
 };
 
 struct Project {
@@ -233,7 +235,7 @@ bool sameFolder(const fs::path& a, const fs::path& b) {
 } // namespace
 
 bool buildWebPage(const std::string& folderArg, const std::string& outArg, const std::string& runtimeArg,
-                  bool dev, std::string& error, std::string& summary) {
+                  bool dev, std::string& error, std::string& summary, const CompileGame& compile) {
     std::error_code ec;
     fs::path folder = fs::absolute(folderArg, ec);
     if (!fs::is_directory(folder)) {
@@ -310,14 +312,29 @@ bool buildWebPage(const std::string& folderArg, const std::string& outArg, const
             return false;
         }
     }
+    // The game compiled to bytecode, which the page starts from.
+    std::string compiled, notCompiled;
+    if (!dev && compile) {
+        std::string bytes, why;
+        if (compile(folder.string(), project.entry, bytes, why)) {
+            Entry built;
+            built.path = fs::path(project.entry).lexically_normal().generic_string() + "b";
+            built.data = std::move(bytes);
+            built.inMemory = true;
+            files.push_back(std::move(built));
+            compiled = files.back().path;
+        } else {
+            notCompiled = why.substr(0, why.find('\n'));
+        }
+    }
     std::sort(files.begin(), files.end(), [](const Entry& a, const Entry& b) { return a.path < b.path; });
 
     // The pack: header, index, then every file's bytes.
     nlohmann::json index = nlohmann::json::array();
     std::string blob;
     for (const Entry& f : files) {
-        std::string data;
-        if (!readFile(f.source, data)) {
+        std::string data = f.data;
+        if (!f.inMemory && !readFile(f.source, data)) {
             error = f.source.string() + ": cannot read";
             return false;
         }
@@ -487,8 +504,10 @@ bool buildWebPage(const std::string& folderArg, const std::string& outArg, const
 
     std::string written = "index.html, drift.js, drift.wasm, game.pack";
     for (const std::string& e : extras) written += ", " + e;
-    summary = out.string() + ": " + written + " (" + std::to_string(files.size() - assetCount) +
-              " scripts and settings, " + std::to_string(assetCount) + " assets)";
+    size_t scripts = files.size() - assetCount - (compiled.empty() ? 0 : 1);
+    summary = out.string() + ": " + written + " (" + std::to_string(scripts) + " scripts and settings, " +
+              std::to_string(assetCount) + " assets" + (compiled.empty() ? "" : ", compiled") + ")";
+    if (!notCompiled.empty()) summary += "\nThe page compiles the scripts when it loads: " + notCompiled;
     return true;
 }
 
