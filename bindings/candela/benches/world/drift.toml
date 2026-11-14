@@ -1,0 +1,14 @@
+[project]
+name = "Bench: world"
+organization = "Drift Benchmarks"
+entry = "main.cdl"
+
+[window]
+width = 960
+height = 540
+
+[physics]
+gravity = [0, 900]
+
+[lighting]
+enabled = true

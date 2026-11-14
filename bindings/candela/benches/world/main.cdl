@@ -1,0 +1,144 @@
+// Benchmark: a big tile world written the plain way a jam team would.
+//
+// Every tile is its own entity with a sprite, and every ground tile has a
+// static collider. Most of the world is off screen while a camera scrolls
+// across it and back. Torches with point lights, a few ember emitters,
+// signposts with text labels, crates resting on the ground and a distance
+// line on the screen complete it.
+//
+// `?n=6000` sets roughly how many tiles; `?lights=40` how many torches;
+// `?emitters=6` how many of the torches also throw embers; `?labels=30`
+// how many signposts; `?crates=20` how many crates. `?stats=1` adds the
+// renderer's draw calls and sprites of the last frame to the distance line.
+
+import "drift" { * };
+
+@resource
+struct Level { width: float = 0.0, speed: float = 240.0, stats: bool = false }
+
+@component struct Scroller { direction: float = 1.0 }
+@component struct Distance {}
+
+const TILE: float = 32.0;
+const ROWS: int = 6;
+
+fn arg(platform: Platform, name: string, fallback: int) -> int {
+    return match platform.query(name).parse<int>() { Some(v) => v, None => fallback };
+}
+
+fn square(assets: Assets, size: int, color: Color, edge: Color) -> Texture {
+    let pixels: Color[] = [];
+    for y in range(size) {
+        for x in range(size) {
+            let border = x == 0 || y == 0 || x == size - 1 || y == size - 1;
+            pixels.push(if border { edge } else { color });
+        }
+    }
+    return assets.create_texture(size, size, pixels);
+}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets, platform: Platform, effects: Effects, level: Level) {
+    let tiles = arg(platform, "n", 6000);
+    let lights = arg(platform, "lights", 40);
+    let emitters = arg(platform, "emitters", 6);
+    let labels = arg(platform, "labels", 30);
+    let crates = arg(platform, "crates", 20);
+    level.stats = arg(platform, "stats", 0) != 0;
+
+    let dirt = square(assets, 32, rgb(120, 82, 50), rgb(90, 60, 36));
+    let grass = square(assets, 32, rgb(70, 150, 60), rgb(50, 110, 40));
+    let stone = square(assets, 32, rgb(110, 110, 120), rgb(80, 80, 90));
+    let brick = square(assets, 32, rgb(60, 50, 60), rgb(45, 38, 45));
+    let wood = square(assets, 24, rgb(160, 110, 60), rgb(110, 70, 30));
+
+    // Half the tiles are ground (a sprite and a static collider each), half
+    // are background bricks above it (a sprite each).
+    let columns = tiles / (ROWS * 2);
+    level.width = float(columns) * TILE;
+    let ground_top = 540.0 - float(ROWS) * TILE;
+    for col in range(columns) {
+        let x = float(col) * TILE + TILE * 0.5;
+        for row in range(ROWS) {
+            let y = ground_top + float(row) * TILE + TILE * 0.5;
+            let image = if row == 0 { grass } else if (col * 7 + row * 3) % 5 == 0 { stone } else { dirt };
+            cmd.spawn([
+                at(x, y),
+                Sprite { image: image, z: 1.0, .. },
+                RigidBody { kind: BodyKind::Static, .. },
+                BoxCollider { half_size: vec2(TILE * 0.5, TILE * 0.5), .. },
+            ]);
+            cmd.spawn([
+                at(x, ground_top - float(row) * TILE - TILE * 0.5),
+                Sprite { image: brick, z: 0.0, .. },
+            ]);
+        }
+    }
+
+    for i in range(lights) {
+        let x = (float(i) + 0.5) * level.width / float(lights);
+        let torch = cmd.spawn([
+            at(x, ground_top - 90.0),
+            PointLight { color: rgb(255, 170, 90), intensity: 1.3, radius: 220.0, falloff: 1.5, .. },
+            Rectangle { size: vec2(6.0, 24.0), color: rgb(80, 50, 30), z: 2.0, .. },
+        ]);
+        cmd.spawn_child(torch, [at(0.0, -14.0), Circle { radius: 6.0, color: rgb(255, 200, 90), z: 3.0, .. }]);
+        if i < emitters {
+            cmd.spawn_child(torch, [
+                at(0.0, -16.0),
+                ParticleEmitter {
+                    rate: 30.0, speed_min: 20.0, speed_max: 60.0, angle_min: -2.2, angle_max: -0.9,
+                    size_start: 3.0, size_end: 0.5,
+                    color_start: rgb(255, 180, 80), color_end: Color { r: 1.0, g: 0.3, b: 0.1, a: 0.0 },
+                    blend: Blend::Additive, max_particles: 64, z: 4.0, ..
+                },
+            ]);
+        }
+    }
+
+    for i in range(labels) {
+        let x = (float(i) + 0.25) * level.width / float(labels);
+        cmd.spawn([
+            at(x, ground_top - 40.0),
+            Text { value: "Signpost " + string(i + 1), size: 18.0, color: rgb(255, 255, 230), align: Align::Center, z: 5.0, .. },
+        ]);
+    }
+
+    for i in range(crates) {
+        let x = (float(i) + 0.5) * level.width / float(crates);
+        cmd.spawn([
+            at(x, ground_top - 12.0),
+            Sprite { image: wood, z: 2.0, .. },
+            RigidBody { .. },
+            BoxCollider { half_size: vec2(12.0, 12.0), .. },
+            Velocity { .. },
+        ]);
+    }
+
+    cmd.spawn([at(480.0, 270.0), Camera { .. }, Scroller { .. }]);
+    cmd.spawn([at(16.0, 12.0), Text { value: "Distance 0", size: 20.0, layer: hud_layer(), .. }, Distance {}]);
+    effects.set_ambient(rgb(70, 70, 90));
+}
+
+@system
+fn scroll(cam: (Scroller, Transform), time: Time, level: Level) {
+    let (s, t) = cam;
+    t.position = vec2(t.position.x + s.direction * level.speed * time.dt, t.position.y);
+    if t.position.x > level.width - 480.0 {
+        s.direction = -1.0;
+    }
+    if t.position.x < 480.0 {
+        s.direction = 1.0;
+    }
+}
+
+@system
+fn distance(row: (Distance, Text), cams: (Scroller, Transform)[], level: Level, window: Window) {
+    let (_, text) = row;
+    for (_, t) in cams {
+        text.value = "Distance " + string(int((t.position.x / TILE).floor()));
+    }
+    if level.stats {
+        text.value = text.value + "   draws " + string(window.draw_calls()) + "   sprites " + string(window.sprite_count());
+    }
+}
