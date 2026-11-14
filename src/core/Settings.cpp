@@ -50,11 +50,10 @@ json toJson(const toml::node& node, const std::string& path,
 // A value written on the command line or in an environment variable: TOML
 // syntax when it parses (3, 0.5, true, [0, 9.8], "text"), else the raw text.
 json parseValueText(const std::string& text) {
-    try {
-        toml::table t = toml::parse("v = " + text);
+    toml::parse_result parsed = toml::parse("v = " + text);
+    if (parsed) {
         std::unordered_map<std::string, int> ignored;
-        if (const toml::node* v = t.get("v")) return toJson(*v, "", ignored);
-    } catch (const toml::parse_error&) {
+        if (const toml::node* v = parsed.table().get("v")) return toJson(*v, "", ignored);
     }
     return text;
 }
@@ -151,15 +150,15 @@ std::string enumChoices(const reflect::TypeInfo& t) {
 } // namespace
 
 bool tomlToJson(const std::string& text, std::string& out, std::string& error) {
-    try {
-        toml::table t = toml::parse(text);
-        std::unordered_map<std::string, int> ignored;
-        out = toJson(t, "", ignored).dump();
-        return true;
-    } catch (const toml::parse_error& e) {
+    toml::parse_result parsed = toml::parse(text);
+    if (!parsed) {
+        const toml::parse_error& e = parsed.error();
         error = std::string(e.description()) + " (line " + std::to_string(e.source().begin.line) + ")";
         return false;
     }
+    std::unordered_map<std::string, int> ignored;
+    out = toJson(parsed.table(), "", ignored).dump();
+    return true;
 }
 
 struct Settings::Impl {
@@ -283,17 +282,17 @@ struct Settings::Impl {
         std::string text(static_cast<const char*>(bytes), size);
         SDL_free(bytes);
         problems.clear();
-        try {
-            toml::table t = toml::parse(text, file);
-            outLines.clear();
-            out = toJson(t, "", outLines);
-            return true;
-        } catch (const toml::parse_error& e) {
+        toml::parse_result parsed = toml::parse(text, file);
+        if (!parsed) {
+            const toml::parse_error& e = parsed.error();
             DRIFT_LOG_ERROR("%s:%u:%u: %s", file.c_str(), unsigned(e.source().begin.line),
                             unsigned(e.source().begin.column), std::string(e.description()).c_str());
             problems.push_back({file, int(e.source().begin.line), "", std::string(e.description())});
             return false;
         }
+        outLines.clear();
+        out = toJson(parsed.table(), "", outLines);
+        return true;
     }
 };
 

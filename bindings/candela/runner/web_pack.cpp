@@ -89,13 +89,13 @@ bool buildOutput(const fs::path& name) {
 
 bool readProject(const fs::path& file, Project& p, WebPage& web, std::string& error) {
     if (!fs::is_regular_file(file)) return true;
-    toml::table t;
-    try {
-        t = toml::parse_file(file.string());
-    } catch (const toml::parse_error& e) {
-        error = file.string() + ": " + std::string(e.description());
+    toml::parse_result parsed = toml::parse_file(file.string());
+    if (!parsed) {
+        const toml::parse_error& e = parsed.error();
+        error = file.string() + ":" + std::to_string(e.source().begin.line) + ": " + std::string(e.description());
         return false;
     }
+    toml::table& t = parsed.table();
     if (auto v = t["project"]["entry"].value<std::string>()) p.entry = *v;
     if (auto v = t["project"]["assets"].value<std::string>()) p.assets = *v;
     if (auto v = t["project"]["name"].value<std::string>()) p.name = *v;

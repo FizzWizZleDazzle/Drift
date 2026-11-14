@@ -99,6 +99,10 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(SDL3 flecs box2d json tomlplusplus)
+# The TOML parser reports a bad file as a value, not an exception: a web
+# build cannot catch C++ exceptions, and a drift.toml with a typo must give
+# its line and what is wrong rather than stop the page or the page writer.
+target_compile_definitions(tomlplusplus_tomlplusplus INTERFACE TOML_EXCEPTIONS=0)
 
 # stb - header-only, just need the path
 FetchContent_GetProperties(stb)
