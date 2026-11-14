@@ -1,0 +1,42 @@
+// ANCHOR: all
+// A camera following a runner along a level three screens wide. The box
+// in the middle of the screen is the camera's dead zone: the runner moves
+// freely inside it, and the camera moves once the runner leaves it.
+
+import "drift" { * };
+
+const LEVEL_W: float = 1440.0;
+
+@component struct Runner {}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    level(cmd);
+    // ANCHOR: follow
+    let runner = cmd.spawn([at(200.0, 200.0), Runner {}, Rectangle { size: vec2(20.0, 32.0), color: rgb(255, 210, 90), .. }]);
+    cmd.spawn([at(200.0, 135.0), Camera { .. },
+               CameraFollow { target: runner, smoothing: 4.0, offset: vec2(0.0, -65.0), dead_zone: vec2(40.0, 200.0) }]);
+    // ANCHOR_END: follow
+
+    // The dead zone, drawn on the HUD: 40 pixels each side of the screen's center.
+    cmd.spawn([at(240.0, 135.0), Rectangle { size: vec2(80.0, 266.0), color: rgba(255, 255, 255, 120), outline: 1.0,
+               layer: hud_layer(), .. }]);
+}
+
+// The runner goes right, then back, then right again, at changing speeds.
+@system
+fn run(row: (Runner, Transform), time: Time) {
+    let (_, t) = row;
+    t.position.x = 720.0 - 560.0 * cos(time.elapsed * 0.8);
+}
+
+// Numbered posts every 120 pixels, so the scrolling shows.
+fn level(cmd: Commands) {
+    cmd.spawn([at(LEVEL_W / 2.0, 250.0), Rectangle { size: vec2(LEVEL_W, 64.0), color: rgb(36, 70, 52), .. }]);
+    for i in range(13) {
+        let x = 120.0 * float(i);
+        cmd.spawn([at(x, 196.0), Rectangle { size: vec2(4.0, 44.0), color: rgb(120, 130, 160), .. }]);
+        cmd.spawn([at(x, 160.0), Text { value: string(int(x)), size: 14.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

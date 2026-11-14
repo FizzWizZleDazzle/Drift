@@ -1,0 +1,36 @@
+// ANCHOR: all
+// A minimap: a second camera, zoomed out, draws the whole level into a
+// texture, and a sprite on the HUD shows that texture in the corner.
+
+import "drift" { * };
+
+@component struct Runner {}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands, assets: Assets) {
+    level(cmd);
+    let runner = cmd.spawn([at(100.0, 200.0), Runner {}, Rectangle { size: vec2(20.0, 32.0), color: rgb(255, 210, 90), .. }]);
+    cmd.spawn([at(240.0, 135.0), Camera { .. }, CameraFollow { target: runner, offset: vec2(0.0, -65.0), .. }]);
+    // ANCHOR: minimap
+    let map = assets.render_target(180, 40);                  // pixels
+    cmd.spawn([at(720.0, 160.0), Camera { zoom: 0.125, order: -1, target: map, clear: true,
+                                          clear_color: rgb(20, 24, 40), .. }]);
+    cmd.spawn([at(380.0, 34.0), Sprite { image: map, layer: hud_layer(), .. }]);
+    // ANCHOR_END: minimap
+}
+
+@system
+fn run(row: (Runner, Transform), time: Time) {
+    let (_, t) = row;
+    t.position.x = 720.0 - 600.0 * cos(time.elapsed * 0.8);
+}
+
+fn level(cmd: Commands) {
+    cmd.spawn([at(720.0, 250.0), Rectangle { size: vec2(1440.0, 64.0), color: rgb(36, 70, 52), .. }]);
+    for i in range(13) {
+        let x = 120.0 * float(i);
+        cmd.spawn([at(x, 196.0), Rectangle { size: vec2(4.0, 44.0), color: rgb(120, 130, 160), .. }]);
+        cmd.spawn([at(x, 160.0), Text { value: string(int(x)), size: 14.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

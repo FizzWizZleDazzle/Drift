@@ -1,0 +1,40 @@
+// ANCHOR: all
+// A camera that follows a runner but stops at the ends of the level: when
+// the runner nears a wall, the camera holds still and the runner walks on
+// to the wall. Without CameraBounds the camera would show past the walls.
+
+import "drift" { * };
+
+const LEVEL_W: float = 960.0;
+
+@component struct Runner {}
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    level(cmd);
+    // ANCHOR: bounds
+    let runner = cmd.spawn([at(40.0, 200.0), Runner {}, Rectangle { size: vec2(20.0, 32.0), color: rgb(255, 210, 90), .. }]);
+    cmd.spawn([at(240.0, 135.0), Camera { .. },
+               CameraFollow { target: runner, smoothing: 6.0, .. },
+               CameraBounds { area: rect(0.0, 0.0, LEVEL_W, 270.0) }]);   // x, y, width, height in world pixels
+    // ANCHOR_END: bounds
+}
+
+// The runner goes from wall to wall and back.
+@system
+fn run(row: (Runner, Transform), time: Time) {
+    let (_, t) = row;
+    t.position.x = LEVEL_W / 2.0 - (LEVEL_W / 2.0 - 30.0) * cos(time.elapsed * 0.9);
+}
+
+fn level(cmd: Commands) {
+    cmd.spawn([at(LEVEL_W / 2.0, 250.0), Rectangle { size: vec2(LEVEL_W, 64.0), color: rgb(36, 70, 52), .. }]);
+    cmd.spawn([at(5.0, 135.0), Rectangle { size: vec2(10.0, 270.0), color: rgb(200, 90, 80), .. }]);
+    cmd.spawn([at(LEVEL_W - 5.0, 135.0), Rectangle { size: vec2(10.0, 270.0), color: rgb(200, 90, 80), .. }]);
+    for i in range(9) {
+        let x = 120.0 * float(i);
+        cmd.spawn([at(x, 196.0), Rectangle { size: vec2(4.0, 44.0), color: rgb(120, 130, 160), .. }]);
+        cmd.spawn([at(x, 160.0), Text { value: string(int(x)), size: 14.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all

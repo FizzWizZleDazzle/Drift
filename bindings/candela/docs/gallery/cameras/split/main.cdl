@@ -1,0 +1,39 @@
+// ANCHOR: all
+// Split screen: two cameras, each on its half of the window and following
+// its own runner through the same level.
+
+import "drift" { * };
+
+@component struct Runner { speed: float = 1.0 }
+
+@system(schedule: Schedule::Startup)
+fn setup(cmd: Commands) {
+    level(cmd);
+    let one = cmd.spawn([at(100.0, 200.0), Runner { speed: 0.7 }, Rectangle { size: vec2(20.0, 32.0), color: rgb(255, 210, 90), .. }]);
+    let two = cmd.spawn([at(100.0, 200.0), Runner { speed: 1.1 }, Rectangle { size: vec2(20.0, 32.0), color: rgb(110, 200, 255), .. }]);
+    // ANCHOR: split
+    // viewport: x, y, width, height as parts of the window, 0 to 1.
+    cmd.spawn([at(100.0, 135.0), Camera { viewport: rect(0.0, 0.0, 0.5, 1.0), order: 0, .. },
+               CameraFollow { target: one, offset: vec2(0.0, -65.0), .. }]);
+    cmd.spawn([at(100.0, 135.0), Camera { viewport: rect(0.5, 0.0, 0.5, 1.0), order: 1, .. },
+               CameraFollow { target: two, offset: vec2(0.0, -65.0), .. }]);
+    // ANCHOR_END: split
+    // A line between the halves, on the HUD.
+    cmd.spawn([at(240.0, 135.0), Rectangle { size: vec2(2.0, 270.0), color: rgb(0, 0, 0), layer: hud_layer(), .. }]);
+}
+
+@system
+fn run(row: (Runner, Transform), time: Time) {
+    let (r, t) = row;
+    t.position.x = 720.0 - 600.0 * cos(time.elapsed * r.speed);
+}
+
+fn level(cmd: Commands) {
+    cmd.spawn([at(720.0, 250.0), Rectangle { size: vec2(1440.0, 64.0), color: rgb(36, 70, 52), .. }]);
+    for i in range(13) {
+        let x = 120.0 * float(i);
+        cmd.spawn([at(x, 196.0), Rectangle { size: vec2(4.0, 44.0), color: rgb(120, 130, 160), .. }]);
+        cmd.spawn([at(x, 160.0), Text { value: string(int(x)), size: 14.0, align: Align::Center, .. }]);
+    }
+}
+// ANCHOR_END: all
