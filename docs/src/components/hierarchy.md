@@ -178,7 +178,7 @@ void grab(App& app, EntityId hand, EntityId item) {
 
 ## Transform propagation
 
-When entities form a hierarchy, `Transform2D` on child entities is interpreted as **local** (relative to the parent). The `HierarchyPlugin` computes the final world-space `GlobalTransform2D` for each entity.
+When entities form a hierarchy, `Transform2D` on child entities is interpreted as **local** (relative to the parent). The `HierarchyPlugin` computes the final world-space `GlobalTransform2D` for each entity. It writes a `GlobalTransform2D` only when the result changed, so trees that stand still (a torch with its flame, a building with its windows) cost reads, not writes.
 
 ### Example: rotating parent
 

@@ -36,8 +36,19 @@ inline void propagateTransforms(
         rootGTs.push_back({id, GlobalTransform2D::from(t)});
     });
 
-    for (auto& [id, gt] : rootGTs) {
+    // Writes a GlobalTransform2D only when it changed: a tree that did not
+    // move costs reads, not writes and change ticks.
+    auto store = [&](EntityId id, const GlobalTransform2D& gt) {
+        const auto* old = static_cast<const GlobalTransform2D*>(world.getComponent(id, globalTransformId));
+        if (old && old->position.x == gt.position.x && old->position.y == gt.position.y &&
+            old->rotation == gt.rotation && old->scale.x == gt.scale.x && old->scale.y == gt.scale.y) {
+            return;
+        }
         world.setComponent(id, globalTransformId, &gt, sizeof(gt));
+    };
+
+    for (auto& [id, gt] : rootGTs) {
+        store(id, gt);
         const auto* ch = static_cast<const Children*>(world.getComponent(id, childrenId));
         if (!ch) continue;
         for (int i = 0; i < ch->count; ++i) {
@@ -56,7 +67,7 @@ inline void propagateTransforms(
         if (!localT) continue;
 
         GlobalTransform2D gt = GlobalTransform2D::compose(parentGT, *localT);
-        world.setComponent(entityId, globalTransformId, &gt, sizeof(gt));
+        store(entityId, gt);
 
         const auto* ch = static_cast<const Children*>(world.getComponent(entityId, childrenId));
         if (ch) {
