@@ -1,7 +1,7 @@
 // Times the benchmark pages (and any other Candela page) in headless Chrome.
 //
 //   node measure.mjs <pages dir> <page>[?query] ... [--seconds 6] [--warmup 3]
-//                    [--profile out.cpuprofile] [--gpu]
+//                    [--profile out.cpuprofile [--startup]] [--gpu]
 //
 // <pages dir> is the build folder holding the pages, such as
 // build-web/bindings/candela; each <page> is a folder in it, such as
@@ -16,6 +16,8 @@
 // frame intervals there say little about a real GPU; cpu times hold.
 // puppeteer-core is found through PUPPETEER_CORE (a path to the package) or
 // the usual module resolution; CHROME names the browser executable.
+// --startup profiles loading the page and compiling the game instead of
+// the frames after it.
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -26,7 +28,7 @@ const require = createRequire(import.meta.url);
 const puppeteer = require(process.env.PUPPETEER_CORE || 'puppeteer-core');
 
 const argv = process.argv.slice(2);
-const opt = { seconds: 6, warmup: 3, profile: '', gpu: false };
+const opt = { seconds: 6, warmup: 3, profile: '', startup: false, gpu: false };
 const pages = [];
 let root = '';
 for (let i = 0; i < argv.length; i++) {
@@ -35,6 +37,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--warmup') opt.warmup = Number(argv[++i]);
   else if (a === '--profile') opt.profile = argv[++i];
   else if (a === '--gpu') opt.gpu = true;
+  else if (a === '--startup') opt.startup = true;
   else if (!root) root = a;
   else pages.push(a);
 }
@@ -132,24 +135,32 @@ for (const p of pages) {
   page.on('pageerror', e => errors.push(e.message));
   const [dir, query] = p.split('?');
   const url = `http://127.0.0.1:${port}/${dir}/index.html${query ? '?' + query : ''}`;
-  await page.goto(url, { waitUntil: 'load' });
-  await page.waitForFunction(() => window.__bench.loaded > 0, { timeout: 60000 }).catch(() => {});
-  await new Promise(r => setTimeout(r, opt.warmup * 1000));
-  const from = await page.evaluate(() => window.__bench.cpu.length);
-  let profiler = null;
-  if (opt.profile) {
-    profiler = await page.createCDPSession();
-    await profiler.send('Profiler.enable');
-    await profiler.send('Profiler.setSamplingInterval', { interval: 200 });
-    await profiler.send('Profiler.start');
-  }
-  await new Promise(r => setTimeout(r, opt.seconds * 1000));
-  if (profiler) {
-    const { profile } = await profiler.send('Profiler.stop');
-    const file = pages.length > 1 ? opt.profile.replace(/(\.cpuprofile)?$/, `-${dir}.cpuprofile`) : opt.profile;
+  const file = pages.length > 1 ? opt.profile.replace(/(\.cpuprofile)?$/, `-${dir}.cpuprofile`) : opt.profile;
+  const startProfile = async () => {
+    const session = await page.createCDPSession();
+    await session.send('Profiler.enable');
+    await session.send('Profiler.setSamplingInterval', { interval: 200 });
+    await session.send('Profiler.start');
+    return session;
+  };
+  const stopProfile = async session => {
+    const { profile } = await session.send('Profiler.stop');
     fs.writeFileSync(file, JSON.stringify(profile));
     printProfile(profile);
+  };
+  let profiler = opt.profile && opt.startup ? await startProfile() : null;
+  await page.goto(url, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__bench.loaded > 0, { timeout: 60000 }).catch(() => {});
+  if (profiler) {
+    await new Promise(r => setTimeout(r, 500));
+    await stopProfile(profiler);
+    profiler = null;
   }
+  await new Promise(r => setTimeout(r, opt.warmup * 1000));
+  const from = await page.evaluate(() => window.__bench.cpu.length);
+  if (opt.profile && !opt.startup) profiler = await startProfile();
+  await new Promise(r => setTimeout(r, opt.seconds * 1000));
+  if (profiler) await stopProfile(profiler);
   const r = await page.evaluate(from => {
     const w = window.__bench;
     const nav = performance.getEntriesByType('navigation')[0];
